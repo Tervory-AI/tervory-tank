@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from r2_archive import PLATFORM_TENANT, Storage, archive_file
-from train import validate_rows
+from tank.training_jobs.train import validate_rows
 
 
 async def export(room: str, source: Path, day: str) -> dict:

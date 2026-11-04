@@ -93,7 +93,7 @@ async def test_tool_calls_policy_room_key_and_durable_receipt(setup, monkeypatch
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("room,authorized,region,expected", [
-    ("radix", True, "us-east", 403), ("base", False, "us-east", 401), ("base", True, "za", 403),
+    ("radix", True, "us-east", 401), ("base", False, "us-east", 401), ("base", True, "za", 403),
 ])
 async def test_rejects_other_room_key_and_region_before_work(setup, room, authorized, region, expected):
     app, _, pool, key = setup

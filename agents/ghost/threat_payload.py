@@ -265,6 +265,7 @@ class ThreatPayload(Strict):
     tenant_id: str | None = Field(default=None, max_length=80)
     advisory_url: str | None = Field(default=None, max_length=500)
     queued_at: str | None = Field(default=None, max_length=40)
+    watch_decision_seconds: float | None = Field(default=None, ge=0, le=60, allow_inf_nan=False)
 
     @field_validator("site")
     @classmethod

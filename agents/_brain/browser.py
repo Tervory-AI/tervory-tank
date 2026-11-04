@@ -623,7 +623,7 @@ async def public_result(page, result, html, directory, task, *, price_reader: bo
 # Credentials never pass through /render, a model, the history file or a URL.
 def access_room():
     room = os.environ.get("ACCESS_ROOM", "base")
-    if room not in {"base", "tiger", "rig"}:
+    if room not in {"base", "tiger", "rig", "trigger", "tisan", "radix", "market_lab"}:
         raise HTTPException(503, "Browser room is not configured.")
     return room
 

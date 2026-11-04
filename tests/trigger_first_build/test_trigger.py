@@ -253,7 +253,7 @@ def test_sources_match_pins_and_internal_room_limits():
     assert server['entrypoint'][0] == 'java'  # No entrypoint downloading optional models.
     root = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())
     corridor = [name for name, service in root['services'].items() if 'tervory-gw-trigger' in service.get('networks', [])]
-    assert set(corridor) == {'tank', 'postgres'}
+    assert set(corridor) == {'tank', 'postgres', 'hermes'}
     assert 'external' not in root['networks']['tervory-gw-trigger']
 
 

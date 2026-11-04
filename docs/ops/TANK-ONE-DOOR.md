@@ -69,8 +69,8 @@ Grouped rows enumerate the call expressions and their shared transport. Versione
 | `mcp/connector/tools.py:333,451,469,513`; `mcp/connector/tank.py:56` | **Through Tank:** tenant-bound `rig.search`, `zenas.scope`, `zenas.retrieve` Skala calls and `market.research` via `/v1/route`. Base/Tiger tools use Tank room proxies. |
 | `workspace/lib/tank.ts:62,106`; `workspace/app/onboarding/csv.ts:242` | **Through Tank:** server-side `/v1/route` with named task; other calls use Tank room/Skala/command APIs. CSV's Tank/LiteLLM strings redact errors; **not a model call**. |
 | `hermes/embeddings.py:28,33,42`; `hermes/service.py:226,274` | **Local model exception:** local CPU FastEmbed initialization/warmup/embedding for tenant-scoped memory, no inference-provider request. |
-| `jobs/train/run.py:72,76,115,118` | **Bypasses Tank — F4:** paid HF `run_uv_job` using `HF_TOKEN`; direct database reservations and ledger writes, explicit `--submit` gate. |
-| `jobs/train/train.py:65,91,94,110,117,118,124` | **Local model training/artifacts:** dataset/weight downloads, SFT train/evaluate, private artifact upload. Not an inference API; paid launcher is F4. |
+| `tank/training_jobs/run.py` | **Audited Tank submit:** paid HF `run_uv_job` is founder-confirmed, spend-capped, protected by advisory lock 871228 and durably reserved before submission. |
+| `tank/training_jobs/train.py` | **Local model training/artifacts:** dataset/weight downloads, SFT train/evaluate, private artifact upload. No inference API call. |
 | `litellm/config.yaml:18,327`; `litellm/config.za.yaml:21,345`; `docker-compose.yml:207`; `docker-compose.za.yml:127` | **Central backend/configuration exception:** provider roster and Tank's LiteLLM origin; actual external inference runs in LiteLLM. |
 | `tests/test_tank_one_door.py:188` exception registry | **Test/configuration exceptions:** exact recorded pilot transcripts, mocked transports, provider-denial assertions and opt-in LiteLLM contract harness. Each occurrence has its own reason/count. No blanket exemption for tests, agents, workers or Workspace. |
 

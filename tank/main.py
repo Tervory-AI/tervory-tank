@@ -230,6 +230,26 @@ def sa_hosted_models() -> frozenset[str]:
     return frozenset(names)
 
 
+_OWN_ZA_MODEL = "tervory-own-zenas-za"
+_graduated_sa_models: set[str] = set()
+
+
+def identifier_safe_sa_models() -> frozenset[str]:
+    """Return deployed SA routes that may receive identifiers.
+
+    ZA_HOSTED_MODELS retains its existing deployment contract. The owned route
+    remains a candidate until Tank's graduation path promotes it; rollback
+    removes that permission again.
+    """
+    deployed = {
+        part.strip()
+        for part in os.environ.get("ZA_HOSTED_MODELS", "").split(",")
+        if part.strip()
+    }
+    deployed.discard(_OWN_ZA_MODEL)
+    return frozenset(deployed | _graduated_sa_models)
+
+
 def is_build_only_model(name: Any, provider_model: Any = None) -> bool:
     """True for a build-only alias (build-*) or any ChatGPT-subscription deployment."""
     alias = str(name or "").strip().lower()
@@ -423,7 +443,7 @@ def model_call_refusal(
         if model is not None and allow is not None and model not in allow:
             return ALLOW_REFUSAL
         return None
-    hosted = sa_hosted_models()
+    hosted = identifier_safe_sa_models()
     if prompt_has_identifier(text) and not public_record:
         permitted = hosted if allow is None else hosted & allow
         if model is None:
@@ -781,6 +801,15 @@ async def _startup() -> None:
         ddl = f.read()
     async with (_admin_pool or raw_pool).acquire() as conn:
         await conn.execute(ddl)
+        own_model_promoted = await conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM tank.policy WHERE tenant_id IS NULL "
+            "AND model=$1 AND promoted_at IS NOT NULL)",
+            _OWN_ZA_MODEL,
+        )
+        if own_model_promoted:
+            _graduated_sa_models.add(_OWN_ZA_MODEL)
+        else:
+            _graduated_sa_models.discard(_OWN_ZA_MODEL)
         # A one-shot task (chat, draft) that was mid-flight when Tank restarted did not finish.
         # Base batches are not in this list: Base resumes them in its own room.
         await conn.execute(
@@ -814,6 +843,7 @@ async def _startup() -> None:
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    _graduated_sa_models.discard(_OWN_ZA_MODEL)
     if _bot_task:
         _bot_task.cancel()
         await asyncio.gather(_bot_task, return_exceptions=True)
@@ -1994,6 +2024,8 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
         )
         if str(updated).endswith(" 0"):
             return
+        if move.policy["model"] == _OWN_ZA_MODEL:
+            _graduated_sa_models.add(_OWN_ZA_MODEL)
         await conn.execute(
             """
             INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
@@ -2020,6 +2052,7 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
     await conn.execute("SELECT set_config('tank.policy_swap_apply','',true)")
     if str(updated).endswith(" 0"):
         return
+    _graduated_sa_models.discard(_OWN_ZA_MODEL)
     await conn.execute(
         """
         INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
@@ -2453,6 +2486,8 @@ async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
                 "INSERT INTO tank.policy_log (task_type,action,from_model,to_model,by_user,detail) VALUES ($1,'rollback',$2,$3,$4,$5::jsonb)",
                 task_type, row["model"], target, body.by, json.dumps({"automatic": False}),
             )
+            if row["model"] == _OWN_ZA_MODEL:
+                _graduated_sa_models.discard(_OWN_ZA_MODEL)
     return {"ok": True, "model": target}
 
 

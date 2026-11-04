@@ -19,7 +19,7 @@ ENABLED_ENV = "GHOST_PATCH_PR_ENABLED"
 ENABLED_ALIASES = (ENABLED_ENV, "PATCH_PR_ENABLED")
 TOKEN_ENVS = ("GHOST_GITHUB_TOKEN", "GH_TOKEN")
 GITHUB_API = "https://api.github.com"
-NEVER_MERGE_NOTE = "CI must pass; Autumbra never merges. Founder / AMMOSYNC merge only after Zenas."
+NEVER_MERGE_NOTE = "CI must pass; Autumbra never merges. A human approval tap is required for every code fix."
 
 
 def enabled() -> bool:
