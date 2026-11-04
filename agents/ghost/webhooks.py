@@ -201,9 +201,9 @@ def accept_signed(
 
 
 async def accept_webhook(provider: str, body: bytes, *, headers, tank) -> dict[str, Any]:
-    """Existing signed callers retain HMAC; native provider requests fail closed."""
-    signature = headers.get('x-autumbra-signature') or headers.get('cf-webhook-signature')
-    if signature or provider.strip().lower() in {'edge', 'mailbox', 'host_firewall'}:
+    """Provider URLs use provider verification; HMAC belongs to internal relays."""
+    signature = headers.get('x-autumbra-signature')
+    if provider.strip().lower() in {'edge', 'mailbox', 'host_firewall'}:
         envelope = accept_signed(provider, body, signature=signature,
                                  timestamp=headers.get('x-autumbra-timestamp'),
                                  nonce=headers.get('x-autumbra-nonce'))

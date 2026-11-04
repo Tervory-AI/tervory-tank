@@ -476,7 +476,7 @@ def test_existing_hmac_path_still_queues_the_verified_tenant(monkeypatch):
     body = json.dumps(payload).encode()
     timestamp, nonce = str(int(time.time())), 'placeholder-review-hmac'
     signature = sign_body(secret='placeholder-secret', body=body, timestamp=timestamp, nonce=nonce)
-    response = TestClient(create_app()).post('/ghost/autumbra/webhooks/cloudflare', content=body,
+    response = TestClient(create_app()).post('/ghost/autumbra/webhooks/edge', content=body,
         headers={'x-autumbra-signature': signature, 'x-autumbra-timestamp': timestamp, 'x-autumbra-nonce': nonce})
     assert response.status_code == 200 and response.json()['queued'] is True
     assert len(calls) == 1 and calls[0]['tenant_id'] == payload['tenant_id']
