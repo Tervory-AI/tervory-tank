@@ -1,0 +1,57 @@
+# Base shipped-feature inventory
+
+Baseline: origin/main d5d3ea2e, checked on 4 November 2026. This inventory follows
+merged history and executable code, not the presence or absence of other PRs.
+
+## Fixes found by this pass
+
+Fixed the flat-image fixture in `tests/test_base_engine_terms_approved.py`:
+with TMPDIR inside this checkout, default ancestor discovery found host skills.
+The child now uses the explicit image SKILLS_DIR, including when absent. No
+runtime skill selection changed. Initial baseline: 503 passed, this one failed.
+The local security precheck now bounds Semgrep jobs (default 2), passed into
+the same pinned container, to avoid oversubscribing the shared test host. No
+rule, target, severity, exception or scanner requirement is changed. The first
+unbounded scan timed out at 900 seconds and is not counted as a pass.
+Claude can use this section at the top of the PR.
+
+## Shipped surface and offline coverage
+
+| Feature | Merged evidence / current code | Existing offline path |
+| --- | --- | --- |
+| Official FFL reference, monthly changes, collector inclusion, reference adoption and persistent blocked-source handling | #440, #450 and subsequent main; `tank/base_reference_status.py`, `agents/base/engines/ffl/reference.py`, `tank/base_repository.py` | `test_base_atf_download`, `test_base_reference_adopt`, `test_base_reference_file`, `test_base_database` |
+| Upload/enrich batch, task collection and tenant-owned records | `tank/base_product.py`, `agents/base/pipeline.py`, `tank/base_repository.py` | `test_base_workflow`, `test_base_product`, `test_base_database` |
+| Records UI, search, per-contact page/date, complete contact CSV, formula protection and unknown cost | #450; `workspace/app/base`, `tank/base_evidence.py`, `tank/base_metrics.py` | `test_base_product`, `test_base_page`, `test_base_unknown_cost`, `test_base_product_origin`, `test_base_proxy_boundary` |
+| HTML-only email/phone quality and contact provenance | #623/#647; `tank/skills/base.contacts`, `tank/base_evidence.py` | `test_base_contact_quality`, `test_base_wave4` |
+| Own-site social presence, MIT pinned technology signals, online sales and newest-year evidence | #647 and earlier shipped skills; `tank/skills/base.socials`, `tank/skills/base.site_signals`, `tank/base_evidence.py` | `test_base_readiness`, `test_base_site_signals`, `test_base_contact_quality` |
+| Verified find filters, saved immutable lists, list enumeration/show/export and CRM handoff | main B4; `tank/base_lists.py`, `tank/base_list_crm.py`, `tank/command.py` | `test_base_lists` |
+| Product extraction, provenance, product filters and separate product CSV | #603/#623; `tank/skills/base.extract`, `tank/base_lists.py`, `tank/base_metrics.py`, Base download route | `test_base_products`, `test_base_list_products` |
+| Ledger-linked list costs, unknown missing/shared allocation and fixed-point decimal CSV | #623; `tank/base_metrics.py` | `test_base_list_costs` |
+| Founder state campaigns, sequential dispatch, progress and evidence report | #647; `tank/base_campaign_commands.py`, `tank/base_repository.py` | `test_base_readiness`, `test_base_database` |
+| Saved 200-record reproducible human audit, checked upload, Wilson interval, histogram and explicit field/source reliability | #603/#647; `tank/base_audit.py`, `tank/base_audit_commands.py`, `tank/base_reliability.py` | `test_base_audit`, `test_base_audit_commands`, `test_base_source_reliability`, `test_base_readiness` |
+| Apollo-only uploaded CSV comparison, field agreement, ambiguity and ownership guards; $0 existing card | #647; `tank/base_compare.py`, `tank/command.py` | `test_base_wave4` |
+| FFL manifest/package and neutral vertical scaffolder, unchanged FFL bytes | #647; `agents/base/engines/ffl/manifest.json`, `agents/base/engines/scaffold.py` | `test_base_wave4`, existing FFL tests |
+| Founder trial, measured receipts and source-generated review candidates | main; `tank/base_product.py`, `agents/base/trials`, gold-source helpers | `test_base_trial_launch`, `test_base_gold_sources`, `test_base_gold_nightly`, `test_base_database` |
+| Existing Base vault/plugin controls and protected Workspace proxy | `workspace/app/base`, existing shared vault routes | `test_base_page`, `test_base_product_origin`, `test_base_proxy_boundary` |
+
+## Approval boundaries
+
+- `base.contacts/1.4.0` is shipped as a minor **candidate**, not implicitly approved.
+  Evaluate it and use the existing founder Skala approval flow before runtime pinning.
+- FFL engine SOT and compliance flags remain empty. No Google Places, paid feeds,
+  carrier lookup, GPL fingerprints or review-content fetch is added.
+- [Base case-study audit frames](../figma/base-audit/REGISTER.md) are Proposed,
+  not approved. List these frames for review; do not build a new audit page or copy.
+- The founder sheet will describe the completed shipped behavior. It will never
+  assert that an endpoint from another branch must remain missing.
+
+## Offline verification
+
+- Full Base + command/token + 50-row acceptance run: **672 passed**, no skips,
+  61 existing warnings, 350.68 seconds. Models/external sockets blocked; real
+  PostgreSQL is disposable and loopback-only. Worker responses are recorded.
+- Flat-image fixture after correction: **16 passed**.
+- Later catalogue HTTP/receipt and public-source candidate assertions receive a
+  focused acceptance rerun before the sheet push.
+- Security precheck is mandatory before each push; the initial timed-out Semgrep
+  run is not a pass. No gitleaks/Semgrep exception or skipped scan is used.
