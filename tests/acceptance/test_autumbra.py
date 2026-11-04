@@ -596,7 +596,7 @@ Module._load=function(name,parent,main){
  if(name.startsWith('@/')) return original.call(this,path.join(root,'workspace',name.slice(2)),parent,main);
  return original.call(this,name,parent,main);
 };
-process.env.AUTUMBRA_UNDO_TOKEN_SECRET='fixture-undo-key';process.env.TANK_API_KEY='fixture-workspace-key';process.env.TANK_URL='http://tank:8000';
+process.env.AUTUMBRA_UNDO_TOKEN_SECRET='fixture-undo-key';process.env.TANK_API_KEY='placeholder-workspace-key';process.env.TANK_URL='http://tank:8000';
 (async()=>{
  if(id==='A58'){
   const page=require(path.join(root,'workspace/app/autumbra/receipts/weekly/[tenant]/page.tsx')).default;
