@@ -1,0 +1,58 @@
+{
+  "pageId": "256:9",
+  "checks": [
+    {
+      "id": "465:26693",
+      "mainId": "533:19787",
+      "w": 240,
+      "h": 1360,
+      "expectedW": 240,
+      "expectedH": 1360,
+      "nonInter": []
+    },
+    {
+      "id": "465:26776",
+      "mainId": "533:19787",
+      "w": 240,
+      "h": 1076,
+      "expectedW": 240,
+      "expectedH": 1076,
+      "nonInter": []
+    },
+    {
+      "id": "465:26859",
+      "mainId": "533:19787",
+      "w": 240,
+      "h": 1056,
+      "expectedW": 240,
+      "expectedH": 1056,
+      "nonInter": []
+    },
+    {
+      "id": "465:26942",
+      "mainId": "533:19787",
+      "w": 240,
+      "h": 848,
+      "expectedW": 240,
+      "expectedH": 848,
+      "nonInter": []
+    },
+    {
+      "id": "465:27025",
+      "mainId": "533:19787",
+      "w": 240,
+      "h": 848,
+      "expectedW": 240,
+      "expectedH": 848,
+      "nonInter": []
+    }
+  ],
+  "exports": [
+    {
+      "id": "256:10",
+      "name": "tiger-desktop.png",
+      "w": 1440,
+      "h": 1449
+    }
+  ]
+}

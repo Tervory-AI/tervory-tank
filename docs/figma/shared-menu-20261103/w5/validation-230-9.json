@@ -1,0 +1,431 @@
+{
+  "pageId": "230:9",
+  "checks": [
+    {
+      "id": "465:45832",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:45919",
+      "mainId": "539:19647",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:46007",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:46094",
+      "mainId": "539:19647",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:46183",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:46270",
+      "mainId": "539:19647",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:46359",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:46447",
+      "mainId": "539:19647",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:47228",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:47318",
+      "mainId": "539:19647",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:47406",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:47493",
+      "mainId": "539:19647",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:47581",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:47668",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:47756",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:47843",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:47931",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:48018",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:48107",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:48195",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:48286",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:48376",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "465:48464",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "465:48551",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "468:26351",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "468:26459",
+      "mainId": "539:19647",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "468:27702",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "468:27808",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "468:27923",
+      "mainId": "539:19647",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "468:27957",
+      "mainId": "539:19647",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "468:26495",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "468:26603",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "468:28000",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "468:28106",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 860,
+      "expectedW": 240,
+      "expectedH": 860,
+      "nonInter": []
+    },
+    {
+      "id": "468:28221",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    },
+    {
+      "id": "468:28255",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 72,
+      "expectedW": 375,
+      "expectedH": 72,
+      "nonInter": []
+    }
+  ],
+  "remainingSharedSourceInstances": [
+    {
+      "id": "465:43393",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "465:43476",
+      "name": "CRM navigation / Mobile header"
+    },
+    {
+      "id": "465:48656",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "465:48743",
+      "name": "CRM navigation / Mobile header"
+    },
+    {
+      "id": "465:48828",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "465:48912",
+      "name": "CRM navigation / Mobile header"
+    },
+    {
+      "id": "465:48997",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "465:49081",
+      "name": "CRM navigation / Mobile header"
+    },
+    {
+      "id": "468:26071",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "468:26177",
+      "name": "CRM navigation / Mobile header"
+    },
+    {
+      "id": "468:26211",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "468:26317",
+      "name": "CRM navigation / Mobile header"
+    },
+    {
+      "id": "468:30893",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "468:31000",
+      "name": "CRM navigation / Mobile header"
+    },
+    {
+      "id": "468:31035",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "468:31142",
+      "name": "CRM navigation / Mobile header"
+    },
+    {
+      "id": "468:31177",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "468:31284",
+      "name": "CRM navigation / Mobile header"
+    },
+    {
+      "id": "468:31319",
+      "name": "CRM navigation / White sidebar"
+    },
+    {
+      "id": "468:31431",
+      "name": "CRM navigation / Mobile header"
+    }
+  ],
+  "exports": [
+    {
+      "id": "231:11870",
+      "name": "rig-mcp-desktop.png",
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "id": "231:12224",
+      "name": "tisan-mcp-desktop.png",
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "id": "465:45919",
+      "name": "rig-compact-bar.png",
+      "w": 375,
+      "h": 72
+    }
+  ]
+}

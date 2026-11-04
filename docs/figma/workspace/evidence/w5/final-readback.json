@@ -1,0 +1,948 @@
+[
+  {
+    "id": "556:3054",
+    "name": "Feedback / Base / Note / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 91,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "556:3190",
+    "name": "Feedback / Base / Saved / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 84,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "556:3319",
+    "name": "Feedback / Tiger / Note / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 91,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "556:3455",
+    "name": "Feedback / Tiger / Saved / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 84,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:5147",
+    "name": "Feedback / Market Lab / Note / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 91,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:5283",
+    "name": "Feedback / Market Lab / Saved / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 84,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:5412",
+    "name": "Feedback / Rig / Note / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 91,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:5548",
+    "name": "Feedback / Rig / Saved / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 84,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:5679",
+    "name": "Feedback / Tisan / Note / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 91,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:5815",
+    "name": "Feedback / Tisan / Saved / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 84,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:5944",
+    "name": "Feedback / Radix / Note / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 91,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:6080",
+    "name": "Feedback / Radix / Saved / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 84,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:6417",
+    "name": "Feedback / Zenas / Note / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 91,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:6553",
+    "name": "Feedback / Zenas / Saved / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 84,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:6682",
+    "name": "Feedback / Trigger / Note / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 91,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:6818",
+    "name": "Feedback / Trigger / Saved / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 84,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:7633",
+    "name": "Feedback / Result / Empty / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 76,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "557:7753",
+    "name": "Feedback / Result / Loading / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 78,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "557:7875",
+    "name": "Feedback / Result / Error / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 77,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "557:4919",
+    "name": "Feedback / Base / Note / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 32,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:4979",
+    "name": "Feedback / Base / Saved / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 25,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:5032",
+    "name": "Feedback / Tiger / Note / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 32,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:5092",
+    "name": "Feedback / Tiger / Saved / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 25,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:6949",
+    "name": "Feedback / Market Lab / Note / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 32,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:7009",
+    "name": "Feedback / Market Lab / Saved / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 25,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:7062",
+    "name": "Feedback / Rig / Note / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 32,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:7122",
+    "name": "Feedback / Rig / Saved / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 25,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:7177",
+    "name": "Feedback / Tisan / Note / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 32,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:7237",
+    "name": "Feedback / Tisan / Saved / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 25,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:7290",
+    "name": "Feedback / Radix / Note / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 32,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:7350",
+    "name": "Feedback / Radix / Saved / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 25,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:7405",
+    "name": "Feedback / Zenas / Note / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 32,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:7465",
+    "name": "Feedback / Zenas / Saved / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 25,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:7518",
+    "name": "Feedback / Trigger / Note / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 32,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": true
+  },
+  {
+    "id": "557:7578",
+    "name": "Feedback / Trigger / Saved / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 25,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": true,
+    "hasSave": false
+  },
+  {
+    "id": "557:7996",
+    "name": "Feedback / Result / Empty / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 17,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "557:8040",
+    "name": "Feedback / Result / Loading / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 19,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "557:8086",
+    "name": "Feedback / Result / Error / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 18,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "559:3085",
+    "name": "Paid steps settings / Default / 1440 · Proposed",
+    "width": 1440,
+    "height": 946,
+    "descendants": 120,
+    "nonInter": [],
+    "steps": [
+      {
+        "id": "559:3205",
+        "choices": [
+          {
+            "id": "I559:3205;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3205;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3213",
+        "choices": [
+          {
+            "id": "I559:3213;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3213;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3221",
+        "choices": [
+          {
+            "id": "I559:3221;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3221;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3231",
+        "choices": [
+          {
+            "id": "I559:3231;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3231;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3239",
+        "choices": [
+          {
+            "id": "I559:3239;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3239;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      }
+    ],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "559:3249",
+    "name": "Paid steps settings / Paused / 1440 · Proposed",
+    "width": 1440,
+    "height": 982,
+    "descendants": 121,
+    "nonInter": [],
+    "steps": [
+      {
+        "id": "559:3370",
+        "choices": [
+          {
+            "id": "I559:3370;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3370;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3378",
+        "choices": [
+          {
+            "id": "I559:3378;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3378;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3386",
+        "choices": [
+          {
+            "id": "I559:3386;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3386;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3396",
+        "choices": [
+          {
+            "id": "I559:3396;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3396;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3404",
+        "choices": [
+          {
+            "id": "I559:3404;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3404;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      }
+    ],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "559:3414",
+    "name": "Paid steps settings / Saved / 1440 · Proposed",
+    "width": 1440,
+    "height": 988,
+    "descendants": 121,
+    "nonInter": [],
+    "steps": [
+      {
+        "id": "559:3535",
+        "choices": [
+          {
+            "id": "I559:3535;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3535;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3543",
+        "choices": [
+          {
+            "id": "I559:3543;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3543;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3551",
+        "choices": [
+          {
+            "id": "I559:3551;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3551;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3561",
+        "choices": [
+          {
+            "id": "I559:3561;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3561;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "559:3569",
+        "choices": [
+          {
+            "id": "I559:3569;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I559:3569;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      }
+    ],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "562:3565",
+    "name": "Paid steps settings / Empty / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 70,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "562:3679",
+    "name": "Paid steps settings / Loading / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 72,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "562:3795",
+    "name": "Paid steps settings / Error / 1440 · Proposed",
+    "width": 1440,
+    "height": 900,
+    "descendants": 71,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "561:3445",
+    "name": "Paid steps settings / Default / 375 · Proposed",
+    "width": 375,
+    "height": 1375,
+    "descendants": 61,
+    "nonInter": [],
+    "steps": [
+      {
+        "id": "561:3489",
+        "choices": [
+          {
+            "id": "I561:3489;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3489;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3497",
+        "choices": [
+          {
+            "id": "I561:3497;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3497;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3505",
+        "choices": [
+          {
+            "id": "I561:3505;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3505;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3515",
+        "choices": [
+          {
+            "id": "I561:3515;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3515;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3523",
+        "choices": [
+          {
+            "id": "I561:3523;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3523;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      }
+    ],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "561:3533",
+    "name": "Paid steps settings / Paused / 375 · Proposed",
+    "width": 375,
+    "height": 1411,
+    "descendants": 62,
+    "nonInter": [],
+    "steps": [
+      {
+        "id": "561:3578",
+        "choices": [
+          {
+            "id": "I561:3578;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3578;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3586",
+        "choices": [
+          {
+            "id": "I561:3586;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3586;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3594",
+        "choices": [
+          {
+            "id": "I561:3594;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3594;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3604",
+        "choices": [
+          {
+            "id": "I561:3604;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3604;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3612",
+        "choices": [
+          {
+            "id": "I561:3612;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3612;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      }
+    ],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "561:3622",
+    "name": "Paid steps settings / Saved / 375 · Proposed",
+    "width": 375,
+    "height": 1417,
+    "descendants": 62,
+    "nonInter": [],
+    "steps": [
+      {
+        "id": "561:3667",
+        "choices": [
+          {
+            "id": "I561:3667;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3667;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3675",
+        "choices": [
+          {
+            "id": "I561:3675;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3675;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3683",
+        "choices": [
+          {
+            "id": "I561:3683;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3683;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3693",
+        "choices": [
+          {
+            "id": "I561:3693;514:3150;266:3033",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3693;514:3152;266:3035",
+            "text": "Auto"
+          }
+        ]
+      },
+      {
+        "id": "561:3701",
+        "choices": [
+          {
+            "id": "I561:3701;514:3158;266:3035",
+            "text": "Ask"
+          },
+          {
+            "id": "I561:3701;514:3160;266:3033",
+            "text": "Auto"
+          }
+        ]
+      }
+    ],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "562:3910",
+    "name": "Paid steps settings / Empty / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 11,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "562:3948",
+    "name": "Paid steps settings / Loading / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 13,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  },
+  {
+    "id": "562:3988",
+    "name": "Paid steps settings / Error / 375 · Proposed",
+    "width": 375,
+    "height": 900,
+    "descendants": 12,
+    "nonInter": [],
+    "steps": [],
+    "hasNote": false,
+    "hasSave": false
+  }
+]
