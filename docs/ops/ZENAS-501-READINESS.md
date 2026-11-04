@@ -18,7 +18,7 @@ fingerprints, excess lengths and exhausted scan budgets fail closed.
 
 ## Narrow offline proof
 
-Use PYTHONPATH=tank with the repository's development dependencies:
+Use PYTHONPATH=.:tank with the repository's development dependencies:
 
     pytest -q tests/test_zenas_rule_card_dated_quotes.py tests/test_zenas_selftest_misses.py
     pytest -q tests/zenas_za_meaning_search/test_sa_scope.py
