@@ -13,6 +13,9 @@ Source baseline: `origin/main` `c94610bd0f9f35443f9d58deb45ec44b60ecb33d`. The r
 | Data · empty batch | https://app.tervory.com/data | 1440 | [604:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=604-9) | Proposed | [PNG](evidence/data-figma-1440.png) | [PNG](evidence/data-browser-1440.png) |
 | Data · empty batch | https://app.tervory.com/data | 375 | [606:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=606-9) | Proposed | [PNG](evidence/data-figma-375.png) | [PNG](evidence/data-browser-375.png) |
 
+| Ledger | https://app.tervory.com/ledger | 1440 | [615:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=615-9) | Proposed | [PNG](evidence/ledger-figma-1440.png) | [PNG](evidence/ledger-browser-1440.png) |
+| Ledger | https://app.tervory.com/ledger | 375 | [616:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=616-9) | Proposed | [PNG](evidence/ledger-figma-375.png) | [PNG](evidence/ledger-browser-375.png) |
+
 ## Data
 
 Unchanged `workspace/app/data/page.tsx`, `data.css`, actual `Shell`, global CSS, local fonts and original brand images. Existing default sample CSV and the built empty-batch message are retained. No batch, upload, enrichment or export is run. Client role excludes founder tools. The account-provider widget is unavailable offline; no company/avatar UI is invented.
@@ -25,7 +28,7 @@ Both native Figma PNGs have the same dimensions as their browser references: 144
 
 | Page | Route | Progress |
 | --- | --- | --- |
-| Ledger | `/ledger` | Pending |
+| Ledger | `/ledger` | Drawn; Proposed, IDs above |
 | Matters | `/matters` | Pending |
 | Chat cost details | `/chats/evidence/[thread]` and `/chats/evidence/[thread]/[row]` | Pending |
 | Onboarding | `/onboarding` | Pending; account-provider widget requires separate evidence |
@@ -36,3 +39,9 @@ Both native Figma PNGs have the same dimensions as their browser references: 144
 | Autumbra weekly receipts | `/autumbra/receipts/weekly/[tenant]` | Pending; never use a real credential-bearing link |
 
 Skipped: Billing; Access, Admin, Review, Rig 3D admin, Tank, Skala and Gold. No frames for those pages are created.
+
+## Ledger
+
+Unchanged `workspace/app/ledger/page.tsx`, Shell and global CSS. Existing test identity “Example”; an empty 30-day summary produces the built zero values, unavailable per-answer dashes, four rung rows and empty By model table. These are fixture values, not live ledger measurements. No model, rung or financial wording is changed.
+
+[Every frame/node ID and exact copy](evidence/ledger-nodes.json); [dimension, source-copy and PNG hash checks](evidence/ledger-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
