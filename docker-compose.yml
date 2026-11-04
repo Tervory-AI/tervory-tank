@@ -86,6 +86,7 @@ services:
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
       TANK_KEY_TRIGGER: ${TANK_KEY_TRIGGER:-}
+      TANK_KEY_GHOST: ${TANK_KEY_GHOST:-}
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
@@ -101,6 +102,7 @@ services:
       - tervory-gw-template
       - tervory-gw-tiger
       - tervory-gw-trigger
+      - tervory-gw-ghost
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan

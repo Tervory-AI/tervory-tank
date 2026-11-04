@@ -43,10 +43,10 @@ def main(names):
         keys = {v.split("=", 1)[0] for v in row["Config"]["Env"]}
         assert not keys & {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "LITELLM_MASTER_KEY"}, "model key in room"
     service = room["Config"].get("Labels", {}).get("com.docker.compose.service")
-    room_name = {"agent-base": "base", "agent-tiger": "tiger", "agent-zenas": "zenas", "agent-market-lab": "market_lab", "agent-radix": "radix", "agent-tisan": "tisan", "agent-trigger": "trigger"}.get(service)
+    room_name = {"agent-base": "base", "agent-tiger": "tiger", "agent-zenas": "zenas", "agent-market-lab": "market_lab", "agent-radix": "radix", "agent-tisan": "tisan", "agent-trigger": "trigger", "agent-ghost": "ghost"}.get(service)
     assert room_name is not None, "unsupported room"
     stem = room_name.replace("_", "-")
-    provisioned = room_name in {"market_lab", "radix", "tisan", "trigger"}
+    provisioned = room_name in {"market_lab", "radix", "tisan", "trigger", "ghost"}
     assert len(rows) == (3 if room_name == "zenas" else 4 if room_name == "ghost" else 5), "room tool topology mismatch"
     assert brain["Config"].get("Labels", {}).get("com.docker.compose.service") == stem + "-brain", "brain belongs to another room"
     if room_name == "zenas":

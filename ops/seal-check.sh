@@ -57,6 +57,7 @@ declare -A CORRIDOR=(
   [tisan-browser-gateway]="tervory-gw-tisan"
   [trigger-brain]="tervory-gw-trigger"
   [trigger-browser-gateway]="tervory-gw-trigger"
+  [ghost-brain]="tervory-gw-ghost"
   [zenas-brain]="tervory-gw-zenas"
   [agent-rig]="tervory-gw-rig"
   [rig-brain]="tervory-gw-rig"
@@ -220,6 +221,8 @@ for id in $ids; do
     trigger-sandbox) expected_nets="${project}_sandbox" ;;
     trigger-browser) expected_nets="${project}_browser" ;;
     trigger-browser-gateway) expected_nets="tervory-gw-trigger ${project}_browser" ;;
+    ghost-brain) expected_nets="tervory-gw-ghost ${project}_sandbox" ;;
+    ghost-sandbox) expected_nets="${project}_sandbox" ;;
     zenas-brain) expected_nets="tervory-gw-zenas ${project}_sandbox" ;;
     rig-forge) expected_nets="${project}_forge-control ${project}_forge-egress" ;;
     rig-forge-egress) expected_nets="${project}_forge-egress ${project}_forge-outbound" ;;
@@ -252,6 +255,8 @@ for id in $ids; do
       elif [[ ( "$service" == "tisan-brain" || "$service" == "tisan-browser-gateway" ) && "$net" == "tervory-gw-tisan" ]]; then
         continue
       elif [[ ( "$service" == "trigger-brain" || "$service" == "trigger-browser-gateway" ) && "$net" == "tervory-gw-trigger" ]]; then
+        continue
+      elif [[ ( "$service" == "ghost-brain" ) && "$net" == "tervory-gw-ghost" ]]; then
         continue
       elif [[ "$service" == "tiger-brain" && "$net" == "tervory-gw-tiger" ]]; then
         continue
@@ -341,6 +346,9 @@ for uuid in "${ROOMS[@]}"; do
   fi
   if [[ "$room" == "agent-trigger" && ( -n "${APP_SERVICES[$uuid/trigger-brain]+set}" || -n "${APP_SERVICES[$uuid/trigger-sandbox]+set}" || -n "${APP_SERVICES[$uuid/trigger-browser]+set}" || -n "${APP_SERVICES[$uuid/trigger-browser-gateway]+set}" ) ]]; then
     required_services+=" trigger-brain trigger-sandbox trigger-browser trigger-browser-gateway"
+  fi
+  if [[ "$room" == "agent-ghost" && ( -n "${APP_SERVICES[$uuid/ghost-brain]+set}" || -n "${APP_SERVICES[$uuid/ghost-sandbox]+set}" ) ]]; then
+    required_services+=" ghost-brain ghost-sandbox"
   fi
   if [[ "$room" == "autumbra-enforce" || -n "${APP_SERVICES[$uuid/enforce]+set}" ]]; then
     required_services+=" enforce egress-proxy health-observer health-egress-proxy"

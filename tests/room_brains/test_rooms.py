@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from tiger_brain.test_tg3 import TENANT, corridor as corridor, load, topology
-from test_room_seal import FIXTURES, leaks, network_flags, run_seal_check
+from test_room_seal import FIXTURES, add_autumbra_placements, leaks, network_flags, run_seal_check
 
 ROOT = Path(__file__).resolve().parents[2]
 ROOMS = json.loads((Path(__file__).parent / 'rooms.json').read_text())
@@ -33,6 +33,7 @@ def test_off_by_default_hardened_and_no_shared_data(room):
     assert services['agent-' + stem]['environment'][upper + '_BRAIN_ENABLED'] == '${' + upper + '_BRAIN_ENABLED:-false}'
     brain, sandbox = services[stem + '-brain'], services[stem + '-sandbox']
     assert brain['build']['dockerfile'] == 'agents/rig/Dockerfile.brain'
+    assert 'HERMES_COMMIT=d923a5eb487a17c0a68801bba9ef0f56c81040a8' in (ROOT / brain['build']['dockerfile']).read_text()
     assert brain['command'][1] == 'brain.standby:app'
     assert sandbox['build']['dockerfile'] == 'agents/base/Dockerfile.sandbox'
     assert brain['networks'] == ['gw', 'sandbox'] and sandbox['networks'] == ['sandbox']
@@ -85,7 +86,7 @@ def test_existing_volumes_are_byte_for_byte_unchanged(room):
     saved = json.loads((Path(__file__).parent / 'snapshots' / (room + '.json')).read_text())
     text = (ROOT / 'agents' / room / 'docker-compose.yml').read_text()
     section = text.split('\nvolumes:\n', 1)[1].split('networks:\n', 1)[0]
-    for kind in ('brain', 'browser'):
+    for kind in (('brain',) if room == 'ghost' else ('brain', 'browser')):
         section = re.sub(r'(?m)^  ' + room + '_' + kind + r'_data:\n(?:    .*\n)*', '', section)
     assert section == (saved['volumes'] if saved['volumes'] is not None else '\n')
     for name, mounts in saved['mounts'].items():
@@ -190,6 +191,8 @@ async def test_all_foreign_room_keys_refused_before_any_work(owning, room):
 
 def placement(room):
     data = json.loads((FIXTURES / 'sealed.json').read_text())
+    if room == 'ghost':
+        add_autumbra_placements(data)
     if room == 'tisan':
         sample = json.loads((FIXTURES / 'tisan.json').read_text())
         data['containers'].update(sample['containers'])
@@ -230,12 +233,9 @@ def placement(room):
     return data
 
 
-@pytest.mark.parametrize('room', ROOMS)
+@pytest.mark.parametrize('room,kind', [(room, kind) for room in ROOMS for kind in (('brain', 'sandbox') if room == 'ghost' else ('brain', 'sandbox', 'browser', 'browser-gateway'))])
 @pytest.mark.parametrize('fault', ['none', 'extra_internal', 'extra_outward', 'missing', 'outward_private'])
-@pytest.mark.parametrize('kind', ['brain', 'sandbox', 'browser', 'browser-gateway'])
 def test_seal_exact_networks_and_partial_optional_group(tmp_path, room, fault, kind):
-    if room == 'ghost' and kind.startswith('browser'):
-        pytest.skip('Watch keeps its existing browser; no new browser pair')
     data = placement(room)
     name = room.replace('_', '-') + '-' + kind
     if fault == 'missing':
@@ -270,6 +270,7 @@ def test_isolation_checker_with_own_fixture(monkeypatch, capsys, room, fault):
     if extra:
         rows[names[0]]['NetworkSettings']['Networks']['placeholder_' + extra] = {}
     if room == 'ghost':
+        del networks['tervory-gw-ghost']['Containers'][names[-1]]
         names.pop()
         rows[names[3]]['NetworkSettings']['Networks'] = {'tervory-gw-ghost': {}}
         networks['tervory-gw-ghost']['Containers'][names[3]] = {}
@@ -299,3 +300,17 @@ def test_isolation_checker_with_own_fixture(monkeypatch, capsys, room, fault):
     else:
         with pytest.raises(AssertionError):
             gate.main(names)
+
+
+def test_enforce_air_gap_is_unchanged_and_never_a_brain_room():
+    from fastapi import HTTPException
+    config = yaml.safe_load((ROOT / 'agents/ghost/docker-compose.enforce.yml').read_text())
+    assert config['services']['enforce']['networks'] == ['enforce_internal']
+    assert config['networks']['enforce_internal']['internal'] is True
+    assert not any(name.endswith(('-brain', '-sandbox')) for name in config['services'])
+    assert not any('BRAIN' in key for spec in config['services'].values() for key in spec.get('environment', {}))
+    # Enforce is excluded from the new owning-key/model boundary.
+    assert not any(name in agent_skills.ROOMS for name in ('enforce', 'autumbra_enforce', 'autumbra-enforce'))
+    for name in ('enforce', 'autumbra_enforce', 'autumbra-enforce'):
+        with pytest.raises(HTTPException):
+            agent_skills.room_text(name)

@@ -1,0 +1,13 @@
+{
+  "main": "de113044",
+  "volumes": "  agent_ghost_data:\n  ghost_browser_data:\n  threat_queues:\n",
+  "mounts": {
+    "agent-ghost": [
+      "agent_ghost_data:/data",
+      "threat_queues:/queues"
+    ],
+    "ghost-browser": [
+      "ghost_browser_data:/data"
+    ]
+  }
+}

@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException
 import agent_skills as route
 
 HOSTILE = ["base'); DELETE FROM tank.ledger; --", "rig' OR '1'='1",
-           "tiger'); DELETE FROM tank.ledger; --", "zenas' OR '1'='1", "market_lab'); DELETE FROM tank.ledger; --", "tisan' OR '1'='1", "trigger'); DELETE FROM tank.ledger; --", "Base", "Tiger", "Zenas", "radix' OR '1'='1", "enforce", "autumbra_enforce", "autumbra-watch", "", None, 7, [], {}]
+           "tiger'); DELETE FROM tank.ledger; --", "zenas' OR '1'='1", "market_lab'); DELETE FROM tank.ledger; --", "tisan' OR '1'='1", "trigger'); DELETE FROM tank.ledger; --", "ghost' OR '1'='1", "Base", "Tiger", "Zenas", "radix' OR '1'='1", "enforce", "autumbra_enforce", "autumbra-watch", "", None, 7, [], {}]
 
 
 class Pool:

@@ -103,7 +103,7 @@ def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
     ("tiger", {"tiger-browser", "tiger-sandbox"}),
     ("rig", {"rig-sandbox", "rig-browser", "rig-forge"}),
     # Radix is sealed on the live host today; this keeps it so.
-    ("radix", {"agent-radix"}),
+    ("radix", {"agent-radix", "radix-brain", "radix-sandbox", "radix-browser", "radix-browser-gateway"}),
 ])
 def test_normal_mode_would_put_sealed_services_on_coolifys_network(room: str, sealed: set[str]) -> None:
     text = (ROOT / "agents" / room / "docker-compose.yml").read_text(encoding="utf-8")

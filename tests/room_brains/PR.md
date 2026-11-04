@@ -121,8 +121,8 @@ configuration, checker network and bind mount remain unchanged. The brain receiv
 only Trigger's room/executor keys and its own new data volume; the browser has a
 separate new volume and no Tank key. No model caller is added.
 
-Hermes previously had no Trigger corridor or key. Its existing service now joins
-only the Trigger corridor and accepts `TANK_KEY_TRIGGER`, through the existing
+Hermes previously had no Trigger corridor or key. Its existing service now also joins
+the Trigger corridor and accepts `TANK_KEY_TRIGGER`, through the existing
 per-room authentication and memory scope. The main-stack configuration therefore
 redeploys along with Trigger. No main-stack volume or other service attachment is
 changed. The isolated checker still joins only `checkers`.
@@ -144,3 +144,95 @@ requirements are stated with their skips rather than claimed as executed.
 Trigger validation: 33 focused and 87 related cases passed. Two existing optional
 integration tests require isolated Postgres / a running LanguageTool pair and are
 not claimed as run. The staged secret scan passed.
+
+## Gate 5 — Autumbra Watch (Ghost)
+
+Watch gets `ghost-brain` and `ghost-sandbox` behind profile `brain`, with
+`GHOST_BRAIN_ENABLED` default false. It retains its existing own browser. Its new
+brain mounts only `ghost_brain_data`; the room, browser and threat-queue volume
+entries and mounts are byte-for-byte unchanged. Sandbox has only its own key,
+read-only root and tmpfs work. The brain has no Coolify, Enforce, edge, SMTP, Undo,
+DB or R2 settings. Its existing room still owns its existing tools/settings.
+
+Hermes now accepts Watch's own key on Watch's existing corridor, with its existing
+per-room memory scope. No Enforce attachment or credential is introduced. Enforce's
+compose is unchanged from main; a regression keeps its internal air gap and
+excludes any brain/sandbox service or setting. Its
+room name is still rejected before SQL. No caller/model escalation is added.
+The isolation checker accepts Watch's four-container topology and verifies its
+brain/sandbox separately from the existing browser. Existing Watch tests continue
+to require exactly its original default services' corridor and key restrictions.
+
+Files: `agents/ghost/docker-compose.yml:1,15,73,126,163`,
+`agents/_brain/standby.py:12`, `agents/base/check_brain_isolation.py:46`,
+`tank/agent_skills.py:35`, `docker-compose.yml:89,105`,
+`ops/seal-check.sh:60,224,259,350`, `.env.example:572`,
+`docs/cursor/ROOMS.md:259`, `tests/room_brains/rooms.json:1`,
+`snapshots/ghost.json:1`, and `test_rooms.py:85,238,259,305` (existing browser-volume
+preservation, optional group seals, four-container fixture and Enforce exclusion).
+`tests/test_ghost_routes.py:164`, `tests/test_ghost_inventory.py:198`,
+`tests/test_hermes_memory.py:429` and `tests/test_ledger_sql_param.py:21` retain
+existing service restrictions and cover the newly authorized memory neighbour/key.
+
+## Capacity and deployment acceptance
+
+The five optional profiles add planned caps of 21 GiB and 10.5 CPUs together,
+including four new private browsers/gateways. That exceeds the dated available
+memory snapshot. These are limits, not measured usage; no capacity approval is
+inferred, no profile was enabled and no larger box is requested. Founder enablement
+requires a fresh read-only host measurement. All flags remain false by default.
+
+For newly raw compose resources, keep the current project identity and existing
+volumes when enabling Raw Compose Deployment. Every named room redeploys on merge;
+Base's isolation-checker path also selects Base, and Tank/main compose changes
+redeploy the main stack and configured ZA counterpart. No deployment or existing
+volume operation was performed. After authorized deployment, check the host seal;
+a default deploy must run none of the new services. After founder profile approval,
+run each room's isolation gate with its own container names (Watch: room, brain,
+sandbox, browser; other new rooms also supply gateway). Raw Compose is required.
+
+The live host seal checks and enabled-profile deployment acceptance remain pending.
+No hosted CI result is claimed before Claude opens the PR.
+
+## Final offline validation
+
+The full cross-room run collected 594 cases: 590 passed, two existing optional
+Trigger integration cases skipped, and two test expectations failed initially.
+The original log is retained. The Watch volume comparison stripped its existing
+browser volume as if it were new; the comparison now removes only Watch's new
+brain volume. The normal-mode leak test listed only agent-radix; it now requires
+all five sealed Radix services to be detected. Both failed cases and their seven
+related cases then passed (9 focused rechecks). All 592 runnable cases are thus
+accounted for without removing or skipping any new requirement.
+
+In addition, Watch's complete focused group passed 23 cases, a 103-case fast
+cross-room group passed, all 29 static compose seals passed, and all 29 one-door
+and secret guards passed. The full run covers the new rooms, Base routes and
+isolation, Tiger's brain, both Zenas regions, hostile SQL values, tenant ledgers,
+Hermes memory and the existing Watch, Trigger, Tisan/Figma and room topology tests.
+Existing integration skips require disposable Postgres / a running LanguageTool
+pair; those dependencies were not provisioned. No live model/provider was used.
+
+Evidence: `squad-initial.txt`, `squad-corrections.txt`, `ghost-tests.txt`,
+`squad-fast.txt`, `static-seals.txt`, `ghost-guards.txt` and the exact lint output
+under `evidence/`. Tests ran in a task-only network-disabled container with socket
+access restricted to unix/loopback; helper containers had `--rm`, the
+`tervory.test=1` label and `codex-room-brains` names. Temporary files stayed in this
+checkout. Runtime proof used the cached shared builds with this checkout's adapter;
+no fresh network-dependent image build or complete room deploy is claimed.
+
+`tests/test_room_seal.py:101` now includes all optional Radix services in the
+negative normal-mode test. This checks the required Raw Compose protection rather
+than excluding the new services from the seal regression.
+
+Prior pushed gate heads:
+
+- Market Lab: `18621dbd9a9fa5892aa77539d569aba31c938ff4`
+- Radix: `179f45bb6369c059bc7b99462f273f83abe9e7cd`
+- Tisan: `833c11cca2166e09d57d141aff476779efc32be6`
+- Trigger: `149d8ed60b5701f4ed6cab3aa3aa78a450180977`
+- Watch: current branch head reported with the final push.
+
+The final semantic Enforce boundary check also passes; Enforce remains on exactly
+its internal network with no brain/sandbox service or setting, and its compose
+has no diff from main. `evidence/enforce-boundary.txt` records the focused check.

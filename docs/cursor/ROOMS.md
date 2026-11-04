@@ -272,6 +272,7 @@ boundary; no ZA deployment or forwarding is introduced.
 | Radix | `RADIX_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
 | Tisan | `TISAN_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
 | Trigger | `TRIGGER_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Autumbra Watch (`ghost`) | `GHOST_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; existing Watch browser unchanged |
 
 All added services carry profile `brain`. A normal Compose deployment starts
 none of them. The flag is reserved for a future caller: enabling a profile or
@@ -297,6 +298,11 @@ Boston snapshot: **3 Nov 2026 16:35 PST (4 Nov 00:35 UTC)**, read-only
 | All container limits | 32,212,254,720 |
 | Running container limits | 32,212,254,720 |
 
+Planned additional limits for all five profiles together: **21 GiB
+(22,548,578,304 bytes) and 10.5 CPUs**. These are caps, not measured usage; the
+combined memory caps exceed this snapshot's available memory. Do not enable the
+squad together on the basis of this measurement. Keep every new profile off.
+
 65 containers, 62 running; 29 have no memory limit. See the complete per-container
 [snapshot](../../tests/room_brains/evidence/boston-memory.txt). Available memory is
 a snapshot, not an allocation; summed limits and unlimited containers require
@@ -307,7 +313,11 @@ Tank changes also redeploy the main stack and its configured ZA counterpart.
 Raw Compose Deployment must be enabled in Coolify for the files carrying its
 marker. Preserve the existing Compose project identity when switching modes so
 unchanged room volumes retain their current identity. No volume migration or
-replacement is part of this work. Hermes also receives Trigger's owning key and
-joins only its existing corridor, so its optional memory URL is reachable. After deployment, run `ops/seal-check.sh` and,
+replacement is part of this work. Hermes also receives Trigger and Watch's owning
+keys and joins their existing corridors, so their optional memory URLs are reachable.
+Watch's brain receives no Coolify, Enforce, edge, SMTP or Undo settings. It mounts
+none of the existing room, browser or threat-queue volumes. Enforce's compose and
+air gap are unchanged; Enforce is excluded from the brain room map. After
+deployment, run `ops/seal-check.sh` and,
 if the optional profile is authorized, the isolation checker with the room's
 container names. Offline fixtures do not replace that host check.

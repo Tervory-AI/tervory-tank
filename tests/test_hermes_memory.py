@@ -431,6 +431,7 @@ def test_hermes_joins_each_agent_corridor() -> None:
         "tervory-gw-template",
         "tervory-gw-tiger",
         "tervory-gw-trigger",
+        "tervory-gw-ghost",
         "tervory-gw-market_lab",
         "tervory-gw-radix",
         "tervory-gw-tisan",
