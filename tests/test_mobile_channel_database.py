@@ -42,6 +42,8 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
                 statement = re.search(r"CREATE TABLE IF NOT EXISTS tank\." + table + r" \(.*?\n\);", schema, re.S)
                 assert statement
                 await owner.execute(statement.group())
+            # An installation that has rolled out RLS: mobile tables follow it.
+            await owner.execute("ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY")
             migration = schema.split("-- BEGIN mobile\n", 1)[1].split("-- END mobile", 1)[0]
             await owner.execute(migration)
             await owner.execute(migration)

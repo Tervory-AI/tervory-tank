@@ -3175,6 +3175,10 @@ CREATE TABLE IF NOT EXISTS tank.mobile_drafts (
 DO $$
 DECLARE mobile_table text;
 BEGIN
+ -- Follow an existing RLS rollout; do not turn it on for a legacy installation.
+ IF NOT EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  RETURN;
+ END IF;
  FOREACH mobile_table IN ARRAY ARRAY['mobile_codes','mobile_sessions','mobile_devices','mobile_drafts'] LOOP
   EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY', mobile_table);
   EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY', mobile_table);
