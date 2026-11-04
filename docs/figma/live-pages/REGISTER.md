@@ -40,6 +40,11 @@ Source baseline: `origin/main` `c94610bd0f9f35443f9d58deb45ec44b60ecb33d`. The r
 | Autumbra public | https://app.tervory.com/autumbra | 1440 | [649:10](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=649-10) | Proposed | [PNG](evidence/autumbra-figma-1440.png) | [PNG](evidence/autumbra-browser-1440.png) |
 | Autumbra public | https://app.tervory.com/autumbra | 375 | [649:22](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=649-22) | Proposed | [PNG](evidence/autumbra-figma-375.png) | [PNG](evidence/autumbra-browser-375.png) |
 
+| Autumbra undo | https://app.tervory.com/autumbra/undo/[id] | 1440 | [666:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=666-9) | Proposed | [PNG](evidence/undo-figma-1440.png) | [PNG](evidence/undo-browser-1440.png) |
+| Autumbra undo | https://app.tervory.com/autumbra/undo/[id] | 375 | [666:17](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=666-17) | Proposed | [PNG](evidence/undo-figma-375.png) | [PNG](evidence/undo-browser-375.png) |
+| Autumbra weekly receipts | https://app.tervory.com/autumbra/receipts/weekly/[tenant] | 1440 | [667:11](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=667-11) | Proposed | [PNG](evidence/weekly-figma-1440.png) | [PNG](evidence/weekly-browser-1440.png) |
+| Autumbra weekly receipts | https://app.tervory.com/autumbra/receipts/weekly/[tenant] | 375 | [667:17](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=667-17) | Proposed | [PNG](evidence/weekly-figma-375.png) | [PNG](evidence/weekly-browser-375.png) |
+
 ## Data
 
 Unchanged `workspace/app/data/page.tsx`, `data.css`, actual `Shell`, global CSS, local fonts and original brand images. Existing default sample CSV and the built empty-batch message are retained. No batch, upload, enrichment or export is run. Client role excludes founder tools. The account-provider widget is unavailable offline; no company/avatar UI is invented.
@@ -59,8 +64,8 @@ Both native Figma PNGs have the same dimensions as their browser references: 144
 | Stored Market Lab sources | `/market-lab/sources/[id]` | Pending |
 | Moot public watch | `/moot` and `/moot/[match]` on zenas.tervory.com | Pending |
 | Autumbra public | `/autumbra` | Drawn; Proposed, IDs above |
-| Autumbra undo | `/autumbra/undo/[id]` | Pending; never use a real credential-bearing link |
-| Autumbra weekly receipts | `/autumbra/receipts/weekly/[tenant]` | Pending; never use a real credential-bearing link |
+| Autumbra undo | `/autumbra/undo/[id]` | Drawn; Proposed, no credential used |
+| Autumbra weekly receipts | `/autumbra/receipts/weekly/[tenant]` | Drawn; Proposed, isolated authorized empty fixture |
 
 Skipped: Billing; Access, Admin, Review, Rig 3D admin, Tank, Skala and Gold. No frames for those pages are created.
 
@@ -123,3 +128,11 @@ The Linux reference browser resolves system-ui to Liberation Mono. Cousine is th
 ## Capture tooling
 
 The local Chrome-CDP capture helper is intentionally untracked and retained outside the repository under the tooling folder’s `.tmp`. The tracked `capture.cjs` was deleted to remove the insecure-request finding from PR #685. No Gitleaks or Semgrep exception, suppression or rule change was added.
+
+## Autumbra receipt pages
+
+Undo: unchanged page and UndoButton, without a token. The button is disabled at the existing globals.css opacity of 0.5 and the built expired-link explanation is shown. No GET status or POST undo request was made. [Every node and exact words](evidence/undo-nodes.json), [disabled-state correction](evidence/undo-disabled-repair.json), [dimensions, copy and PNG hashes](evidence/undo-checks.json).
+
+Weekly: unchanged page, with the authorization/data boundaries isolated to an allowed empty receipt result. This demonstrates existing empty-state copy, not a real owner session or a credential-bearing email link. [Every node and exact words](evidence/weekly-nodes.json), [dimensions, copy and PNG hashes](evidence/weekly-checks.json).
+
+Both routes have 1440 and 375 native editable frames. Existing production copy only; no app code, tokens, account data or live operations changed. As with Autumbra public, Cousine is the metrics-compatible Figma counterpart of the Linux browser’s Liberation Mono fallback. Phone native screenshots were compared with browser references, including the disabled-opacity repair. Root frame IDs remain after that repair.
