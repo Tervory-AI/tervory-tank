@@ -1,0 +1,182 @@
+[
+  {
+    "key": "W01-US-1440",
+    "id": "548:77",
+    "width": 1440,
+    "height": 900,
+    "state": "Sign in",
+    "region": "US",
+    "status": "Proposed"
+  },
+  {
+    "key": "W01-US-1280",
+    "id": "548:136",
+    "width": 1280,
+    "height": 800,
+    "state": "Sign in",
+    "region": "US",
+    "status": "Proposed"
+  },
+  {
+    "key": "W01-ZA-1440",
+    "id": "548:195",
+    "width": 1440,
+    "height": 900,
+    "state": "Sign in",
+    "region": "ZA",
+    "status": "Proposed"
+  },
+  {
+    "key": "W01-ZA-1280",
+    "id": "548:254",
+    "width": 1280,
+    "height": 800,
+    "state": "Sign in",
+    "region": "ZA",
+    "status": "Proposed"
+  },
+  {
+    "key": "W02-1440",
+    "id": "553:1326",
+    "width": 1440,
+    "height": 900,
+    "state": "Empty state",
+    "status": "Proposed"
+  },
+  {
+    "key": "W02-1280",
+    "id": "553:1421",
+    "width": 1280,
+    "height": 800,
+    "state": "Empty state",
+    "status": "Proposed"
+  },
+  {
+    "key": "W03-1440",
+    "id": "555:284",
+    "width": 1440,
+    "height": 900,
+    "state": "Conversation / proposed edit",
+    "status": "Proposed"
+  },
+  {
+    "key": "W03-1280",
+    "id": "555:390",
+    "width": 1280,
+    "height": 800,
+    "state": "Conversation / proposed edit",
+    "status": "Proposed"
+  },
+  {
+    "key": "W04-1440",
+    "id": "556:1710",
+    "width": 1440,
+    "height": 900,
+    "state": "Command waiting for Run",
+    "status": "Proposed"
+  },
+  {
+    "key": "W04-1280",
+    "id": "556:1815",
+    "width": 1280,
+    "height": 800,
+    "state": "Command waiting for Run",
+    "status": "Proposed"
+  },
+  {
+    "key": "W05-1440",
+    "id": "557:1062",
+    "width": 1440,
+    "height": 900,
+    "state": "Command running",
+    "status": "Proposed"
+  },
+  {
+    "key": "W05-1280",
+    "id": "557:1161",
+    "width": 1280,
+    "height": 800,
+    "state": "Command running",
+    "status": "Proposed"
+  },
+  {
+    "key": "W06-1440",
+    "id": "557:1260",
+    "width": 1440,
+    "height": 900,
+    "state": "Command finished",
+    "status": "Proposed"
+  },
+  {
+    "key": "W06-1280",
+    "id": "557:1360",
+    "width": 1280,
+    "height": 800,
+    "state": "Command finished",
+    "status": "Proposed"
+  },
+  {
+    "key": "W07-1440",
+    "id": "557:4683",
+    "width": 1440,
+    "height": 900,
+    "state": "/undo / confirm local restore",
+    "status": "Proposed"
+  },
+  {
+    "key": "W07-1280",
+    "id": "557:4789",
+    "width": 1280,
+    "height": 800,
+    "state": "/undo / confirm local restore",
+    "status": "Proposed"
+  },
+  {
+    "key": "W08-1440",
+    "id": "557:6211",
+    "width": 1440,
+    "height": 900,
+    "state": "Plugins and MCP list",
+    "status": "Proposed"
+  },
+  {
+    "key": "W08-1280",
+    "id": "557:6314",
+    "width": 1280,
+    "height": 800,
+    "state": "Plugins and MCP list",
+    "status": "Proposed"
+  },
+  {
+    "key": "W09-1440",
+    "id": "557:8131",
+    "width": 1440,
+    "height": 900,
+    "state": "Error",
+    "status": "Proposed"
+  },
+  {
+    "key": "W09-1280",
+    "id": "557:8229",
+    "width": 1280,
+    "height": 800,
+    "state": "Error",
+    "status": "Proposed"
+  },
+  {
+    "key": "W10-1440",
+    "id": "557:8327",
+    "width": 1440,
+    "height": 900,
+    "state": "Offline",
+    "status": "Proposed"
+  },
+  {
+    "key": "W10-1280",
+    "id": "557:8425",
+    "width": 1280,
+    "height": 800,
+    "state": "Offline",
+    "status": "Proposed"
+  }
+]

@@ -263,6 +263,11 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npx --no-install playwright install chromium
+      - name: Prepare pinned Trigger acceptance browser dependencies
+        run: |
+          npm ci --prefix tests/trigger_browser_tools --ignore-scripts --no-audit --no-fund
+          tests/trigger_browser_tools/node_modules/.bin/playwright install chromium
+          echo "TRIGGER_BROWSER_TOOLS=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules" >> "$GITHUB_ENV"
       - name: Prepare CLI acceptance fixtures
         run: |
           npm ci --prefix cli --ignore-scripts --no-audit --no-fund
@@ -308,6 +313,8 @@ jobs:
               await conn.close()
           asyncio.run(main())
           PY
+      - name: Install pinned Rig host-split test proxy
+        run: bash .github/scripts/install-rig-traefik.sh
       - name: Full offline test suite
         # The whole suite gates every PR again (it was cut to 3 files on 27 Oct, #351,
         # because it took 10-15 minutes serially and had not passed for three days).

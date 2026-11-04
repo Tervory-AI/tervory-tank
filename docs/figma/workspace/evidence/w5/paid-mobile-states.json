@@ -1,0 +1,120 @@
+{
+  "pageId": "514:3092",
+  "status": "Proposed",
+  "screen": "Paid steps",
+  "frames": [
+    {
+      "id": "562:3910",
+      "name": "Paid steps settings / Empty / 375 · Proposed",
+      "state": "Empty",
+      "mobile": true,
+      "width": 375,
+      "height": 900,
+      "controls": [],
+      "screenshot": "paid-steps-empty-375.png"
+    },
+    {
+      "id": "562:3948",
+      "name": "Paid steps settings / Loading / 375 · Proposed",
+      "state": "Loading",
+      "mobile": true,
+      "width": 375,
+      "height": 900,
+      "controls": [],
+      "screenshot": "paid-steps-loading-375.png"
+    },
+    {
+      "id": "562:3988",
+      "name": "Paid steps settings / Error / 375 · Proposed",
+      "state": "Error",
+      "mobile": true,
+      "width": 375,
+      "height": 900,
+      "retry": "562:4025",
+      "controls": [],
+      "screenshot": "paid-steps-error-375.png"
+    }
+  ],
+  "checks": [
+    {
+      "id": "562:3910",
+      "width": 375,
+      "height": 900,
+      "paidSteps": 0,
+      "askAutoPairs": [],
+      "nonInter": [],
+      "textOverflow": []
+    },
+    {
+      "id": "562:3948",
+      "width": 375,
+      "height": 900,
+      "paidSteps": 0,
+      "askAutoPairs": [],
+      "nonInter": [],
+      "textOverflow": []
+    },
+    {
+      "id": "562:3988",
+      "width": 375,
+      "height": 900,
+      "paidSteps": 0,
+      "askAutoPairs": [],
+      "nonInter": [],
+      "textOverflow": []
+    }
+  ],
+  "createdNodeIds": [
+    "562:3910",
+    "562:3911",
+    "I562:3911;180:8551",
+    "I562:3911;180:8552",
+    "I562:3911;180:8553",
+    "562:3912",
+    "562:3942",
+    "562:3943",
+    "562:3944",
+    "562:3945",
+    "562:3946",
+    "562:3947",
+    "562:3948",
+    "562:3949",
+    "I562:3949;180:8551",
+    "I562:3949;180:8552",
+    "I562:3949;180:8553",
+    "562:3950",
+    "562:3980",
+    "562:3981",
+    "562:3982",
+    "562:3983",
+    "562:3984",
+    "562:3985",
+    "562:3986",
+    "562:3987",
+    "562:3988",
+    "562:3989",
+    "I562:3989;180:8551",
+    "I562:3989;180:8552",
+    "I562:3989;180:8553",
+    "562:3990",
+    "562:4020",
+    "562:4021",
+    "562:4022",
+    "562:4023",
+    "562:4024",
+    "562:4025",
+    "I562:4025;266:3033"
+  ],
+  "copy": [
+    "Workspace",
+    "☰",
+    "Proposed · Illustrative paid-step inventory",
+    "Paid steps settings",
+    "Founder only",
+    "No paid steps yet.",
+    "Free steps stay automatic.",
+    "Loading…",
+    "Something went wrong",
+    "Try again"
+  ]
+}
