@@ -55,3 +55,5 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 2. Chat bot: the privacy notice and how long conversations are kept (decision 35; 12 months suggested).
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
+
+**Street Law (ZA):** ZENAS_REVIEW is the existing room-wide review setting; Street Law still requires human review while pre-launch even when that setting is off. No Street Law key or bypass switch is added.
