@@ -17,7 +17,6 @@ import subprocess
 import sys
 import time
 import re
-from pathlib import Path
 from uuid import UUID
 import urllib.error
 import urllib.request
@@ -41,9 +40,16 @@ ZA_OFFLINE = os.environ.get("ZA_OFFLINE", "").strip().lower() == "true"
 # Empty: unknown, every wanted app deploys as before.
 MAIN_HEAD = os.environ.get("MAIN_HEAD", "").strip().lower()
 
-# Share the exact source-to-app mapping with Radix; no Tank runtime import.
-sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tank'))
-from deploy_scope import MAIN_PREFIXES, ALL_ROOMS_PREFIXES
+# Paths that rebuild the main stack (Tank, Workspace, LiteLLM, Hermes, SearXNG, site, shared compose).
+MAIN_PREFIXES = (
+    "tank/", "workspace/", "litellm/", "hermes/", "db/", "searxng/", "tiger/", "site/", "tor/",
+    "docker-compose.yml",
+    # Backup workers live in the main and ZA stacks (r2-backup, r2-backup-za).
+    "docker-compose.za.yml", "jobs/train/backup.py", "jobs/train/r2_archive.py",
+    "jobs/train/Dockerfile.backup",
+)
+# Shared room code: a change here redeploys every room.
+ALL_ROOMS_PREFIXES = ("agents/_chassis/", "agents/_template/")
 
 
 def radix_blocks(name: str) -> bool:

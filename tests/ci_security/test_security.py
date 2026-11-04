@@ -358,6 +358,25 @@ class SecurityPolicyTests(unittest.TestCase):
             self.assertFalse(scan.leaks(None, self.root, self.output))
 
 
+class DeployScopeTests(unittest.TestCase):
+    def test_standalone_deploy_and_radix_mappings_are_identical(self):
+        scripts = ROOT / ".github/scripts"
+        with patch.dict(os.environ, {"COOLIFY_URL": "https://coolify.tervory.com",
+                                     "COOLIFY_TOKEN": "placeholder-token"}), \
+                patch.object(sys, "path", [str(scripts), *sys.path]):
+            modules = []
+            for name, path in (("placeholder_deploy", scripts / "deploy_changed.py"),
+                               ("placeholder_scope", ROOT / "tank/deploy_scope.py")):
+                spec = importlib.util.spec_from_file_location(name, path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                modules.append(module)
+        deploy, radix = modules
+        for name in ("MAIN_PREFIXES", "ALL_ROOMS_PREFIXES"):
+            with self.subTest(mapping=name):
+                self.assertEqual(getattr(deploy, name), getattr(radix, name))
+
+
 class FixedHTTPSBaseTests(unittest.TestCase):
     def api(self, filename, base):
         path = ROOT / ".github/scripts" / filename
