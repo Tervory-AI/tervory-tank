@@ -29,7 +29,7 @@ async def queue(pool,tenant,domain):
                 if inserted:
                     await conn.execute('''INSERT INTO agent_radix.passive_scans
                       (tenant_id,id,domain,target,artifact,watched,active,infra,active_consent_id)
-                      VALUES($1,$2,$3,$4,$5,true,$6,$6,$7)''',tenant,ident,domain,'https://'+domain+'/',
+                      VALUES($1,$2,$3,'https://' || $3 || '/',$4,true,$5,$5,$6)''',tenant,ident,domain,
                       watch_artifact(domain),kind=='infra',None if row['own'] else row['consent_id'])
             await conn.execute('''UPDATE agent_radix.weekly_domains SET next_run=now()+interval '7 days'
               WHERE tenant_id=$1 AND domain=$2''',tenant,domain)

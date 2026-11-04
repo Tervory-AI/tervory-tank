@@ -80,7 +80,7 @@ async def refresh(tenant):
             raise HTTPException(503,'Radix results are unavailable.')
         async with db().acquire() as conn:
             async with conn.transaction():
-                await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',str(tenant)+':radix-deploy')
+                await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1 || ':radix-deploy',0))",str(tenant))
                 owner=await conn.fetchrow('''SELECT processed,created_at FROM tank.radix_deploy_scans
                   WHERE tenant_id=$1 AND scan_id=$2 FOR UPDATE''',tenant,scan['scan_id'])
                 if owner['processed']:

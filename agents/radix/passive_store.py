@@ -232,14 +232,14 @@ class Store:
     async def issue(self, tenant: UUID, domain: str, *, own=False) -> dict:
         domain = domain_name(domain)
         # Public DNS proof, not an authentication key. No cross-tenant default.
-        challenge = 'tervory-' + secrets.token_hex(32)
+        challenge = secrets.token_hex(32)
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow("""INSERT INTO agent_radix.passive_domains(tenant_id,domain,challenge)
-              VALUES($1,$2,$3) ON CONFLICT(tenant_id,domain) DO UPDATE
+              VALUES($1,$2,'tervory-' || $3) ON CONFLICT(tenant_id,domain) DO UPDATE
               SET challenge=CASE WHEN EXISTS (SELECT 1 FROM agent_radix.passive_watches w
                 WHERE w.tenant_id=$1 AND w.domain=$2 AND w.status='active') OR EXISTS(
                 SELECT 1 FROM agent_radix.weekly_domains v WHERE v.tenant_id=$1 AND v.domain=$2 AND v.enabled)
-                THEN passive_domains.challenge ELSE $3 END,
+                THEN passive_domains.challenge ELSE 'tervory-' || $3 END,
               expires_at=CASE WHEN EXISTS (SELECT 1 FROM agent_radix.passive_watches w
                 WHERE w.tenant_id=$1 AND w.domain=$2 AND w.status='active')
                 THEN passive_domains.expires_at ELSE now()+interval '1 day' END
