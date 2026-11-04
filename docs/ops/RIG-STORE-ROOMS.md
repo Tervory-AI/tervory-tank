@@ -68,7 +68,58 @@ private. Custom Nation remains quote → the store's own invoice → EFT; US sto
 use the store cart and checkout.
 
 Runtime changes ship in this single PR as explicitly requested. On merge,
-existing deployment workflows rebuild Tank, Ghost's lifecycle image and Rig,
-including their registered regional copies; no live resource was changed here.
+existing deployment workflows redeploy the main stacks (Tank/Workspace and
+companions), the Ghost resource (Watch and lifecycle), and the shared Rig
+resource, including their registered regional copies; no live resource was changed here.
 The per-store template is US-only. A lifecycle receipt proves resource creation,
 not deployment readiness, measured capacity or founder browser acceptance.
+
+## Measure rooms locally
+
+Run on the disposable Coolify test host, never the founder’s laptop or a live
+store deployment. Docker and Python 3 are the only host tools. No Coolify token,
+model key, SMTP credential, store credential or cloud k6 account is used.
+From this checkout:
+
+```sh
+mkdir -p .tmp
+export TMPDIR="$PWD/.tmp"
+docker build --label tervory.test=1 -f agents/rig/Dockerfile -t "$(basename "$PWD"):load" agents
+python3 tests/load/rig_rooms_load.py --rooms 2 --duration 60s
+```
+
+The harness launches N actual Rig data planes, each with a private Postgres and
+network. A separate internal network carries only the local generator traffic.
+It seeds the neutral Core fixture, then runs the production search/quote HTTP
+paths. No shared brain/browser/3D worker is copied. Model and email paths are
+unconfigured; quote storage and receipts still run. The application/database
+CPU and memory limits match the room template. All `docker run` calls use
+`--rm`, `tervory.test=1`, and a name beginning with this checkout’s folder name.
+Only synthetic data uses temporary filesystems; no named volume is deleted.
+
+k6 is pinned to [v0.54.0](https://github.com/grafana/k6/releases/tag/v0.54.0),
+Linux amd64 image digest
+`sha256:32000aaa40b848add83425ed7cc77535c343ca473498b0bd29464d00fdca6c79`.
+It runs locally with usage reporting disabled and no cloud output. Search runs
+about once per second per store; quotes are spaced 16 seconds apart to respect
+the production abuse controls. The harness does not disable or spoof those
+controls. A short smoke duration produces few quote samples; use longer runs
+for useful percentile estimates.
+
+Results are in `.tmp/rig-room-load-<id>/measurement.json`, alongside
+`raw-k6.json`, `rooms.json` and `k6.log`. The report includes global/per-room p95
+search and quote times in milliseconds, sampled Docker working-set bytes for
+each app/database, maximum sampled aggregate memory, test duration, image and
+Git revision, and failed checks/HTTP requests. These are working-set samples,
+not RSS or a guaranteed peak. Failed checks, missing samples or failed requests
+refuse a successful measurement. Ambiguous container startup is cleaned by its
+pre-reserved fixture name. If Docker will not acknowledge cleanup, retry only
+the recorded commands in `cleanup-pending.json`; never prune the Docker host.
+
+Repeat with the founder’s chosen N after checking test-host headroom. Include
+shared-worker and operating-system baseline consumption when deciding a
+clients-per-box figure. This harness measures store data planes after startup;
+it does not validate browser/GPU/model workloads or extrapolate capacity.
+**About 60–80 clients on a KVM 8 remains unmeasured.** `capacity_claim` stays null.
+The CI fixture replay verifies the real k6 scenario and report contracts without
+Docker or an external service; its timing values are synthetic, not benchmarks.

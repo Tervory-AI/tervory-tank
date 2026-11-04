@@ -63,3 +63,5 @@ On the existing isolated enforce-lifecycle service only: RIG_COOLIFY_URL, RIG_CO
 On Tank and enforce-lifecycle only: RIG_LIFECYCLE_KEY. It must differ from AUTUMBRA_LIFECYCLE_KEY and all room keys.
 
 Per store application only: RIG_ROOM_DB_PASSWORD (unique URL-safe value), plus the existing names in the create receipt’s founder_fills. The lifecycle supplies RIG_ROOM_TENANT, RIG_ROOM_NAME, RIG_ROOM_DATA_VOLUME, RIG_ROOM_DB_VOLUME and RIG_ROOM_NETWORK; never edit these bindings. Existing R2 settings are needed for the retained bucket snapshot before destroy. See [Rig room operations](RIG-STORE-ROOMS.md).
+
+Existing per-room names used by the room template and retention step: TANK_KEY_RIG, RIG_RETAILER_KEY, RIG_TRUSTED_PROXY_CIDRS, RIG_WIDGET_PUBLISHABLE_KEY, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID_RIG, R2_SECRET_ACCESS_KEY_RIG. Store mail uses the existing SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD and SMTP_FROM names. These are names only; values belong in the owning application.
