@@ -53,6 +53,8 @@ declare -A CORRIDOR=(
   [market-lab-browser-gateway]="tervory-gw-market_lab"
   [radix-brain]="tervory-gw-radix"
   [radix-browser-gateway]="tervory-gw-radix"
+  [tisan-brain]="tervory-gw-tisan"
+  [tisan-browser-gateway]="tervory-gw-tisan"
   [zenas-brain]="tervory-gw-zenas"
   [agent-rig]="tervory-gw-rig"
   [rig-brain]="tervory-gw-rig"
@@ -208,6 +210,10 @@ for id in $ids; do
     radix-sandbox) expected_nets="${project}_sandbox" ;;
     radix-browser) expected_nets="${project}_browser" ;;
     radix-browser-gateway) expected_nets="tervory-gw-radix ${project}_browser" ;;
+    tisan-brain) expected_nets="tervory-gw-tisan ${project}_sandbox" ;;
+    tisan-sandbox) expected_nets="${project}_sandbox" ;;
+    tisan-browser) expected_nets="${project}_browser" ;;
+    tisan-browser-gateway) expected_nets="tervory-gw-tisan ${project}_browser" ;;
     zenas-brain) expected_nets="tervory-gw-zenas ${project}_sandbox" ;;
     rig-forge) expected_nets="${project}_forge-control ${project}_forge-egress" ;;
     rig-forge-egress) expected_nets="${project}_forge-egress ${project}_forge-outbound" ;;
@@ -236,6 +242,8 @@ for id in $ids; do
       elif [[ ( "$service" == "market-lab-brain" || "$service" == "market-lab-browser-gateway" ) && "$net" == "tervory-gw-market_lab" ]]; then
         continue
       elif [[ ( "$service" == "radix-brain" || "$service" == "radix-browser-gateway" ) && "$net" == "tervory-gw-radix" ]]; then
+        continue
+      elif [[ ( "$service" == "tisan-brain" || "$service" == "tisan-browser-gateway" ) && "$net" == "tervory-gw-tisan" ]]; then
         continue
       elif [[ "$service" == "tiger-brain" && "$net" == "tervory-gw-tiger" ]]; then
         continue
@@ -319,6 +327,9 @@ for uuid in "${ROOMS[@]}"; do
   fi
   if [[ "$room" == "agent-radix" && ( -n "${APP_SERVICES[$uuid/radix-brain]+set}" || -n "${APP_SERVICES[$uuid/radix-sandbox]+set}" || -n "${APP_SERVICES[$uuid/radix-browser]+set}" || -n "${APP_SERVICES[$uuid/radix-browser-gateway]+set}" ) ]]; then
     required_services+=" radix-brain radix-sandbox radix-browser radix-browser-gateway"
+  fi
+  if [[ "$room" == "agent-tisan" && ( -n "${APP_SERVICES[$uuid/tisan-brain]+set}" || -n "${APP_SERVICES[$uuid/tisan-sandbox]+set}" || -n "${APP_SERVICES[$uuid/tisan-browser]+set}" || -n "${APP_SERVICES[$uuid/tisan-browser-gateway]+set}" ) ]]; then
+    required_services+=" tisan-brain tisan-sandbox tisan-browser tisan-browser-gateway"
   fi
   if [[ "$room" == "autumbra-enforce" || -n "${APP_SERVICES[$uuid/enforce]+set}" ]]; then
     required_services+=" enforce egress-proxy health-observer health-egress-proxy"

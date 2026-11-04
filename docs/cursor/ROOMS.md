@@ -270,6 +270,7 @@ boundary; no ZA deployment or forwarding is introduced.
 | --- | --- | --- |
 | Market Lab | `MARKET_LAB_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
 | Radix | `RADIX_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Tisan | `TISAN_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
 
 All added services carry profile `brain`. A normal Compose deployment starts
 none of them. The flag is reserved for a future caller: enabling a profile or

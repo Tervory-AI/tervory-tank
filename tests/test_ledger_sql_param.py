@@ -1,6 +1,6 @@
 """Radix scan follow-up: tank/agent_skills.py passes room and task type as bound parameters.
 
-room_key() allows only Base, Rig, Tiger or Zenas. These tests keep it safe if
+room_key() accepts only an approved room's owning key. These tests keep it safe if
 that guard ever moves: a hostile room value never reaches SQL text, and every write stays
 tied to the tenant. All gateway and database traffic is faked.
 """
@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException
 import agent_skills as route
 
 HOSTILE = ["base'); DELETE FROM tank.ledger; --", "rig' OR '1'='1",
-           "tiger'); DELETE FROM tank.ledger; --", "zenas' OR '1'='1", "market_lab'); DELETE FROM tank.ledger; --", "Base", "Tiger", "Zenas", "radix' OR '1'='1", "enforce", "autumbra_enforce", "autumbra-watch", "", None, 7, [], {}]
+           "tiger'); DELETE FROM tank.ledger; --", "zenas' OR '1'='1", "market_lab'); DELETE FROM tank.ledger; --", "tisan' OR '1'='1", "Base", "Tiger", "Zenas", "radix' OR '1'='1", "enforce", "autumbra_enforce", "autumbra-watch", "", None, 7, [], {}]
 
 
 class Pool:

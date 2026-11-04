@@ -86,3 +86,29 @@ and `tests/test_agent1_brain_route.py:96` (new owning-key boundary).
 Radix validation: 33 focused cases and 85 shared brain/isolation/SQL cases passed.
 The final fixture uses the actual internal flag for external corridors; no network
 policy was changed to satisfy it. Exact CI lint and the staged secret scan pass.
+
+## Gate 3 — Tisan
+
+Tisan receives independent optional brain, sandbox, browser and gateway. Its brain
+has only its owning Tank/executor keys; none of the room's Figma, Coolify, R2 or DB
+settings are copied. `TISAN_BRAIN_ENABLED` defaults false; all four new services
+require profile `brain`. Existing Figma proxy attachments and data volume/mounts
+are unchanged. Raw Compose is required by the new sealed tools, with the existing
+project identity retained. No new model caller or paid route is introduced.
+
+Files: `agents/tisan/docker-compose.yml:1,18,76,131,163,199` (marker, flag and four
+optional services), `agents/tisan/README.md:63` (deployment requirement),
+`agents/_brain/standby.py:12`, `agents/_brain/browser.py:627`,
+`agents/base/check_brain_isolation.py:46`, `tank/agent_skills.py:35`,
+`ops/seal-check.sh:56,213,246,331`, `.env.example:562`,
+`docs/cursor/ROOMS.md:259`, `tests/room_brains/rooms.json:1`,
+`snapshots/tisan.json:1`, and `test_rooms.py:188` (own historical Tisan fixture).
+`tests/test_tisan_figma.py:379` and `tests/test_c10_rooms.py:77,115` now check the
+new networks and default-service set while retaining the Figma/Radix proxy guards.
+`tests/test_ledger_sql_param.py:21` covers hostile Tisan input before SQL.
+
+Tisan's 33 focused cases pass. Related Figma, room topology, owning-key, ledger and
+Base route regressions are recorded alongside exact lint and staged secret scans.
+
+Tisan related result: 97 cases passed, including unchanged Figma proxy restrictions
+and real loopback HTTPS response tests.

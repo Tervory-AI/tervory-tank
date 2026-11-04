@@ -187,6 +187,10 @@ async def test_all_foreign_room_keys_refused_before_any_work(owning, room):
 
 def placement(room):
     data = json.loads((FIXTURES / 'sealed.json').read_text())
+    if room == 'tisan':
+        sample = json.loads((FIXTURES / 'tisan.json').read_text())
+        data['containers'].update(sample['containers'])
+        data['networks'].update(sample['networks'])
     stem, project = room.replace('_', '-'), 'placeholder-' + room
     config = compose(room)
     flags = network_flags((ROOT / 'agents' / room / 'docker-compose.yml').read_text())

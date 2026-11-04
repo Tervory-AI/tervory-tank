@@ -74,10 +74,10 @@ def test_agent_compose_is_one_corridor_with_a_limit_and_a_healthcheck(
     folder: str, service: str, corridor: str, role: str, key: str
 ) -> None:
     box = yaml.safe_load((ROOT / "agents" / folder / "docker-compose.yml").read_text(encoding="utf-8"))
-    assert list(box["networks"]) == ["gw", "figma_internal", "egress"]
+    assert set(box["networks"]) == {"gw", "figma_internal", "egress", "sandbox", "browser"}
     assert box["networks"]["figma_internal"] == {"internal": True}
     assert box["networks"]["egress"] == {}
-    assert set(box["services"]) == {"agent-tisan", "figma-egress-proxy"}
+    assert {name for name, spec in box["services"].items() if not spec.get("profiles")} == {"agent-tisan", "figma-egress-proxy"}
     proxy = box["services"]["figma-egress-proxy"]
     assert proxy["networks"] == {"figma_internal": {"interface_name": "radix-link"}, "egress": {}}
     assert proxy["build"] == {"context": "..", "dockerfile": "radix/Dockerfile"}
@@ -112,7 +112,7 @@ def test_agent_compose_is_one_corridor_with_a_limit_and_a_healthcheck(
 def test_radix_reaches_one_host_only_through_the_proxy() -> None:
     raw = (ROOT / "agents" / "radix" / "docker-compose.yml").read_text(encoding="utf-8")
     box = yaml.safe_load(raw)
-    assert list(box["networks"]) == ["gw", "proxy-link", "egress"]
+    assert set(box["networks"]) == {"gw", "proxy-link", "egress", "sandbox", "browser"}
     assert box["networks"]["gw"]["external"] is True
     assert box["networks"]["gw"]["name"] == "tervory-gw-radix"
     assert box["networks"]["proxy-link"]["internal"] is True
