@@ -56,6 +56,20 @@
       "width": 1280,
       "height": 800,
       "sha256": "ffab8edd6466835b5bb5b1e093d55341f32bc1b96067f99d6fd0dff899cca41d"
+    },
+    {
+      "frame": "556:1710",
+      "file": "evidence/W04-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "d21752310e2c6dbc05b175c3d943cbef843dad113db02c143fd07f40db22a9c7"
+    },
+    {
+      "frame": "556:1815",
+      "file": "evidence/W04-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "7ffbf7cccdd426d66a829db393b286191509db591394a0c013f7b98caecd9391"
     }
   ]
 }

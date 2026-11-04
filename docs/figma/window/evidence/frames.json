@@ -66,5 +66,21 @@
     "height": 800,
     "state": "Conversation / proposed edit",
     "status": "Proposed"
+  },
+  {
+    "key": "W04-1440",
+    "id": "556:1710",
+    "width": 1440,
+    "height": 900,
+    "state": "Command waiting for Run",
+    "status": "Proposed"
+  },
+  {
+    "key": "W04-1280",
+    "id": "556:1815",
+    "width": 1280,
+    "height": 800,
+    "state": "Command waiting for Run",
+    "status": "Proposed"
   }
 ]

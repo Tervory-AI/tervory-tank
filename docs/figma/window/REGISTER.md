@@ -28,6 +28,8 @@ Wording/behavior sources: [CLI code/undo and region contract](../../../cli/READM
 | W02-1280 · Empty state | 1280×800 | [553:1421](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=553-1421) | Proposed | [W02-1280.png](evidence/W02-1280.png) |
 | W03-1440 · Conversation / proposed edit | 1440×900 | [555:284](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=555-284) | Proposed | [W03-1440.png](evidence/W03-1440.png) |
 | W03-1280 · Conversation / proposed edit | 1280×800 | [555:390](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=555-390) | Proposed | [W03-1280.png](evidence/W03-1280.png) |
+| W04-1440 · Command waiting for Run | 1440×900 | [556:1710](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=556-1710) | Proposed | [W04-1440.png](evidence/W04-1440.png) |
+| W04-1280 · Command waiting for Run | 1280×800 | [556:1815](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=556-1815) | Proposed | [W04-1280.png](evidence/W04-1280.png) |
 
 ## Evidence and validation
 
