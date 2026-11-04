@@ -5,6 +5,15 @@ merged history and executable code, not the presence or absence of other PRs.
 
 ## Fixes found by this pass
 
+A real long-page failure was found in the older wiring suite: the unbounded
+email regex could exceed 180 seconds on a 400 KB unbroken token. Added candidate
+`base.scrape_site/1.3.1` and bounded the shared evidence matcher. Existing approved
+packages stay unchanged. Five large-page cases check retained later-page contacts,
+source/date, the HTML cap and a deadline; original eight candidate eval cases and
+must-refuse checks remain intact. Normal Skala approval is still required.
+The historical 1.2.0 HTML-cap fixture now uses whitespace-separated filler to test
+its original cap contract without invoking the separately covered legacy regex bug.
+
 Fixed the flat-image fixture in `tests/test_base_engine_terms_approved.py`:
 with TMPDIR inside this checkout, default ancestor discovery found host skills.
 The child now uses the explicit image SKILLS_DIR, including when absent. No
@@ -12,7 +21,9 @@ runtime skill selection changed. Initial baseline: 503 passed, this one failed.
 The local security precheck now bounds Semgrep jobs (default 2), passed into
 the same pinned container, to avoid oversubscribing the shared test host. No
 rule, target, severity, exception or scanner requirement is changed. The first
-unbounded scan timed out at 900 seconds and is not counted as a pass.
+scans timed out at 900 seconds and are not counted as passes. Local scanner
+processes now have a 3600-second wall budget on the shared host; hosted GitHub CI
+keeps its 900-second budget. A complete clean report remains mandatory.
 Claude can use this section at the top of the PR.
 
 ## Shipped surface and offline coverage
@@ -33,6 +44,7 @@ Claude can use this section at the top of the PR.
 | FFL manifest/package and neutral vertical scaffolder, unchanged FFL bytes | #647; `agents/base/engines/ffl/manifest.json`, `agents/base/engines/scaffold.py` | `test_base_wave4`, existing FFL tests |
 | Founder trial, measured receipts and source-generated review candidates | main; `tank/base_product.py`, `agents/base/trials`, gold-source helpers | `test_base_trial_launch`, `test_base_gold_sources`, `test_base_gold_nightly`, `test_base_database` |
 | Existing Base vault/plugin controls and protected Workspace proxy | `workspace/app/base`, existing shared vault routes | `test_base_page`, `test_base_product_origin`, `test_base_proxy_boundary` |
+| Base case-study report API, figures, saved Apollo scoreboard and tenant/period/audit projection | `tank/case_studies.py`, `tank/case_study_sources.py`, existing Workspace API | `test_case_study_reports`, `test_case_study_apollo_scoreboard` |
 
 ## Approval boundaries
 

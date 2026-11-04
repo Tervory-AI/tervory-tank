@@ -12,7 +12,7 @@ from selectolax.parser import HTMLParser
 observations: ContextVar[list[dict[str, Any]] | None] = ContextVar("base_field_observations", default=None)
 FIELDS = ("website", "phone", "email", "socials")
 SITE_SIGNAL_FIELDS = ("technologies", "sells_online", "site_newest_year")
-EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
+EMAIL = re.compile('(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\\.[A-Za-z]{2,63}(?![A-Za-z0-9.-])')
 PHONE = re.compile(r"(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b")
 SOCIAL_NETWORKS = {
     "facebook": ("facebook.com", "fb.com", "fb.me"), "instagram": ("instagram.com",),
