@@ -25,6 +25,54 @@ def trusted_main_ancestor(value: str) -> None:
     git("merge-base", "--is-ancestor", value, "refs/remotes/origin/main")
 
 
+
+QUEUE_REF = re.compile(r"refs/heads/gh-readonly-queue/main/pr-[1-9][0-9]*-([a-f0-9]{40})")
+
+
+def main_contains(value: str) -> bool:
+    try:
+        trusted_main_ancestor(value)
+        return True
+    except subprocess.CalledProcessError as error:
+        if error.returncode != 1:
+            raise
+        return False
+
+
+def verify_queue_base(group: dict, head: str, base: str) -> None:
+    """Trust only fetched GitHub queue merges on a first-parent chain to main.
+
+    A later queue entry can use an earlier, still speculative entry as its base.
+    Being a descendant of main alone does not authenticate such a commit.
+    """
+    head_ref = group["head_ref"]
+    match = QUEUE_REF.fullmatch(head_ref) if isinstance(head_ref, str) else None
+    if not match:
+        raise ValueError("Expected the event's GitHub queue ref")
+    remote_ref = "refs/remotes/origin/" + head_ref.removeprefix("refs/heads/")
+    if git("rev-parse", "--verify", remote_ref + "^{commit}") != head:
+        raise ValueError("Queue ref must match the checked-out event head")
+    refs = set()
+    for row in git("for-each-ref", "--format=%(refname) %(objectname)",
+                   "refs/remotes/origin/gh-readonly-queue/main/").splitlines():
+        name, sha = row.split()
+        queue = QUEUE_REF.fullmatch(name.replace("refs/remotes/origin/", "refs/heads/", 1))
+        if queue:
+            refs.add((sha, queue[1]))
+    parents = git("rev-list", "--parents", "-n", "1", head).split()
+    if len(parents) != 3 or parents[1] != match[1]:
+        raise ValueError("Queue head must merge onto the base encoded by its ref")
+    current, saw_base = head, False
+    while not main_contains(current):
+        parents = git("rev-list", "--parents", "-n", "1", current).split()
+        if len(parents) != 3 or (current, parents[1]) not in refs:
+            raise ValueError("Unverifiable speculative queue merge ancestry")
+        saw_base = saw_base or current == base
+        current = parents[1]
+    if not saw_base:
+        trusted_main_ancestor(base)
+
+
 def event_comparison_base(event_name: str, event: dict) -> str | None:
     """Bind incremental scans to the checked-out event, never a moving fallback."""
     if not isinstance(event, dict):
@@ -61,7 +109,10 @@ def event_comparison_base(event_name: str, event: dict) -> str | None:
     if base == head:
         raise ValueError("Incremental event cannot use its own head as base")
     git("merge-base", "--is-ancestor", base, head)
-    trusted_main_ancestor(base)
+    if event_name == "merge_group":
+        verify_queue_base(group, head, base)
+    else:
+        trusted_main_ancestor(base)
     return base
 
 

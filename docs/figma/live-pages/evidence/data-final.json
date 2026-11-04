@@ -1,0 +1,521 @@
+[
+  {
+    "id": "604:9",
+    "name": "Data / 1440 / As built / Proposed",
+    "width": 1440,
+    "height": 951,
+    "nodeIds": [
+      "604:9",
+      "604:10",
+      "604:14",
+      "604:15",
+      "604:16",
+      "604:18",
+      "604:19",
+      "604:21",
+      "604:22",
+      "604:23",
+      "604:24",
+      "604:25",
+      "604:26",
+      "604:27",
+      "610:677",
+      "610:676",
+      "610:678",
+      "604:28",
+      "604:29",
+      "604:31",
+      "604:32",
+      "604:33",
+      "604:34",
+      "604:35",
+      "604:36",
+      "604:37",
+      "604:38",
+      "604:40",
+      "604:41",
+      "604:42",
+      "604:43",
+      "604:49",
+      "604:44",
+      "604:45",
+      "604:46",
+      "604:47",
+      "604:50",
+      "604:48",
+      "604:51",
+      "612:11",
+      "604:54",
+      "604:55",
+      "604:58",
+      "604:59",
+      "604:61",
+      "604:62",
+      "604:63",
+      "604:64",
+      "604:65",
+      "604:66",
+      "604:67",
+      "604:68",
+      "604:69",
+      "604:70",
+      "604:71",
+      "604:72",
+      "604:73",
+      "604:74",
+      "604:75",
+      "604:76",
+      "604:79",
+      "604:80",
+      "604:88",
+      "604:89",
+      "604:90",
+      "604:91",
+      "604:92",
+      "604:93",
+      "604:95",
+      "604:96",
+      "604:97",
+      "604:98",
+      "604:99",
+      "604:100",
+      "604:101",
+      "604:102",
+      "604:103",
+      "604:104",
+      "604:105",
+      "604:106",
+      "604:107",
+      "604:108",
+      "604:109",
+      "604:110",
+      "604:111",
+      "604:113",
+      "604:114",
+      "604:115",
+      "604:116",
+      "604:117",
+      "604:118",
+      "604:119",
+      "604:120",
+      "604:121",
+      "604:122"
+    ],
+    "copy": [
+      {
+        "id": "604:16",
+        "text": "Data"
+      },
+      {
+        "id": "604:19",
+        "text": "Upload a CSV (or paste one; header row first: name, address, city, state, zip, phone, website — any you have). Base runs all seven passes: clean, match, find the site, scrape it, extract facts, contacts, socials, business data, the industry module, then verification and a 0–100 score. Pick an engine to feed it that industry's own list — the FFL engine reads the ATF licensee export as-is (comma or tab delimited). Up to 100,000 rows per upload; with \"one batch per state\" the upload is split by state and the states run one after another, smallest first, so finished states are auditable while the big ones are still going. A restart resumes where it stopped."
+      },
+      {
+        "id": "604:23",
+        "text": "Batch name"
+      },
+      {
+        "id": "604:25",
+        "text": "Batch name, e.g. ATF full list Oct 2026"
+      },
+      {
+        "id": "610:676",
+        "text": "Choose File"
+      },
+      {
+        "id": "610:678",
+        "text": "No file chosen"
+      },
+      {
+        "id": "604:29",
+        "text": "or paste below"
+      },
+      {
+        "id": "604:32",
+        "text": "…or a link to the file (Drive: share as “Anyone with the link”)"
+      },
+      {
+        "id": "604:34",
+        "text": "name,address,city,state,zip,phone,website\nExample Domain,123 Main St,Boston,MA,02110,,example.com"
+      },
+      {
+        "id": "604:38",
+        "text": "No engine (generic records)"
+      },
+      {
+        "id": "604:48",
+        "text": " one batch per state, smallest state first"
+      },
+      {
+        "id": "612:11",
+        "text": "Run Base"
+      },
+      {
+        "id": "604:59",
+        "text": "Name"
+      },
+      {
+        "id": "604:62",
+        "text": "City"
+      },
+      {
+        "id": "604:64",
+        "text": "Website"
+      },
+      {
+        "id": "604:66",
+        "text": "Emails"
+      },
+      {
+        "id": "604:68",
+        "text": "Decision maker"
+      },
+      {
+        "id": "604:70",
+        "text": "Segment"
+      },
+      {
+        "id": "604:72",
+        "text": "Tier"
+      },
+      {
+        "id": "604:74",
+        "text": "Conf."
+      },
+      {
+        "id": "604:76",
+        "text": "Status"
+      },
+      {
+        "id": "604:80",
+        "text": "No records in this batch yet."
+      },
+      {
+        "id": "604:93",
+        "text": "Dashboard"
+      },
+      {
+        "id": "604:96",
+        "text": "Projects"
+      },
+      {
+        "id": "604:98",
+        "text": "Chats"
+      },
+      {
+        "id": "604:101",
+        "text": "Squad"
+      },
+      {
+        "id": "604:105",
+        "text": "Ledger"
+      },
+      {
+        "id": "604:107",
+        "text": "Billing"
+      },
+      {
+        "id": "604:109",
+        "text": "Tasks"
+      },
+      {
+        "id": "604:111",
+        "text": "Data"
+      },
+      {
+        "id": "604:114",
+        "text": "Prices"
+      },
+      {
+        "id": "604:116",
+        "text": "Settings"
+      },
+      {
+        "id": "604:118",
+        "text": "CLI sign-ins"
+      },
+      {
+        "id": "604:120",
+        "text": "Support"
+      },
+      {
+        "id": "604:122",
+        "text": "Skip to content"
+      }
+    ],
+    "buttons": [
+      {
+        "id": "604:51",
+        "width": 109,
+        "height": 48
+      }
+    ]
+  },
+  {
+    "id": "606:9",
+    "name": "Data / 375 / As built / Proposed",
+    "width": 375,
+    "height": 1397,
+    "nodeIds": [
+      "606:9",
+      "606:11",
+      "606:12",
+      "606:13",
+      "606:14",
+      "606:15",
+      "606:16",
+      "606:18",
+      "606:19",
+      "606:21",
+      "606:22",
+      "606:23",
+      "606:24",
+      "606:25",
+      "606:26",
+      "606:27",
+      "610:682",
+      "610:681",
+      "610:683",
+      "606:29",
+      "606:31",
+      "606:32",
+      "606:33",
+      "606:34",
+      "606:35",
+      "606:36",
+      "606:37",
+      "606:38",
+      "606:40",
+      "606:41",
+      "606:42",
+      "606:43",
+      "606:49",
+      "606:44",
+      "606:45",
+      "606:46",
+      "606:47",
+      "606:50",
+      "606:48",
+      "606:51",
+      "612:12",
+      "606:85",
+      "606:54",
+      "606:81",
+      "606:55",
+      "606:58",
+      "606:59",
+      "606:61",
+      "606:62",
+      "606:63",
+      "606:64",
+      "606:65",
+      "606:66",
+      "606:67",
+      "606:68",
+      "606:69",
+      "606:70",
+      "606:71",
+      "606:72",
+      "606:73",
+      "606:74",
+      "606:75",
+      "606:76",
+      "606:79",
+      "606:80",
+      "606:86",
+      "606:87",
+      "606:88",
+      "606:89",
+      "606:91",
+      "606:92",
+      "606:94",
+      "606:95",
+      "606:96",
+      "606:97",
+      "606:98",
+      "606:100",
+      "606:101",
+      "606:102",
+      "606:103",
+      "606:104",
+      "606:105",
+      "606:106",
+      "606:108",
+      "606:109",
+      "606:110",
+      "606:111",
+      "606:112",
+      "606:113",
+      "606:114",
+      "606:115",
+      "606:116",
+      "606:118",
+      "606:119",
+      "606:120",
+      "606:121",
+      "606:122",
+      "606:123",
+      "606:124",
+      "606:125",
+      "606:126",
+      "606:127"
+    ],
+    "copy": [
+      {
+        "id": "606:16",
+        "text": "Data"
+      },
+      {
+        "id": "606:19",
+        "text": "Upload a CSV (or paste one; header row first: name, address, city, state, zip, phone, website — any you have). Base runs all seven passes: clean, match, find the site, scrape it, extract facts, contacts, socials, business data, the industry module, then verification and a 0–100 score. Pick an engine to feed it that industry's own list — the FFL engine reads the ATF licensee export as-is (comma or tab delimited). Up to 100,000 rows per upload; with \"one batch per state\" the upload is split by state and the states run one after another, smallest first, so finished states are auditable while the big ones are still going. A restart resumes where it stopped."
+      },
+      {
+        "id": "606:23",
+        "text": "Batch name"
+      },
+      {
+        "id": "606:25",
+        "text": "Batch name, e.g. ATF full list Oct 2026"
+      },
+      {
+        "id": "610:681",
+        "text": "Choose File"
+      },
+      {
+        "id": "610:683",
+        "text": "No file chosen"
+      },
+      {
+        "id": "606:29",
+        "text": "or paste below"
+      },
+      {
+        "id": "606:32",
+        "text": "…or a link to the file (Drive: share as “Anyone with the link”)"
+      },
+      {
+        "id": "606:34",
+        "text": "name,address,city,state,zip,phone,website\nExample Domain,123 Main St,Boston,MA,02110,,example.com"
+      },
+      {
+        "id": "606:38",
+        "text": "No engine (generic records)"
+      },
+      {
+        "id": "606:48",
+        "text": " one batch per state, smallest state first"
+      },
+      {
+        "id": "612:12",
+        "text": "Run Base"
+      },
+      {
+        "id": "606:59",
+        "text": "Name"
+      },
+      {
+        "id": "606:62",
+        "text": "City"
+      },
+      {
+        "id": "606:64",
+        "text": "Website"
+      },
+      {
+        "id": "606:66",
+        "text": "Emails"
+      },
+      {
+        "id": "606:68",
+        "text": "Decision maker"
+      },
+      {
+        "id": "606:70",
+        "text": "Segment"
+      },
+      {
+        "id": "606:72",
+        "text": "Tier"
+      },
+      {
+        "id": "606:74",
+        "text": "Conf."
+      },
+      {
+        "id": "606:76",
+        "text": "Status"
+      },
+      {
+        "id": "606:80",
+        "text": "No records in this batch yet."
+      },
+      {
+        "id": "606:89",
+        "text": "Menu"
+      },
+      {
+        "id": "606:95",
+        "text": "Close"
+      },
+      {
+        "id": "606:98",
+        "text": "Dashboard"
+      },
+      {
+        "id": "606:101",
+        "text": "Projects"
+      },
+      {
+        "id": "606:103",
+        "text": "Chats"
+      },
+      {
+        "id": "606:106",
+        "text": "Squad"
+      },
+      {
+        "id": "606:110",
+        "text": "Ledger"
+      },
+      {
+        "id": "606:112",
+        "text": "Billing"
+      },
+      {
+        "id": "606:114",
+        "text": "Tasks"
+      },
+      {
+        "id": "606:116",
+        "text": "Data"
+      },
+      {
+        "id": "606:119",
+        "text": "Prices"
+      },
+      {
+        "id": "606:121",
+        "text": "Settings"
+      },
+      {
+        "id": "606:123",
+        "text": "CLI sign-ins"
+      },
+      {
+        "id": "606:125",
+        "text": "Support"
+      },
+      {
+        "id": "606:127",
+        "text": "Skip to content"
+      }
+    ],
+    "buttons": [
+      {
+        "id": "606:51",
+        "width": 109,
+        "height": 48
+      }
+    ]
+  }
+]

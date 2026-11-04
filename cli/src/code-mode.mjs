@@ -2,9 +2,9 @@ import { confirmCard, followThread } from './client.mjs';
 import { randomUUID } from 'node:crypto';
 import { CodeFolder, redactSecrets } from './code-tools.mjs';
 
-export async function codeSession(tank, folder, model, io, formatReceipt, sanitize) {
+export async function codeSession(tank, folder, model, io, formatReceipt, sanitize, { createFolder = CodeFolder.create } = {}) {
   if (io.interactive !== true) throw new Error('Code mode requires an interactive terminal.');
-  const local = await CodeFolder.create(folder);
+  const local = await createFolder(folder);
   const thread = (await tank.json('/v1/command/threads', {})).thread_id;
   io.write(`Thread ${sanitize(thread)}\n`);
   const notesFolder = await CodeFolder.create(local.gitWorkTree);

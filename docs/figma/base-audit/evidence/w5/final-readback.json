@@ -1,0 +1,1529 @@
+{
+  "frames": [
+    {
+      "id": "518:6969",
+      "name": "Client case-study template / Ready / 1440 / Proposed",
+      "width": 1440,
+      "height": 9786,
+      "counts": {
+        "FRAME": 47,
+        "TEXT": 164,
+        "INSTANCE": 82,
+        "RECTANGLE": 1,
+        "ELLIPSE": 1,
+        "VECTOR": 91
+      },
+      "nonInter": [],
+      "figures": [
+        {
+          "id": "518:7139",
+          "name": "Figure / Spend",
+          "x": 264,
+          "y": 760,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7151",
+          "name": "Figure / Work by code / cache / model",
+          "x": 264,
+          "y": 1128,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7163",
+          "name": "Figure / Graduation progress",
+          "x": 264,
+          "y": 1496,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7198",
+          "name": "Figure / Confidence histogram",
+          "x": 264,
+          "y": 2123,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7210",
+          "name": "Figure / By state",
+          "x": 264,
+          "y": 2491,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7222",
+          "name": "Figure / vs Apollo",
+          "x": 264,
+          "y": 2859,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7265",
+          "name": "Figure / Price-change histogram",
+          "x": 264,
+          "y": 3650,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7277",
+          "name": "Figure / Time to detect a change",
+          "x": 264,
+          "y": 4018,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7320",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "x": 264,
+          "y": 4809,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7363",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "x": 264,
+          "y": 5600,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7375",
+          "name": "Figure / Most-searched products",
+          "x": 264,
+          "y": 5968,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7418",
+          "name": "Figure / Sources per answer",
+          "x": 264,
+          "y": 6759,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7486",
+          "name": "Figure / Findings by severity",
+          "x": 264,
+          "y": 8028,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "id": "I518:6973;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "retry": []
+    },
+    {
+      "id": "518:7555",
+      "name": "Client case-study template / Ready / 375 / Proposed",
+      "width": 375,
+      "height": 13165,
+      "counts": {
+        "FRAME": 56,
+        "TEXT": 138,
+        "INSTANCE": 61,
+        "RECTANGLE": 1,
+        "ELLIPSE": 1,
+        "VECTOR": 91
+      },
+      "nonInter": [],
+      "figures": [
+        {
+          "id": "518:7728",
+          "name": "Figure / Spend",
+          "x": 16,
+          "y": 1359,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7740",
+          "name": "Figure / Work by code / cache / model",
+          "x": 16,
+          "y": 1727,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7752",
+          "name": "Figure / Graduation progress",
+          "x": 16,
+          "y": 2095,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7789",
+          "name": "Figure / Confidence histogram",
+          "x": 16,
+          "y": 3090,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7801",
+          "name": "Figure / By state",
+          "x": 16,
+          "y": 3458,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7813",
+          "name": "Figure / vs Apollo",
+          "x": 16,
+          "y": 3826,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7858",
+          "name": "Figure / Price-change histogram",
+          "x": 16,
+          "y": 4985,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7870",
+          "name": "Figure / Time to detect a change",
+          "x": 16,
+          "y": 5353,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7915",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "x": 16,
+          "y": 6512,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7960",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "x": 16,
+          "y": 7671,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7972",
+          "name": "Figure / Most-searched products",
+          "x": 16,
+          "y": 8039,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8017",
+          "name": "Figure / Sources per answer",
+          "x": 16,
+          "y": 9198,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8088",
+          "name": "Figure / Findings by severity",
+          "x": 16,
+          "y": 11019,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "id": "I518:7559;180:8470",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "width": 156,
+          "height": 28.569766998291016
+        }
+      ],
+      "retry": []
+    },
+    {
+      "id": "518:8159",
+      "name": "Client case-study template / Empty / 1440 / Proposed",
+      "width": 1440,
+      "height": 9830,
+      "counts": {
+        "FRAME": 47,
+        "TEXT": 165,
+        "INSTANCE": 82,
+        "RECTANGLE": 1,
+        "ELLIPSE": 1,
+        "VECTOR": 91
+      },
+      "nonInter": [],
+      "figures": [
+        {
+          "id": "518:8330",
+          "name": "Figure / Spend",
+          "x": 264,
+          "y": 804,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8342",
+          "name": "Figure / Work by code / cache / model",
+          "x": 264,
+          "y": 1172,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8354",
+          "name": "Figure / Graduation progress",
+          "x": 264,
+          "y": 1540,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8389",
+          "name": "Figure / Confidence histogram",
+          "x": 264,
+          "y": 2167,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8401",
+          "name": "Figure / By state",
+          "x": 264,
+          "y": 2535,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8413",
+          "name": "Figure / vs Apollo",
+          "x": 264,
+          "y": 2903,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8456",
+          "name": "Figure / Price-change histogram",
+          "x": 264,
+          "y": 3694,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8468",
+          "name": "Figure / Time to detect a change",
+          "x": 264,
+          "y": 4062,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8511",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "x": 264,
+          "y": 4853,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8554",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "x": 264,
+          "y": 5644,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8566",
+          "name": "Figure / Most-searched products",
+          "x": 264,
+          "y": 6012,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8609",
+          "name": "Figure / Sources per answer",
+          "x": 264,
+          "y": 6803,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8677",
+          "name": "Figure / Findings by severity",
+          "x": 264,
+          "y": 8072,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "id": "I518:8163;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "retry": []
+    },
+    {
+      "id": "518:8746",
+      "name": "Client case-study template / Empty / 375 / Proposed",
+      "width": 375,
+      "height": 13209,
+      "counts": {
+        "FRAME": 56,
+        "TEXT": 139,
+        "INSTANCE": 61,
+        "RECTANGLE": 1,
+        "ELLIPSE": 1,
+        "VECTOR": 91
+      },
+      "nonInter": [],
+      "figures": [
+        {
+          "id": "518:8920",
+          "name": "Figure / Spend",
+          "x": 16,
+          "y": 1403,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8932",
+          "name": "Figure / Work by code / cache / model",
+          "x": 16,
+          "y": 1771,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8944",
+          "name": "Figure / Graduation progress",
+          "x": 16,
+          "y": 2139,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8981",
+          "name": "Figure / Confidence histogram",
+          "x": 16,
+          "y": 3134,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8993",
+          "name": "Figure / By state",
+          "x": 16,
+          "y": 3502,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9005",
+          "name": "Figure / vs Apollo",
+          "x": 16,
+          "y": 3870,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9050",
+          "name": "Figure / Price-change histogram",
+          "x": 16,
+          "y": 5029,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9062",
+          "name": "Figure / Time to detect a change",
+          "x": 16,
+          "y": 5397,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9107",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "x": 16,
+          "y": 6556,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9152",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "x": 16,
+          "y": 7715,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9164",
+          "name": "Figure / Most-searched products",
+          "x": 16,
+          "y": 8083,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9209",
+          "name": "Figure / Sources per answer",
+          "x": 16,
+          "y": 9242,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9280",
+          "name": "Figure / Findings by severity",
+          "x": 16,
+          "y": 11063,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "id": "I518:8750;180:8470",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "width": 156,
+          "height": 28.569766998291016
+        }
+      ],
+      "retry": []
+    },
+    {
+      "id": "573:3721",
+      "name": "Client case-study template / Loading / 1440 / Proposed",
+      "width": 1440,
+      "height": 9874,
+      "counts": {
+        "FRAME": 47,
+        "TEXT": 166,
+        "INSTANCE": 82,
+        "RECTANGLE": 1,
+        "ELLIPSE": 1,
+        "VECTOR": 91
+      },
+      "nonInter": [],
+      "figures": [
+        {
+          "id": "573:3745",
+          "name": "Figure / Spend",
+          "x": 264,
+          "y": 848,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3746",
+          "name": "Figure / Work by code / cache / model",
+          "x": 264,
+          "y": 1216,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3747",
+          "name": "Figure / Graduation progress",
+          "x": 264,
+          "y": 1584,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3753",
+          "name": "Figure / Confidence histogram",
+          "x": 264,
+          "y": 2211,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3754",
+          "name": "Figure / By state",
+          "x": 264,
+          "y": 2579,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3755",
+          "name": "Figure / vs Apollo",
+          "x": 264,
+          "y": 2947,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3763",
+          "name": "Figure / Price-change histogram",
+          "x": 264,
+          "y": 3738,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3764",
+          "name": "Figure / Time to detect a change",
+          "x": 264,
+          "y": 4106,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3772",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "x": 264,
+          "y": 4897,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3780",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "x": 264,
+          "y": 5688,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3781",
+          "name": "Figure / Most-searched products",
+          "x": 264,
+          "y": 6056,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3789",
+          "name": "Figure / Sources per answer",
+          "x": 264,
+          "y": 6847,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3804",
+          "name": "Figure / Findings by severity",
+          "x": 264,
+          "y": 8116,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "id": "I573:3725;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "retry": []
+    },
+    {
+      "id": "573:4209",
+      "name": "Client case-study template / Error / 1440 / Proposed",
+      "width": 1440,
+      "height": 9946,
+      "counts": {
+        "FRAME": 47,
+        "TEXT": 167,
+        "INSTANCE": 83,
+        "RECTANGLE": 1,
+        "ELLIPSE": 1,
+        "VECTOR": 91
+      },
+      "nonInter": [],
+      "figures": [
+        {
+          "id": "573:4233",
+          "name": "Figure / Spend",
+          "x": 264,
+          "y": 920,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4234",
+          "name": "Figure / Work by code / cache / model",
+          "x": 264,
+          "y": 1288,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4235",
+          "name": "Figure / Graduation progress",
+          "x": 264,
+          "y": 1656,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4241",
+          "name": "Figure / Confidence histogram",
+          "x": 264,
+          "y": 2283,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4242",
+          "name": "Figure / By state",
+          "x": 264,
+          "y": 2651,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4243",
+          "name": "Figure / vs Apollo",
+          "x": 264,
+          "y": 3019,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4251",
+          "name": "Figure / Price-change histogram",
+          "x": 264,
+          "y": 3810,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4252",
+          "name": "Figure / Time to detect a change",
+          "x": 264,
+          "y": 4178,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4260",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "x": 264,
+          "y": 4969,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4268",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "x": 264,
+          "y": 5760,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4269",
+          "name": "Figure / Most-searched products",
+          "x": 264,
+          "y": 6128,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4277",
+          "name": "Figure / Sources per answer",
+          "x": 264,
+          "y": 6919,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4292",
+          "name": "Figure / Findings by severity",
+          "x": 264,
+          "y": 8188,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "id": "I573:4213;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "retry": [
+        {
+          "id": "573:4538",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "518:6969",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "518:6969",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "573:4700",
+      "name": "Client case-study template / Loading / 375 / Proposed",
+      "width": 375,
+      "height": 13273,
+      "counts": {
+        "FRAME": 56,
+        "TEXT": 140,
+        "INSTANCE": 61,
+        "RECTANGLE": 1,
+        "ELLIPSE": 1,
+        "VECTOR": 91
+      },
+      "nonInter": [],
+      "figures": [
+        {
+          "id": "573:4726",
+          "name": "Figure / Spend",
+          "x": 16,
+          "y": 1467,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4727",
+          "name": "Figure / Work by code / cache / model",
+          "x": 16,
+          "y": 1835,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4728",
+          "name": "Figure / Graduation progress",
+          "x": 16,
+          "y": 2203,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4736",
+          "name": "Figure / Confidence histogram",
+          "x": 16,
+          "y": 3198,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4737",
+          "name": "Figure / By state",
+          "x": 16,
+          "y": 3566,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4738",
+          "name": "Figure / vs Apollo",
+          "x": 16,
+          "y": 3934,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4748",
+          "name": "Figure / Price-change histogram",
+          "x": 16,
+          "y": 5093,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4749",
+          "name": "Figure / Time to detect a change",
+          "x": 16,
+          "y": 5461,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4759",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "x": 16,
+          "y": 6620,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4769",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "x": 16,
+          "y": 7779,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4770",
+          "name": "Figure / Most-searched products",
+          "x": 16,
+          "y": 8147,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4780",
+          "name": "Figure / Sources per answer",
+          "x": 16,
+          "y": 9306,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4798",
+          "name": "Figure / Findings by severity",
+          "x": 16,
+          "y": 11127,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "id": "I573:4704;180:8470",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "width": 156,
+          "height": 28.569766998291016
+        }
+      ],
+      "retry": []
+    },
+    {
+      "id": "573:5131",
+      "name": "Client case-study template / Error / 375 / Proposed",
+      "width": 375,
+      "height": 13365,
+      "counts": {
+        "FRAME": 56,
+        "TEXT": 141,
+        "INSTANCE": 62,
+        "RECTANGLE": 1,
+        "ELLIPSE": 1,
+        "VECTOR": 91
+      },
+      "nonInter": [],
+      "figures": [
+        {
+          "id": "573:5157",
+          "name": "Figure / Spend",
+          "x": 16,
+          "y": 1559,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5158",
+          "name": "Figure / Work by code / cache / model",
+          "x": 16,
+          "y": 1927,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5159",
+          "name": "Figure / Graduation progress",
+          "x": 16,
+          "y": 2295,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5167",
+          "name": "Figure / Confidence histogram",
+          "x": 16,
+          "y": 3290,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5168",
+          "name": "Figure / By state",
+          "x": 16,
+          "y": 3658,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5169",
+          "name": "Figure / vs Apollo",
+          "x": 16,
+          "y": 4026,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5179",
+          "name": "Figure / Price-change histogram",
+          "x": 16,
+          "y": 5185,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5180",
+          "name": "Figure / Time to detect a change",
+          "x": 16,
+          "y": 5553,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5190",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "x": 16,
+          "y": 6712,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5200",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "x": 16,
+          "y": 7871,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5201",
+          "name": "Figure / Most-searched products",
+          "x": 16,
+          "y": 8239,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5211",
+          "name": "Figure / Sources per answer",
+          "x": 16,
+          "y": 9398,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5229",
+          "name": "Figure / Findings by severity",
+          "x": 16,
+          "y": 11219,
+          "height": 344,
+          "visibleTotals": [],
+          "plotText": [
+            "0"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "id": "I573:5135;180:8470",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "width": 156,
+          "height": 28.569766998291016
+        }
+      ],
+      "retry": [
+        {
+          "id": "573:5403",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "518:7555",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "518:7555",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "words": [
+    "Proposed · Not approved",
+    "Business",
+    "⌄",
+    "Case study",
+    "Writing",
+    "Write",
+    "Voice",
+    "CRM",
+    "Leads",
+    "Clients",
+    "Contacts",
+    "Opportunities",
+    "Cases",
+    "Tasks",
+    "Sales",
+    "Quotes",
+    "Invoices",
+    "Marketing",
+    "Channels",
+    "Calendar",
+    "Composer",
+    "Google posts",
+    "Google reviews",
+    "Chat bot",
+    "Inbox",
+    "Settings",
+    "All products",
+    "Receipts",
+    "Billing",
+    "Account settings",
+    "Case study summary",
+    "[Client name]",
+    "Proposed wording and example data",
+    "30 days",
+    "Compare to previous",
+    "Export PDF",
+    "Export CSV",
+    "Every graph, histogram and tool stays present. Zero until there is data. · Proposed",
+    "Tank",
+    "Spend",
+    "$0.00",
+    "Savings vs baseline cost",
+    "Cost per task",
+    "Cache hits",
+    "0%",
+    "0",
+    "Work by code / cache / model",
+    "Graduation progress",
+    "Base",
+    "Records verified",
+    "Cost per verified record",
+    "Measured accuracy",
+    "0% ± 0",
+    "200-record audit",
+    "Confidence histogram",
+    "By state",
+    "vs Apollo",
+    "Tiger",
+    "Changes caught",
+    "Pages watched",
+    "Checks run",
+    "Alerts sent",
+    "Price-change histogram",
+    "Time to detect a change",
+    "Market Lab",
+    "Questions answered",
+    "Sources cited",
+    "Active feeds",
+    "Prediction confidence vs actual hit rate",
+    "0% / 0%",
+    "Rig",
+    "Searches",
+    "No-result searches",
+    "Setups built",
+    "Quotes sent",
+    "Quotes that became estimates or invoices",
+    "Most-searched products",
+    "Zenas",
+    "Questions",
+    "Cited answers",
+    "Criminal questions refused",
+    "Drafts",
+    "Sources per answer",
+    "Trigger",
+    "Checker issues per draft",
+    "Acceptance rate",
+    "Voice-rule hits",
+    "Tisan",
+    "Sites built",
+    "Visual scores",
+    "Radix",
+    "Scans",
+    "Findings by severity",
+    "Autumbra",
+    "Checks",
+    "Incidents",
+    "Shields",
+    "Product",
+    "↕",
+    "Base · Records verified",
+    "Tiger · Changes caught",
+    "Market Lab · Questions answered",
+    "Rig · Searches",
+    "Zenas · Questions",
+    "Trigger · Drafts",
+    "Tisan · Sites built",
+    "Radix · Scans",
+    "Autumbra · Checks",
+    "PDF: only the client’s signed-in users and the founder. · Proposed",
+    "×",
+    "Menu",
+    "No work yet",
+    "Loading… · Proposed",
+    "Values are unavailable while loading. Zero charts are the template, not measured results. · Proposed",
+    "Could not load the case study. Try again. · Proposed",
+    "Values are unavailable. Zero charts are the template, not measured results. · Proposed",
+    "Try again"
+  ]
+}

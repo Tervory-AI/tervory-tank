@@ -1,0 +1,613 @@
+{
+  "frameCount": 30,
+  "widths": [
+    1440,
+    375
+  ],
+  "uniqueIds": true,
+  "noOverlappingFrames": true,
+  "newProductWords": [],
+  "providerWidgetGap": "Onboarding external OrganizationList unavailable without an account; not invented.",
+  "frames": [
+    {
+      "frameId": "604:9",
+      "page": "Data \u00b7 empty batch",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/data-figma-1440.png",
+          "width": 1440,
+          "height": 951,
+          "sha256": "d6758ed6e4277c6d5bab19b0d92321f4f6708425d3384c930d02787b4d6a7adc"
+        },
+        {
+          "file": "evidence/data-browser-1440.png",
+          "width": 1440,
+          "height": 951,
+          "sha256": "12449fcb2f48306f40daa0d1ff8482830e8ac578715d0e11ed0743493f1aa549"
+        }
+      ]
+    },
+    {
+      "frameId": "606:9",
+      "page": "Data \u00b7 empty batch",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/data-figma-375.png",
+          "width": 375,
+          "height": 1397,
+          "sha256": "8fe9b28f2345aae34b39d644e1a80918ca52c4bef3a35823a57df58eb6e5e242"
+        },
+        {
+          "file": "evidence/data-browser-375.png",
+          "width": 375,
+          "height": 1397,
+          "sha256": "c3eea6b64c09d96aa5c267ef81b2093d09c996cb9fb3025caa17ae7529b04616"
+        }
+      ]
+    },
+    {
+      "frameId": "615:9",
+      "page": "Ledger",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/ledger-figma-1440.png",
+          "width": 1440,
+          "height": 907,
+          "sha256": "8feef5b4535aa1ccdd0c994bb81f833ee4e42d493fd85752d455a29f49eedfc3"
+        },
+        {
+          "file": "evidence/ledger-browser-1440.png",
+          "width": 1440,
+          "height": 907,
+          "sha256": "a666478e6c206df14439011be6b94c956b4a45284468884359333aa860b21e02"
+        }
+      ]
+    },
+    {
+      "frameId": "616:9",
+      "page": "Ledger",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/ledger-figma-375.png",
+          "width": 375,
+          "height": 1156,
+          "sha256": "9abfd8c7e07662ff828be507a055b7370dc28e31a0c456f06895216152f40a18"
+        },
+        {
+          "file": "evidence/ledger-browser-375.png",
+          "width": 375,
+          "height": 1156,
+          "sha256": "66ba4ae69aad9e77f71ad5a124cccba6df5009aa305c4ea827375fa819dcb283"
+        }
+      ]
+    },
+    {
+      "frameId": "618:9",
+      "page": "Matters",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/matters-figma-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "171c0745c7b73df46e0fc15097b1c89cc657f5166fa03e4dd82aafb617d0ab7b"
+        },
+        {
+          "file": "evidence/matters-browser-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "3fb886289ff10a0d56e984e3b6a56cd4a996bdde0aedd07e7cea3323072f5cf4"
+        }
+      ]
+    },
+    {
+      "frameId": "619:9",
+      "page": "Matters",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/matters-figma-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "788609c4a4c8f6a4a34985d514b1f52c12bf58fcc059a7c4b69c2854ad2fc033"
+        },
+        {
+          "file": "evidence/matters-browser-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "68de9e0d8de668ad7ae12c26cc17607ddc982ffe02cfcad9d0da2196f806bad3"
+        }
+      ]
+    },
+    {
+      "frameId": "626:9",
+      "page": "Chat costs",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/chat-costs-figma-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "4874c348e149bc0c1e445f6e7d367607193a3a5f169251747e3e2e9af7ee8204"
+        },
+        {
+          "file": "evidence/chat-costs-browser-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "36094994794a48f1d010fea8e5fbdab4fc7123ebf9be731c56ffb2d69ba1240d"
+        }
+      ]
+    },
+    {
+      "frameId": "630:9",
+      "page": "Chat costs",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/chat-costs-figma-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "349a8562b6b21ad5094903d6e79bb1b51af1e071930fbab1ca2bd37d0248b0a4"
+        },
+        {
+          "file": "evidence/chat-costs-browser-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "b3f94babf02c627100edb7409699f5c4dd7c1c48db607c2ea59b29ba867e63dc"
+        }
+      ]
+    },
+    {
+      "frameId": "631:9",
+      "page": "Cost details",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/cost-details-figma-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "84498d75acefe30d1b1f0c8676efdd51e65dedbb8cee25d157d26ef6ceb3d075"
+        },
+        {
+          "file": "evidence/cost-details-browser-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "37e351e54f31c3ca46a68c6d6dc9ca04b74307758f64efebbe0786d0d33ffe75"
+        }
+      ]
+    },
+    {
+      "frameId": "632:9",
+      "page": "Cost details",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/cost-details-figma-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "51d8c8f1fd4d5ee62d944879dccb08870dad046c3a129c93140477cd75bc24a0"
+        },
+        {
+          "file": "evidence/cost-details-browser-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "dd228dd908bd145dafcd1e73042d50d201d3daf9a9f15fc3551bbc8dda640329"
+        }
+      ]
+    },
+    {
+      "frameId": "636:9",
+      "page": "Onboarding \u00b7 Organization",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/onboarding-figma-1440.png",
+          "width": 1440,
+          "height": 1044,
+          "sha256": "7ef9288874b98f8d89635fb9b6833f0a4d96dadcbca79c247486422e403c5385"
+        },
+        {
+          "file": "evidence/onboarding-browser-1440.png",
+          "width": 1440,
+          "height": 1044,
+          "sha256": "a03262cc1fed9ba0092dda00ea6be57cf8fcebc4f75f8d5d3017faf35eb02c3a"
+        }
+      ]
+    },
+    {
+      "frameId": "637:9",
+      "page": "Onboarding \u00b7 Organization",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/onboarding-figma-375.png",
+          "width": 375,
+          "height": 1100,
+          "sha256": "77f7886a2c3deef11bebddf0d1eb066e8e4a46028f7ead939ef140ad75fbf6bf"
+        },
+        {
+          "file": "evidence/onboarding-browser-375.png",
+          "width": 375,
+          "height": 1100,
+          "sha256": "a7655c67ea436eb6bd22b1458d6694567596b70486bea2a9e47df80b5632cca1"
+        }
+      ]
+    },
+    {
+      "frameId": "640:9",
+      "page": "Onboarding \u00b7 Industry",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/onboarding-industry-figma-1440.png",
+          "width": 1440,
+          "height": 1044,
+          "sha256": "bd896dd27c183ab5babf42a1a9668b1936272ed195178a6aa6d877da1934ce1b"
+        },
+        {
+          "file": "evidence/onboarding-industry-browser-1440.png",
+          "width": 1440,
+          "height": 1044,
+          "sha256": "a1697a990f78ad243d30765a9143a9e5b9354f592e1b4df69f892e9877302e95"
+        }
+      ]
+    },
+    {
+      "frameId": "641:9",
+      "page": "Onboarding \u00b7 Industry",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/onboarding-industry-figma-375.png",
+          "width": 375,
+          "height": 1100,
+          "sha256": "13f91dde94fded84b4afff2626d16bc962757d7d875395559af777db4a161de4"
+        },
+        {
+          "file": "evidence/onboarding-industry-browser-375.png",
+          "width": 375,
+          "height": 1100,
+          "sha256": "6eaaeeac026c2c8e9e9929895db60c882fcc60bdd6867e36dcfe354b943267c1"
+        }
+      ]
+    },
+    {
+      "frameId": "648:9",
+      "page": "Onboarding \u00b7 File",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/onboarding-file-figma-1440.png",
+          "width": 1440,
+          "height": 1437,
+          "sha256": "6c930cdf81e8868e2fa52579ee69517722358e8f649ed5f7435ec15a416713bd"
+        },
+        {
+          "file": "evidence/onboarding-file-browser-1440.png",
+          "width": 1440,
+          "height": 1437,
+          "sha256": "c55d2008b5dada5385c8bfec6d5f167b781ae5e1150b0c7b5e8a4816db2ea198"
+        }
+      ]
+    },
+    {
+      "frameId": "650:9",
+      "page": "Onboarding \u00b7 File",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/onboarding-file-figma-375.png",
+          "width": 375,
+          "height": 1663,
+          "sha256": "f376428b3087aee7e339ec8555349a2c589935d4da9978b18a160ce8ee45521d"
+        },
+        {
+          "file": "evidence/onboarding-file-browser-375.png",
+          "width": 375,
+          "height": 1663,
+          "sha256": "6a981270de8dc21332f343014dac4f347048b826399f1136c0c4a10b99035024"
+        }
+      ]
+    },
+    {
+      "frameId": "654:9",
+      "page": "Onboarding \u00b7 Run",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/onboarding-run-figma-1440.png",
+          "width": 1440,
+          "height": 1044,
+          "sha256": "be7bad3d0af079585e105b5b5c4c9aba2747b076b6877baf5798ca4a6a34d38c"
+        },
+        {
+          "file": "evidence/onboarding-run-browser-1440.png",
+          "width": 1440,
+          "height": 1044,
+          "sha256": "1a8b891499309486a6dcdb13a394084654a89b7aa92b1eafba4aa79f52823eb9"
+        }
+      ]
+    },
+    {
+      "frameId": "655:9",
+      "page": "Onboarding \u00b7 Run",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/onboarding-run-figma-375.png",
+          "width": 375,
+          "height": 1100,
+          "sha256": "ee0128b88329038ec1b4739739e18bf1599646f8513768c12f4dd8a3bd4e6438"
+        },
+        {
+          "file": "evidence/onboarding-run-browser-375.png",
+          "width": 375,
+          "height": 1100,
+          "sha256": "12156977069b2170c2cae0a472c53c6660b85ea47b8374786abb9d6550c23f36"
+        }
+      ]
+    },
+    {
+      "frameId": "649:10",
+      "page": "Autumbra public",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/autumbra-figma-1440.png",
+          "width": 1440,
+          "height": 1044,
+          "sha256": "1023a77f87938df9f460faebdc77b1667ae4da38070abaafd77ecc925abc76ad"
+        },
+        {
+          "file": "evidence/autumbra-browser-1440.png",
+          "width": 1440,
+          "height": 1044,
+          "sha256": "fb4be789f0e7ff14c19f3edccaac1f38b2063d022f521a898d764f2adef10d05"
+        }
+      ]
+    },
+    {
+      "frameId": "649:22",
+      "page": "Autumbra public",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/autumbra-figma-375.png",
+          "width": 375,
+          "height": 1044,
+          "sha256": "c01cd2327cda0a947a6fd1accbd4f81ed64568c487dd5aa5caec407c19f1902e"
+        },
+        {
+          "file": "evidence/autumbra-browser-375.png",
+          "width": 375,
+          "height": 1044,
+          "sha256": "37484746452d96ce2b9db7704821a9c0d156274e7c3ba3547c5bd8896557c673"
+        }
+      ]
+    },
+    {
+      "frameId": "657:9",
+      "page": "Stored Market Lab source",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/sources-figma-1440.png",
+          "width": 1440,
+          "height": 916,
+          "sha256": "88456479ba8eb4ee8045597508e1462c73d80175df34859ecfca4a5f51dbd7c9"
+        },
+        {
+          "file": "evidence/sources-browser-1440.png",
+          "width": 1440,
+          "height": 916,
+          "sha256": "8f93fcf1d28470a87b86ffd21ae78a073b69c16923d3506ff2a88f40754db21b"
+        }
+      ]
+    },
+    {
+      "frameId": "658:9",
+      "page": "Stored Market Lab source",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/sources-figma-375.png",
+          "width": 375,
+          "height": 1007,
+          "sha256": "9026d4235ae24d7deb31076dc1dfa7cb48fe5013d2294c07e7f9617d9eed2818"
+        },
+        {
+          "file": "evidence/sources-browser-375.png",
+          "width": 375,
+          "height": 1007,
+          "sha256": "d5e0637847d9bfc3a750d878785aa07bb4862e93cef98f70059522902fbb22e4"
+        }
+      ]
+    },
+    {
+      "frameId": "666:9",
+      "page": "Autumbra undo",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/undo-figma-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "c4243de1cb0075517538da291fc722e554ff519539417a7ad680990bf59cdd86"
+        },
+        {
+          "file": "evidence/undo-browser-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "29d763783780d33e645cce1f1c644b2654b7fb40b82fe493e25417389141e1e8"
+        }
+      ]
+    },
+    {
+      "frameId": "666:17",
+      "page": "Autumbra undo",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/undo-figma-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "cc02f972f5ba3f5a5ffe76a12f9df9125cce989c9a460e8c964fc5d4e0d19db2"
+        },
+        {
+          "file": "evidence/undo-browser-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "7abdd43f84a33ef9eb47f84248fe424f038c19225ca1ad6bac5340ebd21ef03f"
+        }
+      ]
+    },
+    {
+      "frameId": "667:11",
+      "page": "Autumbra weekly receipts",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/weekly-figma-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "0802f2cb02274704eb0568ebdc6cb9d0c9d5ea3d37a9db57dd52fb6e4c7adecd"
+        },
+        {
+          "file": "evidence/weekly-browser-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "88fffb9bd1d713d8a8ef0e03aca80c60bca436848b5a0f465c6f03f022873290"
+        }
+      ]
+    },
+    {
+      "frameId": "667:17",
+      "page": "Autumbra weekly receipts",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/weekly-figma-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "fda51a1e3d59835f79a9a4808bd0ddc328edf73eeffdf3cca111d3c77d52f29e"
+        },
+        {
+          "file": "evidence/weekly-browser-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "79f476946c717552c7a8b3d3af9dc65f49ebae2515112906241d577c67eac196"
+        }
+      ]
+    },
+    {
+      "frameId": "661:9",
+      "page": "Moot public watch \u00b7 Index",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/moot-figma-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "a5bfc41da8b2d4443dd1e54b3433de9e4a9b192fa615307abb68d8a12b45f77b"
+        },
+        {
+          "file": "evidence/moot-browser-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "912f36c72b4c6e1586e01ca1d76754ffddd3a440072d87c0777aa33b368331a0"
+        }
+      ]
+    },
+    {
+      "frameId": "662:9",
+      "page": "Moot public watch \u00b7 Index",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/moot-figma-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "573136a53fd77dc93330501e57e1001456471ece133f9e9058cd49ebf7e4a2cf"
+        },
+        {
+          "file": "evidence/moot-browser-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "46c06b8dead52c227a291a8aada2b6d684aba347ec0099c52a85475291e9f9c4"
+        }
+      ]
+    },
+    {
+      "frameId": "664:9",
+      "page": "Moot public watch \u00b7 Match",
+      "width": 1440,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/moot-watch-figma-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "bb7fcfe8f03b5157d2f7bdf159635221500a98cba685ac481420a3af05ec905e"
+        },
+        {
+          "file": "evidence/moot-watch-browser-1440.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "a964bcefea9d628b5430bfa08e57e4ebd874c4c9192ea99ab55f13def3c0497f"
+        }
+      ]
+    },
+    {
+      "frameId": "665:9",
+      "page": "Moot public watch \u00b7 Match",
+      "width": 375,
+      "status": "Proposed",
+      "images": [
+        {
+          "file": "evidence/moot-watch-figma-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "b181fe94e88f4e974c85669ee613527f67c4bf932931fc6eb4d52071db056d67"
+        },
+        {
+          "file": "evidence/moot-watch-browser-375.png",
+          "width": 375,
+          "height": 900,
+          "sha256": "7f3cc88115697f5171a78f300939ed5523d87b9da6307c637d5716302d4d15a1"
+        }
+      ]
+    }
+  ]
+}

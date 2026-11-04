@@ -1,0 +1,36 @@
+{
+  "frames": [
+    {
+      "id": "556:3054",
+      "screenshot": "feedback-base-note-1440.png",
+      "width": 1440,
+      "height": 900,
+      "nonInter": [],
+      "textOverflow": []
+    },
+    {
+      "id": "556:3190",
+      "screenshot": "feedback-base-saved-1440.png",
+      "width": 1440,
+      "height": 900,
+      "nonInter": [],
+      "textOverflow": []
+    },
+    {
+      "id": "556:3319",
+      "screenshot": "feedback-tiger-note-1440.png",
+      "width": 1440,
+      "height": 900,
+      "nonInter": [],
+      "textOverflow": []
+    },
+    {
+      "id": "556:3455",
+      "screenshot": "feedback-tiger-saved-1440.png",
+      "width": 1440,
+      "height": 900,
+      "nonInter": [],
+      "textOverflow": []
+    }
+  ]
+}
