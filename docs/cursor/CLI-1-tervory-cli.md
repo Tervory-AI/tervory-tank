@@ -5,13 +5,13 @@
 **Files you may change:**
 - new `cli/` (the package);
 - `tank/` (personal access tokens only: new module, route registration in main.py, additive schema);
-- `workspace/app/cli/` (device approval and CLI sign-ins pages);
+- `workspace/app/cli/` (CLI sign-ins page; approval is hosted by Trigger sign-in);
 - `.env.example` (names only);
 - tests.
 
 1. **Package:** `cli/` (`"private": true`, never published to npm or any third-party registry), distributed only from Tervory's own Workspace at `https://app.tervory.com/cli/` (install.sh, latest.json, versioned per-platform tarballs with a SHA-256 manifest; `tervory update`). Node 22, a single `tervory` command. Version pinned, with a changelog.
-2. **Sign-in:** personal access tokens.
-   - Now device approval (`tervory login`), not pasted tokens. Each user sees and revokes their own sign-ins in the Workspace at `/cli/sign-ins` (review of #506, B3).
+2. **Sign-in:** Trigger sign-in.
+   - Native device approval (`tervory login`) in both regions, not pasted tokens or a Workspace approval page. Each user sees and revokes their own issuer-scoped sign-ins in the Workspace at `/cli/sign-ins`.
    - Stored hashed in Tank, scoped to one user, one tenant and one region box.
    - `tervory login` saves the token in the OS keychain, never in plain files or logs.
    - Founders see every tool; clients see only their own squad tools, enforced by Tank.
@@ -28,21 +28,19 @@
    - Tank answers `/v1/command/models` with 404 and a non-Auto pin with 403 ("Only Auto is available on this account", no model named) for everyone else. The app.tervory.com CLI corridor does not forward `models` at all. Receipts, steps, messages and streams carry model names, requested models and price-book rows to the founder only (customer views are allowlists).
 5. **Region:** the token's box decides where it talks: app.tervory.com or za.tervory.com. It never mixes the two.
 
-## Decision: device codes are bound to a region, not to a tenant (review item 5 of #496; rewritten for #506 should-fix 6)
-Two different things, kept apart:
-- **Region (bound).** A code is created on one region's Tank (us-east or ZA) and can only be
-  approved, polled and redeemed on that Tank; the credential it yields works only there.
-  The Workspace records a ZA approval on the ZA Tank (`TANK_URL_ZA`) with the dedicated
-  `TANK_DEVICE_APPROVAL_KEY_ZA`, never the ZA homes key.
-- **Tenant (not bound at creation).** The CLI has no identity when it asks for a code
-  (RFC 8628 §3.1), so there is nothing trustworthy to bind a tenant to. The tenant and user
-  come from the person who approves: the credential is minted for the approving user in the
-  approving user's active organization, never for anyone else, and never as a founder through
-  the ZA key (Tank refuses founders there with 403).
-- **What the ZA approval key is worth (should-fix 1).** `TANK_DEVICE_APPROVAL_KEY` trusts the
-  user and tenant headers, so whoever holds it can create a CLI sign-in for any non-founder
-  user in any tenant on ZA; it is a secret of that weight, not a low-privilege key. It cannot
-  act for founders, call any other route, or create tokens except through a pending code.
+## Trigger sign-in device flow — supersedes Workspace approval
+
+The CLI starts the region's native device flow through Tank. Only that region's
+Trigger sign-in host approves the code: `auth.tervory.com` in the US and
+`auth-za.tervory.com` in ZA. Tank verifies the native token's signature, issuer,
+audience, expiry, subject and Tervory-project grants before issuing its existing
+hashed CLI credential. The subject is unchanged; an organisation maps only to
+its setup-published existing Tank tenant. Email, names and metadata grant nothing.
+
+There is no Workspace approval page or service-key approval fallback. The narrow
+`TRIGGER_SIGNIN_SESSIONS_KEY` permits only verified own-session list/revoke on ZA;
+it cannot approve a code or mint a credential. Independent regional subjects are
+not linked by matching email. See [Trigger sign-in deployment](../ops/TRIGGER-SIGNIN.md).
 
 **What phishing gets an attacker, and why revoke matters.** An attacker can start
 `tervory login` on their own machine and send the code or approval link to a victim. If the
@@ -50,16 +48,15 @@ victim approves, the attacker's machine holds a credential with **the victim's a
 victim's organization and region (the CLI corridor only: chat, threads, receipts, build and
 confirm cards; a CLI token reaches no other route). Binding the code to a tenant would not
 stop this: the attacker would just create it for the victim's tenant. So the defences are:
-- the approval page (`workspace/app/cli/device/page.tsx`) shows the code, **when the code was
-  created**, the organization, the region and **"Device (the name the device reported)"**:
-  the hostname is whatever the requesting machine claims, so it is labelled as unverified;
-  it tells the user to deny any code they did not just create themselves;
-- codes are single use and expire after 10 minutes, with a cap on pending codes per box (`MAX_PENDING`);
+- approval is rendered only by the native Trigger sign-in device screens; never
+  approve a code you did not just request in your own CLI;
+- native codes expire, are single-use, and enforce the server's polling interval;
 - the access token lasts 1 hour and the refresh token 30 days, rotating on every use;
 - **revoke**: the Workspace page **CLI sign-ins** (`/cli/sign-ins`) lists every active sign-in
   (device name, region, signed in, last used) with Revoke, which ends the access and refresh
   tokens at once; `tervory logout` revokes from the CLI side. Revocation is what ends a
-  phished sign-in, so it is one click from the approval page and the sidebar.
+  phished sign-in. A separately issued ZA-native credential can always be revoked
+  by `tervory logout` in that CLI.
 
 Revisit if Tank gains per-tenant region residency rules (then refuse approval on a box
 outside the tenant's allowed regions) or if a code ever needs to carry a tenant hint.

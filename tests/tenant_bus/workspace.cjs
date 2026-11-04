@@ -16,6 +16,8 @@ let session = {userId: 'client-a', orgId: 'org_a'};
 const load = Module._load;
 Module._load = function(name, parent, ...rest) {
   if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
+  if (name === 'server-only') return {};
   if (name === '@/lib/trigger-signin') return {
     auth: async () => session,
     signinDirectory: async () => ({organizations: {getOrganization: async ({organizationId}) => ({id: organizationId, name: 'Offline'})}}),

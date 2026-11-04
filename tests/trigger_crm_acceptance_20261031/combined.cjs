@@ -16,6 +16,8 @@ let session = { userId: 'offline-founder', orgId: 'org_offline_crm' };
 const load = Module._load;
 Module._load = function(name, parent, ...rest) {
   if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
+  if (name === 'server-only') return {};
   if (name === '@/lib/trigger-signin') return { auth: async () => session };
   return load.call(this, name, parent, ...rest);
 };

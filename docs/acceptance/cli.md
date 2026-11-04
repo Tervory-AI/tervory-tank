@@ -8,6 +8,23 @@ They assert values and side effects, not source-code strings. Existing Node
 fixtures are reused; pytest refuses missing, failed or skipped proofs. No real
 model, provider, account, production SQL or founder computer is used offline.
 
+## Trigger sign-in cutover rows
+
+These additional rows are collected in `tests/acceptance/test_trigger_signin.py`.
+Offline fakes prove integration boundaries, never live founder acceptance.
+
+| Row | Founder check | Offline proof |
+| --- | --- | --- |
+| S01 | Sign in and sign up through Trigger sign-in on app.tervory.com and a product host. | Maintained OIDC provider, PKCE/state/nonce, encrypted session and safe host return. |
+| S02 | Sign out; the Workspace session ends and native Trigger sign-in logout opens. | Actual sign-out control, expiry checks and fixed native logout redirect. |
+| S03 | Switch organisation A/B/A without seeing another tenant's private data. | Signed Tervory-project grants only; forged user/role/ungranted selections refused. |
+| S04 | `tervory login --region us-east`, then `tervory logout`. | Native US device flow, actual token verifier and disposable PostgreSQL. |
+| S05 | `tervory login --region za`, then `tervory logout`. | Native ZA device flow, actual token verifier and disposable PostgreSQL. |
+| S06 | A client cannot open founder-only pages. | Actual founder gate and Tank founder page refuse client/reviewer subjects before reads. |
+
+Use the short [Trigger sign-in deployment steps](../ops/TRIGGER-SIGNIN.md) before
+live checks. Record the deployed head and outcome, never secrets or device codes.
+
 ## Before founder testing
 
 - Deploy the reviewed release and use Node 22, Git and an unlocked OS keychain.

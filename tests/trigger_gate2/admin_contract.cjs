@@ -15,6 +15,8 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
 let session = {};
 const load = Module._load;
 Module._load = function(name, ...rest) {
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
   if (name === '@/lib/trigger-signin') return {auth: async () => session};
   return load.call(this, name, ...rest);
 };

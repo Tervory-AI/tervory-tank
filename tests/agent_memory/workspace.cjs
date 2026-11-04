@@ -16,6 +16,8 @@ let session = {userId: 'client-a', orgRole: 'org:member'};
 const load = Module._load;
 Module._load = function(name, parent, ...rest) {
   if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
+  if (name === 'server-only') return {};
   if (name === 'next/navigation') return {notFound: () => {throw Object.assign(new Error(), {status: 404});}};
   if (name === '@/lib/trigger-signin') return {
     auth: async () => session,

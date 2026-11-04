@@ -1,11 +1,3 @@
-// Review of #506, B3: the signed-in user's own CLI sign-ins, per region, with Revoke.
-// A phished device approval gives the attacker the victim's access for up to 30 days
-// (refresh token lifetime); this is how the victim sees it and ends it.
-// Server-side only. Each region's Tank is reached with the same key that records that
-// region's approvals (device-login.ts signinTank): this Workspace's own Tank with its
-// Workspace key, and the ZA Tank with the dedicated TANK_DEVICE_APPROVAL_KEY_ZA, which
-// the ZA Tank accepts here for listing and revoking the user's own sign-ins only (never
-// to create one, never for a founder). Every call has a hard deadline, body included.
 import type { Region } from "@/app/api/zenas/tank";
 import { signinTank, type SigninIdentity } from "@/lib/signin-regions";
 import { boundedFetch } from "@/lib/tank";
@@ -57,7 +49,6 @@ export async function regionSignIns(identity: SigninIdentity, region: Region): P
       method: "GET", headers: headers(tank.key, identity), cache: "no-store", signal: AbortSignal.timeout(SIGN_IN_TIMEOUT_MS),
     }, SIGN_IN_TIMEOUT_MS, async response => {
       if (!response.ok) {
-        // Drain, never cancel: Next's render dedupe fetch tees GET bodies (device-login.ts).
         await response.arrayBuffer().catch(() => undefined);
         return { status: response.status, body: null };
       }

@@ -67,7 +67,8 @@ def lookups(monkeypatch):
             if "tank.personal_tokens" in sql:
                 seen.append(sql)
                 # A valid, unrevoked CLI credential for an ordinary member.
-                return {"token_id": uuid.uuid4(), "user_id": "customer", "stale": False}
+                return {"token_id": uuid.uuid4(), "user_id": "customer", "stale": False,
+                        "trigger_signin_issuer": "https://auth-za.tervory.com"}
             raise AssertionError("no other database work past the corridor check")
 
         async def fetch(self, *_):

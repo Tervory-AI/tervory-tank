@@ -104,7 +104,7 @@ async def test_revoke_scoped_to_token_owner(runtime):
     token_id = uuid.uuid4()
     result = await pat.revoke_token(token_id, command.Actor(TENANT, 'client', False))
     assert result.status_code == 204
-    assert runtime.fetchrow.call_args.args[1:] == (TENANT, 'client', token_id)
+    assert runtime.fetchrow.call_args.args[1:] == (TENANT, 'client', token_id, 'https://auth.tervory.com')
     assert 'tenant_id=$1 AND user_id=$2 AND token_id=$3' in runtime.fetchrow.call_args.args[0]
 
 

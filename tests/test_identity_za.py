@@ -2,7 +2,6 @@
 from trigger_signin_fakes import set_founders
 import asyncio
 import base64
-import json
 import time
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -32,7 +31,6 @@ def provider(monkeypatch, runtime, request):
     oidc._cache.clear()
     monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', provider.issuer)
     monkeypatch.setenv('TRIGGER_SIGNIN_CLIENT_ID', CLIENT)
-    monkeypatch.setenv('TRIGGER_SIGNIN_ORG_TENANTS', json.dumps({ORG: str(TENANT)}))
     monkeypatch.setattr(oidc, 'http_client', lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
     yield provider
     oidc._cache.clear()

@@ -21,6 +21,8 @@ const savings={as_of:'2026-10-21T12:00:00Z',revision:'1',total:savingsTotal,mont
 async function rigProxy(){if(sourceError)throw Error('unavailable');return savings;}
 Module._load = function (name, parent, isMain) {
   if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
+  if (name === 'server-only') return {};
   if (name === 'stripe') return class StripeFixture {
     constructor() {this.balance={retrieve:async()=>({livemode:false})};this.subscriptions={list:async function*(){
       yield {customer:'customer-one',items:{data:[{price:{unit_amount:1200}}]}};

@@ -13,7 +13,7 @@ function resolveFile(base) {
   throw new Error(`Cannot resolve ${base}`);
 }
 
-exports.workspace = function workspace({ env, fetch, mocks = {} }) {
+exports.workspace = function workspace({ env, fetch, mocks = {}, browser }) {
   const cache = new Map();
   function load(file) {
     if (cache.has(file)) return cache.get(file).exports;
@@ -35,7 +35,7 @@ exports.workspace = function workspace({ env, fetch, mocks = {} }) {
     vm.runInNewContext(output, {
       module, exports: module.exports, require: local, process: { env },
       URL, URLSearchParams, Request, Response, Headers, Uint8Array, TextEncoder, TextDecoder, ReadableStream,
-      AbortController, AbortSignal, setTimeout, clearTimeout, console, fetch,
+      AbortController, AbortSignal, setTimeout, clearTimeout, console, fetch, window: browser,
     });
     return module.exports;
   }

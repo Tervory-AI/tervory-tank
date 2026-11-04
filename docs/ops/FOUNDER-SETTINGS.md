@@ -8,7 +8,7 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 **Trigger sign-in, Boston Tank/Workspace (names only):** TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_WORKSPACE_SECRET, TRIGGER_SIGNIN_DIRECTORY_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY_ZA
 
-**Trigger sign-in, Boston routing (names only):** TRIGGER_SIGNIN_REGION, TRIGGER_SIGNIN_HOST, TRIGGER_SIGNIN_VOLUME_PREFIX, TRIGGER_SIGNIN_PROXY_NETWORK, TRIGGER_SIGNIN_BACKUP_SCHEDULE
+**Trigger sign-in, Boston routing (names only):** TRIGGER_SIGNIN_REGION, TRIGGER_SIGNIN_HOST, TRIGGER_SIGNIN_VOLUME_PREFIX, TRIGGER_SIGNIN_PROXY_NETWORK
 
 **Shared email** (the morning report and default alerts): SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 
@@ -46,7 +46,7 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 **Trigger sign-in, ZA Tank (names only):** TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY
 
-**Trigger sign-in, ZA routing (names only):** TRIGGER_SIGNIN_REGION, TRIGGER_SIGNIN_HOST, TRIGGER_SIGNIN_VOLUME_PREFIX, TRIGGER_SIGNIN_PROXY_NETWORK, TRIGGER_SIGNIN_BACKUP_SCHEDULE
+**Trigger sign-in, ZA routing (names only):** TRIGGER_SIGNIN_REGION, TRIGGER_SIGNIN_HOST, TRIGGER_SIGNIN_VOLUME_PREFIX, TRIGGER_SIGNIN_PROXY_NETWORK
 
 The initial native founder account must change its temporary password at first Trigger sign-in; it can then enrol a passkey. The setup job reads the created account’s native subject, not its email, and binds/grants that subject through the Tervory project. Machine/directory tokens are secret values entered only in Coolify; no subject or app ID is copied by hand.
 

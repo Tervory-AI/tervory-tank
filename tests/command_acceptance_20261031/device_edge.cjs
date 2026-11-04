@@ -1,7 +1,3 @@
-/* Actual CLI device login -> (us-east: actual Workspace adapter | za: Tank directly)
- * -> disposable loopback Tank. The browser approval step is automated by calling
- * the actual Workspace approval module (US) or the offline Zitadel fixture (ZA).
- * Synthetic only. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,28 +9,14 @@ const origin = input.origin; const region = input.region;
 assert.equal(new URL(origin).hostname, '127.0.0.1');
 assert(['us-east', 'za'].includes(region));
 const PUBLIC = { 'us-east': 'https://app.tervory.com', za: 'https://za.tervory.com' };
-const ZA_TANK = 'https://za-tank.fixture';
-// Production shape: Boston's TANK_API_KEY_ZA is the ZA Tank's narrow TANK_HOMES_KEY,
-// which cannot approve; approvals use the dedicated TANK_DEVICE_APPROVAL_KEY_ZA.
-const ZA_HOMES_KEY = 'dummy-za-homes-key';
-const ZA_KEY = input.za_key ?? 'dummy-workspace-key';
-
-let adapterCalls = 0; let directCalls = 0; let approvalCalls = 0;
-// Workspace process: us-east home. ZA approvals use approvalTank('za') (https only).
+let adapterCalls = 0; let directCalls = 0;
 const load = workspace({
-  env: { TANK_URL: region === 'us-east' ? origin : 'http://us-east-tank.invalid', TANK_API_KEY: 'dummy-workspace-key',
-         TANK_URL_ZA: ZA_TANK, TANK_API_KEY_ZA: ZA_HOMES_KEY, TANK_DEVICE_APPROVAL_KEY_ZA: ZA_KEY },
+  env: { TANK_URL: region === 'us-east' ? origin : 'http://us-east-tank.invalid', TANK_API_KEY: 'dummy-workspace-key' },
   fetch: async (url, init) => {
     const target = new URL(url);
-    if (target.pathname.startsWith('/v1/command/device/approval/')) {
-      approvalCalls++;
-      assert.equal(target.origin, region === 'za' ? ZA_TANK : origin);
-      assert.equal(init.headers['x-tank-key'], region === 'za' ? ZA_KEY : 'dummy-workspace-key');
-    } else {
-      // The public adapter only ever forwards to its own box.
-      assert.equal(region, 'us-east'); assert.equal(target.origin, origin);
-      adapterCalls++;
-    }
+    assert(!target.pathname.startsWith('/v1/command/device/approval/'));
+    assert.equal(region, 'us-east'); assert.equal(target.origin, origin);
+    adapterCalls++;
     return fetch(origin + target.pathname + target.search, init);
   },
 });
@@ -56,7 +38,6 @@ const transport = async (url, init) => {
   const cli = await import(pathToFileURL(path.join(root, 'cli/src/client.mjs')).href);
   let saved = null; let output = ''; const opened = [];
   const store = { get: async () => saved, set: async value => { saved = value; }, remove: async () => { saved = null; } };
-  const identity = { tenantId: input.tenant, userId: 'offline-client', tenantAdmin: false };
   let approved = false;
   const io = {
     write: value => { output += value; }, prompt: async () => 'N', deviceName: () => `acceptance-${region}`,
@@ -108,7 +89,6 @@ const transport = async (url, init) => {
   for (const secret of [first.access_token, first.refresh_token, second.access_token, second.refresh_token]) {
     assert(!output.includes(secret));
   }
-  assert.equal(approvalCalls, 0);
   if (region === 'za') assert(adapterCalls === 0 && directCalls >= 8);
   else assert(adapterCalls >= 8 && directCalls === 0);
   process.stdout.write(`PASS: CLI device login ${region} ${region === 'za' ? 'direct to Tank' : 'via Workspace adapter'}; `

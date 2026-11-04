@@ -80,7 +80,6 @@ def services(output):
     env.update(TANK_API_KEY="placeholder-keyless-workspace-key", TANK_KEY_MARKET_LAB="placeholder-keyless-room-key",
         LITELLM_MASTER_KEY="placeholder-keyless-unused-provider-key", TANK_REGION="us-east", TERVORY_ADMIN_USER_IDS="",
         REDIS_URL="redis://127.0.0.1:1/0", TANK_URL=f"http://127.0.0.1:{tank_port}", NEXT_TELEMETRY_DISABLED="1",
-        TRIGGER_SIGNIN_KEY="<retired-build-value>",
         PYTHONPATH=os.pathsep.join(str(ROOT / p) for p in ("tank", "agents/market_lab", "agents/_chassis", "tests/market_lab_keyless_feeds")))
     proxy_env = {"HTTP_PROXY": f"http://127.0.0.1:{proxy.server_port}", "http_proxy": f"http://127.0.0.1:{proxy.server_port}",
                  "NO_PROXY": "localhost,127.0.0.1", "no_proxy": "localhost,127.0.0.1"}

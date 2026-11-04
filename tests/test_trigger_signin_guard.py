@@ -1,4 +1,3 @@
-import json
 import sys
 from types import SimpleNamespace
 
@@ -6,8 +5,12 @@ import httpx
 import pytest
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
+from starlette.requests import Request
+from fastapi import HTTPException
 
 import identity_oidc as oidc
+import personal_tokens
+import trigger_signin_config as registry
 from trigger_signin_guard import TriggerSigninMiddleware
 from trigger_signin_fakes import Provider, CLIENT, ORG, SUB, install_registry
 
@@ -31,9 +34,6 @@ def boundary(monkeypatch, request):
     monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', local.issuer)
     monkeypatch.setenv('TRIGGER_SIGNIN_CLIENT_ID', CLIENT)
     monkeypatch.setenv('TRIGGER_SIGNIN_WORKSPACE_CLIENT_ID', WEB_CLIENT)
-    bindings = json.dumps({ORG: TENANT, '99999': OTHER})
-    monkeypatch.setenv('TRIGGER_SIGNIN_ORG_TENANTS', bindings)
-    monkeypatch.setenv('TRIGGER_SIGNIN_WORKSPACE_ORG_TENANTS', bindings)
     monkeypatch.setattr(oidc, 'http_client', lambda: httpx.AsyncClient(
         transport=httpx.MockTransport(lambda incoming: providers[incoming.url.host](incoming))))
     oidc._cache.clear()
@@ -116,3 +116,35 @@ async def test_regional_and_workspace_key_caches_and_audiences_stay_separate(bou
         await oidc.verify(local.token(), workspace=True)
     with pytest.raises(oidc.IdentityError):
         await oidc.verify(web.token())
+
+
+@pytest.mark.asyncio
+async def test_narrow_za_sessions_key_requires_native_proof_and_cannot_mint(boundary, monkeypatch):
+    _, provider, _, headers = boundary
+    region = sys.modules['main'].box_region()
+    monkeypatch.setenv('TRIGGER_SIGNIN_SESSIONS_KEY', 'offline-own-sessions')
+    records = {name: {**record, 'founders': [SUB]} for name, record in registry._records.items()}
+    monkeypatch.setattr(registry, '_records', records)
+
+    async def terminal(scope, receive, send):
+        request = Request(scope)
+        try:
+            actor = await (personal_tokens.sign_in_actor(request) if request.method == 'GET'
+                           else personal_tokens.workspace_actor(request))
+            response = JSONResponse({'user_id': actor.user_id, 'founder': actor.founder})
+        except HTTPException as error:
+            response = JSONResponse({'detail': error.detail}, status_code=error.status_code)
+        await response(scope, receive, send)
+
+    presented = {**headers, 'x-tank-key': 'offline-own-sessions'}
+    app = TriggerSigninMiddleware(terminal)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://offline') as client:
+        assert (await client.get('/v1/personal-tokens', headers=presented)).status_code == 401
+        verified = {**presented, 'x-trigger-signin-token': provider.token()}
+        listed = await client.get('/v1/personal-tokens', headers=verified)
+        assert listed.status_code == (200 if region == 'za' else 401)
+        if region == 'za':
+            assert listed.json() == {'user_id': SUB, 'founder': True}
+        assert (await client.post('/v1/personal-tokens', headers=verified)).status_code == 401
+        forged = {**verified, 'x-tervory-user': 'another-subject'}
+        assert (await client.get('/v1/personal-tokens', headers=forged)).status_code == 403

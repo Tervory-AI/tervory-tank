@@ -47,6 +47,8 @@ Configuration uses supported APIs only; no upstream source is copied or patched.
    first Trigger sign-in; enrol a passkey if desired. Link later admins by
    selecting their native subject in the correct tenant organisation and
    granting that project's `org_admin` in the console. Never match by email.
+   Self-registration creates only a native account; an unassigned account cannot
+   enter a tenant until its subject receives a Tervory-project grant there.
 8. Deploy the Workspace and shared CLI release together. Setup configures
    native light-only branding, the original logo and Inter, approved English
    translations and Trigger sign-in email names. Existing native email bodies,
@@ -75,12 +77,28 @@ surface and result, never a password, token or device code.
 
 ## Identity and operation
 
+Historical product screenshots and transport reports are not evidence of this
+cutover. Use the new acceptance rows, current-head tests/CI and the founder's
+live checks; renamed historical instructions do not constitute new sign-in proof.
+
 `user_id` is the verified native `sub`, unchanged. Names, email and metadata
 are display data, never identity, tenant links or authority. `tenant_admin`
 comes only from the requesting Tervory project's signed `org_admin` grant.
+Setup reserves native organisation IDs durably in the existing private bootstrap
+volume before creating organisations through the native v2 API. Retries recover
+by reserved ID, never by organisation name. Preserve this volume along with each
+region's database; losing a pending reservation requires an operator to reconcile
+the native resources, not an automatic name/email match. Published Tank bindings
+remain authoritative on subsequent runs.
 Roles from another project or an unlinked organisation are refused. Workspace
 service keys alone cannot attest a human. Old opaque credentials and old
 device/OAuth codes lack native provenance and are refused immediately.
+
+Private conversations and CLI sessions also retain the verified issuer as their
+ownership scope. Equal subjects on the two independent regional servers are
+not linked by email or presumed to identify the same person. The Workspace
+shows sessions issued for its current native identity; a separate ZA-native
+account signs out/revokes its CLI credential with `tervory logout` in ZA.
 
 The shared encrypted backup/restore worker covers each resource's own database;
 retain the existing ZA backup settings and enable Boston's separate copy before
@@ -88,3 +106,9 @@ live acceptance. Do not delete or rename existing data volumes. The upstream
 API identifiers and pinned image paths keep their required original spelling.
 The resource, product, setting prefix, emails and reports are Trigger sign-in,
 separate from Trigger CRM and its tools/hostname.
+
+Configuration reference: the pinned upstream
+[hosted-translation schema](https://github.com/zitadel/zitadel/blob/v4.20.0/proto/zitadel/settings/v2/settings_service.proto),
+[label/email API schema](https://github.com/zitadel/zitadel/blob/v4.20.0/proto/zitadel/admin.proto)
+[asset API routes](https://github.com/zitadel/zitadel/blob/v4.20.0/internal/api/assets/generator/asset.yaml)
+and [native organisation API](https://github.com/zitadel/zitadel/blob/v4.20.0/proto/zitadel/org/v2/org_service.proto).

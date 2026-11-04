@@ -1,4 +1,4 @@
-"""Configure unmodified Zitadel through its public API; success prints client ID only."""
+"""Configure Trigger sign-in through upstream public APIs without logging credentials."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -51,10 +51,10 @@ class Configure:
     def request(self, method, path, **kwargs):
         response = self.client.request(method, path, **kwargs)
         if not response.is_success:
-            raise SetupError('Identity setup refused')
+            raise SetupError('Trigger sign-in setup refused')
         result = response.json()
         if not isinstance(result, dict):
-            raise SetupError('Identity setup refused')
+            raise SetupError('Trigger sign-in setup refused')
         return result
 
     def search(self, path, name, field='nameQuery'):
@@ -62,7 +62,7 @@ class Configure:
             'query': {'limit': 2}, 'queries': [{field: {'name': name, 'method': 'TEXT_QUERY_METHOD_EQUALS'}}],
         }).get('result', [])
         if not isinstance(result, list) or len(result) > 1:
-            raise SetupError('Identity setup found ambiguous resources')
+            raise SetupError('Trigger sign-in setup found ambiguous resources')
         return result[0] if result else None
 
     def run(self):
@@ -164,11 +164,13 @@ def main(bootstrap: Path = Path('/bootstrap')):
         client.headers['Authorization'] = 'Bearer ' + credential
         api = Configure(client)
         result = api.run()
+        from branding import configure_branding
+        configure_branding(api, bootstrap, Path('/app/brand'), issuer)
         from provision import provision, publish_workspace
         setup_token = os.environ['TRIGGER_SIGNIN_SETUP_TOKEN']
         with httpx.Client(base_url='http://tank:8000', timeout=30, trust_env=False, follow_redirects=False,
                           headers={'x-trigger-signin-setup': setup_token}) as tank:
-            payload = provision(api, tank, result, region, issuer)
+            payload = provision(api, tank, result, region, issuer, bootstrap)
         if region == 'us-east':
             with httpx.Client(base_url='https://za.tervory.com', timeout=30, trust_env=True, follow_redirects=False,
                               headers={'x-trigger-signin-setup': os.environ['TRIGGER_SIGNIN_SETUP_TOKEN_ZA']}) as tank:
@@ -181,5 +183,5 @@ if __name__ == '__main__':
     try:
         main()
     except Exception:
-        print('Identity setup failed', file=sys.stderr)
+        print('Trigger sign-in setup failed', file=sys.stderr)
         raise SystemExit(1) from None

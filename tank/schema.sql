@@ -3126,6 +3126,7 @@ ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
 -- END platform
 
 -- BEGIN trigger_signin
+ALTER TABLE tank.command_threads ADD COLUMN IF NOT EXISTS trigger_signin_issuer text NOT NULL DEFAULT '';
 ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.oauth_codes ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;

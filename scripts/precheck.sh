@@ -3,7 +3,7 @@
 # something a local run would have caught). Same commands as .github/workflows/ci.yml.
 #
 #   scripts/precheck.sh            # lint, secrets, gitleaks, semgrep, osv, tests for changed files
-#   PRECHECK_SKIP_SEMGREP=1 ...    # only if Docker is unavailable; CI still runs it
+#   PRECHECK_SKIP_SEMGREP=1 ...    # local checks; CI performs the security scan
 #
 # Exit code 0 means push. Anything else: fix first.
 set -uo pipefail

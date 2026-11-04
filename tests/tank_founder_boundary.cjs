@@ -10,7 +10,7 @@ function load(file, mocks) {
     compilerOptions: {module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022},
   }).outputText;
   const exports = {};
-  vm.runInNewContext(code, {exports, process: {env: {TERVORY_ADMIN_USER_IDS: 'founder'}}, require(name) {
+  vm.runInNewContext(code, {exports, process: {env: {TERVORY_ADMIN_USER_IDS: 'founder', TRIGGER_SIGNIN_REVIEWERS: JSON.stringify({'00000000-0000-4000-8000-000000000011': {reviewer: {jurisdiction: 'us', admission_no: 'fixture-admission'}}})}}, require(name) {
     if (name in mocks) return mocks[name];
     if (name === 'server-only' || name.endsWith('.css')) return {};
     throw Error(`Unmocked dependency ${name}`);
@@ -23,7 +23,7 @@ const founder = load('workspace/app/review/founder.ts', {});
 const access = load('workspace/app/review/access.ts', {
   './founder': founder, 'next/navigation': navigation,
   '@/lib/trigger-signin': {
-    auth: async () => ({userId, orgRole}),
+    auth: async () => ({userId, orgRole, tenantId: '00000000-0000-4000-8000-000000000011'}),
     signinDirectory: async () => ({users: {getUser: async () => ({publicMetadata: {jurisdiction: 'us', admission_no: 'fixture-admission'}})}}),
   },
 });

@@ -43,6 +43,10 @@ def founders() -> set[str]:
     return {subject for record in _records.values() if record['issuer'] == issuer for subject in record['founders']}
 
 
+def issuer() -> str:
+    return _issuer.get()
+
+
 async def refresh(*, force: bool = False):
     global _records, _expires
     if not force and _expires > time.monotonic():

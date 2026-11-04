@@ -24,8 +24,7 @@ export function tenantIdFor(orgId: string): string {
 export async function activeTenant(): Promise<Tenant | null> {
   const identity = await auth();
   if (!identity.userId || !identity.orgId || !identity.tenantId) return null;
-  const names = JSON.parse(process.env.TRIGGER_SIGNIN_ORG_NAMES ?? "{}") as Record<string, string>;
-  const tenant = { tenantId: identity.tenantId, orgId: identity.orgId, orgName: names[identity.orgId] ?? "Your organisation", userId: identity.userId };
+  const tenant = { tenantId: identity.tenantId, orgId: identity.orgId, orgName: "Your organisation", userId: identity.userId };
   await ensureCaseStudyReports(tenant);
   return tenant;
 }

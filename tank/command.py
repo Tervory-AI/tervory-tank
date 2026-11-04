@@ -183,8 +183,8 @@ class Followup(Body):
 
 async def owned(conn: Any, thread_id: uuid.UUID, actor: Actor, *, lock: bool = False) -> dict:
     row = await conn.fetchrow(
-        "SELECT * FROM tank.command_threads WHERE thread_id=$1 AND tenant_id=$2 AND user_id=$3"
-        + (" FOR UPDATE" if lock else ""), thread_id, actor.tenant_id, actor.user_id,
+        "SELECT * FROM tank.command_threads WHERE thread_id=$1 AND tenant_id=$2 AND user_id=$3 AND trigger_signin_issuer=$4"
+        + (" FOR UPDATE" if lock else ""), thread_id, actor.tenant_id, actor.user_id, __import__('trigger_signin_config').issuer(),
     )
     if row is None:
         raise HTTPException(404, "Thread not found")
@@ -369,8 +369,8 @@ async def create_thread(body: NewThread, actor: Actor = Depends(identity)) -> di
     state = {"messages": [], "steps": {}, "cards": {}, "receipts": [], "active_turn": None}
     async with db().acquire() as conn:
         await conn.execute(
-            "INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,$4,$5::jsonb)",
-            thread_id, actor.tenant_id, actor.user_id, body.title, dump(state),
+            "INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state,trigger_signin_issuer) VALUES($1,$2,$3,$4,$5::jsonb,$6)",
+            thread_id, actor.tenant_id, actor.user_id, body.title, dump(state), __import__('trigger_signin_config').issuer(),
         )
     return {"thread_id": str(thread_id)}
 
@@ -379,9 +379,9 @@ async def create_thread(body: NewThread, actor: Actor = Depends(identity)) -> di
 async def list_threads(q: str = Query(default="", max_length=200), actor: Actor = Depends(identity)) -> list[dict]:
     async with db().acquire() as conn:
         rows = await conn.fetch(
-            "SELECT * FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 "
+            "SELECT * FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND trigger_signin_issuer=$4 "
             "AND (strpos(lower(title),lower($3))>0 OR strpos(lower((state->'messages')::text),lower($3))>0) "
-            "ORDER BY updated_at DESC LIMIT 100", actor.tenant_id, actor.user_id, q,
+            "ORDER BY updated_at DESC LIMIT 100", actor.tenant_id, actor.user_id, q, __import__('trigger_signin_config').issuer(),
         )
     result = []
     for row in rows:
@@ -743,8 +743,8 @@ async def propose_build(body: Build, actor: Actor = Depends(identity)) -> dict:
 async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depends(identity)) -> dict:
     async with db().acquire() as conn:
         thread_id = await conn.fetchval(
-            "SELECT thread_id FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->'cards' ? $3",
-            actor.tenant_id, actor.user_id, str(card_id),
+            "SELECT thread_id FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->'cards' ? $3 AND trigger_signin_issuer=$4",
+            actor.tenant_id, actor.user_id, str(card_id), __import__('trigger_signin_config').issuer(),
         )
     if thread_id is None:
         raise HTTPException(404, "Card not found")

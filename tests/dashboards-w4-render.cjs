@@ -36,6 +36,8 @@ class StripeRows {
 process.env.STRIPE_SECRET_KEY='placeholder-provider-double';
 const load=Module._load;
 Module._load=function(name,parent,main){
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
   if(name==='server-only')return {};
   if(name==='stripe')return StripeRows;
   if(name==='@/lib/trigger-signin')return {auth:async()=>({userId:'placeholder-founder'}),currentUser:async()=>({firstName:'placeholder'}),signinDirectory:async()=>({users:{getCount:async()=>users.length,getUserList:async()=>({totalCount:users.length,data:users})}})};

@@ -32,7 +32,6 @@ def signin_provider(monkeypatch, runtime, request):  # noqa: F811
     oidc._cache.clear()
     monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', provider.issuer)
     monkeypatch.setenv('TRIGGER_SIGNIN_CLIENT_ID', CLIENT)
-    monkeypatch.setenv('TRIGGER_SIGNIN_ORG_TENANTS', '{"' + ORG + '":"' + str(TENANT) + '"}')
     monkeypatch.setattr(oidc, 'http_client', lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
     yield provider
     oidc._cache.clear()

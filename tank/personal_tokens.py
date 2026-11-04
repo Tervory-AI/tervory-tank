@@ -37,29 +37,14 @@ async def workspace_actor(request: Request) -> command.Actor:
     return await command.identity(request)
 
 
-# Approving a ZA CLI sign-in happens on the Boston Workspace's Trigger sign-in page, but the
-# Boston Workspace never holds the ZA TANK_API_KEY, and its ZA homes key
-# (TANK_HOMES_KEY, Boston's TANK_API_KEY_ZA) stays limited to the Zenas homes and
-# feeds routes. So the ZA Tank accepts one dedicated key, TRIGGER_SIGNIN_SESSIONS_KEY
-# (Boston holds it as TRIGGER_SIGNIN_SESSIONS_KEY_ZA), for exactly the two
-# device-approval routes below (GET shows a pending code, POST approves or denies
-# it), on a ZA box only. The signed-in user and tenant headers are still required
-# and checked exactly as for the Workspace key. The key is refused everywhere else,
-# and refused outright if it is unset or equal to the Workspace or homes key (a
-# misconfiguration that would blur the scopes).
-
-
 def sessions_key() -> str:
-    """The ZA Tank's dedicated device-approval key, or '' when unset or not distinct."""
+    """The ZA own-session list/revoke key, or '' when unset or not distinct."""
     from main import TANK_API_KEY
     key = os.environ.get("TRIGGER_SIGNIN_SESSIONS_KEY", "").strip()
     others = {TANK_API_KEY.strip(), os.environ.get("TANK_HOMES_KEY", "").strip()} - {""}
     return "" if not key or key in others else key
 
 
-# Review of #506, B3: the same key also lets the Boston Workspace's "CLI sign-ins"
-# page list the signed-in user's own ZA CLI sign-ins and revoke one. It cannot create
-# a token (POST stays Workspace-key only) and it is refused for founders as below.
 SIGN_IN_PATHS = {"GET": re.compile(r"/v1/personal-tokens\Z"),
                  "DELETE": re.compile(r"/v1/personal-tokens/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")}
 
@@ -76,16 +61,8 @@ def sessions_key_may_manage(request: Request) -> bool:
 async def sign_in_actor(request: Request) -> command.Actor:
     """Workspace key, or (ZA box, list and revoke only) the dedicated key; never a CLI token."""
     if sessions_key_may_manage(request):
-        return await non_founder(request)
+        return await command.signed_in_actor(request)
     return await command.identity(request)
-
-
-async def non_founder(request: Request) -> command.Actor:
-    actor = await command.signed_in_actor(request)
-    admins = __import__("trigger_signin_config").founders()
-    if actor.founder or actor.user_id in admins:
-        raise HTTPException(403, "Not available for this account here")
-    return actor
 
 
 # A CLI credential authenticates the CLI corridor and nothing else. register() puts
@@ -185,8 +162,8 @@ async def list_tokens(response: Response,
             rows = await conn.fetch(
                 "SELECT token_id,name,region,device_name,created_at,expires_at,refresh_expires_at,last_used_at,revoked_at "
                 "FROM tank.personal_tokens "
-                "WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC,token_id",
-                actor.tenant_id, actor.user_id,
+                "WHERE tenant_id=$1 AND user_id=$2 AND trigger_signin AND trigger_signin_issuer=$3 ORDER BY created_at DESC,token_id",
+                actor.tenant_id, actor.user_id, __import__('trigger_signin_config').issuer(),
             )
     response.headers["Cache-Control"] = "no-store"
     return [dict(row) for row in rows]
@@ -198,8 +175,8 @@ async def revoke_token(token_id: uuid.UUID, actor: command.Actor = Depends(sign_
         async with command.db().acquire() as conn:
             row = await conn.fetchrow(
                 "UPDATE tank.personal_tokens SET revoked_at=COALESCE(revoked_at,now()) "
-                "WHERE tenant_id=$1 AND user_id=$2 AND token_id=$3 RETURNING token_id",
-                actor.tenant_id, actor.user_id, token_id,
+                "WHERE tenant_id=$1 AND user_id=$2 AND token_id=$3 AND trigger_signin AND trigger_signin_issuer=$4 RETURNING token_id",
+                actor.tenant_id, actor.user_id, token_id, __import__('trigger_signin_config').issuer(),
             )
     if row is None:
         raise HTTPException(404, "Personal token not found")

@@ -1,7 +1,13 @@
 """Configure native organisations and publish public resource IDs through Tank APIs."""
 from __future__ import annotations
 
+import fcntl
+import json
+import os
+import re
+import secrets
 import uuid
+from pathlib import Path
 
 
 class ProvisionError(ValueError):
@@ -50,7 +56,50 @@ def initial_founder(api, owner, previous):
     return subjects.pop()
 
 
-def provision(api, tank, record, region, issuer):
+def reserved_organisation(api, tenant: str, issuer: str, path: Path) -> str:
+    ledger = json.loads(path.read_text()) if path.exists() else {'issuer': issuer, 'organisations': {}}
+    if ledger.get('issuer') != issuer or not isinstance(ledger.get('organisations'), dict):
+        raise ProvisionError('Trigger sign-in organisation ledger refused')
+    org = ledger['organisations'].get(tenant)
+    if org is None:
+        org = str(10 ** 29 + secrets.randbelow(9 * 10 ** 29))
+        ledger['organisations'][tenant] = org
+        pending = path.with_suffix('.pending')
+        with os.fdopen(os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as output:
+            json.dump(ledger, output)
+            output.flush()
+            os.fsync(output.fileno())
+        pending.replace(path)
+        directory = os.open(path.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    if not isinstance(org, str) or not re.fullmatch(r'[0-9]{30}', org):
+        raise ProvisionError('Trigger sign-in organisation reservation refused')
+    found = api.request('POST', '/v2/organizations/_search', json={
+        'query': {'limit': 2}, 'queries': [{'idQuery': {'id': org}}],
+    }).get('result', [])
+    if found:
+        if len(found) != 1 or found[0].get('id') != org:
+            raise ProvisionError('Trigger sign-in reserved organisation refused')
+    else:
+        created = api.request('POST', '/v2/organizations', json={
+            'organizationId': org, 'name': 'Tervory tenant ' + tenant + ' ' + org,
+        })
+        if created.get('organizationId') != org:
+            raise ProvisionError('Trigger sign-in created organisation refused')
+    return org
+
+
+def provision(api, tank, record, region, issuer, bootstrap: Path):
+    with (bootstrap / ('tenant-organisations-' + region + '.lock')).open('a') as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return provision_locked(api, tank, record, region, issuer, bootstrap / ('tenant-organisations-' + region + '.json'))
+
+
+def provision_locked(api, tank, record, region, issuer, ledger: Path):
     previous = tank_request(tank, 'GET', '/v1/trigger-signin/config')['regions'].get(region)
     subject = initial_founder(api, record['owner_org_id'], previous)
     existing = previous['organisations'] if previous else {}
@@ -60,9 +109,7 @@ def provision(api, tank, record, region, issuer):
     for tenant in tenants(tank):
         org = by_tenant.get(tenant)
         if not org:
-            name = 'Tervory tenant ' + tenant
-            found = api.search('/admin/v1/orgs/_search', name)
-            org = found['id'] if found else api.request('POST', '/management/v1/orgs', json={'name': name})['id']
+            org = reserved_organisation(api, tenant, issuer, ledger)
         grants = api.request('POST', project + '/grants/_search', json={
             'query': {'limit': 2}, 'queries': [{'grantedOrgIdQuery': {'grantedOrgId': org}}],
         }).get('result', [])

@@ -15,6 +15,8 @@ const grants = agents.map(agent => ({agent,enabled:agent === 'base',enabled_by:a
 const log = [{id:1,agent:'base',enabled:true,changed_by:'founder-fixture',changed_at:'2026-10-21T12:00:00Z'}];
 process.env.TANK_API_KEY = 'dummy-workspace-key';
 Module._load = function(name,parent,isMain) {
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
   if (name === '@/lib/trigger-signin') return {
     auth:async()=>({userId:founder?'founder-fixture':'client-fixture'}),
     signinDirectory:async()=>({organizations:{
