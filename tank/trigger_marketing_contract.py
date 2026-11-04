@@ -77,6 +77,12 @@ class Location(Args):
     brief_markdown: str = Field(default='', max_length=25000)
 
 
+class Page(Args):
+    page_id: str = Field(pattern=r'^[0-9]{1,50}$')
+    generation: UUID | None = None
+    brief_markdown: str = Field(default='', max_length=25000)
+
+
 class Review(Args):
     review_id: str = Field(pattern=r'^[A-Za-z0-9_-]+$', max_length=200)
 
@@ -100,7 +106,8 @@ TOOLS = {'post.create': Create, 'post.edit': Edit, 'post.approve': Post, 'post.s
          'post.cancel': Post, 'post.retry': Post, 'posts': Posts, 'calendar': Calendar,
          'gbp.connect': Args, 'gbp.locations': Args, 'gbp.location.select': Location,
          'gbp.disconnect': Disconnect, 'gbp.reviews': Args, 'gbp.reply.draft': Review,
-         'gbp.reply.edit': ReplyEdit, 'gbp.reply.send': Reply}
+         'gbp.reply.edit': ReplyEdit, 'gbp.reply.send': Reply,
+         'meta.connect': Args, 'meta.pages': Args, 'meta.page.select': Page, 'meta.disconnect': Disconnect}
 
 
 def schedulable(report: dict, channel: str) -> bool:

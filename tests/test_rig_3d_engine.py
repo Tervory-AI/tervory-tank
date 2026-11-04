@@ -510,3 +510,26 @@ async def test_wave4_room_entitlement_grant_review_revoke_and_restore(rig, monke
     restored = await engine.store.approved(TENANT, 'centre')
     assert restored['id'] == model['id'] and restored['approved_at'] == model['approved_at']
     assert (await client.get(asset, headers=public)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_kiosk_quote_requires_current_displayed_notice_and_records_receipt(rig):
+    engine, pool, client, _ = rig
+    await approve_all(engine)
+    await engine.catalogue.store.put_retailer(str(TENANT), 'fixture-store', None, None,
+        quote_notice={'text': 'Fixture privacy notice', 'url': 'https://example.test/privacy'})
+    headers = {'X-Rig-Key': PUBLIC_KEY}
+    configured = (await client.get('/v1/rig/privacy-notice', headers=headers)).json()['notice']
+    body = {'assembly': {'product_id': 'centre'}, 'name': 'Fixture Shopper', 'phone': '+12025550123'}
+    assert (await client.post('/v1/rig/3d/quote', headers=headers, json=body)).status_code == 409
+    assert await pool.fetchval('SELECT count(*) FROM agent_rig.quotes WHERE tenant_id=$1', TENANT) == 0
+    body['notice_version'] = configured['version']
+    response = await client.post('/v1/rig/3d/quote', headers=headers, json=body)
+    assert response.status_code == 200
+    payload = await pool.fetchval('SELECT payload FROM agent_rig.quotes WHERE id=$1', response.json()['request_id'])
+    saved = json.loads(payload) if isinstance(payload, str) else payload
+    assert saved['notice_receipt']['version'] == configured['version']
+    assert saved['notice_receipt']['submitted_at']
+    await engine.catalogue.store.put_retailer(str(TENANT), 'fixture-store', None, None,
+        quote_notice={'text': 'Changed fixture notice', 'url': 'https://example.test/privacy'})
+    assert (await client.post('/v1/rig/3d/quote', headers=headers, json=body)).status_code == 409

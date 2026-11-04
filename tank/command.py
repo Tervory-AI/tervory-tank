@@ -48,8 +48,9 @@ TOOLS = {
     "zenas": ["zenas.ask", "zenas.matters", "zenas.draft", "zenas.review", "zenas.playbook.add", "zenas.playbooks", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
+TOOLS["trigger"] += ["trigger.crm.list", "trigger.crm.get", "trigger.crm.write"]
 
-FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.campaign.start", "base.campaign.show", "base.campaign.csv", "base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.campaign.start", "base.campaign.show", "base.campaign.csv", "base.audit.start", "base.audit.csv", "base.audit.review", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "training.status",
                  "training.run", "training.receipt",
@@ -1307,6 +1308,26 @@ class TriggerScorecardArgs(Body):
     pass
 
 
+class TriggerCRMListArgs(Body):
+    resource: Literal["leads", "contacts", "estimates", "invoices"]
+    page: int = Field(default=1, ge=1, le=10000)
+    name: str | None = Field(default=None, max_length=255)
+    title: str | None = Field(default=None, max_length=255)
+    status: Literal["assigned", "closed", "converted", "in process", "recycled"] | None = None
+
+    @model_validator(mode="after")
+    def allowed_query(self):
+        if ((self.name is not None and self.resource != "contacts") or
+                ((self.title is not None or self.status is not None) and self.resource != "leads")):
+            raise ValueError("Invalid CRM query")
+        return self
+
+
+class TriggerCRMGetArgs(Body):
+    resource: Literal["leads", "contacts", "estimates", "invoices"]
+    record_id: uuid.UUID
+
+
 class TriggerCRMWriteArgs(Body):
     resource: Literal["leads", "contacts", "estimates", "invoices"]
     record_id: uuid.UUID | None = None
@@ -1496,6 +1517,8 @@ ADAPTERS = {
     "mcp.servers.list": Adapter("GET", "/v1/command/mcp/servers/list", EmptyArgs, "mcp.servers.list"),
     "mcp.servers.approve": Adapter("POST", "/v1/command/mcp/servers/approve", MCPApproveArgs, "mcp.servers.approve"),
     "mcp.servers.remove": Adapter("POST", "/v1/command/mcp/servers/remove", MCPServerArgs, "mcp.servers.remove"),
+    "trigger.crm.list": Adapter("GET", "/v1/trigger/crm/{resource}", TriggerCRMListArgs, "trigger.crm.list"),
+    "trigger.crm.get": Adapter("GET", "/v1/trigger/crm/{resource}/{record_id}", TriggerCRMGetArgs, "trigger.crm.get"),
     "trigger.crm.write": Adapter("POST", "/v1/trigger/crm/write", TriggerCRMWriteArgs, "trigger.crm.write"),
     "trigger.voice.show": Adapter("POST", "/v1/trigger/voice.show", TriggerVoiceShowArgs, "trigger.voice.show"),
     "trigger.voice.set": Adapter("POST", "/v1/trigger/voice.set", TriggerVoiceSetArgs, "trigger.voice.set"),
@@ -1810,6 +1833,10 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, args if adapter.method == "GET" else {}, None if adapter.method == "GET" else args
     if action.tool == "trigger.scorecard":
         return adapter.method, path, scope, None
+    if action.tool in {"trigger.crm.list", "trigger.crm.get"}:
+        resource = args.pop("resource")
+        path = path.format(resource=resource, record_id=args.pop("record_id", ""))
+        return adapter.method, path, args, None
     if action.tool == "training.status":
         return adapter.method, path, {}, None
     if action.tool in {"training.run", "training.receipt"}:
@@ -2051,7 +2078,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "training.run", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fix.approve", "autumbra.blocks.share"}:
+            elif (action.tool.startswith("trigger.") and action.tool not in {"trigger.crm.list", "trigger.crm.get"}) or action.tool in {"zenas.draft", "zenas.playbook.add", "training.run", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.blocks.share", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fix.approve"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:

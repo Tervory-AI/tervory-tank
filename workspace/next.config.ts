@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   async headers() {
     // The CLI approval page grants a credential: never framed, never cached.
     return [{
+      // Public OFL widget fonts must load from approved stores on other origins.
+      source: "/trigger/:font(AtkinsonHyperlegible-Regular|Literata).ttf",
+      headers: [{ key: "Access-Control-Allow-Origin", value: "*" }, { key: "X-Content-Type-Options", value: "nosniff" }],
+    }, {
       // Self-hosted CLI: the pointer and installer must not be cached; a versioned
       // release never changes once published.
       source: "/cli/:file(latest.json|install.sh)",

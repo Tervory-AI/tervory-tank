@@ -24,10 +24,11 @@ TEST_PAGE_CSP = (
     "object-src 'none'; "
     "frame-ancestors 'none'; "
     "form-action 'none'; "
-    "script-src 'self'; "
+    "script-src 'self' 'wasm-unsafe-eval'; "
+    "worker-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; "
     "font-src 'self'; "
-    "img-src 'self' data: https:; "
+    "img-src 'self' data: https: blob:; "
     "connect-src 'self'"
 )
 
