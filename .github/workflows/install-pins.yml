@@ -28,4 +28,6 @@ jobs:
       - name: Reject new unpinned installs
         env:
           PIN_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || 'origin/main' }}
-        run: python3 .github/scripts/check_install_pins.py --base "$PIN_BASE"
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: python3 .github/scripts/check_install_pins.py --base "$PIN_BASE" --pr-head "$PR_HEAD" --base-ref "$BASE_REF"

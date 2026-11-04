@@ -303,16 +303,35 @@ def policy_file(path: Path) -> bool:
             or (".github/workflows/" in path.as_posix() and path.suffix in {".yaml", ".yml"}))
 
 
+def comparison_base(root: Path, advertised: str, pr_head: str = "", base_ref: str = "") -> str:
+    """PR event base SHAs may be stale; verify the actual synthetic merge parents."""
+    if not pr_head:
+        return advertised
+    if not re.fullmatch(r"[a-f0-9]{40}", pr_head) or not base_ref:
+        raise ValueError("PR comparison needs an exact head and trusted base ref")
+    parents = subprocess.check_output(["git", "rev-list", "--parents", "-n", "1", "HEAD"], cwd=root).decode().split()
+    if len(parents) != 3 or parents[2] != pr_head:
+        raise ValueError("PR pin gate must check the synthetic merge, not a head checkout")
+    actual = parents[1]
+    # Never let an untrusted parent or PR commit become inherited debt.
+    for older, newer in ((advertised, actual), (actual, "refs/remotes/origin/" + base_ref)):
+        subprocess.run(["git", "merge-base", "--is-ancestor", older, newer], cwd=root, check=True)
+    return actual
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", help="Reject new violations relative to the trusted PR base; omit for a full audit")
+    parser.add_argument("--pr-head", default="", help="Verify the checked-out synthetic merge's head")
+    parser.add_argument("--base-ref", default="", help="Trusted PR base branch, used to verify the merge parent")
     args = parser.parse_args()
     tracked = subprocess.check_output(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=ROOT,
     ).decode().split("\0")
     paths = [ROOT / name for name in sorted(set(tracked)) if name and policy_file(Path(name))]
     if args.base:
-        errors, inherited = new_errors(ROOT, paths, args.base)
+        base = comparison_base(ROOT, args.base, args.pr_head, args.base_ref)
+        errors, inherited = new_errors(ROOT, paths, base)
         print(f"Existing violations owned by the dependency migration: {inherited}")
     else:
         errors = check(ROOT, paths)

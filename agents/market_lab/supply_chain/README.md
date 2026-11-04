@@ -36,7 +36,8 @@ The run summary records the report even when coverage or findings fail the run.
 
 The separate `install-pins` workflow covers all PRs, including docs-only, and
 merge groups. It rejects new or changed unpinned Python/Node/Docker installs
-relative to the trusted base; unchanged existing debt is counted, not excused
+relative to the trusted base (verified synthetic merge parent for PRs, explicit
+queue base for merge groups); unchanged existing debt is counted, not excused
 through a maintained allowlist. Full audit is available without `--base`.
 This is a static checker for the documented literal command forms, not a shell
 interpreter or a guarantee about dynamic downloaded scripts. A Python install

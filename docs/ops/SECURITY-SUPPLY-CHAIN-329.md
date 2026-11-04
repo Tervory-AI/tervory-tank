@@ -21,7 +21,13 @@ changes are part of this update.
 - `tests/test_install_pins.py`: rejects mutable Python/Node/Docker installs,
   missing/unhashed/transitive locks, npm flag overrides, duplicate and changed
   violations; line shifts alone do not create migration churn. It verifies both
-  PR and merge-group trigger contracts without a second secret baseline.
+  PR and merge-group trigger contracts without a second secret baseline. A stale
+  PR event base is replaced only with the verified synthetic merge first parent:
+  its second parent must equal the event head, and the first must descend from
+  the advertised base and belong to the fetched trusted base branch. Head-only
+  checkouts, unrelated base parents and wrong heads fail. This fixes #329 event
+  metadata reporting `feccd797` while checkout merged onto `fa34a9f0`, without
+  excusing any actual PR violation.
 - `tests/test_supply_chain_watch.py`: fixture advisory/KEV attribution, independent
   source queries, incomplete/truncated coverage, withdrawn advisories, nested
   identities and no import-time I/O. Read-only CLI tests cover clean/findings/error

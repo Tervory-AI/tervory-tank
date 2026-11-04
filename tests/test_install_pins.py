@@ -197,3 +197,64 @@ def test_python_subprocess_installs_and_node_package_scripts_are_enforced(tmp_pa
 ])
 def test_lifecycle_or_metadata_flag_override_cannot_bypass_policy(command):
     assert pins.install_errors(command)
+
+
+def synthetic_pr(tmp_path):
+    """An isolated fixture repo, never the task checkout or remote main."""
+    import subprocess
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path).decode().strip()
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.name", "Policy test")
+    git("config", "user.email", "policy-test@localhost")
+    (tmp_path / "Dockerfile").write_text("FROM python:3.12\n")
+    git("add", ".")
+    git("commit", "-qm", "Advertised old base")
+    old = git("rev-parse", "HEAD")
+    (tmp_path / "inherited.sh").write_text("pip install existing\n")
+    git("add", ".")
+    git("commit", "-qm", "New trusted main debt")
+    actual = git("rev-parse", "HEAD")
+    git("update-ref", "refs/remotes/origin/main", actual)
+    git("switch", "-qc", "pr", old)
+    (tmp_path / "introduced.sh").write_text("npm install introduced\n")
+    git("add", ".")
+    git("commit", "-qm", "PR violation")
+    head = git("rev-parse", "HEAD")
+    git("switch", "-q", "main")
+    git("merge", "--no-edit", "pr")
+    return git, old, actual, head
+
+
+def test_stale_pr_event_base_uses_verified_main_parent_without_excusing_pr_debt(tmp_path):
+    _, old, actual, head = synthetic_pr(tmp_path)
+    base = pins.comparison_base(tmp_path, old, head, "main")
+    assert base == actual
+    paths = [tmp_path / name for name in ("Dockerfile", "inherited.sh", "introduced.sh")]
+    errors, inherited = pins.new_errors(tmp_path, paths, base)
+    assert inherited == 2 and len(errors) == 1
+    assert errors[0].startswith("introduced.sh:")
+    assert len(pins.new_errors(tmp_path, paths, old)[0]) == 2
+
+
+def test_head_checkout_cannot_grandfather_its_own_pr_changes(tmp_path):
+    git, old, _, head = synthetic_pr(tmp_path)
+    git("switch", "-q", "pr")
+    with pytest.raises(ValueError, match="synthetic merge"):
+        pins.comparison_base(tmp_path, old, head, "main")
+
+
+def test_untrusted_base_parent_or_wrong_head_is_rejected(tmp_path):
+    import subprocess
+    git, old, _, head = synthetic_pr(tmp_path)
+    with pytest.raises(ValueError, match="synthetic merge"):
+        pins.comparison_base(tmp_path, old, "a" * 40, "main")
+    git("update-ref", "refs/remotes/origin/main", old)
+    with pytest.raises(subprocess.CalledProcessError):
+        pins.comparison_base(tmp_path, old, head, "main")
+
+
+def test_non_pr_uses_its_explicit_queue_or_manual_base(tmp_path):
+    assert pins.comparison_base(tmp_path, "origin/main") == "origin/main"
