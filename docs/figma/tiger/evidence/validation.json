@@ -70,6 +70,20 @@
       "height": 900,
       "screenshot": "T05-375.png",
       "sha256": "2719c993930964a53321ead6b5c670236df1664af8371ccd0562dd7b61af35d9"
+    },
+    {
+      "id": "628:470",
+      "width": 1440,
+      "height": 1189,
+      "screenshot": "T06-1440.png",
+      "sha256": "8ec6e433398adc75a367a5a273213642329761c547aada9f2457e617fcff4644"
+    },
+    {
+      "id": "628:623",
+      "width": 375,
+      "height": 1277,
+      "screenshot": "T06-375.png",
+      "sha256": "1ec29e9d430ae6e9fb0b579d0c1333371da34e549973f4b63ed541d1254d95dd"
     }
   ]
 }
