@@ -7,45 +7,38 @@ These copy the built pages, not a redesign. Existing wording, fonts, colours, da
 Source baseline: `origin/main` `c94610bd0f9f35443f9d58deb45ec44b60ecb33d`. The requested route source matches this branch. Public Autumbra and Moot returned HTTP 200 on 4 Nov. Protected pages are rendered from unchanged production components with offline identity/data boundaries, without credentials, founder sessions or production reads. They are source-faithful fixture states, not signed-in live captures or claims about live client values. Provider-hosted widgets that cannot be reproduced without an account must be listed as gaps rather than invented.
 
 ## Frames
-
 | Page / built state | Address | Width | Frame ID | Status | Figma screenshot | Browser reference |
 | --- | --- | --- | --- | --- | --- | --- |
 | Data · empty batch | https://app.tervory.com/data | 1440 | [604:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=604-9) | Proposed | [PNG](evidence/data-figma-1440.png) | [PNG](evidence/data-browser-1440.png) |
 | Data · empty batch | https://app.tervory.com/data | 375 | [606:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=606-9) | Proposed | [PNG](evidence/data-figma-375.png) | [PNG](evidence/data-browser-375.png) |
-
 | Ledger | https://app.tervory.com/ledger | 1440 | [615:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=615-9) | Proposed | [PNG](evidence/ledger-figma-1440.png) | [PNG](evidence/ledger-browser-1440.png) |
 | Ledger | https://app.tervory.com/ledger | 375 | [616:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=616-9) | Proposed | [PNG](evidence/ledger-figma-375.png) | [PNG](evidence/ledger-browser-375.png) |
-
 | Matters | https://app.tervory.com/matters | 1440 | [618:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=618-9) | Proposed | [PNG](evidence/matters-figma-1440.png) | [PNG](evidence/matters-browser-1440.png) |
 | Matters | https://app.tervory.com/matters | 375 | [619:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=619-9) | Proposed | [PNG](evidence/matters-figma-375.png) | [PNG](evidence/matters-browser-375.png) |
-
 | Chat costs | https://app.tervory.com/chats/evidence/[thread] | 1440 | [626:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=626-9) | Proposed | [PNG](evidence/chat-costs-figma-1440.png) | [PNG](evidence/chat-costs-browser-1440.png) |
 | Chat costs | https://app.tervory.com/chats/evidence/[thread] | 375 | [630:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=630-9) | Proposed | [PNG](evidence/chat-costs-figma-375.png) | [PNG](evidence/chat-costs-browser-375.png) |
-
 | Cost details | https://app.tervory.com/chats/evidence/[thread]/[row] | 1440 | [631:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=631-9) | Proposed | [PNG](evidence/cost-details-figma-1440.png) | [PNG](evidence/cost-details-browser-1440.png) |
 | Cost details | https://app.tervory.com/chats/evidence/[thread]/[row] | 375 | [632:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=632-9) | Proposed | [PNG](evidence/cost-details-figma-375.png) | [PNG](evidence/cost-details-browser-375.png) |
-
 | Onboarding · Organization | https://app.tervory.com/onboarding | 1440 | [636:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=636-9) | Proposed | [PNG](evidence/onboarding-figma-1440.png) | [PNG](evidence/onboarding-browser-1440.png) |
 | Onboarding · Organization | https://app.tervory.com/onboarding | 375 | [637:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=637-9) | Proposed | [PNG](evidence/onboarding-figma-375.png) | [PNG](evidence/onboarding-browser-375.png) |
-
 | Onboarding · Industry | https://app.tervory.com/onboarding?step=industry | 1440 | [640:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=640-9) | Proposed | [PNG](evidence/onboarding-industry-figma-1440.png) | [PNG](evidence/onboarding-industry-browser-1440.png) |
 | Onboarding · Industry | https://app.tervory.com/onboarding?step=industry | 375 | [641:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=641-9) | Proposed | [PNG](evidence/onboarding-industry-figma-375.png) | [PNG](evidence/onboarding-industry-browser-375.png) |
-
 | Onboarding · File | https://app.tervory.com/onboarding | 1440 | [648:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=648-9) | Proposed | [PNG](evidence/onboarding-file-figma-1440.png) | [PNG](evidence/onboarding-file-browser-1440.png) |
 | Onboarding · File | https://app.tervory.com/onboarding | 375 | [650:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=650-9) | Proposed | [PNG](evidence/onboarding-file-figma-375.png) | [PNG](evidence/onboarding-file-browser-375.png) |
-
 | Onboarding · Run | https://app.tervory.com/onboarding | 1440 | [654:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=654-9) | Proposed | [PNG](evidence/onboarding-run-figma-1440.png) | [PNG](evidence/onboarding-run-browser-1440.png) |
 | Onboarding · Run | https://app.tervory.com/onboarding | 375 | [655:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=655-9) | Proposed | [PNG](evidence/onboarding-run-figma-375.png) | [PNG](evidence/onboarding-run-browser-375.png) |
-
 | Autumbra public | https://app.tervory.com/autumbra | 1440 | [649:10](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=649-10) | Proposed | [PNG](evidence/autumbra-figma-1440.png) | [PNG](evidence/autumbra-browser-1440.png) |
 | Autumbra public | https://app.tervory.com/autumbra | 375 | [649:22](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=649-22) | Proposed | [PNG](evidence/autumbra-figma-375.png) | [PNG](evidence/autumbra-browser-375.png) |
 | Stored Market Lab source | https://market-lab.tervory.com/market-lab/sources/[id] | 1440 | [657:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=657-9) | Proposed | [PNG](evidence/sources-figma-1440.png) | [PNG](evidence/sources-browser-1440.png) |
 | Stored Market Lab source | https://market-lab.tervory.com/market-lab/sources/[id] | 375 | [658:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=658-9) | Proposed | [PNG](evidence/sources-figma-375.png) | [PNG](evidence/sources-browser-375.png) |
-
 | Autumbra undo | https://app.tervory.com/autumbra/undo/[id] | 1440 | [666:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=666-9) | Proposed | [PNG](evidence/undo-figma-1440.png) | [PNG](evidence/undo-browser-1440.png) |
 | Autumbra undo | https://app.tervory.com/autumbra/undo/[id] | 375 | [666:17](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=666-17) | Proposed | [PNG](evidence/undo-figma-375.png) | [PNG](evidence/undo-browser-375.png) |
 | Autumbra weekly receipts | https://app.tervory.com/autumbra/receipts/weekly/[tenant] | 1440 | [667:11](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=667-11) | Proposed | [PNG](evidence/weekly-figma-1440.png) | [PNG](evidence/weekly-browser-1440.png) |
 | Autumbra weekly receipts | https://app.tervory.com/autumbra/receipts/weekly/[tenant] | 375 | [667:17](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=667-17) | Proposed | [PNG](evidence/weekly-figma-375.png) | [PNG](evidence/weekly-browser-375.png) |
+| Moot public watch · Index | https://zenas.tervory.com/moot | 1440 | [661:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=661-9) | Proposed | [PNG](evidence/moot-figma-1440.png) | [PNG](evidence/moot-browser-1440.png) |
+| Moot public watch · Index | https://zenas.tervory.com/moot | 375 | [662:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=662-9) | Proposed | [PNG](evidence/moot-figma-375.png) | [PNG](evidence/moot-browser-375.png) |
+| Moot public watch · Match | https://zenas.tervory.com/moot/[match] | 1440 | [664:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=664-9) | Proposed | [PNG](evidence/moot-watch-figma-1440.png) | [PNG](evidence/moot-watch-browser-1440.png) |
+| Moot public watch · Match | https://zenas.tervory.com/moot/[match] | 375 | [665:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=665-9) | Proposed | [PNG](evidence/moot-watch-figma-375.png) | [PNG](evidence/moot-watch-browser-375.png) |
 
 ## Data
 
@@ -55,16 +48,17 @@ Unchanged `workspace/app/data/page.tsx`, `data.css`, actual `Shell`, global CSS,
 
 Both native Figma PNGs have the same dimensions as their browser references: 1440×951 and 375×1397. The table and file input retain the built horizontal clipping at phone width. No new product wording is introduced, and no site/application code is changed.
 
-## Remaining requested pages
+## Requested-page coverage
 
 | Page | Route | Progress |
+| --- | --- | --- |
 | --- | --- | --- |
 | Ledger | `/ledger` | Drawn; Proposed, IDs above |
 | Matters | `/matters` | Drawn; Proposed, IDs above |
 | Chat cost details | `/chats/evidence/[thread]` and `/chats/evidence/[thread]/[row]` | Drawn; Proposed, IDs above |
 | Onboarding | `/onboarding` | Four built steps drawn; Proposed. Gap: external account-provider widget requires separate evidence |
 | Stored Market Lab sources | `/market-lab/sources/[id]` | Drawn; Proposed, IDs above |
-| Moot public watch | `/moot` and `/moot/[match]` on zenas.tervory.com | Pending |
+| Moot public watch | `/moot` and `/moot/[match]` on zenas.tervory.com | Both routes drawn; Proposed, IDs above |
 | Autumbra public | `/autumbra` | Drawn; Proposed, IDs above |
 | Autumbra undo | `/autumbra/undo/[id]` | Drawn; Proposed, no credential used |
 | Autumbra weekly receipts | `/autumbra/receipts/weekly/[tenant]` | Drawn; Proposed, isolated authorized empty fixture |
@@ -143,3 +137,15 @@ Both routes have 1440 and 375 native editable frames. Existing production copy o
 Unchanged stored-source route, StoredSourcePage, SourceDocumentView and CSS. An adapted three-observation subset and one notice use the existing Harbor proof fixture labels, units and values. These are offline sample values, not a client document; no service is called. Native disclosure triangle is a browser control glyph, not new wording.
 
 [Every frame/node ID and exact copy](evidence/sources-nodes.json); [dimension, source-copy and PNG hash checks](evidence/sources-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Moot public watch · Index
+
+Unchanged Moot public index and moot-watch.css. The live public URL returned HTTP 200 with No published matches yet; the local empty published-match response reproduces that built state. No authentication or client matter is used.
+
+[Every frame/node ID and exact copy](evidence/moot-nodes.json); [dimension, source-copy and PNG hash checks](evidence/moot-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Moot public watch · Match
+
+Unchanged Moot watch route, store validation and WatchPanel. No published live match exists on the public index, so this is a source-faithful offline view using the existing acceptance-test Civil appeal record: Independent order and Stored court holding. These are fixture strings, not legal advice or a published case. No new wording or court content is authored.
+
+[Every frame/node ID and exact copy](evidence/moot-watch-nodes.json); [dimension, source-copy and PNG hash checks](evidence/moot-watch-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
