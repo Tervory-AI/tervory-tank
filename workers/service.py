@@ -452,6 +452,9 @@ async def serve(settings: Settings) -> None:
     log.info("workers listening on 127.0.0.1:%s", settings.service_port)
     async with httpx.AsyncClient(timeout=60) as client:
         control = TankControl(settings, client)
+        from workers.window_agent.service import WindowJobs
+        window_jobs = asyncio.create_task(WindowJobs(settings, control, client).serve())
+        window_jobs.add_done_callback(lambda task: log.warning("Window job poller stopped") if not task.cancelled() and task.exception() else None)
 
         async def beat() -> None:
             while True:

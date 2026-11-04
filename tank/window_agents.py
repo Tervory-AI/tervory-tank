@@ -1,0 +1,246 @@
+"""User-owned window jobs. Existing identity, vault and command receipts only."""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import re
+import secrets
+import uuid
+from contextlib import asynccontextmanager
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import Field, field_validator
+
+import command
+from tenant_db import activate_tenant, tenant_scope
+from vault import open_seal, seal
+
+PLATFORM = uuid.UUID('00000000-0000-0000-0000-000000000001')
+REPO = re.compile(r'[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*\Z')
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS tank.window_agent_credentials (
+ tenant_id uuid NOT NULL, user_id text NOT NULL, name text NOT NULL, sealed text NOT NULL,
+ PRIMARY KEY(tenant_id,user_id,name));
+CREATE TABLE IF NOT EXISTS tank.window_agent_jobs (
+ tenant_id uuid NOT NULL, user_id text NOT NULL, job_id uuid NOT NULL, thread_id uuid NOT NULL,
+ repo text NOT NULL, credential_name text NOT NULL, prompt text NOT NULL,
+ status text NOT NULL DEFAULT 'queued', lease_hash text, heartbeat timestamptz,
+ result jsonb NOT NULL DEFAULT '{}', created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(tenant_id,job_id));
+CREATE TABLE IF NOT EXISTS tank.window_agent_dispatch (
+ tenant_id uuid NOT NULL, job_id uuid NOT NULL, owner_tenant uuid NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), claimed boolean NOT NULL DEFAULT false, PRIMARY KEY(tenant_id,job_id));
+"""
+router = APIRouter(prefix='/v1/window-agents', tags=['window agents'])
+
+
+async def actor_identity(request: Request) -> command.Actor:
+    if request.headers.get('authorization'):
+        from personal_tokens import bearer_identity
+        actor, _ = await bearer_identity(request, audience='cli')
+    else:
+        actor = await command.identity(request)
+    activate_tenant(actor.tenant_id)
+    return actor
+
+
+class Credential(command.Body):
+    name: str = Field(min_length=1, max_length=100, pattern=r'^[A-Za-z0-9_.-]+$')
+    value: str = Field(min_length=20, max_length=500, repr=False)
+
+    @field_validator('value')
+    @classmethod
+    def token_shape(cls, value):
+        if not re.fullmatch(r'(?:github_pat_|gh[pous]_)[A-Za-z0-9_]+', value):
+            raise ValueError('Use a GitHub token in the vault form.')
+        return value
+
+
+class Start(command.Body):
+    repo: str = Field(max_length=200)
+    credential_name: str = Field(min_length=1, max_length=100, pattern=r'^[A-Za-z0-9_.-]+$')
+    prompt: str = Field(min_length=1, max_length=18000)
+    request_id: uuid.UUID
+
+    @field_validator('repo')
+    @classmethod
+    def valid_repo(cls, value):
+        if not REPO.fullmatch(value) or any(p in {'.', '..'} or p.endswith('.git') for p in value.split('/')):
+            raise ValueError('Use owner/repository.')
+        return value
+
+
+class Lease(command.Body):
+    lease: str = Field(min_length=32, max_length=100, repr=False)
+
+
+class Finish(Lease):
+    status: Literal['done', 'failed']
+    pr_number: int | None = Field(default=None, gt=0)
+    sha: str | None = Field(default=None, pattern=r'^[a-f0-9]{40}$')
+
+
+def context(actor, name):
+    return f'window-agents:v1:{actor.tenant_id}:{actor.user_id}:{name}'
+
+
+async def credential(conn, actor, name):
+    value = await conn.fetchval('SELECT sealed FROM tank.window_agent_credentials WHERE tenant_id=$1 AND user_id=$2 AND name=$3',
+                                actor.tenant_id, actor.user_id, name)
+    if value is None:
+        raise HTTPException(404, 'Named GitHub credential not found in your vault.')
+    return open_seal(value, context(actor, name))['value']
+
+
+@router.put('/vault/github', status_code=204)
+async def save_credential(body: Credential, actor: command.Actor = Depends(actor_identity)):
+    async with command.db().acquire() as conn:
+        await conn.execute('INSERT INTO tank.window_agent_credentials VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,user_id,name) DO UPDATE SET sealed=EXCLUDED.sealed',
+                           actor.tenant_id, actor.user_id, body.name, seal({'value': body.value}, context(actor, body.name)))
+
+
+@router.get('/vault/github')
+async def names(actor: command.Actor = Depends(actor_identity)):
+    async with command.db().acquire() as conn:
+        rows = await conn.fetch('SELECT name FROM tank.window_agent_credentials WHERE tenant_id=$1 AND user_id=$2 ORDER BY name', actor.tenant_id, actor.user_id)
+    return [r['name'] for r in rows]
+
+
+async def enqueue(body: Start, actor):
+    async with command.db().acquire() as conn:
+        async with conn.transaction():
+            # Serialise duplicate requests before creating their receipt thread.
+            await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', f'{actor.tenant_id}:{body.request_id}')
+            previous = await conn.fetchrow('SELECT * FROM tank.window_agent_jobs WHERE tenant_id=$1 AND job_id=$2', actor.tenant_id, body.request_id)
+            if previous:
+                if previous['user_id'] != actor.user_id:
+                    raise HTTPException(404, 'Job not found.')
+                if (previous['repo'], previous['credential_name'], previous['prompt']) != (body.repo, body.credential_name, body.prompt):
+                    raise HTTPException(409, 'Request already used for another task.')
+                return {'job_id': str(body.request_id)}
+            await credential(conn, actor, body.credential_name)
+            thread_id = uuid.uuid4()
+            state = {'messages': [], 'steps': {}, 'cards': {}, 'receipts': [], 'active_turn': None}
+            await conn.execute('INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,$4,$5::jsonb)',
+                               thread_id, actor.tenant_id, actor.user_id, body.repo, json.dumps(state))
+            await conn.execute('INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt) VALUES($1,$2,$3,$4,$5,$6,$7)',
+                               actor.tenant_id, actor.user_id, body.request_id, thread_id, body.repo, body.credential_name, body.prompt)
+            await conn.execute('INSERT INTO tank.window_agent_dispatch(tenant_id,job_id,owner_tenant) VALUES($1,$2,$3)', PLATFORM, body.request_id, actor.tenant_id)
+    return {'job_id': str(body.request_id)}
+
+
+@router.post('/jobs', status_code=202)
+async def start(body: Start, actor: command.Actor = Depends(actor_identity)):
+    return await enqueue(body, actor)
+
+
+@router.post('/jobs/{job_id}/cancel')
+async def cancel(job_id: uuid.UUID, actor: command.Actor = Depends(actor_identity)):
+    async with command.db().acquire() as conn:
+        status = await conn.fetchval("UPDATE tank.window_agent_jobs SET status='cancelled' WHERE tenant_id=$1 AND user_id=$2 AND job_id=$3 AND status IN ('queued','running') RETURNING status", actor.tenant_id, actor.user_id, job_id)
+        if status is None:
+            status = await conn.fetchval('SELECT status FROM tank.window_agent_jobs WHERE tenant_id=$1 AND user_id=$2 AND job_id=$3', actor.tenant_id, actor.user_id, job_id)
+    if status is None:
+        raise HTTPException(404, 'Job not found.')
+    return {'status': status}
+
+
+@router.get('/jobs')
+async def jobs(actor: command.Actor = Depends(actor_identity)):
+    async with command.db().acquire() as conn:
+        rows = await conn.fetch('SELECT job_id,thread_id,repo,status,result,created_at FROM tank.window_agent_jobs WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100', actor.tenant_id, actor.user_id)
+    return [{**dict(row), 'result': command.unpack(row['result'])} for row in rows]
+
+
+async def leased(conn, tenant_id, job_id, lease):
+    row = await conn.fetchrow('SELECT * FROM tank.window_agent_jobs WHERE tenant_id=$1 AND job_id=$2', tenant_id, job_id)
+    if row is None or not row['lease_hash'] or not hmac.compare_digest(row['lease_hash'], hashlib.sha256(lease.encode()).hexdigest()):
+        raise HTTPException(404, 'Job not found.')
+    if row['status'] != 'running':
+        raise HTTPException(409, 'Job stopped.')
+    return dict(row)
+
+
+@router.post('/worker/next', dependencies=[Depends(command.worker)])
+async def next_job():
+    with tenant_scope(PLATFORM, administrative=True):
+        async with command.db().acquire() as conn:
+            async with conn.transaction():
+                # Interrupted jobs are failed, never replayed after an uncertain charge/push.
+                abandoned = await conn.fetch('SELECT owner_tenant,job_id FROM tank.window_agent_dispatch WHERE tenant_id=$1 AND claimed=true', PLATFORM)
+                for pending in abandoned:
+                    await conn.execute("UPDATE tank.window_agent_jobs SET status='failed' WHERE tenant_id=$1 AND job_id=$2 AND status='running' AND heartbeat < now() - interval '2 minutes'", pending['owner_tenant'], pending['job_id'])
+                dispatch = await conn.fetchrow('SELECT * FROM tank.window_agent_dispatch WHERE tenant_id=$1 AND claimed=false ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED', PLATFORM)
+                if not dispatch:
+                    return None
+                tenant_id, job_id = dispatch['owner_tenant'], dispatch['job_id']
+                await conn.execute('UPDATE tank.window_agent_dispatch SET claimed=true WHERE tenant_id=$1 AND job_id=$2', PLATFORM, job_id)
+                lease = secrets.token_urlsafe(32)
+                row = await conn.fetchrow("UPDATE tank.window_agent_jobs SET status='running',lease_hash=$3,heartbeat=now() WHERE tenant_id=$1 AND job_id=$2 AND status='queued' RETURNING *", tenant_id, job_id, hashlib.sha256(lease.encode()).hexdigest())
+                if row is None:
+                    return None
+                return {**{k: str(row[k]) for k in ('tenant_id', 'job_id', 'thread_id')}, 'repo': row['repo'], 'prompt': row['prompt'], 'lease': lease}
+
+
+@router.post('/worker/{tenant_id}/{job_id}/heartbeat', dependencies=[Depends(command.worker)])
+async def heartbeat(tenant_id: uuid.UUID, job_id: uuid.UUID, body: Lease):
+    activate_tenant(tenant_id)
+    async with command.db().acquire() as conn:
+        await leased(conn, tenant_id, job_id, body.lease)
+        await conn.execute('UPDATE tank.window_agent_jobs SET heartbeat=now() WHERE tenant_id=$1 AND job_id=$2', tenant_id, job_id)
+    return {'status': 'running'}
+
+
+@router.post('/worker/{tenant_id}/{job_id}/credential', dependencies=[Depends(command.worker)])
+async def worker_credential(tenant_id: uuid.UUID, job_id: uuid.UUID, body: Lease):
+    from fastapi.responses import JSONResponse
+    activate_tenant(tenant_id)
+    async with command.db().acquire() as conn:
+        row = await leased(conn, tenant_id, job_id, body.lease)
+        token = await credential(conn, command.Actor(tenant_id, row['user_id'], False), row['credential_name'])
+    return JSONResponse({'value': token}, headers={'Cache-Control': 'no-store'})
+
+
+class Turn(Lease):
+    turn: command.CodeTurn
+
+
+@router.post('/worker/{tenant_id}/{job_id}/code-turn')
+async def code_turn(tenant_id: uuid.UUID, job_id: uuid.UUID, body: Turn):
+    activate_tenant(tenant_id)
+    async with command.db().acquire() as conn:
+        row = await leased(conn, tenant_id, job_id, body.lease)
+    if body.turn.model != 'auto':
+        raise HTTPException(422, 'Use automatic routing.')
+    actor = await command.authorized_actor(command.Actor(tenant_id, row['user_id'], False))
+    plan = await command.code_turn(row['thread_id'], body.turn, actor)
+    # Background permission covers repository edits only. Never execute product cards.
+    if plan.get('cards'):
+        raise HTTPException(422, 'Background agents only edit the repository.')
+    return plan
+
+
+@router.post('/worker/{tenant_id}/{job_id}/finish', dependencies=[Depends(command.worker)])
+async def finish(tenant_id: uuid.UUID, job_id: uuid.UUID, body: Finish):
+    activate_tenant(tenant_id)
+    async with command.db().acquire() as conn:
+        row = await leased(conn, tenant_id, job_id, body.lease)
+        result = {'sha': body.sha, 'pr_url': f"https://github.com/{row['repo']}/pull/{body.pr_number}" if body.pr_number else None}
+        await conn.execute("UPDATE tank.window_agent_jobs SET status=$3,result=$4::jsonb WHERE tenant_id=$1 AND job_id=$2 AND status='running'", tenant_id, job_id, body.status, json.dumps(result))
+    return {'status': body.status}
+
+
+def install(app, tank):
+    app.include_router(router)
+    previous = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(application):
+        async with previous(application):
+            with tenant_scope(PLATFORM, administrative=True):
+                async with tank.pool().acquire() as conn:
+                    await conn.execute(SCHEMA)
+            yield
+    app.router.lifespan_context = lifespan

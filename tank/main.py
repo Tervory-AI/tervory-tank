@@ -4804,5 +4804,8 @@ app.include_router(memory_router)
 # B3: process committed model changes through the existing skill-eval handler.
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
 
+# Window agents: reuse the existing authenticated command corridor.
+__import__("window_agents").install(app, __import__("sys").modules[__name__])
+
 # Bind only accepted endpoint arguments after existing authentication dependencies.
 bind_tenant_endpoints(app)
