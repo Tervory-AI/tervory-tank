@@ -31,6 +31,10 @@ No Code Connect files were found. Local source instances and variables take prec
 | T05-375 · Empty catalogue | 375×900 | [628:376](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=628-376) | Proposed | [PNG](evidence/T05-375.png) |
 | T06-1440 · GTIN review | 1440×1189 | [628:470](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=628-470) | Proposed | [PNG](evidence/T06-1440.png) |
 | T06-375 · GTIN review | 375×1277 | [628:623](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=628-623) | Proposed | [PNG](evidence/T06-375.png) |
+| T07-1440 · Watch card controls · On | 1440×1577 | [629:293](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=629-293) | Proposed | [PNG](evidence/T07-1440.png) |
+| T07-375 · Watch card controls · On | 375×1678 | [629:510](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=629-510) | Proposed | [PNG](evidence/T07-375.png) |
+| T08-1440 · Watch card controls · Off | 1440×1610 | [629:650](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=629-650) | Proposed | [PNG](evidence/T08-1440.png) |
+| T08-375 · Watch card controls · Off | 375×1728 | [629:868](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=629-868) | Proposed | [PNG](evidence/T08-375.png) |
 
 ## Validation and copy
 

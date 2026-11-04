@@ -84,6 +84,34 @@
       "height": 1277,
       "screenshot": "T06-375.png",
       "sha256": "1ec29e9d430ae6e9fb0b579d0c1333371da34e549973f4b63ed541d1254d95dd"
+    },
+    {
+      "id": "629:293",
+      "width": 1440,
+      "height": 1577,
+      "screenshot": "T07-1440.png",
+      "sha256": "d032bfb015b56beb09cde08ce633799ee92021d6642f1e52894179945f068750"
+    },
+    {
+      "id": "629:510",
+      "width": 375,
+      "height": 1678,
+      "screenshot": "T07-375.png",
+      "sha256": "5b7ca66bdc9734bfa3ccc9ebe06c903016d130eaa27c9ea71464336426954f72"
+    },
+    {
+      "id": "629:650",
+      "width": 1440,
+      "height": 1610,
+      "screenshot": "T08-1440.png",
+      "sha256": "b9712c51cfdf5da0b5e2962a7fbd9781bda860594467f9a1394385592f5bd372"
+    },
+    {
+      "id": "629:868",
+      "width": 375,
+      "height": 1728,
+      "screenshot": "T08-375.png",
+      "sha256": "455f18eb1e20e1aa62672ab9d6b98161a6ffa0b7118f081a9a27bd060d644b53"
     }
   ]
 }
