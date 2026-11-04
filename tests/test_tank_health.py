@@ -64,6 +64,15 @@ def test_baked_sha_wins_over_runtime_commit(monkeypatch) -> None:
     assert main.tank_sha() == "abc1234"
 
 
+@pytest.mark.parametrize("baked", ["", "unknown", "HEAD", "not-a-sha", "abc", "g" * 40])
+def test_invalid_baked_sha_does_not_hide_valid_runtime_commit(monkeypatch, baked) -> None:
+    sha = "5d954e96dcaf946d16251b102f7e2c9a5222b94c"
+    monkeypatch.setenv("TANK_GIT_SHA", baked)
+    monkeypatch.setenv("SOURCE_COMMIT", sha.upper())
+    monkeypatch.setattr(main, "pool", lambda: _Pool())
+    assert asyncio.run(main.health())["sha"] == sha
+
+
 @pytest.mark.parametrize("value", ["", "unknown", "HEAD", "not-a-sha", "abc"])
 def test_values_that_are_not_commits_read_as_unknown(monkeypatch, value) -> None:
     monkeypatch.setenv("TANK_GIT_SHA", value)
