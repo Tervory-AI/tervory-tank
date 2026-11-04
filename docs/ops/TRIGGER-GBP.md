@@ -3,8 +3,9 @@
 Checked against Google's official documentation on **3 November 2026**.
 This is the channel connection for a tenant's business profile. M1 adds no page
 or widget: the founder/tenant admin uses the existing `/chats` Confirm cards.
-Meta publishing is M2 and is absent. Facebook, Instagram, LinkedIn and X drafts
-remain scheduled-only; the calendar marks them due without sending anything.
+Facebook Page publishing is covered by [Trigger M2](TRIGGER-META.md). Instagram,
+LinkedIn and X drafts remain scheduled-only; the calendar marks them due without
+sending anything.
 
 ## Google project: founder steps
 

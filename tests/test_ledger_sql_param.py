@@ -1,6 +1,6 @@
 """Radix scan follow-up: tank/agent_skills.py passes room and task type as bound parameters.
 
-room_key() allows only Base, Rig or Tiger, so this was safe. These tests keep it safe if
+room_key() accepts only an approved room's owning key. These tests keep it safe if
 that guard ever moves: a hostile room value never reaches SQL text, and every write stays
 tied to the tenant. All gateway and database traffic is faked.
 """
@@ -10,6 +10,7 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -18,7 +19,7 @@ from fastapi import FastAPI, HTTPException
 import agent_skills as route
 
 HOSTILE = ["base'); DELETE FROM tank.ledger; --", "rig' OR '1'='1",
-           "tiger'); DELETE FROM tank.ledger; --", "Base", "Tiger", "radix", "", None, 7, [], {}]
+           "tiger'); DELETE FROM tank.ledger; --", "zenas' OR '1'='1", "market_lab'); DELETE FROM tank.ledger; --", "tisan' OR '1'='1", "trigger'); DELETE FROM tank.ledger; --", "ghost' OR '1'='1", "Base", "Tiger", "Zenas", "radix' OR '1'='1", "enforce", "autumbra_enforce", "autumbra-watch", "", None, 7, [], {}]
 
 
 class Pool:
@@ -51,7 +52,7 @@ class Pool:
 
 @pytest.fixture
 def setup(monkeypatch):
-    keys = {room: uuid.uuid4().hex for room in ("base", "rig", "tiger")}
+    keys = {room: uuid.uuid4().hex for room in route.ROOMS}
     for room, key in keys.items():
         monkeypatch.setenv("TANK_KEY_" + room.upper(), key)
     pool = Pool()
@@ -65,6 +66,8 @@ def setup(monkeypatch):
                  "model_info": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}} for name in ("baseline", "serving")]
 
     tank = SimpleNamespace(pool=lambda: pool, load_policy=policy, _roster_models=roster, box_region=lambda: "us-east",
+                           _pick_version=AsyncMock(return_value="1.2.1"),
+                           get_package=lambda *args: SimpleNamespace(path=Path(__file__).resolve().parents[1] / "tank/skills/zenas.scope/1.2.1"),
                            model_call_refusal=lambda *a, **kw: None, graduate=SimpleNamespace(router_cannot_serve=lambda m: False),
                            LITELLM_URL="http://gateway.invalid", LITELLM_MASTER_KEY=uuid.uuid4().hex)
     original = httpx.AsyncClient
@@ -81,19 +84,19 @@ def setup(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("room", ["base", "rig", "tiger"])
+@pytest.mark.parametrize("room", list(route.ROOMS))
 async def test_room_and_task_type_are_bound_parameters_and_rows_carry_the_tenant(setup, room):
     app, _tank, pool, keys, original = setup
     tenant = uuid.uuid4()
     async with original(transport=httpx.ASGITransport(app=app), base_url="http://tank") as client:
         response = await client.post(f"/v1/agents/{room}/chat/completions",
-                                     headers={"Authorization": "Bearer " + keys[room], "X-Tenant-ID": str(tenant)},
-                                     json={"messages": [{"role": "user", "content": "Plan"}]})
+                                     headers={"Authorization": "Bearer " + keys[room], "X-Tenant-ID": str(tenant), "X-Home-Region": "us-east"},
+                                     json={"messages": [{"role": "user", "content": "commercial lease"}]})
     assert response.status_code == 200
     ledger, transcript, receipt = pool.rows
     task_type = f"agent.{room}.think"
     for sql, args in pool.rows:
-        assert "'base'" not in sql and "'rig'" not in sql and "'tiger'" not in sql and "think'" not in sql
+        assert all(repr(allowed) not in sql for allowed in route.ROOMS) and "think'" not in sql
         assert args[1] == tenant  # every write is the caller's tenant
     assert "tenant_id" in ledger[0] and ledger[1][13:] == (room, task_type)
     assert transcript[1][4] == task_type and "$5" in transcript[0]
@@ -116,10 +119,11 @@ async def test_hostile_room_never_reaches_sql(setup, room):
         await route.export_skills(tank, uuid.uuid4(), "us-east", room=room)
     assert pool.rows == [] and pool.fetched == []
     assert pool.acquired == 0
+    tank._pick_version.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("room", ["base", "rig", "tiger"])
+@pytest.mark.parametrize("room", list(route.ROOMS))
 async def test_reads_bind_room_and_filter_by_tenant(setup, room):
     app, tank, pool, keys, original = setup
     tenant = uuid.uuid4()
@@ -128,7 +132,7 @@ async def test_reads_bind_room_and_filter_by_tenant(setup, room):
     assert "s.agent=$3" in sql and "a.tenant_id=$1" in sql and args == (tenant, "us-east", room)
     async with original(transport=httpx.ASGITransport(app=app), base_url="http://tank") as client:
         response = await client.get(app.url_path_for("receipts", room=room), params={"tenant_id": str(tenant), "task_id": str(uuid.uuid4())},
-                                    headers={"Authorization": "Bearer " + keys[room]})
+                                    headers={"Authorization": "Bearer " + keys[room], "X-Home-Region": "us-east"})
     assert response.status_code == 200
     sql, args = pool.fetched[-1]
     assert "r.room=$3" in sql and "r.tenant_id=$1 AND l.tenant_id=$1" in sql and args[0] == tenant and args[2] == room

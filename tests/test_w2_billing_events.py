@@ -26,9 +26,9 @@ from chassis.roles import statements_for  # noqa: E402
 from test_zenas_schema_apply import _guarded_ownership  # noqa: E402
 
 SCHEMA_PATH = ROOT / "tank" / "schema.sql"
-# tank/schema.sql on origin/main when this table was appended. The bytes before
-# the billing_events appendix must stay that file.
-MAIN_SCHEMA_SHA256 = "915b2d1ca01ff41c81fb92981e6fe0fe7f4d16d9d6f448a38c190317f6c88c94"
+# The additive judgment_splits table is intentionally before billing_events.
+# Pin the complete prefix so later edits cannot silently alter either schema.
+MAIN_SCHEMA_SHA256 = "1b0e9c645b4575663528903880e466466e0477ee90362d384ff87dd7f2d1ca23"
 APPENDIX = "\n-- Workspace billing webhook. One row per Stripe event id.\n"
 AGENTS = ("base", "tiger", "market_lab", "zenas", "rig", "radix", "tisan")
 AGENT_KEY = "agent-key-billing-fixture"
@@ -60,7 +60,7 @@ def _schemas() -> tuple[str, str]:
     # AGENT-1 corrected only the transcript comment, as requested in review.
     # Pin the current prefix AND reconstruct the byte-identical historical
     # fixture; every DDL byte remains protected by the original checksum.
-    assert hashlib.sha256(main_sql.encode()).hexdigest() == "a04241697be2adeb3a65e80ad7cc15a237163715eebc123d6137878caa46d128"
+    assert hashlib.sha256(main_sql.encode()).hexdigest() == "1ae4663caaf347149c4d5c8710df9d653e74d9f5e78129bc9dcb5511c3db8bc4"
     main_sql = main_sql.replace("as sent; agent chat includes its policy system prompt",
         "as sent (system prompt excluded; it lives in policy)")
     assert hashlib.sha256(main_sql.encode()).hexdigest() == MAIN_SCHEMA_SHA256

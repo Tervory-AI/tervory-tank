@@ -286,9 +286,9 @@
         "max_gap_days": 14
       },
       {
-        "id": "noaa_alerts:availability",
+        "id": "noaa_alerts:supply:availability",
         "source": "noaa_alerts",
-        "ref": "severe_weather:US",
+        "ref": "severe_weather:supply",
         "label": "Severe-weather alerts",
         "downstream_source": "tiger_stock",
         "direction": "surge",
@@ -303,7 +303,51 @@
         "pct_threshold": 0.15,
         "min_lag_days": 7,
         "max_lag_days": 84,
-        "max_gap_days": 14
+        "max_gap_days": 14,
+        "trigger": "event",
+        "key_name": "NOAA_TOKEN"
+      },
+      {
+        "id": "legiscan:engrossed:availability",
+        "source": "legiscan",
+        "ref": "bill_stage:engrossed:supply",
+        "label": "Legislation",
+        "downstream_source": "tiger_stock",
+        "direction": "surge",
+        "outcome_direction": "drop",
+        "baseline_value": 2,
+        "outcome_pct": 0.25,
+        "outcome_words": "became unavailable",
+        "prediction_words": "may become unavailable",
+        "min_episodes": 3,
+        "window": 6,
+        "z_threshold": 2.0,
+        "pct_threshold": 0.15,
+        "min_lag_days": 7,
+        "max_lag_days": 84,
+        "max_gap_days": 14,
+        "trigger": "event",
+        "key_name": "LEGISCAN_API_KEY"
+      }
+    ],
+    "event_signals": [
+      {
+        "source": "noaa_alerts",
+        "kind": "severe_weather",
+        "ref": "severe_weather:supply",
+        "key_name": "NOAA_TOKEN",
+        "region_source": "listing_counts",
+        "region_prefix": "count:state:"
+      },
+      {
+        "source": "legiscan",
+        "kind": "bill_status",
+        "ref": "bill_stage:engrossed:supply",
+        "key_name": "LEGISCAN_API_KEY",
+        "region_source": "listing_counts",
+        "region_prefix": "count:state:",
+        "stage": "Engrossed",
+        "stage_pattern": "^(?:[A-Z]+\\s*\\d+|\\d+)\\s+(?P<stage>.*)$"
       }
     ]
   }

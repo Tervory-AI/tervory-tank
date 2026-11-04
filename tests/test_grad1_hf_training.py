@@ -1,9 +1,12 @@
 """No live GPU, HF credentials or client exports are needed to validate training."""
 from decimal import Decimal
 import importlib.util
+import os
 from pathlib import Path
+from types import SimpleNamespace
 import uuid
 import pytest
+from fastapi import HTTPException
 import training
 from gold import PLATFORM_TENANT
 from test_train1 import database as _database
@@ -12,7 +15,7 @@ database = _database
 ROOT = Path(__file__).resolve().parents[1]
 
 def load(name):
-    spec = importlib.util.spec_from_file_location(name, ROOT / 'jobs/train' / f'{name}.py')
+    spec = importlib.util.spec_from_file_location(name, ROOT / 'tank/training_jobs' / f'{name}.py')
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -25,6 +28,76 @@ def test_refuses_bad_or_over_budget_job(rate, minutes, cap):
 
 def test_accepts_capped_estimate():
     assert load('run').estimate(Decimal('0.025'), 120, Decimal('50')) == Decimal('3')
+
+
+def test_zenas_uses_allowlisted_smallest_a10g_that_fits():
+    mod = load('run')
+    assert mod.HARDWARE == frozenset({'a10g-small', 'a10g-large'})
+    assert mod.training_hardware('zenas') == 'a10g-small'
+    with pytest.raises(ValueError, match='Unsupported training agent'):
+        mod.training_hardware('base')
+    trainer = load('train')
+    assert trainer.context_length('') == 1024
+    assert trainer.context_length('zenas') == 4096
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('values', 'configured', 'status'),
+    [
+        ([1999, 200], True, 'fewer than 2,000 public zenas training rows'),
+        ([2000, 199], True, 'fewer than 200 holdout rows'),
+        ([2000, 200, True], True, 'reconcile the previous training job'),
+        ([2000, 200, False], False, 'Hugging Face training is not configured'),
+    ],
+)
+async def test_zenas_training_run_plain_refusals(monkeypatch, values, configured, status):
+    from unittest.mock import AsyncMock
+    conn = SimpleNamespace(fetchval=AsyncMock(side_effect=values))
+    if configured:
+        monkeypatch.setenv('HF_TOKEN', 'placeholder-token')
+        monkeypatch.setenv('HF_ORG', 'placeholder-org')
+    else:
+        monkeypatch.delenv('HF_TOKEN', raising=False)
+        monkeypatch.delenv('HF_ORG', raising=False)
+    body = training.TrainingRunRequest(agent='zenas', minutes=120)
+    assert (await training._training_readiness(conn, body))['status'] == status
+
+
+@pytest.mark.asyncio
+async def test_training_run_and_receipt_refuse_tenant_admin_before_provider(monkeypatch):
+    actor = training.Reviewer('placeholder-admin', uuid.uuid4(), False)
+    with pytest.raises(HTTPException) as run_refused:
+        await training.training_run(training.TrainingRunRequest(agent='zenas', minutes=120), actor)
+    with pytest.raises(HTTPException) as receipt_refused:
+        await training.training_receipt(
+            training.TrainingReceiptRequest(job_id='placeholder-job', billed_usd=1), actor,
+        )
+    assert run_refused.value.status_code == receipt_refused.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_zenas_plan_reads_live_hf_price(monkeypatch):
+    monkeypatch.setenv('HF_TOKEN', 'placeholder-token')
+    monkeypatch.setenv('HF_TRAIN_MAX_USD', '50')
+    async def child(*args):
+        assert args == ('--agent', 'zenas', '--minutes', '120')
+        return {'status': 'ready', 'cost_usd': '3', 'hardware': 'a10g-small'}
+    monkeypatch.setattr(training, '_training_subprocess', child)
+    result = await training._training_quote(training.TrainingRunRequest(agent='zenas', minutes=120))
+    assert result == {'status': 'ready', 'cost_usd': '3', 'hardware': 'a10g-small'}
+
+
+@pytest.mark.asyncio
+async def test_tank_stays_hf_offline_while_training_child_is_online(monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setenv('HF_HUB_OFFLINE', '1')
+    process = SimpleNamespace(returncode=0, communicate=AsyncMock(return_value=(b'{"status":"ready"}\n', b'')))
+    launch = AsyncMock(return_value=process)
+    monkeypatch.setattr(training.asyncio, 'create_subprocess_exec', launch)
+    assert await training._training_subprocess('--agent', 'zenas') == {'status': 'ready'}
+    assert os.environ['HF_HUB_OFFLINE'] == '1'
+    assert launch.await_args.kwargs['env']['HF_HUB_OFFLINE'] == '0'
 
 @pytest.mark.parametrize('change', [{'tenant_id': uuid.uuid4()}, {'public': False}, {'client_matter': True},
                                     {'region': 'za'}, {'holdout': True}, {'active': False}])
@@ -70,7 +143,7 @@ async def test_actual_export_payload_cannot_contain_private_rows(database, monke
             await training.save_pair(conn, tenant=tenant, agent='base', task='base.fixture', value={'n': n}, output={'ok': True},
                                      approved_by='fixture', source='gold', ref=str(n), public=public, client_matter=client)
     captured = []
-    async def upload(client, org, agent, day, rows, region):
+    async def upload(client, org, agent, day, rows, region, holdouts=None):
         load('train').validate_rows(rows)  # Any forbidden row fails the export test.
         captured.extend(rows)
     monkeypatch.setattr(training, 'upload_dataset', upload)
@@ -79,8 +152,10 @@ async def test_actual_export_payload_cannot_contain_private_rows(database, monke
     assert [r['input'] for r in captured] == [{'n': 0}]
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('submit,cap,expected_jobs', [(False,'50',0), (True,'50',1), (True,'1',0)])
-async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(monkeypatch, capsys, submit, cap, expected_jobs):
+@pytest.mark.parametrize('submit,cap,expected_jobs,agent,region', [
+    (False,'50',0,'','us-east'), (True,'50',1,'','us-east'),
+    (True,'50',1,'zenas','za'), (True,'1',0,'zenas','za')])
+async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(monkeypatch, capsys, submit, cap, expected_jobs, agent, region):
     import secrets
     import sys
     from types import SimpleNamespace
@@ -89,7 +164,7 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
     monkeypatch.setenv('HF_TOKEN', token)
     monkeypatch.setenv('HF_ORG', 'fixture')
     monkeypatch.setenv('HF_TRAIN_MAX_USD', cap)
-    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.setenv('TANK_REGION', region)
     monkeypatch.setenv('DATABASE_URL', 'postgresql://fixture.invalid/fixture')
     jobs, repos = [], []
     def launch(script, **kwargs):
@@ -98,6 +173,7 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
         assert token not in str(kwargs['env'])
         assert 'DATABASE_URL' not in kwargs['secrets']
         assert Path(script).name == 'train.py'
+        assert kwargs['env']['TRAIN_AGENT'] == agent
         jobs.append(kwargs)
         return SimpleNamespace(id='fixture-job')
     api = SimpleNamespace(list_jobs_hardware=lambda: [SimpleNamespace(name='a10g-small',unit_label='minute',unit_cost_micro_usd=16667)],
@@ -106,7 +182,7 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
     import asyncpg
     conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]), close=AsyncMock())
     monkeypatch.setattr(asyncpg, 'connect', AsyncMock(return_value=conn))
-    args = SimpleNamespace(receipt=None, minutes=120, submit=submit, day='2026-10-20')
+    args = SimpleNamespace(receipt=None, minutes=120, submit=submit, day='2026-10-20', agent=agent)
     if cap == '1':
         with pytest.raises(ValueError):
             await load('run').run(args)
@@ -162,7 +238,7 @@ async def test_legacy_ledger_and_package_pairs_stay_private_after_upgrade(databa
                     value={'public_source': source, 'held': held}, output={}, approved_by='fixture',
                     source=source, ref='public-' + str(held), public=True, holdout=held)
     captured = []
-    async def upload(client, org, agent, day, rows, region):
+    async def upload(client, org, agent, day, rows, region, holdouts=None):
         load('train').validate_rows(rows)
         captured.extend(rows)
     monkeypatch.setattr(training, 'upload_dataset', upload)
@@ -231,10 +307,12 @@ async def test_public_za_decided_case_exports_but_client_matter_does_not(databas
     monkeypatch.setenv('HF_ORG', 'fixture')
     monkeypatch.setattr(gold, 'is_holdout', lambda *args: False)
     async with pool.acquire() as conn:
-        await conn.execute((ROOT / 'agents/zenas/schema.sql').read_text())
-        case = await conn.fetchval("INSERT INTO agent_zenas.worked_matters(region,source,jurisdiction,material_type) VALUES ('za','case','za','public_record') RETURNING id")
-        await conn.execute("INSERT INTO agent_zenas.training_pairs(region,source,worked_id,request) VALUES ('za','case',$1,'Public ZA decision')", case)
-        await training.collect_zenas(conn, None)
+        await training.save_pair(conn, tenant=PLATFORM_TENANT, agent='zenas', task='zenas.reasoning',
+            value={'facts': 'Public ZA decision', 'issues': 'placeholder issue'},
+            output={'reasoning': 'placeholder reasons', 'order': 'The application is granted.',
+                    'outcome': 'granted', 'costs': 'without costs'},
+            approved_by='court decision', source='court_text', ref='concourt:placeholder-version',
+            public=True, client_matter=False, region='za')
         await training.save_pair(conn, tenant=uuid.uuid4(), agent='zenas', task='zenas.reasoning',
             value={'text': 'Client matter'}, output={}, approved_by='fixture', source='zenas', ref='client',
             public=True, client_matter=True)
@@ -249,7 +327,7 @@ async def test_public_za_decided_case_exports_but_client_matter_does_not(databas
     real_client = httpx.AsyncClient
     monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(respond), **kw))
     assert (await training.export_once())['exported'] == 1
-    assert captured[0]['input'] == {'text': 'Public ZA decision'}
+    assert captured[0]['input'] == {'facts': 'Public ZA decision', 'issues': 'placeholder issue'}
     assert captured[0]['region'] == 'za'
     load('train').validate_rows(captured)
 

@@ -1,7 +1,7 @@
 """Rig's own Locate fulfilment: orders and supplier purchase orders in Rig's Postgres.
 
-Tervory no longer uses Odoo, so a store-confirmed accepted quote is recorded here, not in
-an ERP. One accepted quote makes exactly one row in agent_rig.locate_orders
+A store-confirmed accepted quote is recorded here. One accepted quote makes
+exactly one row in agent_rig.locate_orders
 (what the shopper bought, at the held price) and one draft row in
 agent_rig.supplier_purchase_orders (what the store buys from the approved
 source, at the source's live price). Both are keyed by (tenant, quote), so a
@@ -18,7 +18,7 @@ Sandbox only, like the rest of Locate ordering (RIG_LOCATE_ORDER_MODE=sandbox).
 Nothing here opens a socket or sends mail.
 
 The interface (Fulfilment) is what QuoteService calls. RigOrders is the only
-implementation. There is no Odoo or other ERP order path.
+implementation. There is no external ERP order path.
 """
 
 from __future__ import annotations

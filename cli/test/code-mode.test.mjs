@@ -2,16 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { mkdtemp, writeFile, readFile, mkdir, symlink, rm, copyFile, chmod } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, mkdir, symlink as nativeSymlink, stat, rm, copyFile, chmod } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createServer, createConnection } from 'node:net';
 import { once } from 'node:events';
 import { CodeFolder, LIMITS, redactSecrets, processOutput, applyDiff } from '../src/code-tools.mjs';
 import { run } from '../src/client.mjs';
 
+// Windows needs the target kind when creating directory symlinks.
+const symlink = async (target, path) => {
+  const absolute = resolve(dirname(path), target);
+  const kind = process.platform === 'win32' && (await stat(absolute).catch(() => null))?.isDirectory() ? 'junction' : 'file';
+  return nativeSymlink(kind === 'junction' ? absolute : target, path, kind);
+};
 const work = await mkdtemp(join(tmpdir(), 'code-mode-'));
 test.after(() => rm(work, { recursive: true, force: true }));
 async function folder() {
@@ -100,7 +106,7 @@ test('new file diff requires a missing-file read; malformed/context-mismatched d
   await assert.rejects(applyDiff('old\n', patch.replace('b/file.txt', 'b/../outside.txt'), 'file.txt', false, f.root));
 });
 
-test('commands show in full, require y and cannot run non-interactively; cwd and output cap', async () => {
+test('commands show in full, require y and cannot run non-interactively; cwd and output cap', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
   const f = await folder();
   const command = 'printf done > marker'; const request = { name: 'run_command', arguments: { command } };
   let shown = '';
@@ -152,7 +158,7 @@ test('list caps at 2000 entries, including repositories with more than 64 KB of 
   assert.equal(result.files.length, 2000); assert(result.truncated);
 });
 
-test('approved command cannot read secret paths, outside symlinks or inherited host credentials', async () => {
+test('approved command cannot read secret paths, outside symlinks or inherited host credentials', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
   const f = await folder();
   await writeFile(join(f.root, '.env'), 'private-file-canary');
   await writeFile(join(work, 'host-private.txt'), 'outside-file-canary');
@@ -168,7 +174,7 @@ test('approved command cannot read secret paths, outside symlinks or inherited h
   await assert.rejects(f.edit('.env', patch, io()));
 });
 
-test('fake Tank can request a missing-file read, explicit edit and explicit test run without a new sign-in', async () => {
+test('fake Tank can request a missing-file read, explicit edit and explicit test run without a new sign-in', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
   const f = await folder();
   const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
   const requests = [
@@ -207,10 +213,10 @@ test('git status and diff work without exposing secret-file contents', async () 
   const f = await folder();
   execFileSync('git', ['add', 'file.txt'], { cwd: f.root });
   await writeFile(join(f.root, 'file.txt'), 'changed\n');
-  await writeFile(join(f.root, '.e*'), 'old glob file\n');
+  await writeFile(join(f.root, '.e[n]v'), 'old glob file\n');
   await writeFile(join(f.root, '.env'), 'old private file\n');
-  execFileSync('git', ['--literal-pathspecs', 'add', '.e*', '.env'], { cwd: f.root });
-  await writeFile(join(f.root, '.e*'), 'changed glob file\n');
+  execFileSync('git', ['--literal-pathspecs', 'add', '.e[n]v', '.env'], { cwd: f.root });
+  await writeFile(join(f.root, '.e[n]v'), 'changed glob file\n');
   await writeFile(join(f.root, '.env'), 'private-git-canary');
   const status = await f.tool({ name: 'git', arguments: { action: 'status' } }, io());
   const diff = await f.tool({ name: 'git', arguments: { action: 'diff' } }, io());
@@ -220,7 +226,7 @@ test('git status and diff work without exposing secret-file contents', async () 
   assert(!diff.output.includes('old private file'));
 });
 
-test('cancelling at command approval stops execution and any following model turn', async () => {
+test('cancelling at command approval stops execution and any following model turn', { skip: process.platform === 'win32' && 'Windows refuses commands before approval' }, async () => {
   const f = await folder(); const controller = new AbortController(); let calls = 0;
   const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
   await assert.rejects(run(['code', f.root], { store: { get: async () => token },
@@ -302,7 +308,7 @@ test('Git reads remain pinned after a nested repository appears', async () => {
   assert((await selected.files()).files.includes('original.txt'));
 });
 
-test('external Node runtime is read-only, named before approval and cannot expose HOME', async () => {
+test('external Node runtime is read-only, named before approval and cannot expose HOME', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
   const f = await folder();
   const runtime = await mkdtemp(join(work, 'runtime-'));
   await mkdir(join(runtime, 'bin'));
@@ -359,7 +365,7 @@ test('session history is bounded, redacted and transient; continuation rounds sh
 });
 
 
-test('external Node intermediate links do not expose their host directory', async () => {
+test('external Node intermediate links do not expose their host directory', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
   const f = await folder();
   const install = await mkdtemp(join(work, 'node-install-'));
   const middle = await mkdtemp(join(work, 'node-links-'));
@@ -375,7 +381,7 @@ test('external Node intermediate links do not expose their host directory', asyn
 });
 
 
-test('external runtime rejects directories, nonexecutables and their symlinks before approval', async () => {
+test('external runtime rejects directories, nonexecutables and their symlinks before approval', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
   const f = await folder(); const outside = await mkdtemp(join(work, 'other-projects-'));
   await mkdir(join(outside, 'client-a/.aws'), { recursive: true });
   await writeFile(join(outside, 'client-a/.npmrc'), 'unrelated-npm-canary');
@@ -398,7 +404,7 @@ test('external runtime rejects directories, nonexecutables and their symlinks be
   assert.equal(prompts, 0);
 });
 
-test('external runtimes refuse pip-user and uv launchers without exposing .local user data', async () => {
+test('external runtimes refuse pip-user and uv launchers without exposing .local user data', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
   const f = await folder(); const home = await mkdtemp(join(work, 'user-home-'));
   const local = join(home, '.local'); await mkdir(join(local, 'bin'), { recursive: true });
   await mkdir(join(local, 'share/python_keyring'), { recursive: true });
@@ -584,7 +590,7 @@ test('/undo is local and never sends its command or snapshot to Tank', async () 
   assert.equal(await readFile(join(f.root, 'file.txt'), 'utf8'), 'old\n');
 });
 
-test('sandbox confines outside writes, secret reads and network while echo succeeds', async () => {
+test('sandbox confines outside writes, secret reads and network while echo succeeds', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
   const f = await folder(); const outside = join(work, 'placeholder-outside-write');
   await writeFile(join(f.root, '.env.placeholder'), 'placeholder-private-canary');
   const server = createServer(socket => socket.end());
@@ -711,7 +717,7 @@ test('parent swap during rename cannot write through the replacement symlink', a
   assert.equal(await readFile(join(outside, 'file.txt'), 'utf8'), 'placeholder outside\n');
 });
 
-test('sandbox denies home, secret directories, git config, outside reads and Unix sockets', async () => {
+test('sandbox denies home, secret directories, git config, outside reads and Unix sockets', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
   const f = await folder(); const home = homedir();
   await mkdir(join(home, '.ssh'), { recursive: true });
   const directories = [home, join(home, '.ssh')];
@@ -766,4 +772,19 @@ test('AWS assignments and complete or truncated PEM blocks are redacted', async 
   const source = `process.stdout.write(${JSON.stringify(begin + '\nplaceholder-private-body\n' + end + '\n')})`;
   const result = await processOutput(process.execPath, ['-e', source], { cwd: f.root });
   assert.equal(result.output, '[redacted]\n');
+});
+
+// Also runs on POSIX: a simulated Windows platform must never spawn a command.
+test('Windows refuses commands before approval and never creates a marker', async () => {
+  const f = await folder(); const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  let prompts = 0;
+  try {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    await assert.rejects(f.tool({ name: 'run_command', arguments: { command: 'echo wrong > marker' } }, {
+      ...io(), prompt: async () => { prompts++; return 'y'; },
+    }), /Code tool refused/);
+    await assert.rejects(f.command('echo wrong > marker', io(), 1000), /Code tool refused/);
+    assert.equal(prompts, 0);
+    await assert.rejects(readFile(join(f.root, 'marker')));
+  } finally { Object.defineProperty(process, 'platform', descriptor); }
 });

@@ -19,7 +19,6 @@ async def owned_attachment(actor, attachment_id):
 
 async def scan(actor, body, *, attachment=None):
     from command import MAX_ATTACHMENT_BYTES
-    from ghost_routes import call_room
     from trigger_commands import confirmation
 
     confirmation(actor, "radix.repo.scan", body.model_dump(mode="json"))
@@ -30,15 +29,21 @@ async def scan(actor, body, *, attachment=None):
     # Same signature check as ghost_routes; extraction remains in Radix.
     if not (raw.startswith((b"PK\x03\x04", b"\x1f\x8b")) or raw[257:262] == b"ustar"):
         raise HTTPException(422, "Hand over a tar or zip archive.")
+    return await submit(actor.tenant_id, raw, row["name"])
+
+
+async def submit(tenant, raw: bytes, ref: str):
+    """Shared R5 job submission; caller supplies its already-authorized archive."""
+    from ghost_routes import call_room
     response = await call_room("POST", "radix", "/jobs", body={
-        "tenant_id": str(actor.tenant_id), "kind": "scan",
-        "input": {"tenant_id": str(actor.tenant_id), "source": "b64:" + base64.b64encode(raw).decode("ascii"),
-                  "ref": row["name"]},
+        "tenant_id": str(tenant), "kind": "scan",
+        "input": {"tenant_id": str(tenant), "source": "b64:" + base64.b64encode(raw).decode("ascii"),
+                  "ref": ref},
     })
     if response.status_code != 201:
         raise HTTPException(503, "Radix did not accept the scan.")
     data = response.json()
-    if data.get("tenant_id") != str(actor.tenant_id) or data.get("kind") != "scan":
+    if data.get("tenant_id") != str(tenant) or data.get("kind") != "scan":
         raise HTTPException(503, "Radix did not accept the scan.")
     return {"scan_id": str(UUID(data["id"])), "status": "pending"}
 
@@ -65,7 +70,7 @@ async def findings(actor, scan_id: UUID):
         if not isinstance(result.get("findings"), list):
             raise HTTPException(503, "Radix results are unavailable.")
         public.update({key: result.get(key) for key in
-                       ("summary", "critical", "tools", "tool_status", "scan_complete")})
+                       ("summary", "critical", "tools", "tool_status", "scan_complete", "ref", "leaked")})
         public["findings"] = [
             {**{key: row[key] for key in ("rule", "severity", "tool", "file", "line") if key in row},
              **({"explanation": row["explanation"]} if row.get("explanation") else {}),

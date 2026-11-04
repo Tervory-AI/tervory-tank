@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY agents/_chassis/chassis /app/chassis
 COPY ops/live_check.mjs ops/live_check_banned.txt /app/ops/
 COPY agents/tisan/scaffold.py /app/scaffold.py
+COPY agents/tisan/repo_scan.py /app/repo_scan.py
+COPY agents/tisan/pipeline.py /app/pipeline.py
 COPY agents/tisan/figma.py /app/figma.py
 COPY agents/tisan/gold_sources.py /app/gold_sources.py
 COPY agents/tisan/review_store.py /app/review_store.py

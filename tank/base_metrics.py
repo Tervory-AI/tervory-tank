@@ -222,6 +222,11 @@ def export_records(rows: list[dict[str, Any]], ledger: list[dict[str, Any]] | No
             if record_id in record_ids:
                 per_record[record_id].append(entry)
                 ledger_records[str(entry["id"])].add(record_id)
+    # Preserve existing CSV bytes unless a verified link needs the catch-all columns.
+    other_socials = any(any(social_network(item["value"]) not in SOCIAL_NETWORKS
+                           for item in verified_contacts(obj(row["fields"]).get("socials") or {})) for row in rows)
+    if other_socials:
+        columns += ["other_socials", "other_socials_source_url", "other_socials_checked_at"]
     exported = []
     for row in rows:
         fields = obj(row["fields"])
@@ -249,6 +254,8 @@ def export_records(rows: list[dict[str, Any]], ledger: list[dict[str, Any]] | No
             reason = csv_reason(fields["socials"].get("reason"), "socials") or f"No verified {SOCIAL_NAMES[network]} link found for this business."
             write(network, values[:1], reason, fields["socials"] if not fields["socials"].get("verified") else None)
             write(f"other_{network}", values[1:])
+        if other_socials:
+            write("other_socials", [item for item in socials if social_network(item["value"]) not in SOCIAL_NETWORKS])
         for name in quality_columns:
             item = fields.get(name) or {}
             if item.get("verified"):

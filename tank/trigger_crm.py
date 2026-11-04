@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
-from command import Actor, authorized_actor, identity, require_founder, require_tool
+from command import Actor, authorized_actor, identity, require_tool
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jsonschema import Draft4Validator, FormatChecker
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -50,18 +50,18 @@ class CRMWriteArgs(BaseModel):
         return self
 
 
-async def authority(actor: Actor) -> Actor:
+async def authority(actor: Actor, tool: str = "trigger.crm.write") -> Actor:
     actor = await authorized_actor(actor)
-    # Only a durably confirmed Base list card can use this corridor as a
-    # Base-squad client. Ordinary Trigger CRM actions remain founder-only.
+    # Preserve the actor-bound, durably confirmed Base list capability.
     from trigger_commands import CONFIRMED, confirmation
     bound = CONFIRMED.get()
     if bound and bound[3] == "base.list.to_crm":
         require_tool(actor, "base.list.to_crm")
         confirmation(actor, "base.list.to_crm", bound[4])
         return actor
-    require_founder(actor)
-    require_tool(actor, "trigger.crm.write")
+    if not (actor.founder or actor.tenant_admin):
+        raise HTTPException(403, "This tool is not available to this user")
+    require_tool(actor, tool)
     return actor
 
 
@@ -171,7 +171,8 @@ def projected(value, depth=0):
 
 @router.get("/{resource}")
 async def listing(resource: Resource, request: Request, actor: Annotated[Actor, Depends(identity)]):
-    actor = await authority(actor)
+    from trigger_routes import code_receipt
+    actor = await authority(actor, "trigger.crm.list")
     query = dict(request.query_params)
     allowed = {"page"} | ({"name"} if resource == "contacts" else {"title", "status"} if resource == "leads" else set())
     if set(query) - allowed or len(request.query_params.multi_items()) != len(query):
@@ -203,15 +204,21 @@ async def listing(resource: Resource, request: Request, actor: Annotated[Actor, 
     if not isinstance(rows, list) or len(rows) > 1000:
         raise HTTPException(502, "Invalid CRM response")
     return {"resource": resource, "items": [project(item) for item in rows], "page": page,
-            "count": count if type(count) is int and count >= 0 else None}
+            "count": count if type(count) is int and count >= 0 else None,
+            "model_calls": 0, "cost_usd": 0,
+            "ledger_id": str(await code_receipt(actor.tenant_id, "trigger.crm.list"))}
 
 
 @router.get("/{resource}/{record_id}")
 async def detail(resource: Resource, record_id: UUID, actor: Annotated[Actor, Depends(identity)]):
-    actor = await authority(actor)
+    from trigger_routes import code_receipt
+    actor = await authority(actor, "trigger.crm.get")
     raw = await upstream(actor, resource, record_id=record_id)
     key = {"leads": "lead_obj", "contacts": "contact_obj", "estimates": "estimate", "invoices": "invoice"}[resource]
-    return {"resource": resource, "item": project(raw.get(key))}
+    item = project(raw.get(key))
+    return {"resource": resource, "record_id": str(record_id), "item": item,
+            "model_calls": 0, "cost_usd": 0,
+            "ledger_id": str(await code_receipt(actor.tenant_id, "trigger.crm.get"))}
 
 
 @router.post("/write")
@@ -242,7 +249,7 @@ async def write(request: Request, actor: Annotated[Actor, Depends(identity)]):
 
 
 async def confirmed_bot_lead(actor: Actor, draft_id: UUID, data: dict, arguments: dict) -> dict:
-    """Narrow bot create-only capability; generic CRM access stays founder-only."""
+    """Narrow bot create-only capability; generic CRM access requires a founder or tenant admin."""
     from trigger_commands import confirmation
 
     async def authorize(current):

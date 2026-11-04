@@ -41,7 +41,9 @@ def analyze(
 ) -> dict[str, Any]:
     up = sorted((p for p in upstream if day(p) <= as_of), key=day)
     down = sorted((p for p in downstream if day(p) <= as_of), key=day)
-    baseline = classify(up, config)
+    baseline = ({"events": [{"date": str(p["date"]), "kind": config["direction"], "size": float(p["value"])}
+                            for p in up if float(p["value"]) > 0], "shifts": []}
+                if config.get("trigger") == "event" else classify(up, config))
     events, shifts = baseline["events"], baseline["shifts"]
     shift_by_date = {item["date"]: item["kind"] for item in shifts}
     by_date = {str(p["date"]): (i, p) for i, p in enumerate(up)}
@@ -58,7 +60,7 @@ def analyze(
             {
                 "event": event,
                 "point": point,
-                "previous": up[index - 1],
+                "previous": up[index - 1] if index else point,
                 "start": stamp,
                 "end": end,
                 "shift": shift_by_date.get(event["date"]),

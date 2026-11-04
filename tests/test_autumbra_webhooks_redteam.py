@@ -21,7 +21,7 @@ def test_unsigned_webhook_dropped_never_stored(monkeypatch):
     reset_drop_counts()
     monkeypatch.setenv(CF_SECRET_ENV, "test-secret")
     with pytest.raises(WebhookRejected):
-        accept_signed("cloudflare", b'{"event":1}', signature=None)
+        accept_signed("edge", b'{"event":1}', signature=None)
     assert drop_counts()["cloudflare"] >= 1
 
 
@@ -34,7 +34,7 @@ def test_signed_webhook_accepted_not_stored(monkeypatch):
     nonce = "nonce-1"
     sig = sign_body(secret=secret, body=body, timestamp=ts, nonce=nonce)
     envelope = accept_signed(
-        "cloudflare", body, signature=sig, timestamp=ts, nonce=nonce
+        "edge", body, signature=sig, timestamp=ts, nonce=nonce
     )
     assert envelope["accepted"] is True and envelope["stored"] is False
 
@@ -63,7 +63,8 @@ def test_webhook_route_signature_before_tank_auth(monkeypatch, tmp_path):
         "/ghost/autumbra/webhooks/edge",
         content=body,
         headers={
-            "X-Autumbra-Signature": sig,
+            "X-Tank-Key": "tank-key-value",
+                "X-Autumbra-Signature": sig,
             "X-Autumbra-Timestamp": ts,
             "X-Autumbra-Nonce": nonce,
         },

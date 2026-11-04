@@ -8,7 +8,7 @@ from vault_routes import clean, public_url, VAULTS
 
 
 def test_existing_product_vault_names_are_bound_to_one_squad():
-    assert VAULTS == {'base.vault': 'base', 'tiger.vault': 'tiger', 'rig.vault': 'rig', 'lab.vault': 'market_lab', 'tisan.vault': 'tisan', 'radix.vault': 'radix', 'zenas.vault': 'zenas'}
+    assert VAULTS == {'base.vault': 'base', 'tiger.vault': 'tiger', 'rig.vault': 'rig', 'lab.vault': 'market_lab', 'tisan.vault': 'tisan', 'radix.vault': 'radix', 'zenas.vault': 'zenas', 'ghost.vault': 'ghost'}
 
 
 @pytest.mark.parametrize('kind', ['newline', 'too_long', 'wrong_type'])

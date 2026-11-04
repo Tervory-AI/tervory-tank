@@ -1,4 +1,4 @@
-"""RIG-4: real HTTP contracts with an Odoo stub, no external requests."""
+"""RIG-4: store delivery HTTP contracts, no external requests."""
 
 import asyncio
 from datetime import date
@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "agents" / "rig"))
 from rigbox.api import mount  # noqa: E402
 from rigbox.quotes.api import mount as mount_quotes  # noqa: E402
 from fixtures.rig_quote_sample import KEY, TENANT, seed  # noqa: E402
-from rigbox.quotes.senders import DeliveryError, OdooHandoff, RetailerHandoff  # noqa: E402
+from rigbox.quotes.senders import DeliveryError, RetailerHandoff  # noqa: E402
 from rigbox.quotes.service import QuoteService  # noqa: E402
 from rigbox.quotes.store import MemoryQuotes  # noqa: E402
 from rigbox.service import RecordingHandoff, RigError, hash_key  # noqa: E402
@@ -32,73 +32,6 @@ async def service(handoff=None):
     store = MemoryStore()
     await seed(store)
     return QuoteService(store, None, handoff or RecordingHandoff(), MemoryQuotes(store))
-
-
-class OdooStub:
-    def __init__(self):
-        self.calls = []
-        self.orders = []
-        self.partners = []
-        self.fail_after_create = False
-        self.fail_after_partner = False
-        self.reject_order = False
-        self.missing_product = False
-        self.version = 17
-
-    def __call__(self, request):
-        assert request.url.path == "/jsonrpc"
-        body = json.loads(request.content)
-        assert body["jsonrpc"] == "2.0" and body["method"] == "call"
-        params = body["params"]
-        if params["service"] == "common":
-            if params["method"] == "version":
-                return httpx.Response(200, json={"result": {"server_version_info": [self.version, 0, 0]}})
-            assert params["method"] == "authenticate"
-            return httpx.Response(200, json={"result": 7})
-        assert params["method"] == "execute_kw"
-        _, uid, _, model, method, args, kwargs = params["args"]
-        assert uid == 7
-        self.calls.append((model, method, args, kwargs))
-        if model == "sale.order" and method == "search":
-            result = [index + 1 for index, order in enumerate(self.orders)
-                      if order["client_order_ref"] == args[0][0][2]]
-        elif model == "sale.order" and method == "create":
-            if self.reject_order:
-                return httpx.Response(200, json={"error": {"message": "stub order rejected"}})
-            self.orders.append(args[0])
-            if self.fail_after_create:
-                self.fail_after_create = False
-                raise httpx.ReadTimeout("stub", request=request)
-            result = len(self.orders)
-        elif model == "product.product" and self.missing_product:
-            result = []
-        elif model == "res.partner" and method == "create":
-            self.partners.append(args[0])
-            if self.fail_after_partner:
-                self.fail_after_partner = False
-                raise httpx.ReadTimeout("stub", request=request)
-            result = 100 + len(self.partners)
-        elif model == "res.partner" and method == "search":
-            if args[0][0][0] == "email":
-                result = [42]  # An existing customer must never be selected by typed email.
-            else:
-                assert args[0][0][0] == "ref"
-                assert len(args[0]) == 1
-                result = [101 + index for index, partner in enumerate(self.partners)
-                          if partner["ref"] == args[0][0][2]]
-        elif method == "search":
-            result = [42]
-        elif method == "create":
-            result = 42
-        else:
-            raise AssertionError((model, method))
-        return httpx.Response(200, json={"result": result})
-
-
-def adapter(http):
-    key_var = "RIG_ODOO_API_KEY"
-    return OdooHandoff(http, url="https://odoo.example", database="sample", user="RIG_ODOO_USER",
-                       api_key=key_var)
 
 
 @pytest.mark.asyncio
@@ -135,68 +68,6 @@ async def test_missing_configuration_is_stored_pending_and_can_be_retried(monkey
     assert len(rig.handoff.sent) == 1
     assert (await rig.quote_store.status(TENANT, ack["request_id"]))["status"] == "sent"
     assert (await rig.quote_store.analytics(TENANT, date.min))["quotes"] == 1
-
-
-@pytest.mark.asyncio
-async def test_odoo_draft_uses_server_price_and_reconciles_timeout():
-    stub = OdooStub()
-    stub.fail_after_create = True
-    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
-        rig = await service(adapter(http))
-        ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
-        assert ack["delivery"] == "pending"
-        await rig.quote_store.retry_now(TENANT, ack["request_id"])
-        await rig.retry_pending(TENANT)
-        assert (await rig.quote_store.status(TENANT, ack["request_id"]))["status"] == "sent"
-    assert len(stub.orders) == 1
-    order = stub.orders[0]
-    assert order["order_line"][0][2]["price_unit"] == 100
-    assert order["order_line"][0][2]["tax_id"] == [[6, 0, []]]
-    assert order["pricelist_id"] == 42
-    assert order["client_order_ref"] == f"rig:{TENANT}:{ack['request_id']}"
-    assert all(call[1] in {"search", "create"} for call in stub.calls)
-    assert "state" not in order  # Odoo's create default is a draft quotation.
-    assert len(stub.partners) == 1  # Reconciliation avoids a second unverified partner too.
-
-
-@pytest.mark.asyncio
-async def test_typed_email_never_selects_an_existing_odoo_customer():
-    stub = OdooStub()  # Searches would return existing customer 42.
-    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
-        rig = await service(adapter(http))
-        for _ in range(2):
-            ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
-            assert ack["delivery"] == "sent"
-    assert [order["partner_id"] for order in stub.orders] == [101, 102]
-    assert all(partner["email"] == CONTACT["email"] and partner["comment"] == "from Rig, not verified"
-               for partner in stub.partners)
-    assert all(args[0][0][0] == "ref" for model, method, args, _ in stub.calls
-               if model == "res.partner" and method == "search")
-    assert len({partner["ref"] for partner in stub.partners}) == 2
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("lost_partner_response", [False, True])
-async def test_odoo_retries_reuse_request_partner_before_an_order_exists(lost_partner_response):
-    stub = OdooStub()
-    stub.fail_after_partner = lost_partner_response
-    stub.reject_order = True
-    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
-        rig = await service(adapter(http))
-        ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
-        assert ack["delivery"] == "pending" and not stub.orders
-        stub.partners[0]["comment"] = "<p>from Rig, not verified</p>"  # Odoo normalizes HTML notes.
-        for _ in range(2):
-            await rig.quote_store.retry_now(TENANT, ack["request_id"])
-            await rig.retry_pending(TENANT)
-            assert len(stub.partners) == 1 and not stub.orders
-        stub.reject_order = False
-        await rig.quote_store.retry_now(TENANT, ack["request_id"])
-        await rig.retry_pending(TENANT)
-        assert (await rig.quote_store.status(TENANT, ack["request_id"]))["status"] == "sent"
-    assert len(stub.orders) == len(stub.partners) == 1
-    assert stub.orders[0]["partner_id"] == 101
-    assert stub.partners[0]["ref"] == f"rig:{TENANT}:{ack['request_id']}"
 
 
 @pytest.mark.asyncio
@@ -262,42 +133,8 @@ async def test_controls_are_removed_before_storage_and_handoff():
 
 
 @pytest.mark.asyncio
-async def test_link_request_is_stored_and_sent_as_unpriced_odoo_note():
-    stub = OdooStub()
-    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
-        rig = await service(adapter(http))
-        ack = await rig.link_quote(TENANT, "https://example.com/item", "Please source this", CONTACT)
-    assert ack["delivery"] == "sent"
-    line = stub.orders[0]["order_line"][0][2]
-    assert line["display_type"] == "line_note"
-    assert "https://example.com/item" in line["name"]
-    assert "price_unit" not in line and "product_id" not in line
-    assert (await rig.store.quotes_for(TENANT))[0]["contact"] == CONTACT
-
-
-@pytest.mark.asyncio
-async def test_odoo_refuses_unmapped_sku_and_remote_error_is_not_exposed():
-    stub = OdooStub()
-    stub.missing_product = True
-    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
-        rig = await service(adapter(http))
-        ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
-        assert ack["delivery"] == "pending"
-        assert not stub.orders
-        assert not stub.partners  # A mapping failure must not create an orphan partner.
-        assert (await rig.quote_store.status(TENANT, ack["request_id"]))["error"] == "odoo_product_mapping"
-    async with httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda _: httpx.Response(200, json={"error": {"data": "PRIVATE_REMOTE_DIAGNOSTIC"}}))) as http:
-        with pytest.raises(DeliveryError, match="^odoo_rejected$"):
-            await adapter(http).send(tenant_id=TENANT, email=None, webhook=None,
-                                    quote={"id": "request", "payload": {}, "contact": CONTACT})
-
-
-@pytest.mark.asyncio
 async def test_flow_is_exact_tenant_and_webhook_checks_http_status(monkeypatch):
-    monkeypatch.setenv("RIG_QUOTE_FLOWS", json.dumps({TENANT: {"sender": "odoo"}}))
-    for name in ("RIG_ODOO_URL", "RIG_ODOO_DATABASE", "RIG_ODOO_USER", "RIG_ODOO_API_KEY"):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("RIG_QUOTE_FLOWS", json.dumps({TENANT: {"sender": "email"}}))
     calls = []
 
     def reject(request):
@@ -407,24 +244,50 @@ async def test_delivery_backoff_stops_and_only_explicit_resume_reopens_budget():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", [16, 17, 18, 19])
-async def test_odoo_version_guard_precedes_all_mutations(version):
-    stub = OdooStub()
-    stub.version = version
-    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
-        rig = await service(adapter(http))
-        ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
-    if version == 19:
-        assert not stub.calls and not stub.orders
-        assert (await rig.quote_store.status(TENANT, ack["request_id"]))["error"] == "odoo_version_unsupported"
-    else:
-        assert ack["delivery"] == "sent" and len(stub.orders) == 1
-
-
-@pytest.mark.asyncio
 async def test_sample_has_three_distinct_approved_tiers():
     rig = await service()
     setups = (await rig.setups(TENANT, "CORE-1"))["setups"]
     assert [s["total"]["amount"] for s in setups] == [120, 130, 160]
     assert setups[1]["badge"] == "Most chosen"
     assert all("PART-DRAFT" not in [part["product"]["id"] for part in s["parts"]] for s in setups)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['product', 'setup', 'link'])
+async def test_store_email_delivery_keeps_pending_retry_and_reference(monkeypatch, kind):
+    """Email remains the store's quote handoff, including recovery after SMTP failure."""
+    from rigbox.reserve import SmtpMailer
+
+    letters = []
+    class Mail:
+        async def send(self, letter):
+            letters.append(letter)
+            if len(letters) == 1:
+                raise RuntimeError('private SMTP diagnostic')
+    monkeypatch.setenv('RIG_QUOTE_FLOWS', '')
+    monkeypatch.setattr(SmtpMailer, 'from_env', lambda: Mail())
+    rig = await service(RetailerHandoff(None))
+    await rig.store.put_retailer(TENANT, 'email-store', 'store@example.com', None)
+    if kind == 'link':
+        ack = await rig.link_quote(TENANT, 'https://example.com/item', 'Please source this', CONTACT)
+    elif kind == 'setup':
+        built = (await rig.setups(TENANT, 'CORE-1'))['setups'][0]
+        ack = await rig.quote(TENANT, {'setup': built, 'contact': CONTACT})
+    else:
+        ack = await rig.quote(TENANT, {'product_id': 'CORE-1', 'contact': CONTACT})
+    qid = ack['request_id']
+    assert ack['delivery'] == 'pending'
+    state = await rig.quote_store.status(TENANT, qid)
+    assert state['error'] == 'email_unavailable'
+    assert (await rig.store.quotes_for(TENANT))[0]['sent_at'] is None
+    await rig.quote_store.retry_now(TENANT, qid)
+    await rig.retry_pending(TENANT)
+    assert (await rig.quote_store.status(TENANT, qid))['status'] == 'sent'
+    assert len(letters) == 2
+    assert all(letter['to'] == 'store@example.com' for letter in letters)
+    assert all(letter['reply_to'] == CONTACT['email'] for letter in letters)
+    assert letters[0]['message_id'] == letters[1]['message_id'] == f'<{qid}@rig.tervory.com>'
+    assert all(qid in letter['subject'] for letter in letters)
+    if kind == 'link':
+        assert all('https://example.com/item' in letter['text'] for letter in letters)
+    assert len(await rig.store.quotes_for(TENANT)) == 1

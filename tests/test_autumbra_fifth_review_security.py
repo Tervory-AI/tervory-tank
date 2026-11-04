@@ -264,7 +264,7 @@ def test_5_auto_fix_paragraph_only_with_real_pr():
     assert "let us fix this kind of problem automatically" not in mail["body"]
     assert "blocked 1" in mail["body"] or "blocked" in mail["body"]
 
-    # Real code fix + PR → auto paragraph with PR link.
+    # A legacy automatic preference still requires approval when a PR exists.
     mail2 = build_owner_update(
         settings=settings,
         site_name="coolify.tervory.com",
@@ -274,8 +274,9 @@ def test_5_auto_fix_paragraph_only_with_real_pr():
         pr_url="https://github.com/example/repo/pull/9",
         undo_fix_url="https://protect.tervory.com/autumbra/undo/r2?token=y",
     )
-    assert "let us fix this kind of problem automatically" in mail2["body"]
-    assert "patched versions" in mail2["body"]
+    assert "let us fix this kind of problem automatically" not in mail2["body"]
+    assert "approve fixes yourself" in mail2["body"]
+    assert "patched versions" not in mail2["body"]
     assert "https://github.com/example/repo/pull/9" in mail2["body"]
 
     # week_stats must not set undo_fix_url for an IP-block-only receipt.

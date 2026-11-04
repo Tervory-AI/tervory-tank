@@ -1,0 +1,154 @@
+{
+  "directlyEditedNodeCount": 4667,
+  "createdNodeCount": 34,
+  "changedVariableIds": [
+    "VariableID:152:3606",
+    "VariableID:465:44702",
+    "VariableID:465:44703",
+    "VariableID:465:48635"
+  ],
+  "newWords": [
+    {
+      "id": "I149:15228;266:3035",
+      "before": "Draft quote",
+      "after": "Quote draft"
+    },
+    {
+      "id": "I149:15620;266:3035",
+      "before": "Draft quote",
+      "after": "Quote draft"
+    },
+    {
+      "id": "I149:15909;266:3035",
+      "before": "Draft quote",
+      "after": "Quote draft"
+    },
+    {
+      "id": "I149:16198;266:3035",
+      "before": "Draft quote",
+      "after": "Quote draft"
+    },
+    {
+      "id": "151:8450",
+      "before": "Confirm \u00b7 Hand over",
+      "after": "Confirm \u00b7 Hand-over"
+    },
+    {
+      "id": "151:8786",
+      "before": "Confirm \u00b7 Hand over",
+      "after": "Confirm \u00b7 Hand-over"
+    },
+    {
+      "id": "151:9019",
+      "before": "Confirm \u00b7 Hand over",
+      "after": "Confirm \u00b7 Hand-over"
+    },
+    {
+      "id": "151:9252",
+      "before": "Confirm \u00b7 Hand over",
+      "after": "Confirm \u00b7 Hand-over"
+    },
+    {
+      "id": "I151:10759;93:7",
+      "before": "Draft quote",
+      "after": "Quote draft"
+    },
+    {
+      "id": "I151:11098;93:7",
+      "before": "Draft quote",
+      "after": "Quote draft"
+    },
+    {
+      "id": "I151:11098;93:8",
+      "before": "[Draft quote]",
+      "after": "[Quote draft]"
+    },
+    {
+      "id": "I151:11334;93:7",
+      "before": "Draft quote",
+      "after": "Quote draft"
+    },
+    {
+      "id": "I151:11570;93:7",
+      "before": "Draft quote",
+      "after": "Quote draft"
+    },
+    {
+      "id": "I151:11570;93:8",
+      "before": "[Draft quote]",
+      "after": "[Quote draft]"
+    },
+    {
+      "id": "151:11900",
+      "before": "Confirm \u00b7 Bot settings",
+      "after": "Confirm \u00b7 Settings"
+    },
+    {
+      "id": "151:12242",
+      "before": "Confirm \u00b7 Bot settings",
+      "after": "Confirm \u00b7 Settings"
+    },
+    {
+      "id": "151:12481",
+      "before": "Confirm \u00b7 Bot settings",
+      "after": "Confirm \u00b7 Settings"
+    },
+    {
+      "id": "151:12720",
+      "before": "Confirm \u00b7 Bot settings",
+      "after": "Confirm \u00b7 Settings"
+    }
+  ],
+  "mobileDrawers": [
+    {
+      "id": "468:28294",
+      "area": "calendar",
+      "data": "Zero"
+    },
+    {
+      "id": "468:28384",
+      "area": "calendar",
+      "data": "Filled"
+    },
+    {
+      "id": "468:28474",
+      "area": "composer",
+      "data": "Zero"
+    },
+    {
+      "id": "468:28564",
+      "area": "composer",
+      "data": "Filled"
+    },
+    {
+      "id": "468:28654",
+      "area": "google-posts",
+      "data": "Zero"
+    },
+    {
+      "id": "468:28744",
+      "area": "google-posts",
+      "data": "Filled"
+    },
+    {
+      "id": "468:28834",
+      "area": "google-reviews",
+      "data": "Zero"
+    },
+    {
+      "id": "468:28924",
+      "area": "google-reviews",
+      "data": "Filled"
+    },
+    {
+      "id": "468:30687",
+      "area": "bot-settings",
+      "data": "Zero"
+    },
+    {
+      "id": "468:30777",
+      "area": "bot-settings",
+      "data": "Filled"
+    }
+  ]
+}

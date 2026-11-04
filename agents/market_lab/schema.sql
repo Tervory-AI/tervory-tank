@@ -105,6 +105,19 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.reports (
 CREATE INDEX IF NOT EXISTS reports_tenant_idx
     ON agent_market_lab.reports (tenant_id, made_at);
 
+-- ML6 report/channel claims remain in this room. Sending is never reclaimed.
+CREATE TABLE IF NOT EXISTS agent_market_lab.brief_deliveries (
+    tenant_id uuid NOT NULL,
+    report_id uuid NOT NULL REFERENCES agent_market_lab.reports(id),
+    channel text NOT NULL CHECK (channel IN ('email','webhook')),
+    status text NOT NULL CHECK (status IN ('pending','sending','sent','uncertain','suppressed','held')),
+    reason text,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, report_id, channel)
+);
+CREATE INDEX IF NOT EXISTS brief_deliveries_pending
+    ON agent_market_lab.brief_deliveries (tenant_id, channel, report_id) WHERE status='pending';
+
 -- Provenance on every stored point. A batch stays out of the pool until it passes.
 ALTER TABLE agent_market_lab.series ADD COLUMN IF NOT EXISTS region text NOT NULL DEFAULT '';
 ALTER TABLE agent_market_lab.series ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT '';

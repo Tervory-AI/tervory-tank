@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 — 2026-11-03
+
+- ZA login selects Zitadel by default; ZA code mode keeps all requests on ZA.
+- Windows release builds and CI; commands refuse without an equivalent sandbox.
+- Tag release archives carry checksums and Ed25519 signatures.
+
 ## 0.4.0 — 2026-11-03
 
 - One approval applies a validated unified diff across up to 20 files. Stale files or invalid hunks refuse the whole set; same-directory temporary files and renames preserve whole-file contents across a crash.
