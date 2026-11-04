@@ -48,6 +48,16 @@ class Scan(BaseModel):
         return artifact_id(value)
 
 
+class Active(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    tenant_id: UUID
+    url: str
+
+
+class Consent(Domain):
+    consent_text: str
+
+
 class Watch(Domain):
     interval: Literal['daily', 'weekly']
     run_now: bool = True
@@ -108,7 +118,7 @@ def attach(app):
     @router.post('/domains', status_code=201)
     async def issue(body: Domain, request: Request):
         identity(request, body.tenant_id)
-        return await Store(app.state.pool).issue(body.tenant_id, body.domain)
+        return await Store(app.state.pool).issue(body.tenant_id, body.domain,own=request.headers.get('x-tervory-founder')=='true')
 
     @router.post('/scans')
     async def scan(body: Scan, request: Request):
@@ -130,8 +140,58 @@ def attach(app):
     @router.get('/scans/{scan_id}/findings')
     async def findings(scan_id: UUID, tenant_id: UUID, request: Request):
         identity(request, tenant_id)
-        return {'findings': await Store(app.state.pool).findings(tenant_id, scan_id)}
+        store = Store(app.state.pool)
+        return {'findings': await store.findings(tenant_id, scan_id),
+                **await store.active_state(tenant_id, scan_id)}
 
+
+    @router.get('/scans/{scan_id}/report')
+    async def report(scan_id: UUID,tenant_id: UUID,request: Request):
+        identity(request,tenant_id)
+        try:
+            return await Store(app.state.pool).report(tenant_id,scan_id)
+        except LookupError:
+            raise HTTPException(404,'scan not found') from None
+
+    @router.post('/consent')
+    async def consent(body: Consent, request: Request):
+        identity(request,body.tenant_id)
+        if request.headers.get('x-tervory-active-authorized')!='true' or not request.headers.get('x-tervory-user'):
+            raise HTTPException(403,'scan not authorized')
+        return await Store(app.state.pool).consent(body.tenant_id,body.domain,request.headers['x-tervory-user'],body.consent_text)
+
+    @router.post('/consent-withdraw')
+    async def withdraw(body: Domain, request: Request):
+        identity(request,body.tenant_id)
+        if request.headers.get('x-tervory-active-authorized')!='true' or not request.headers.get('x-tervory-user'):
+            raise HTTPException(403,'scan not authorized')
+        result=await Store(app.state.pool).withdraw_consent(body.tenant_id,body.domain,request.headers['x-tervory-user'])
+        async with httpx.AsyncClient(trust_env=False,timeout=15) as client:
+            # scan_id is not used to select authority: the gateway reads its own current lease.
+            response=await client.post(GATEWAY+'/active/revoke',json={'tenant_id':str(body.tenant_id),'scan_id':str(UUID(int=0))})
+            response.raise_for_status()
+        return result
+
+    @router.post('/infra')
+    @router.post('/active')
+    async def active_scan(body: Active, request: Request):
+        identity(request, body.tenant_id)
+        if request.headers.get('x-tervory-active-authorized') != 'true':
+            raise HTTPException(403, 'scan not authorized')
+        from active_routes import execute as execute_active
+        try:
+            kwargs={}
+            if request.url.path.endswith('/infra'):
+                from passive_infra_tools import collect as collect_infra
+                kwargs={'scanner':collect_infra,'infra':True}
+            return await execute_active(Store(app.state.pool), body.tenant_id, body.url,
+                client=request.headers.get('x-tervory-active-client') == 'true',**kwargs)
+        except (PermissionError, ValueError):
+            raise HTTPException(403, 'scan not authorized') from None
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(503, 'scan incomplete') from None
 
     @router.post('/watch')
     async def watch(body: Watch, request: Request):
@@ -145,6 +205,8 @@ def attach(app):
             result = await Store(app.state.pool).watch(body.tenant_id, body.domain, body.interval, run_now=body.run_now)
         except PermissionError:
             raise HTTPException(403, 'domain proof required') from None
+        if request.headers.get('x-tervory-founder')=='true':
+            await Store(app.state.pool).enroll_weekly(body.tenant_id,body.domain,own=True)
         return {**result, 'queued': body.run_now}
 
     @router.post('/unwatch')

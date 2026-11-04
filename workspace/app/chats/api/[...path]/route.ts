@@ -43,6 +43,10 @@ async function handle(request: Request, context: Context): Promise<Response> {
     const target = path.join("/");
     const method = request.method;
     if (target === "tools" && method === "GET") return json(await commandTools(identity));
+    const radixReport = path.length === 4 && path[0] === "radix" && path[1] === "reports" && attachmentId(path[2]) && ["html", "pdf"].includes(path[3]);
+    const radixEvidence = path.length === 5 && path[0] === "radix" && path[1] === "reports" && attachmentId(path[2]) && path[3] === "evidence" && /^\d+$/.test(path[4]);
+    if (method === "GET" && radixReport) return download(await commandRequest(identity, target, { signal: request.signal }));
+    if (method === "GET" && radixEvidence) return json(await (await commandRequest(identity, target, { signal: request.signal })).json());
     const fileRequest = /^threads\/[\w-]+\/files\/[\w-]+\/\d+$/.test(target) && method === "GET";
     if (fileRequest) {
       const snapshot: Snapshot = await (await commandRequest(identity, `threads/${path[1]}`, { signal: request.signal })).json();

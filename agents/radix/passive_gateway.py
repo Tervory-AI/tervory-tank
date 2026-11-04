@@ -50,18 +50,20 @@ class Lease:
         self.store, self.check, self.server, self.now = store, check, server, now
         self.lock = asyncio.Lock()
         self.run = None
+        self.consent = None
         self.until = 0.0
         self.proxy_server = None
 
     def close(self):
         self.until = 0
         self.run = None
+        self.consent = None
         if self.proxy_server:
             self.proxy_server.close()
             self.proxy_server = None
 
     @tenant_path("tenant")
-    async def start(self, tenant: UUID, ident: UUID):
+    async def start(self, tenant: UUID, ident: UUID, *, active=False, infra=False):
         async with self.lock:
             if self.run is not None and self.now() < self.until:
                 raise HTTPException(409, 'scan busy')
@@ -69,6 +71,17 @@ class Lease:
             row = await self.store.pending(tenant, ident)
             if row is None:
                 raise HTTPException(403, 'domain proof required')
+            if bool(row.get('infra',False)) != infra or bool(row.get('active', False)) != active:
+                raise HTTPException(403, 'scan not authorized')
+            if row.get('active_consent_id') is not None:
+                if not await self.store.consent_valid(tenant,row['domain'],row['active_consent_id']):
+                    raise HTTPException(403,'scan not authorized')
+            elif active or row.get('weekly'):
+                from active_policy import active_target
+                try:
+                    active_target('https://' + row['domain'] + '/')
+                except (PermissionError, ValueError):
+                    raise HTTPException(403, 'scan not authorized') from None
             reason = (await proof_status(row['domain'], row['challenge']) if self.check is None
                       else None if await self.check(row['domain'], row['challenge']) else 'txt_missing')
             if reason == 'dns_unavailable':
@@ -84,12 +97,19 @@ class Lease:
                 raise HTTPException(409, 'scan busy') from None
             if not started:
                 raise HTTPException(409, 'scan unavailable')
-            self.run, self.until = (tenant, ident), self.now() + 420
+            self.consent = (row['domain'],row.get('active_consent_id')) if row.get('active_consent_id') else None
+            self.run, self.until = (tenant, ident), self.now() + (1800 if active else 420)
             domain = row['domain']
             # Capture this lease's deadline, so a later tenant cannot revive an old tunnel.
             until = self.until
-            proxy = Proxy(verified_host=domain, allow_storage=False,
-                resolve=lambda host: system_resolve(host, verified_host=domain),
+            from active_policy import BOUNDS as ACTIVE_BOUNDS
+            proxy_class=Proxy
+            if infra:
+                from passive_infra_proxy import InfraProxy
+                proxy_class=InfraProxy
+            proxy = proxy_class(**(ACTIVE_BOUNDS if active else {}), verified_host=domain, allow_storage=False,
+                require_sni=active and not infra,
+                **({} if infra else {'resolve':lambda host: system_resolve(host, verified_host=domain)}),
                 active=lambda: self.run == (tenant, ident) and self.now() < until and not env_revoked())
             try:
                 self.proxy_server = self.server(proxy, host=private_bind_address(), port=8082).start()
@@ -98,6 +118,15 @@ class Lease:
                 await self.store.fail(tenant, ident)
                 raise HTTPException(503, 'scan egress unavailable') from None
             return {'ready': True}
+
+    @tenant_path("tenant")
+    async def revoke_withdrawn(self,tenant):
+        async with self.lock:
+            if self.run and self.run[0]==tenant and self.consent:
+                if not await self.store.consent_valid(tenant,*self.consent):
+                    prior=self.run
+                    self.close()
+                    await self.store.fail(*prior)
 
     @tenant_path("tenant")
     async def release(self, tenant: UUID, ident: UUID):
@@ -140,6 +169,8 @@ async def lifespan(app):
             # Explicit gateway administration, separate from any caller's tenant.
             try:
                 await app.state.lease.store.reap_expired()
+                if app.state.lease.run:
+                    await app.state.lease.revoke_withdrawn(app.state.lease.run[0])
             except (asyncpg.PostgresError, OSError):
                 logging.getLogger(__name__).warning('Passive lease maintenance unavailable; will retry')
             await asyncio.sleep(15)
@@ -167,6 +198,23 @@ app = FastAPI(lifespan=lifespan)
 @app.post('/lease')
 async def lease(body: Run):
     return await app.state.lease.start(body.tenant_id, body.scan_id)
+
+
+@app.post('/active/lease')
+async def active_lease(body: Run):
+    return await app.state.lease.start(body.tenant_id, body.scan_id, active=True)
+
+
+@app.post('/infra/lease')
+async def infra_lease(body: Run):
+    return await app.state.lease.start(body.tenant_id,body.scan_id,active=True,infra=True)
+
+
+@app.post('/active/revoke')
+async def revoke(body: Run):
+    # Caller cannot grant authority here; only persisted withdrawal can close a lease.
+    await app.state.lease.revoke_withdrawn(body.tenant_id)
+    return {'released':True}
 
 
 @app.post('/release')

@@ -3055,6 +3055,46 @@ DO $$ BEGIN
  END IF;
 END $$;
 
+-- I6: own-repository scan provenance and per-app critical observations.
+
+CREATE TABLE IF NOT EXISTS tank.radix_deploy_scans (
+ tenant_id uuid NOT NULL, scan_id uuid NOT NULL, commit_sha text NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), processed boolean NOT NULL DEFAULT false,
+ complete boolean NOT NULL DEFAULT false,
+ PRIMARY KEY(tenant_id,scan_id), CHECK(commit_sha ~ '^[a-f0-9]{40}$')
+);
+CREATE TABLE IF NOT EXISTS tank.radix_deploy_findings (
+ tenant_id uuid NOT NULL, id uuid NOT NULL, scan_id uuid NOT NULL, app text NOT NULL,
+ commit_sha text NOT NULL, finding jsonb NOT NULL, resolved_at timestamptz,
+ override_user text, override_at timestamptz, ledger_id uuid,
+ PRIMARY KEY(tenant_id,id),
+ FOREIGN KEY(tenant_id,scan_id) REFERENCES tank.radix_deploy_scans(tenant_id,scan_id)
+);
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.radix_deploy_scans ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.radix_deploy_scans FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.radix_deploy_scans'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.radix_deploy_scans FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.radix_deploy_scans'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.radix_deploy_scans AS RESTRICTIVE FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.radix_deploy_findings ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.radix_deploy_findings FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.radix_deploy_findings'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.radix_deploy_findings FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.radix_deploy_findings'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.radix_deploy_findings AS RESTRICTIVE FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
 -- Trigger B2: existing tenant RLS and retention cover the console/widget fields.
 ALTER TABLE tank.trigger_bot_config ADD COLUMN IF NOT EXISTS settings jsonb NOT NULL DEFAULT '{}';
 ALTER TABLE tank.trigger_bot_messages ADD COLUMN IF NOT EXISTS person text;

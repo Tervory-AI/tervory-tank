@@ -70,7 +70,8 @@ def build_result(ctx) -> dict:
 
     raw = archive.load_bytes(source, read_file)
     with tempfile.TemporaryDirectory(prefix="radix-scan-") as tmp:
-        root = archive.unpack(raw, Path(tmp) / "tree")
+        commit=payload.get('commit') if payload.get('repository')=='Tervory-AI/tervory-tank' else None
+        root = archive.unpack(raw, Path(tmp) / "tree", **({'commit':commit} if commit else {}))
         tool_status = {}
         findings, hidden = collect(root, tool_status)
     shown_ref = _public_ref(ref, hidden)
@@ -92,6 +93,8 @@ def build_result(ctx) -> dict:
         "tools": ["scan.secrets", "scan.dependencies", "scan.static", "scan.iac"],
         "findings": findings,
     }
+    if commit:
+        result.update(repository='Tervory-AI/tervory-tank',commit=commit)
     blob = json.dumps(result)
     if any(secret and secret != "REDACTED" and secret in blob for secret in hidden):
         for secret in hidden:

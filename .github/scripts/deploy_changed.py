@@ -16,8 +16,11 @@ import os
 import subprocess
 import sys
 import time
+import re
+from uuid import UUID
 import urllib.error
 import urllib.request
+import urllib.parse
 
 from backup_runtime_scope import verify_main_scope
 
@@ -47,6 +50,53 @@ MAIN_PREFIXES = (
 )
 # Shared room code: a change here redeploys every room.
 ALL_ROOMS_PREFIXES = ("agents/_chassis/", "agents/_template/")
+
+
+def radix_blocks(name: str) -> bool:
+    """Only an authenticated, tenant-scoped confirmed critical can hold this app."""
+    key=os.environ.get('RADIX_DEPLOY_TANK_KEY','')
+    tenant=os.environ.get('RADIX_DEPLOY_TENANT_ID','')
+    def note(text):
+        safe=text.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+        print('::notice title=Radix deploy gate::'+safe)
+        summary=os.environ.get('GITHUB_STEP_SUMMARY')
+        if summary:
+            try:
+                with open(summary,'a',encoding='utf-8') as stream:
+                    stream.write('\n'+text.replace('\r',' ').replace('\n',' ').replace('`','').replace('<','&lt;')+'\n')
+            except OSError:
+                pass
+    try:
+        UUID(tenant)
+        if not key:
+            raise ValueError('not configured')
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self,*args,**kwargs): return None
+        query=urllib.parse.urlencode({'tenant_id':tenant,'app':name})
+        request=urllib.request.Request('https://tank.tervory.com/v1/command/radix/deploy/gate?'+query,
+            headers={'X-Tank-Key':key,'X-Tervory-Tenant':tenant,'Accept':'application/json'})
+        with urllib.request.build_opener(NoRedirect).open(request,timeout=10) as response:
+            payload=response.read(256001)
+            if len(payload)>256000: raise ValueError('response limit')
+            data=json.loads(payload)
+        if not isinstance(data,dict) or data.get('app')!=name or type(data.get('blocked')) is not bool:
+            raise ValueError('invalid decision')
+        findings=data.get('findings')
+        if not isinstance(findings,list): raise ValueError('invalid findings')
+        if data['blocked']:
+            if not findings: raise ValueError('unconfirmed block')
+            for row in findings:
+                UUID(row['id'])
+                if row.get('severity')!='critical' or not re.fullmatch(r'[a-f0-9]{40}',row.get('commit','')):
+                    raise ValueError('unconfirmed critical')
+            for row in findings:
+                note(f"{name} held: critical {row.get('tool','')}:{row.get('rule','')} "
+                     f"finding {row['id']} at {row['commit']} {row.get('file','')}")
+            return True
+        return False
+    except (OSError,ValueError,TypeError,KeyError,AttributeError,http.client.HTTPException):
+        note(f'{name}: gate could not be checked; deploy continues')
+        return False
 
 
 def api(method: str, path: str) -> tuple[int, object]:
@@ -249,7 +299,7 @@ def main() -> int:
     if not want_main and not za_retry and not targets:
         print("::notice title=nothing to deploy::no app code changed")
         return 0
-    if want_main:
+    if want_main and not radix_blocks("main"):
         # Coolify injects the app's runtime .env into every Compose service.
         # Refuse drift before replacing the live stack, rather than losing backups.
         if not verify_main_scope(api):
@@ -267,7 +317,9 @@ def main() -> int:
               + (" and " + ", ".join(skipped) if skipped else "") + " skipped on purpose")
     elif want_main or za_retry:
         za_uuid = by_name.get(SA_APP)
-        if za_uuid and already_live(za_uuid, SA_APP):
+        if radix_blocks(SA_APP):
+            pass
+        elif za_uuid and already_live(za_uuid, SA_APP):
             pass
         elif not za_uuid or not deploy(za_uuid, SA_APP) or not wait_for(za_uuid, SA_APP, ZA_TIMEOUT_S):
             # The ZA box failing (for example a power outage there) must not hold back
@@ -280,6 +332,8 @@ def main() -> int:
     # One room at a time: deploy, then wait until it is healthy before the next.
     # Starting every room at once took every product page down together (28 Oct, #403).
     for name, uuid in sorted(targets.items()):
+        if radix_blocks(name):
+            continue
         if already_live(uuid, name):
             continue
         wait = room_timeout(name)

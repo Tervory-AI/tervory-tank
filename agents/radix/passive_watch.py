@@ -23,6 +23,10 @@ async def tick(pool, *, execute_scan=None) -> dict:
             queued = await run_queued(pool, conn)
             if queued is not None:
                 return queued
+            from passive_weekly import tick as weekly_tick
+            weekly=await weekly_tick(pool,conn)
+            if weekly is not None:
+                return weekly
             # Administrative discovery only. Every operation below re-enters the
             # persisted owner's tenant scope and rechecks status/due time.
             owner = await conn.fetchrow("""SELECT tenant_id,domain FROM agent_radix.passive_watches

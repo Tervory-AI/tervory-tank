@@ -19,7 +19,7 @@ from fastapi import HTTPException
 REPOSITORY = "Tervory-AI/tervory-tank"
 API = "https://api.github.com/repos/" + REPOSITORY
 SHA = r"[0-9a-f]{40}"
-READ_PATH = re.compile(rf"(?:pulls(?:/[1-9][0-9]*(?:/files)?)?|commits/{SHA}/(?:check-runs|status)|git/trees/(?:main|{SHA})|git/blobs/{SHA})")
+READ_PATH = re.compile(rf"(?:compare/{SHA}\.\.\.{SHA}|git/ref/heads/main|git/commits/{SHA}|pulls(?:/[1-9][0-9]*(?:/files)?)?|commits/{SHA}/(?:check-runs|status)|git/trees/(?:main|{SHA})|git/blobs/{SHA})")
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_FILE_BYTES = 64_000
 MAX_CHECK_PAGES = 10

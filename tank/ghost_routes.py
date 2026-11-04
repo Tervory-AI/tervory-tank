@@ -48,14 +48,17 @@ async def google_signing_keys(kid: str = Query(default="", max_length=200)):
     return keys
 
 
-async def call_room(method: str, room: str, path: str, *, body=None, params=None):
+async def call_room(method: str, room: str, path: str, *, body=None, params=None, tenant=None):
     key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
     http = runtime()._http
     if not key or http is None:
         raise HTTPException(503, "The room is unavailable.")
+    headers={"X-Tank-Key": key}
+    if tenant is not None:
+        headers["X-Tervory-Tenant"]=str(uuid.UUID(str(tenant)))
     try:
         response = await http.request(method, ROOMS[room] + path, json=body, params=params,
-                                      headers={"X-Tank-Key": key}, follow_redirects=False, timeout=60)
+                                      headers=headers, follow_redirects=False, timeout=60)
     except httpx.HTTPError:
         raise HTTPException(503, "The room is unavailable.") from None
     if len(response.content) > 2_000_000 or response.status_code >= 500:
