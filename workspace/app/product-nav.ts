@@ -57,7 +57,6 @@ export const REVIEW_LINK: NavLink = { href: "/review", label: "Review" };
 
 /** Signed-in routes that share the workspace sidebar shell. */
 export const SHELL_ROUTES: readonly string[] = [
-  "/",
   "/chats",
   "/matters",
   "/tasks",
@@ -77,6 +76,7 @@ export const SHELL_ROUTES: readonly string[] = [
 
 /** Clerk auth and Figma squad product roots that already render their own left panel. */
 const OWN_SHELL = [
+  "/", // Frame 12:2 client dashboard owns its five-item navigation.
   "/sign-in",
   "/sign-up",
   "/autumbra",

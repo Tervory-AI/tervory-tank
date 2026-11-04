@@ -67,8 +67,7 @@ async function render() {
   assert(visible.includes('Saved by team member') && visible.includes('the standard model') && !visible.includes('savings could not'));
   assert(visible.includes('Jobs done this month') && visible.includes('Business list'));
   sourceError=true;
-  const unavailable=renderToStaticMarkup(await ClientPage({searchParams:Promise.resolve({})}));
-  assert(unavailable.includes('Your activity could not be loaded'));
+  await assert.rejects(()=>ClientPage({searchParams:Promise.resolve({})}),/unavailable/);
   sourceError=false;
   const {FounderDashboard,WorkersTile} = require('../workspace/app/control/view.tsx');
   const {activity}=require('../workspace/app/control/values.ts');

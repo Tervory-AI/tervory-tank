@@ -31,13 +31,32 @@ Offline proof: `tests/dashboards_w4_routes.py` executes production FastAPI route
 
 Passed: route fixture generation, route-to-screen render, 1440/375 browser checks, existing dashboard regressions, Workspace TypeScript checking and the full production build. Screenshots: `docs/screenshots/dashboards-w4/{main,current}-founder-{1440,375}.png`.
 
+## Client dashboard — completed
+
+Restored the approved five-item navigation, original status dots and full desktop width. Only granted approved squads appear. The default screen excludes the extra savings report; its existing source drilldown remains available. Missing/malformed measurements reject; measured zero passes.
+
+| Value | Component | Loader | Route and source |
+| --- | --- | --- | --- |
+| Greeting / first name | `workspace/app/page.tsx:32`, `workspace/app/dashboard-greeting.tsx:13` | Clerk `currentUser`, `workspace/app/page.tsx:30` | Direct Clerk identity; browser-local hour. No Tank identity table is invented. |
+| Organisation | `workspace/app/page.tsx:33` | `workspace/lib/tenant.ts:78` | Clerk active organisation lookup/name, `workspace/lib/tenant.ts:82`. |
+| Jobs done this month | `workspace/app/page.tsx:38`, `workspace/app/dashboard-values.ts:10` | `workspace/lib/tank.ts:1136` | `/v1/dashboards/client`, `tank/dashboards.py:55` → `measurements:34` → monthly completed `tank.tasks` count, `dashboards.py:44`. Opens `/tasks`. |
+| You saved | `workspace/app/page.tsx:38`, `workspace/app/dashboard-values.ts:16` | `workspace/app/tank/proof/savings-actions.ts:8` → `workspace/lib/tank.ts:1301` | `/v1/client-savings`, `tank/proof.py:553` → `savings_snapshot:413`, monthly query `proof.py:420` → CTE `proof.py:348`, totals `proof.py:352`; eligible tenant ledger/task costs and baseline prices. `client_payload:532` strips model details. |
+| Recent titles/statuses/links | `workspace/app/page.tsx:39`, `workspace/app/dashboard-values.ts:21` | `workspace/lib/tank.ts:1136` | `/v1/dashboards/client` → tenant-scoped `tank.tasks`, `tank/dashboards.py:60`. Four approved status labels; empty shows “No work yet.” |
+| Team grants | `workspace/app/page.tsx:40`, approved labels `page.tsx:20` | `workspace/lib/tank.ts:1136` | Same route → `tank.tenant_squad`, `tank/dashboards.py:64`; only approved granted tiles render. |
+
+Ask submits through `workspace/app/page.tsx:12` to `/chats`. All five navigation items use existing routes; no disabled pretend controls.
+
+The offline route → actual loader → actual screen proof asserts placeholder-marked organisation, name, all four titles/statuses, grants, 1,235 jobs and $11,765 rounded monthly savings. Browser checks mount the actual Shell and local greeting at 1440/375, check approved text, assets, internal-word/model roster and bounds. Source failures reject and real zero passes. Screenshots: `docs/screenshots/dashboards-w4/{main,current}-client-{1440,375}.png`.
+
+Passed: both route-to-screen checks, both screens at both widths, F06 browser regressions, dashboard regressions, shell routing, TypeScript and production build. No live acceptance is claimed.
+
 ## No frame / source gaps
 
 - No distinct 375px export exists for either dashboard in the supplied folders. Mobile captures prove wrapping and approved content, not identity to a nonexistent mobile frame.
 - The extra Workers diagnostics card has no place in 10:115 and is removed from this screen; its reusable component remains available elsewhere.
 - Bulk approval confirmation/progress/errors and generic source-failure pages have no frame in these two exports. Existing safety behavior is preserved; no replacement copy is invented.
 - Ledger rows with missing prices cannot produce a complete monthly spend. Provider outages/missing signup metadata likewise cannot produce truthful provider values. These remain explicit source failures rather than sample values, partial totals or disabled pretend controls.
-- Client dashboard comparison and provenance follow in the next screen commit.
+- The expanded client savings drilldown has no frame in these exports. Its existing report remains reachable from “You saved”, hidden on the default dashboard. Missing identity or measurements reject the read rather than displaying sample values.
 
 ## Founder testing sheet — after deploy
 
@@ -46,3 +65,8 @@ Passed: route fixture generation, route-to-screen render, 1440/375 browser check
 - [ ] Confirm per-squad running/queued/idle measurements and the latest five real signup metadata/timestamps.
 - [ ] Exercise paid pause/resume, workers pause/resume, approval confirmation, Switch/Later and source/navigation links using the founder's own session.
 - [ ] Founder visually accepts 1440px and 375px. Builder screenshots are offline fixture evidence only.
+
+- [ ] Client: verify first name, local greeting and active organisation against the signed-in account.
+- [ ] Client: compare monthly completed jobs, monthly savings and recent titles/statuses with tenant sources; open number links and savings report.
+- [ ] Client: confirm approved granted teams, Ask and five navigation routes; verify empty/zero states and absence of internal words/model names.
+- [ ] Founder accepts client at 1440/375 after deploy. Builder captures are offline only.

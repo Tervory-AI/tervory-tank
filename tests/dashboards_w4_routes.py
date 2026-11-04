@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tank"))
 os.environ["TANK_API_KEY"] = "offline-w4-key"
 os.environ["TERVORY_ADMIN_USER_IDS"] = "placeholder-founder"
-from fastapi import FastAPI, Header
+from fastapi import FastAPI, Header, Depends
 from fastapi.testclient import TestClient
 import admin
 import controls
@@ -136,7 +136,7 @@ app.include_router(controls.router)
 app.include_router(gold.router)
 app.include_router(workers_status.founder_router)
 app.include_router(proof.client_router)
-app.get("/v1/graduation", dependencies=[])(scope["graduation"])
+app.get("/v1/graduation", dependencies=[Depends(dashboards.workspace_only)])(scope["graduation"])
 headers = {"x-tank-key": "offline-w4-key", "x-tervory-admin": "placeholder-founder",
            "x-tervory-user": "placeholder-founder", "x-tervory-tenant": str(gold.PLATFORM_TENANT), "x-tervory-role": "founder"}
 client = TestClient(app)
@@ -151,6 +151,7 @@ for path in ["/v1/dashboards/founder", f"/v1/dashboards/client?tenant_id={TENANT
 assert result["/v1/dashboards/founder"]["daily"][1]["delivered"] == 83
 assert result[f"/v1/dashboards/client?tenant_id={TENANT}"]["recent"][0]["title"] == "placeholder requested work 0"
 assert result["/v1/graduation"][0]["eligible"] is True
+assert "placeholder-model-name" not in json.dumps(result[f"/v1/client-savings?tenant_id={TENANT}"])
 target = Path(sys.argv[1])
 target.parent.mkdir(parents=True, exist_ok=True)
 target.write_text(json.dumps(result, default=str, indent=2) + "\n")

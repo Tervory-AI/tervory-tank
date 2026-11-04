@@ -4,14 +4,38 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createServer} from 'node:http';
 import {pathToFileURL} from 'node:url';
+import {createRequire} from 'node:module';
+import {execFileSync} from 'node:child_process';
 const root=process.cwd();
 const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
 const output=process.env.W4_SCREENSHOTS || path.join(root,'docs/screenshots/dashboards-w4');
 const base=process.env.W4_FIXTURES || '/dev/shm/dashboards-w4';
 const screen=process.env.W4_SCREEN || 'founder';
 await fs.mkdir(output,{recursive:true});
+const bundles={};
+if(screen==='client'){
+  const require=createRequire(import.meta.url);
+  const {build}=require(process.env.ESBUILD_MODULE);
+  for(const phase of ['main','current']){
+    const entry=`import React from 'react';import{createRoot}from'react-dom/client';import{createPortal}from'react-dom';import{Shell}from'./app/shell';import{DashboardGreeting}from'./app/dashboard-greeting';function Snapshot(){const[slot,setSlot]=React.useState(null);React.useEffect(()=>{setSlot(document.querySelector('[data-w4-greeting]'))},[]);return <><div style={{display:'contents'}} dangerouslySetInnerHTML={{__html:window.w4Fragment}}/>{slot&&createPortal(<DashboardGreeting firstName="placeholder"/>,slot)}</>}createRoot(document.getElementById('root')).render(<Shell founder={false} reviewer={false} readAccess={async()=>({founder:false,reviewer:false})}><Snapshot/></Shell>);`;
+    const bundle=await build({stdin:{contents:entry,resolveDir:path.join(root,'workspace'),loader:'tsx'},bundle:true,write:false,format:'esm',jsx:'automatic',loader:{'.css':'empty'},define:{'process.env.NODE_ENV':'"production"'},plugins:[{name:'offline-shell',setup(b){
+      b.onLoad({filter:/product-nav\.ts$/},async args=>({loader:'ts',contents:phase==='main'?execFileSync('git',['show','981ac096:workspace/app/product-nav.ts'],{cwd:root,encoding:'utf8'}):await fs.readFile(args.path,'utf8')}));
+      b.onResolve({filter:/^(@clerk\/nextjs|next\/link|next\/navigation)$/},args=>({path:args.path,namespace:'offline'}));
+      b.onLoad({filter:/.*/,namespace:'offline'},args=>({loader:'js',resolveDir:path.join(root,'workspace'),contents:args.path==='@clerk/nextjs'?`export const useAuth=()=>({isLoaded:true,isSignedIn:false,userId:null});export const OrganizationSwitcher=()=>null;export const UserButton=()=>null;`:args.path==='next/link'?`import React from 'react';export default function Link({prefetch,...p}){return React.createElement('a',p)}`:`export const usePathname=()=>'/';export const useSearchParams=()=>new URLSearchParams(location.search);export const useSelectedLayoutSegments=()=>[];`}));
+    }}]});
+    bundles[`/${phase}/client.js`]=bundle.outputFiles[0].text;
+  }
+}
 const server=createServer(async(req,res)=>{
   const pathname=new URL(req.url,'http://offline').pathname;
+  if(bundles[pathname]){res.setHeader('Content-Type','text/javascript');res.end(bundles[pathname]);return;}
+  if(screen==='client'&&/^\/(main|current)\/client\.html$/.test(pathname)){
+    const phase=pathname.split('/')[1];
+    const css=await fs.readFile(path.join(base,phase,'styles.css'),'utf8');
+    const fragment=(await fs.readFile(path.join(base,phase,'client-fragment.html'),'utf8')).replace(/<h1>.*?<\/h1>/,'<div data-w4-greeting></div>');
+    res.setHeader('Content-Type','text/html');
+    res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><style>${css}</style><div id="root"></div><script>window.w4Fragment=${JSON.stringify(fragment).replaceAll('<','\\u003c')}</script><script type="module" src="/${phase}/client.js"></script></html>`);return;
+  }
   let file;
   if(pathname.startsWith('/brand/') || pathname.startsWith('/dashboards/'))file=path.join(root,'workspace/public',pathname);
   else if(pathname.startsWith('/fonts/'))file=path.join(root,'workspace/app',pathname);
@@ -25,10 +49,12 @@ const browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTAB
 const errors=[];
 try{
   for(const phase of ['main','current'])for(const width of [1440,375]){
-    const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1});
+    const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1,timezoneId:'America/Los_Angeles'});
     page.on('pageerror',error=>errors.push(error.message));
     await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+    if(screen==='client')await page.clock.setFixedTime(new Date('2026-11-03T20:00:00Z'));
     await page.goto(`http://127.0.0.1:${server.address().port}/${phase}/${screen}.html`);
+    if(screen==='client')await page.getByRole('heading',{name:'Good afternoon, placeholder',exact:true}).waitFor();
     await page.evaluate(()=>document.fonts.ready);
     await page.locator('img').evaluateAll(images=>Promise.all(images.map(image=>image.decode())));
     if(phase==='current'){
@@ -53,6 +79,24 @@ try{
         assert.equal(await page.locator('[data-tile="workers"]').count(),0);
         assert.equal(await page.locator('.control-top>img').getAttribute('width'),'180');
         assert(!/—|Recorded spend|Approve all ready/.test(await page.locator('body').innerText()));
+      }else{
+        assert.equal(await page.locator('.shell-side').count(),0,'No unframed shared menu');
+        assert.deepEqual(await page.locator('.dash-nav a').allTextContents(),['Home','Chats','Files','Billing','Settings']);
+        assert.deepEqual(await page.locator('.dash-value').allTextContents(),['1,235','$11,765']);
+        assert.equal(await page.locator('.dash-client-top>.dash-note').textContent(),'placeholder organisation');
+        assert.deepEqual(await page.locator('.dash-status').allTextContents(),['Queued','In progress','Ready','Failed']);
+        assert.deepEqual(await page.locator('.dash-row>a').allTextContents(),[0,1,2,3].map(i=>`placeholder requested work ${i}`));
+        assert.deepEqual(await page.locator('.dash-member strong').allTextContents(),['Base','Tiger','Market Lab','Zenas']);
+        assert.deepEqual(await page.locator('.dash-member .dash-note').allTextContents(),['Business lists','Prices','Market research','Legal']);
+        assert.equal(await page.locator('.dash-input').getAttribute('placeholder'),'What do you need today?');
+        assert.equal(await page.locator('.dash-logo img').getAttribute('width'),'180');
+        assert.equal(await page.locator('#your-savings').isVisible(),false,'Report is a separate drilldown');
+        const require=createRequire(import.meta.url);
+        require('./client-copy.cjs')(await page.locator('body').innerText());
+        assert(!/[—]/.test(await page.locator('body').innerText()));
+        const found=await page.locator('.dash-client-root').boundingBox();
+        assert.equal(found.width,width);
+        if(width===1440)assert.equal((await page.locator('.dash-sidebar').boundingBox()).width,220);
       }
       const overflow=await page.evaluate(()=>{
         const bad=[];const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
