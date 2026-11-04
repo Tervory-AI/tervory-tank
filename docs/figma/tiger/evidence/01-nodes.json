@@ -18,14 +18,14 @@
       "words": [
         "Proposed",
         "Proposed wording and example data",
-        "Illustrative values · Figma only.",
+        "Illustrative values \u00b7 Figma only.",
         "Search watched products, readings and alerts",
         "Tiger",
         "Track product prices and stock availability across your watched stores.",
         "Price position",
         "Matches to review",
         "Competitor sites",
-        "Loading…",
+        "Loading\u2026",
         "Prices and position are unavailable while loading.",
         "Scheduled checks of public product pages. Alerts for confirmed price and stock changes."
       ],
@@ -85,13 +85,13 @@
       "images": [
         {
           "id": "622:18",
-          "name": "Logo · tiger-on-dark.png",
+          "name": "Logo \u00b7 tiger-on-dark.png",
           "width": 156.22471618652344,
           "height": 48
         },
         {
           "id": "622:32",
-          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "name": "Logo \u00b7 tervory-logo-reversed.png \u00b7 180 wide",
           "width": 186,
           "height": 34
         }
@@ -113,7 +113,7 @@
       "words": [
         "Proposed",
         "Proposed wording and example data",
-        "Illustrative values · Figma only.",
+        "Illustrative values \u00b7 Figma only.",
         "Menu",
         "Search watched products, readings and alerts",
         "Tiger",
@@ -121,7 +121,7 @@
         "Price position",
         "Matches to review",
         "Competitor sites",
-        "Loading…",
+        "Loading\u2026",
         "Prices and position are unavailable while loading.",
         "Scheduled checks of public product pages. Alerts for confirmed price and stock changes."
       ],
@@ -168,7 +168,7 @@
       "images": [
         {
           "id": "622:224",
-          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "name": "Logo \u00b7 tervory-logo-reversed.png \u00b7 180 wide",
           "width": 186,
           "height": 34
         }
@@ -191,7 +191,7 @@
       "words": [
         "Proposed",
         "Proposed wording and example data",
-        "Illustrative values · Figma only.",
+        "Illustrative values \u00b7 Figma only.",
         "Search watched products, readings and alerts",
         "Tiger",
         "Track product prices and stock availability across your watched stores.",
@@ -259,13 +259,13 @@
       "images": [
         {
           "id": "622:317",
-          "name": "Logo · tiger-on-dark.png",
+          "name": "Logo \u00b7 tiger-on-dark.png",
           "width": 156.22471618652344,
           "height": 48
         },
         {
           "id": "622:331",
-          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "name": "Logo \u00b7 tervory-logo-reversed.png \u00b7 180 wide",
           "width": 186,
           "height": 34
         }
@@ -288,7 +288,7 @@
       "words": [
         "Proposed",
         "Proposed wording and example data",
-        "Illustrative values · Figma only.",
+        "Illustrative values \u00b7 Figma only.",
         "Menu",
         "Search watched products, readings and alerts",
         "Tiger",
@@ -344,7 +344,7 @@
       "images": [
         {
           "id": "622:507",
-          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "name": "Logo \u00b7 tervory-logo-reversed.png \u00b7 180 wide",
           "width": 186,
           "height": 34
         }
@@ -367,7 +367,7 @@
       "words": [
         "Proposed",
         "Proposed wording and example data",
-        "Illustrative values · Figma only.",
+        "Illustrative values \u00b7 Figma only.",
         "Search watched products, readings and alerts",
         "Tiger",
         "Track product prices and stock availability across your watched stores.",
@@ -378,7 +378,7 @@
         "Your decision was not saved. This match is still awaiting review.",
         "Try again",
         "Fieldlight desk lamp",
-        "FL-DL01 · North shop",
+        "FL-DL01 \u00b7 North shop",
         "Same brand and maker part number. No barcode match. Confirm the product before it affects price position.",
         "north-shop.example/products/desk-lamp",
         "Confirm",
@@ -449,13 +449,13 @@
       "images": [
         {
           "id": "622:602",
-          "name": "Logo · tiger-on-dark.png",
+          "name": "Logo \u00b7 tiger-on-dark.png",
           "width": 156.22471618652344,
           "height": 48
         },
         {
           "id": "622:616",
-          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "name": "Logo \u00b7 tervory-logo-reversed.png \u00b7 180 wide",
           "width": 186,
           "height": 34
         }
@@ -478,7 +478,7 @@
       "words": [
         "Proposed",
         "Proposed wording and example data",
-        "Illustrative values · Figma only.",
+        "Illustrative values \u00b7 Figma only.",
         "Menu",
         "Search watched products, readings and alerts",
         "Tiger",
@@ -490,7 +490,7 @@
         "Your decision was not saved. This match is still awaiting review.",
         "Try again",
         "Fieldlight desk lamp",
-        "FL-DL01 · North shop",
+        "FL-DL01 \u00b7 North shop",
         "Same brand and maker part number. No barcode match. Confirm the product before it affects price position.",
         "north-shop.example/products/desk-lamp",
         "Confirm",
@@ -548,7 +548,7 @@
       "images": [
         {
           "id": "622:772",
-          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "name": "Logo \u00b7 tervory-logo-reversed.png \u00b7 180 wide",
           "width": 186,
           "height": 34
         }
@@ -853,5 +853,11 @@
     "622:792",
     "622:808",
     "622:824"
+  ],
+  "removedAfterCompositionNodeIds": [
+    "622:133",
+    "622:303",
+    "622:432",
+    "622:586"
   ]
 }

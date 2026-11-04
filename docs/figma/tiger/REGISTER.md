@@ -51,3 +51,9 @@ No Code Connect files were found. Local source instances and variables take prec
 [validation.json](evidence/validation.json) records exact native PNG dimensions and SHA-256. Per-item `*-audit.json` records editable node-type counts, all surviving IDs, actual fonts, logo image slots, text bounds and minimum control checks. Construction ledgers additionally identify removed temporary clone nodes. No source main/component was changed.
 
 Screenshots are review evidence, not proof of backend behavior. No model call, scheduled read, match decision, catalogue mutation, GTIN validation or alert delivery is executed by this design task. Full application tests do not apply to documentation/Figma-only changes.
+
+## Completion — 4 Nov 2026
+
+All six requested items are delivered: 24 Proposed frames with native-width PNGs. Card controls have On and Off views; five independent alert choices keep their values when the watch is Off. Alerts includes all five labels plus empty/loading/error at both widths. Input outlines reuse the existing accessible input-border token; [paint fallback correction](evidence/color-fallback-fix.json) records exact numeric fallback/binding synchronization without geometry or wording changes. The new desktop clones use their linked Tiger navigation alone, hiding inherited duplicate legacy siblings; approved source frames remain unchanged.
+
+Per-item pushes: loading/read/decision `97b75ee2`; site details `ca54e129`; empty catalogue `2f83679e`; GTIN `35d15ea0`; controls `10d2757e`; bound-colour correction `591dc9d9`; Alerts `ad5b34cb`. Final evidence checks: 24 unique frame IDs, exact widths and native PNG dimensions/hashes, Jost/Inter only, no recorded text overflow or control below 44px, all five kind labels in both filled Alerts frames, and 27 valid relative register references before this completion appendix. These are drawing/evidence checks, not runtime acceptance or founder approval.
