@@ -1,0 +1,22 @@
+[
+  {
+    "id": "657:9",
+    "width": 1440,
+    "height": 916,
+    "newProductWording": [],
+    "pngSha256": {
+      "browser": "8f93fcf1d28470a87b86ffd21ae78a073b69c16923d3506ff2a88f40754db21b",
+      "figma": "88456479ba8eb4ee8045597508e1462c73d80175df34859ecfca4a5f51dbd7c9"
+    }
+  },
+  {
+    "id": "658:9",
+    "width": 375,
+    "height": 1007,
+    "newProductWording": [],
+    "pngSha256": {
+      "browser": "d5e0637847d9bfc3a750d878785aa07bb4862e93cef98f70059522902fbb22e4",
+      "figma": "9026d4235ae24d7deb31076dc1dfa7cb48fe5013d2294c07e7f9617d9eed2818"
+    }
+  }
+]

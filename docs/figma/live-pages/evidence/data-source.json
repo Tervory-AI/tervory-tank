@@ -1,0 +1,12 @@
+{
+  "sourceCommit": "c94610bd0f9f35443f9d58deb45ec44b60ecb33d",
+  "source": "unchanged production components with empty transport data; no signed-in/live data claim",
+  "files": {
+    "workspace/app/data/page.tsx": "8f2d3e8b97e1a422b8a17866cac85bd33ed8281babbe5efa93b4058e499e3a76",
+    "workspace/app/data/data.css": "64c36a6a8413f626117731447420a2d5d4c3dd18e7c3729c0b7091353885fd7b",
+    "workspace/app/shell.tsx": "c3a2e10162e62167bb7009bda439ae794e0f2354bc63fd23790823a7d82f85b0",
+    "workspace/app/product-nav.ts": "24d9d6fc4b1d87247ef1138f4df6aecf77405ec7ea6a76ec43c4c954805e7772",
+    "workspace/app/globals.css": "7b6d446d98d4f131941c365a6f7b3ad84ebbac19a26469efc402f6c49c622b0d",
+    "workspace/app/fonts/index.ts": "d404dfd5344289a31c71eda41058df1182e43268d62669322d6bff2221a1fc34"
+  }
+}

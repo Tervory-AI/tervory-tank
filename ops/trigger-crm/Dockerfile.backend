@@ -1,0 +1,9 @@
+# syntax=docker/dockerfile:1
+# Trigger CRM backend = the pinned Django-CRM image plus the Tervory connector files.
+# `crm-pinned` is the image Compose builds for celery-worker from
+# Django-CRM/Django-CRM v1.39.0 @ cd7c12a607df1719518fcdaf289864f6ba7d0bcd
+# (see docker-compose.yml, additional_contexts). Entrypoint/CMD unchanged.
+# The files are baked in, not mounted: Coolify runs Compose inside its helper
+# container, so file-based configs became host bind mounts that do not exist.
+FROM crm-pinned
+COPY --chmod=0444 tervory_crm_middleware.py tervory_connector_wsgi.py /run/tervory/

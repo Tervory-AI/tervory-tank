@@ -1,0 +1,1712 @@
+{
+  "checks": [
+    {
+      "id": "518:6969",
+      "width": 1440,
+      "height": 9786,
+      "nonInter": [],
+      "textOverflow": [],
+      "figures": [
+        {
+          "id": "518:7139",
+          "name": "Figure / Spend",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7151",
+          "name": "Figure / Work by code / cache / model",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7163",
+          "name": "Figure / Graduation progress",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7198",
+          "name": "Figure / Confidence histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7210",
+          "name": "Figure / By state",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7222",
+          "name": "Figure / vs Apollo",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7265",
+          "name": "Figure / Price-change histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7277",
+          "name": "Figure / Time to detect a change",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7320",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7363",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7375",
+          "name": "Figure / Most-searched products",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7418",
+          "name": "Figure / Sources per answer",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7486",
+          "name": "Figure / Findings by severity",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        }
+      ],
+      "darkSurfaces": [],
+      "copy": [
+        "Proposed · Not approved",
+        "Business",
+        "⌄",
+        "Case study",
+        "Writing",
+        "Write",
+        "Voice",
+        "CRM",
+        "Leads",
+        "Clients",
+        "Contacts",
+        "Opportunities",
+        "Cases",
+        "Tasks",
+        "Sales",
+        "Quotes",
+        "Invoices",
+        "Marketing",
+        "Channels",
+        "Calendar",
+        "Composer",
+        "Google posts",
+        "Google reviews",
+        "Chat bot",
+        "Inbox",
+        "Settings",
+        "All products",
+        "Receipts",
+        "Billing",
+        "Account settings",
+        "Case study summary",
+        "[Client name]",
+        "Proposed wording and example data",
+        "30 days",
+        "Compare to previous",
+        "Export PDF",
+        "Export CSV",
+        "Every graph, histogram and tool stays present. Zero until there is data. · Proposed",
+        "Tank",
+        "Spend",
+        "$0.00",
+        "Savings vs baseline cost",
+        "Cost per task",
+        "Cache hits",
+        "0%",
+        "0",
+        "Work by code / cache / model",
+        "Graduation progress",
+        "Base",
+        "Records verified",
+        "Cost per verified record",
+        "Measured accuracy",
+        "0% ± 0",
+        "200-record audit",
+        "Confidence histogram",
+        "By state",
+        "vs Apollo",
+        "Tiger",
+        "Changes caught",
+        "Pages watched",
+        "Checks run",
+        "Alerts sent",
+        "Price-change histogram",
+        "Time to detect a change",
+        "Market Lab",
+        "Questions answered",
+        "Sources cited",
+        "Active feeds",
+        "Prediction confidence vs actual hit rate",
+        "0% / 0%",
+        "Rig",
+        "Searches",
+        "No-result searches",
+        "Setups built",
+        "Quotes sent",
+        "Quotes that became estimates or invoices",
+        "Most-searched products",
+        "Zenas",
+        "Questions",
+        "Cited answers",
+        "Criminal questions refused",
+        "Drafts",
+        "Sources per answer",
+        "Trigger",
+        "Checker issues per draft",
+        "Acceptance rate",
+        "Voice-rule hits",
+        "Tisan",
+        "Sites built",
+        "Visual scores",
+        "Radix",
+        "Scans",
+        "Findings by severity",
+        "Autumbra",
+        "Checks",
+        "Incidents",
+        "Shields",
+        "Product",
+        "↕",
+        "Base · Records verified",
+        "Tiger · Changes caught",
+        "Market Lab · Questions answered",
+        "Rig · Searches",
+        "Zenas · Questions",
+        "Trigger · Drafts",
+        "Tisan · Sites built",
+        "Radix · Scans",
+        "Autumbra · Checks",
+        "PDF: only the client’s signed-in users and the founder. · Proposed"
+      ]
+    },
+    {
+      "id": "518:7555",
+      "width": 375,
+      "height": 13165,
+      "nonInter": [],
+      "textOverflow": [],
+      "figures": [
+        {
+          "id": "518:7728",
+          "name": "Figure / Spend",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7740",
+          "name": "Figure / Work by code / cache / model",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7752",
+          "name": "Figure / Graduation progress",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7789",
+          "name": "Figure / Confidence histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7801",
+          "name": "Figure / By state",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7813",
+          "name": "Figure / vs Apollo",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7858",
+          "name": "Figure / Price-change histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7870",
+          "name": "Figure / Time to detect a change",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7915",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7960",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:7972",
+          "name": "Figure / Most-searched products",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8017",
+          "name": "Figure / Sources per answer",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8088",
+          "name": "Figure / Findings by severity",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        }
+      ],
+      "darkSurfaces": [],
+      "copy": [
+        "Proposed · Not approved",
+        "×",
+        "Menu",
+        "⌄",
+        "Case study summary",
+        "[Client name]",
+        "Proposed wording and example data",
+        "30 days",
+        "Compare to previous",
+        "Export PDF",
+        "Export CSV",
+        "Every graph, histogram and tool stays present. Zero until there is data. · Proposed",
+        "Tank",
+        "Spend",
+        "$0.00",
+        "Savings vs baseline cost",
+        "Cost per task",
+        "Cache hits",
+        "0%",
+        "0",
+        "Work by code / cache / model",
+        "Graduation progress",
+        "Base",
+        "Records verified",
+        "Cost per verified record",
+        "Measured accuracy",
+        "0% ± 0",
+        "200-record audit",
+        "Confidence histogram",
+        "By state",
+        "vs Apollo",
+        "Tiger",
+        "Changes caught",
+        "Pages watched",
+        "Checks run",
+        "Alerts sent",
+        "Price-change histogram",
+        "Time to detect a change",
+        "Market Lab",
+        "Questions answered",
+        "Sources cited",
+        "Active feeds",
+        "Prediction confidence vs actual hit rate",
+        "0% / 0%",
+        "Rig",
+        "Searches",
+        "No-result searches",
+        "Setups built",
+        "Quotes sent",
+        "Quotes that became estimates or invoices",
+        "Most-searched products",
+        "Zenas",
+        "Questions",
+        "Cited answers",
+        "Criminal questions refused",
+        "Drafts",
+        "Sources per answer",
+        "Trigger",
+        "Checker issues per draft",
+        "Acceptance rate",
+        "Voice-rule hits",
+        "Tisan",
+        "Sites built",
+        "Visual scores",
+        "Radix",
+        "Scans",
+        "Findings by severity",
+        "Autumbra",
+        "Checks",
+        "Incidents",
+        "Shields",
+        "Product",
+        "↕",
+        "Base · Records verified",
+        "Tiger · Changes caught",
+        "Market Lab · Questions answered",
+        "Rig · Searches",
+        "Zenas · Questions",
+        "Trigger · Drafts",
+        "Tisan · Sites built",
+        "Radix · Scans",
+        "Autumbra · Checks",
+        "PDF: only the client’s signed-in users and the founder. · Proposed"
+      ]
+    },
+    {
+      "id": "518:8159",
+      "width": 1440,
+      "height": 9830,
+      "nonInter": [],
+      "textOverflow": [],
+      "figures": [
+        {
+          "id": "518:8330",
+          "name": "Figure / Spend",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8342",
+          "name": "Figure / Work by code / cache / model",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8354",
+          "name": "Figure / Graduation progress",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8389",
+          "name": "Figure / Confidence histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8401",
+          "name": "Figure / By state",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8413",
+          "name": "Figure / vs Apollo",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8456",
+          "name": "Figure / Price-change histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8468",
+          "name": "Figure / Time to detect a change",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8511",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8554",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8566",
+          "name": "Figure / Most-searched products",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8609",
+          "name": "Figure / Sources per answer",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8677",
+          "name": "Figure / Findings by severity",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        }
+      ],
+      "darkSurfaces": [],
+      "copy": [
+        "Proposed · Not approved",
+        "Business",
+        "⌄",
+        "Case study",
+        "Writing",
+        "Write",
+        "Voice",
+        "CRM",
+        "Leads",
+        "Clients",
+        "Contacts",
+        "Opportunities",
+        "Cases",
+        "Tasks",
+        "Sales",
+        "Quotes",
+        "Invoices",
+        "Marketing",
+        "Channels",
+        "Calendar",
+        "Composer",
+        "Google posts",
+        "Google reviews",
+        "Chat bot",
+        "Inbox",
+        "Settings",
+        "All products",
+        "Receipts",
+        "Billing",
+        "Account settings",
+        "Case study summary",
+        "[Client name]",
+        "Proposed wording and example data",
+        "30 days",
+        "Compare to previous",
+        "Export PDF",
+        "Export CSV",
+        "No work yet",
+        "Every graph, histogram and tool stays present. Zero until there is data. · Proposed",
+        "Tank",
+        "Spend",
+        "$0.00",
+        "Savings vs baseline cost",
+        "Cost per task",
+        "Cache hits",
+        "0%",
+        "0",
+        "Work by code / cache / model",
+        "Graduation progress",
+        "Base",
+        "Records verified",
+        "Cost per verified record",
+        "Measured accuracy",
+        "0% ± 0",
+        "200-record audit",
+        "Confidence histogram",
+        "By state",
+        "vs Apollo",
+        "Tiger",
+        "Changes caught",
+        "Pages watched",
+        "Checks run",
+        "Alerts sent",
+        "Price-change histogram",
+        "Time to detect a change",
+        "Market Lab",
+        "Questions answered",
+        "Sources cited",
+        "Active feeds",
+        "Prediction confidence vs actual hit rate",
+        "0% / 0%",
+        "Rig",
+        "Searches",
+        "No-result searches",
+        "Setups built",
+        "Quotes sent",
+        "Quotes that became estimates or invoices",
+        "Most-searched products",
+        "Zenas",
+        "Questions",
+        "Cited answers",
+        "Criminal questions refused",
+        "Drafts",
+        "Sources per answer",
+        "Trigger",
+        "Checker issues per draft",
+        "Acceptance rate",
+        "Voice-rule hits",
+        "Tisan",
+        "Sites built",
+        "Visual scores",
+        "Radix",
+        "Scans",
+        "Findings by severity",
+        "Autumbra",
+        "Checks",
+        "Incidents",
+        "Shields",
+        "Product",
+        "↕",
+        "Base · Records verified",
+        "Tiger · Changes caught",
+        "Market Lab · Questions answered",
+        "Rig · Searches",
+        "Zenas · Questions",
+        "Trigger · Drafts",
+        "Tisan · Sites built",
+        "Radix · Scans",
+        "Autumbra · Checks",
+        "PDF: only the client’s signed-in users and the founder. · Proposed"
+      ]
+    },
+    {
+      "id": "518:8746",
+      "width": 375,
+      "height": 13209,
+      "nonInter": [],
+      "textOverflow": [],
+      "figures": [
+        {
+          "id": "518:8920",
+          "name": "Figure / Spend",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8932",
+          "name": "Figure / Work by code / cache / model",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8944",
+          "name": "Figure / Graduation progress",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8981",
+          "name": "Figure / Confidence histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:8993",
+          "name": "Figure / By state",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9005",
+          "name": "Figure / vs Apollo",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9050",
+          "name": "Figure / Price-change histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9062",
+          "name": "Figure / Time to detect a change",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9107",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9152",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9164",
+          "name": "Figure / Most-searched products",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9209",
+          "name": "Figure / Sources per answer",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "518:9280",
+          "name": "Figure / Findings by severity",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        }
+      ],
+      "darkSurfaces": [],
+      "copy": [
+        "Proposed · Not approved",
+        "×",
+        "Menu",
+        "⌄",
+        "Case study summary",
+        "[Client name]",
+        "Proposed wording and example data",
+        "30 days",
+        "Compare to previous",
+        "Export PDF",
+        "Export CSV",
+        "No work yet",
+        "Every graph, histogram and tool stays present. Zero until there is data. · Proposed",
+        "Tank",
+        "Spend",
+        "$0.00",
+        "Savings vs baseline cost",
+        "Cost per task",
+        "Cache hits",
+        "0%",
+        "0",
+        "Work by code / cache / model",
+        "Graduation progress",
+        "Base",
+        "Records verified",
+        "Cost per verified record",
+        "Measured accuracy",
+        "0% ± 0",
+        "200-record audit",
+        "Confidence histogram",
+        "By state",
+        "vs Apollo",
+        "Tiger",
+        "Changes caught",
+        "Pages watched",
+        "Checks run",
+        "Alerts sent",
+        "Price-change histogram",
+        "Time to detect a change",
+        "Market Lab",
+        "Questions answered",
+        "Sources cited",
+        "Active feeds",
+        "Prediction confidence vs actual hit rate",
+        "0% / 0%",
+        "Rig",
+        "Searches",
+        "No-result searches",
+        "Setups built",
+        "Quotes sent",
+        "Quotes that became estimates or invoices",
+        "Most-searched products",
+        "Zenas",
+        "Questions",
+        "Cited answers",
+        "Criminal questions refused",
+        "Drafts",
+        "Sources per answer",
+        "Trigger",
+        "Checker issues per draft",
+        "Acceptance rate",
+        "Voice-rule hits",
+        "Tisan",
+        "Sites built",
+        "Visual scores",
+        "Radix",
+        "Scans",
+        "Findings by severity",
+        "Autumbra",
+        "Checks",
+        "Incidents",
+        "Shields",
+        "Product",
+        "↕",
+        "Base · Records verified",
+        "Tiger · Changes caught",
+        "Market Lab · Questions answered",
+        "Rig · Searches",
+        "Zenas · Questions",
+        "Trigger · Drafts",
+        "Tisan · Sites built",
+        "Radix · Scans",
+        "Autumbra · Checks",
+        "PDF: only the client’s signed-in users and the founder. · Proposed"
+      ]
+    },
+    {
+      "id": "573:3721",
+      "width": 1440,
+      "height": 9874,
+      "nonInter": [],
+      "textOverflow": [],
+      "figures": [
+        {
+          "id": "573:3745",
+          "name": "Figure / Spend",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3746",
+          "name": "Figure / Work by code / cache / model",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3747",
+          "name": "Figure / Graduation progress",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3753",
+          "name": "Figure / Confidence histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3754",
+          "name": "Figure / By state",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3755",
+          "name": "Figure / vs Apollo",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3763",
+          "name": "Figure / Price-change histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3764",
+          "name": "Figure / Time to detect a change",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3772",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3780",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3781",
+          "name": "Figure / Most-searched products",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3789",
+          "name": "Figure / Sources per answer",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:3804",
+          "name": "Figure / Findings by severity",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        }
+      ],
+      "darkSurfaces": [],
+      "copy": [
+        "Proposed · Not approved",
+        "Business",
+        "⌄",
+        "Case study",
+        "Writing",
+        "Write",
+        "Voice",
+        "CRM",
+        "Leads",
+        "Clients",
+        "Contacts",
+        "Opportunities",
+        "Cases",
+        "Tasks",
+        "Sales",
+        "Quotes",
+        "Invoices",
+        "Marketing",
+        "Channels",
+        "Calendar",
+        "Composer",
+        "Google posts",
+        "Google reviews",
+        "Chat bot",
+        "Inbox",
+        "Settings",
+        "All products",
+        "Receipts",
+        "Billing",
+        "Account settings",
+        "Case study summary",
+        "[Client name]",
+        "Proposed wording and example data",
+        "30 days",
+        "Compare to previous",
+        "Export PDF",
+        "Export CSV",
+        "Loading… · Proposed",
+        "Values are unavailable while loading. Zero charts are the template, not measured results. · Proposed",
+        "Every graph, histogram and tool stays present. Zero until there is data. · Proposed",
+        "Tank",
+        "Spend",
+        "$0.00",
+        "Savings vs baseline cost",
+        "Cost per task",
+        "Cache hits",
+        "0%",
+        "0",
+        "Work by code / cache / model",
+        "Graduation progress",
+        "Base",
+        "Records verified",
+        "Cost per verified record",
+        "Measured accuracy",
+        "0% ± 0",
+        "200-record audit",
+        "Confidence histogram",
+        "By state",
+        "vs Apollo",
+        "Tiger",
+        "Changes caught",
+        "Pages watched",
+        "Checks run",
+        "Alerts sent",
+        "Price-change histogram",
+        "Time to detect a change",
+        "Market Lab",
+        "Questions answered",
+        "Sources cited",
+        "Active feeds",
+        "Prediction confidence vs actual hit rate",
+        "0% / 0%",
+        "Rig",
+        "Searches",
+        "No-result searches",
+        "Setups built",
+        "Quotes sent",
+        "Quotes that became estimates or invoices",
+        "Most-searched products",
+        "Zenas",
+        "Questions",
+        "Cited answers",
+        "Criminal questions refused",
+        "Drafts",
+        "Sources per answer",
+        "Trigger",
+        "Checker issues per draft",
+        "Acceptance rate",
+        "Voice-rule hits",
+        "Tisan",
+        "Sites built",
+        "Visual scores",
+        "Radix",
+        "Scans",
+        "Findings by severity",
+        "Autumbra",
+        "Checks",
+        "Incidents",
+        "Shields",
+        "Product",
+        "↕",
+        "Base · Records verified",
+        "Tiger · Changes caught",
+        "Market Lab · Questions answered",
+        "Rig · Searches",
+        "Zenas · Questions",
+        "Trigger · Drafts",
+        "Tisan · Sites built",
+        "Radix · Scans",
+        "Autumbra · Checks",
+        "PDF: only the client’s signed-in users and the founder. · Proposed"
+      ]
+    },
+    {
+      "id": "573:4209",
+      "width": 1440,
+      "height": 9946,
+      "nonInter": [],
+      "textOverflow": [],
+      "figures": [
+        {
+          "id": "573:4233",
+          "name": "Figure / Spend",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4234",
+          "name": "Figure / Work by code / cache / model",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4235",
+          "name": "Figure / Graduation progress",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4241",
+          "name": "Figure / Confidence histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4242",
+          "name": "Figure / By state",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4243",
+          "name": "Figure / vs Apollo",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4251",
+          "name": "Figure / Price-change histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4252",
+          "name": "Figure / Time to detect a change",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4260",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4268",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4269",
+          "name": "Figure / Most-searched products",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4277",
+          "name": "Figure / Sources per answer",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4292",
+          "name": "Figure / Findings by severity",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        }
+      ],
+      "darkSurfaces": [],
+      "copy": [
+        "Proposed · Not approved",
+        "Business",
+        "⌄",
+        "Case study",
+        "Writing",
+        "Write",
+        "Voice",
+        "CRM",
+        "Leads",
+        "Clients",
+        "Contacts",
+        "Opportunities",
+        "Cases",
+        "Tasks",
+        "Sales",
+        "Quotes",
+        "Invoices",
+        "Marketing",
+        "Channels",
+        "Calendar",
+        "Composer",
+        "Google posts",
+        "Google reviews",
+        "Chat bot",
+        "Inbox",
+        "Settings",
+        "All products",
+        "Receipts",
+        "Billing",
+        "Account settings",
+        "Case study summary",
+        "[Client name]",
+        "Proposed wording and example data",
+        "30 days",
+        "Compare to previous",
+        "Export PDF",
+        "Export CSV",
+        "Could not load the case study. Try again. · Proposed",
+        "Values are unavailable. Zero charts are the template, not measured results. · Proposed",
+        "Try again",
+        "Every graph, histogram and tool stays present. Zero until there is data. · Proposed",
+        "Tank",
+        "Spend",
+        "$0.00",
+        "Savings vs baseline cost",
+        "Cost per task",
+        "Cache hits",
+        "0%",
+        "0",
+        "Work by code / cache / model",
+        "Graduation progress",
+        "Base",
+        "Records verified",
+        "Cost per verified record",
+        "Measured accuracy",
+        "0% ± 0",
+        "200-record audit",
+        "Confidence histogram",
+        "By state",
+        "vs Apollo",
+        "Tiger",
+        "Changes caught",
+        "Pages watched",
+        "Checks run",
+        "Alerts sent",
+        "Price-change histogram",
+        "Time to detect a change",
+        "Market Lab",
+        "Questions answered",
+        "Sources cited",
+        "Active feeds",
+        "Prediction confidence vs actual hit rate",
+        "0% / 0%",
+        "Rig",
+        "Searches",
+        "No-result searches",
+        "Setups built",
+        "Quotes sent",
+        "Quotes that became estimates or invoices",
+        "Most-searched products",
+        "Zenas",
+        "Questions",
+        "Cited answers",
+        "Criminal questions refused",
+        "Drafts",
+        "Sources per answer",
+        "Trigger",
+        "Checker issues per draft",
+        "Acceptance rate",
+        "Voice-rule hits",
+        "Tisan",
+        "Sites built",
+        "Visual scores",
+        "Radix",
+        "Scans",
+        "Findings by severity",
+        "Autumbra",
+        "Checks",
+        "Incidents",
+        "Shields",
+        "Product",
+        "↕",
+        "Base · Records verified",
+        "Tiger · Changes caught",
+        "Market Lab · Questions answered",
+        "Rig · Searches",
+        "Zenas · Questions",
+        "Trigger · Drafts",
+        "Tisan · Sites built",
+        "Radix · Scans",
+        "Autumbra · Checks",
+        "PDF: only the client’s signed-in users and the founder. · Proposed"
+      ]
+    },
+    {
+      "id": "573:4700",
+      "width": 375,
+      "height": 13273,
+      "nonInter": [],
+      "textOverflow": [],
+      "figures": [
+        {
+          "id": "573:4726",
+          "name": "Figure / Spend",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4727",
+          "name": "Figure / Work by code / cache / model",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4728",
+          "name": "Figure / Graduation progress",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4736",
+          "name": "Figure / Confidence histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4737",
+          "name": "Figure / By state",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4738",
+          "name": "Figure / vs Apollo",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4748",
+          "name": "Figure / Price-change histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4749",
+          "name": "Figure / Time to detect a change",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4759",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4769",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4770",
+          "name": "Figure / Most-searched products",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4780",
+          "name": "Figure / Sources per answer",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:4798",
+          "name": "Figure / Findings by severity",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        }
+      ],
+      "darkSurfaces": [],
+      "copy": [
+        "Proposed · Not approved",
+        "×",
+        "Menu",
+        "⌄",
+        "Case study summary",
+        "[Client name]",
+        "Proposed wording and example data",
+        "30 days",
+        "Compare to previous",
+        "Export PDF",
+        "Export CSV",
+        "Loading… · Proposed",
+        "Values are unavailable while loading. Zero charts are the template, not measured results. · Proposed",
+        "Every graph, histogram and tool stays present. Zero until there is data. · Proposed",
+        "Tank",
+        "Spend",
+        "$0.00",
+        "Savings vs baseline cost",
+        "Cost per task",
+        "Cache hits",
+        "0%",
+        "0",
+        "Work by code / cache / model",
+        "Graduation progress",
+        "Base",
+        "Records verified",
+        "Cost per verified record",
+        "Measured accuracy",
+        "0% ± 0",
+        "200-record audit",
+        "Confidence histogram",
+        "By state",
+        "vs Apollo",
+        "Tiger",
+        "Changes caught",
+        "Pages watched",
+        "Checks run",
+        "Alerts sent",
+        "Price-change histogram",
+        "Time to detect a change",
+        "Market Lab",
+        "Questions answered",
+        "Sources cited",
+        "Active feeds",
+        "Prediction confidence vs actual hit rate",
+        "0% / 0%",
+        "Rig",
+        "Searches",
+        "No-result searches",
+        "Setups built",
+        "Quotes sent",
+        "Quotes that became estimates or invoices",
+        "Most-searched products",
+        "Zenas",
+        "Questions",
+        "Cited answers",
+        "Criminal questions refused",
+        "Drafts",
+        "Sources per answer",
+        "Trigger",
+        "Checker issues per draft",
+        "Acceptance rate",
+        "Voice-rule hits",
+        "Tisan",
+        "Sites built",
+        "Visual scores",
+        "Radix",
+        "Scans",
+        "Findings by severity",
+        "Autumbra",
+        "Checks",
+        "Incidents",
+        "Shields",
+        "Product",
+        "↕",
+        "Base · Records verified",
+        "Tiger · Changes caught",
+        "Market Lab · Questions answered",
+        "Rig · Searches",
+        "Zenas · Questions",
+        "Trigger · Drafts",
+        "Tisan · Sites built",
+        "Radix · Scans",
+        "Autumbra · Checks",
+        "PDF: only the client’s signed-in users and the founder. · Proposed"
+      ]
+    },
+    {
+      "id": "573:5131",
+      "width": 375,
+      "height": 13365,
+      "nonInter": [],
+      "textOverflow": [],
+      "figures": [
+        {
+          "id": "573:5157",
+          "name": "Figure / Spend",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5158",
+          "name": "Figure / Work by code / cache / model",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5159",
+          "name": "Figure / Graduation progress",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5167",
+          "name": "Figure / Confidence histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5168",
+          "name": "Figure / By state",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5169",
+          "name": "Figure / vs Apollo",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5179",
+          "name": "Figure / Price-change histogram",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5180",
+          "name": "Figure / Time to detect a change",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5190",
+          "name": "Figure / Prediction confidence vs actual hit rate",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5200",
+          "name": "Figure / Quotes that became estimates or invoices",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5201",
+          "name": "Figure / Most-searched products",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5211",
+          "name": "Figure / Sources per answer",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        },
+        {
+          "id": "573:5229",
+          "name": "Figure / Findings by severity",
+          "totalVisible": 0,
+          "visiblePlotTexts": [
+            "0"
+          ]
+        }
+      ],
+      "darkSurfaces": [],
+      "copy": [
+        "Proposed · Not approved",
+        "×",
+        "Menu",
+        "⌄",
+        "Case study summary",
+        "[Client name]",
+        "Proposed wording and example data",
+        "30 days",
+        "Compare to previous",
+        "Export PDF",
+        "Export CSV",
+        "Could not load the case study. Try again. · Proposed",
+        "Values are unavailable. Zero charts are the template, not measured results. · Proposed",
+        "Try again",
+        "Every graph, histogram and tool stays present. Zero until there is data. · Proposed",
+        "Tank",
+        "Spend",
+        "$0.00",
+        "Savings vs baseline cost",
+        "Cost per task",
+        "Cache hits",
+        "0%",
+        "0",
+        "Work by code / cache / model",
+        "Graduation progress",
+        "Base",
+        "Records verified",
+        "Cost per verified record",
+        "Measured accuracy",
+        "0% ± 0",
+        "200-record audit",
+        "Confidence histogram",
+        "By state",
+        "vs Apollo",
+        "Tiger",
+        "Changes caught",
+        "Pages watched",
+        "Checks run",
+        "Alerts sent",
+        "Price-change histogram",
+        "Time to detect a change",
+        "Market Lab",
+        "Questions answered",
+        "Sources cited",
+        "Active feeds",
+        "Prediction confidence vs actual hit rate",
+        "0% / 0%",
+        "Rig",
+        "Searches",
+        "No-result searches",
+        "Setups built",
+        "Quotes sent",
+        "Quotes that became estimates or invoices",
+        "Most-searched products",
+        "Zenas",
+        "Questions",
+        "Cited answers",
+        "Criminal questions refused",
+        "Drafts",
+        "Sources per answer",
+        "Trigger",
+        "Checker issues per draft",
+        "Acceptance rate",
+        "Voice-rule hits",
+        "Tisan",
+        "Sites built",
+        "Visual scores",
+        "Radix",
+        "Scans",
+        "Findings by severity",
+        "Autumbra",
+        "Checks",
+        "Incidents",
+        "Shields",
+        "Product",
+        "↕",
+        "Base · Records verified",
+        "Tiger · Changes caught",
+        "Market Lab · Questions answered",
+        "Rig · Searches",
+        "Zenas · Questions",
+        "Trigger · Drafts",
+        "Tisan · Sites built",
+        "Radix · Scans",
+        "Autumbra · Checks",
+        "PDF: only the client’s signed-in users and the founder. · Proposed"
+      ]
+    }
+  ]
+}

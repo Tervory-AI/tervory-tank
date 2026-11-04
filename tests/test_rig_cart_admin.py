@@ -10,9 +10,9 @@ from fastapi import FastAPI
 
 import access
 import command
+from test_rig_cart import TENANT, OTHER, setup
 from rigbox.cart_api import commerce_operation
 from rigbox.commerce import CommerceError
-from test_rig_cart import TENANT, OTHER, setup
 
 
 @pytest.mark.asyncio

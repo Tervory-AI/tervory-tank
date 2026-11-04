@@ -1,0 +1,285 @@
+{
+  "fileUrl": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS",
+  "pageId": "610:675",
+  "frames": [
+    {
+      "id": "604:9",
+      "name": "Data / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 0,
+      "width": 1440,
+      "height": 951,
+      "proposed": true
+    },
+    {
+      "id": "606:9",
+      "name": "Data / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 0,
+      "width": 375,
+      "height": 1397,
+      "proposed": true
+    },
+    {
+      "id": "615:9",
+      "name": "Ledger / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 2200,
+      "width": 1440,
+      "height": 907,
+      "proposed": true
+    },
+    {
+      "id": "616:9",
+      "name": "Ledger / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 2200,
+      "width": 375,
+      "height": 1156,
+      "proposed": true
+    },
+    {
+      "id": "618:9",
+      "name": "Matters / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 4400,
+      "width": 1440,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "619:9",
+      "name": "Matters / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 4400,
+      "width": 375,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "626:9",
+      "name": "Chat costs / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 6600,
+      "width": 1440,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "630:9",
+      "name": "Chat costs / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 6600,
+      "width": 375,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "631:9",
+      "name": "Cost details / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 8800,
+      "width": 1440,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "632:9",
+      "name": "Cost details / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 8800,
+      "width": 375,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "636:9",
+      "name": "Onboarding · Organization / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 11000,
+      "width": 1440,
+      "height": 1044,
+      "proposed": true
+    },
+    {
+      "id": "637:9",
+      "name": "Onboarding · Organization / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 11000,
+      "width": 375,
+      "height": 1100,
+      "proposed": true
+    },
+    {
+      "id": "640:9",
+      "name": "Onboarding · Industry / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 13200,
+      "width": 1440,
+      "height": 1044,
+      "proposed": true
+    },
+    {
+      "id": "641:9",
+      "name": "Onboarding · Industry / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 13200,
+      "width": 375,
+      "height": 1100,
+      "proposed": true
+    },
+    {
+      "id": "649:10",
+      "name": "Autumbra public / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 26400,
+      "width": 1440,
+      "height": 1044,
+      "proposed": true
+    },
+    {
+      "id": "649:22",
+      "name": "Autumbra public / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 26400,
+      "width": 375,
+      "height": 1044,
+      "proposed": true
+    },
+    {
+      "id": "648:9",
+      "name": "Onboarding · File / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 15400,
+      "width": 1440,
+      "height": 1437,
+      "proposed": true
+    },
+    {
+      "id": "650:9",
+      "name": "Onboarding · File / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 15400,
+      "width": 375,
+      "height": 1663,
+      "proposed": true
+    },
+    {
+      "id": "654:9",
+      "name": "Onboarding · Run / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 17600,
+      "width": 1440,
+      "height": 1044,
+      "proposed": true
+    },
+    {
+      "id": "655:9",
+      "name": "Onboarding · Run / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 17600,
+      "width": 375,
+      "height": 1100,
+      "proposed": true
+    },
+    {
+      "id": "657:9",
+      "name": "Stored Market Lab source / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 19800,
+      "width": 1440,
+      "height": 916,
+      "proposed": true
+    },
+    {
+      "id": "658:9",
+      "name": "Stored Market Lab source / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 19800,
+      "width": 375,
+      "height": 1007,
+      "proposed": true
+    },
+    {
+      "id": "661:9",
+      "name": "Moot public watch · Index / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 22000,
+      "width": 1440,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "662:9",
+      "name": "Moot public watch · Index / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 22000,
+      "width": 375,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "666:9",
+      "name": "Autumbra undo / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 28600,
+      "width": 1440,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "666:17",
+      "name": "Autumbra undo / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 28600,
+      "width": 375,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "664:9",
+      "name": "Moot public watch · Match / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 24200,
+      "width": 1440,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "665:9",
+      "name": "Moot public watch · Match / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 24200,
+      "width": 375,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "667:11",
+      "name": "Autumbra weekly receipts / 1440 / As built / Proposed",
+      "x": 0,
+      "y": 30800,
+      "width": 1440,
+      "height": 900,
+      "proposed": true
+    },
+    {
+      "id": "667:17",
+      "name": "Autumbra weekly receipts / 375 / As built / Proposed",
+      "x": 1520,
+      "y": 30800,
+      "width": 375,
+      "height": 900,
+      "proposed": true
+    }
+  ],
+  "canvasPositionChangedIds": [
+    "649:10",
+    "649:22",
+    "666:9",
+    "666:17",
+    "667:11",
+    "667:17"
+  ],
+  "newProductWords": []
+}
