@@ -32,7 +32,7 @@ def argv_for(settings, name, runtime, directory, job):
         del argv[index:index + 2]
     for i, arg in enumerate(argv):
         if arg in ('/work:rw,nosuid,nodev,size=3g', '/home/worker:rw,nosuid,nodev,size=256m'):
-            argv[i] = arg + ',uid=1001,gid=1001'
+            argv[i] = arg + ',mode=1777'
     argv[-1:] = ['--user', '1001:1001', IMAGE]
     # No Tank service credential is staged in this container; only its job lease.
     index = argv.index('TANK_KEY_FILE=/run/secrets/tank_key')
