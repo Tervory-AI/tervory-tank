@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import math
+import re
 import sqlite3
 from pathlib import Path
 from uuid import uuid4
@@ -14,11 +15,15 @@ from rigbox.rank import search
 MAX_BYTES = 32 * 1024 * 1024
 
 
-async def command(*args):
+async def command(*args, timeout=45):
+    if args[0] == 'ffmpeg':
+        args = list(args)
+        args[1:1] = ['-threads', '1', '-filter_threads', '1', '-filter_complex_threads', '1']
+        args[-1:-1] = ['-threads', '1']
     process = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE,
                                                  stderr=asyncio.subprocess.DEVNULL)
     try:
-        output, _ = await asyncio.wait_for(process.communicate(), 45)
+        output, _ = await asyncio.wait_for(process.communicate(), timeout)
     except BaseException:
         process.kill()
         await process.wait()
@@ -31,7 +36,8 @@ async def command(*args):
 async def frames(path: Path):
     # Disable network protocols inside the decoder. At most 120 samples / 10 minutes.
     raw = await command('ffmpeg', '-v', 'error', '-protocol_whitelist', 'file,pipe',
-                        '-i', str(path), '-t', '600', '-vf', 'fps=1/5,scale=32:32',
+                        '-format_whitelist', 'mov,matroska,webm,avi',
+                        '-i', str(path), '-t', '600', '-vf', 'fps=1/5:start_time=0:round=up,scale=32:32',
                         '-frames:v', '120', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1')
     return [raw[i:i + 3072] for i in range(0, len(raw), 3072) if len(raw[i:i + 3072]) == 3072]
 
@@ -64,6 +70,13 @@ class Repository:
             raise KeyError(identifier)
         return json.loads(row[0])
 
+    def list(self, tenant):
+        with self.db() as db:
+            rows = db.execute('SELECT body FROM videos WHERE tenant=? ORDER BY rowid DESC LIMIT 100',
+                              (tenant,)).fetchall()
+        return [{key: value for key, value in json.loads(row[0]).items()
+                 if key in {'id', 'status', 'duration', 'revision'}} for row in rows]
+
     def save(self, tenant, body, expected=None):
         with self.db() as db:
             if expected is None:
@@ -82,24 +95,60 @@ class Engine:
         self.lock = asyncio.Semaphore(1)
 
     async def ingest(self, tenant, video: bytes, transcript: list, references: dict):
+        if not isinstance(transcript, list) or not isinstance(references, dict):
+            raise ValueError('media_input')
         if not video or len(video) > MAX_BYTES or len(transcript) > 1000 or len(references) > 100:
             raise ValueError('media_limit')
         for segment in transcript:
+            if not isinstance(segment, dict):
+                raise ValueError('transcript')
             start, end = float(segment['start']), float(segment['end'])
-            if not (0 <= start < end <= 600) or len(segment['text']) > 10000:
+            if not (0 <= start < end <= 600) or not isinstance(segment['text'], str) or len(segment['text']) > 10000:
                 raise ValueError('transcript')
         identifier = uuid4().hex
         path = self.repository.directory(tenant) / (identifier + '.mp4')
         path.write_bytes(video)
         try:
             async with self.lock:
+                metadata = json.loads(await command(
+                    'ffprobe', '-v', 'error', '-protocol_whitelist', 'file,pipe',
+                    '-format_whitelist', 'mov,matroska,webm,avi', '-show_entries', 'format=duration',
+                    '-of', 'json', str(path)))
+                duration = float(metadata['format']['duration'])
+                if not (0 < duration <= 600):
+                    raise ValueError('duration_limit')
                 samples = await frames(path)
                 if not samples:
                     raise ValueError('no_frames')
                 products = await self.rig.store.products(tenant)
                 catalogue = {str(p.get('sku') or p.get('id')): p for p in products if p.get('active', True)}
+                # Reuse store catalogue images automatically. Explicit uploads can
+                # replace inaccessible images without changing catalogue rows.
+                from .video_media import download
+                images = dict(references)
+                image_errors = []
+                slots = asyncio.Semaphore(4)
+
+                async def fetch_reference(sku, product):
+                    url = product.get('image_url') or product.get('image')
+                    if sku in images or not url:
+                        return
+                    async with slots:
+                        try:
+                            images[sku] = await asyncio.to_thread(download, url, 2 * 1024 * 1024)
+                        except (ValueError, OSError):
+                            image_errors.append(sku)
+
+                tasks = [asyncio.create_task(fetch_reference(sku, product))
+                         for sku, product in list(catalogue.items())[:100]]
+                if tasks:
+                    _, pending = await asyncio.wait(tasks, timeout=45)
+                    for task in pending:
+                        task.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    image_errors.extend(['fetch_timeout'] * len(pending))
                 fingerprints = {}
-                for sku, image in references.items():
+                for sku, image in images.items():
                     if sku not in catalogue or len(image) > 2 * 1024 * 1024:
                         raise ValueError('reference_invalid')
                     reference = path.with_suffix('.reference')
@@ -107,19 +156,30 @@ class Engine:
                     try:
                         fingerprints[sku] = await command(
                             'ffmpeg', '-v', 'error', '-protocol_whitelist', 'file,pipe',
+                            '-format_whitelist', 'png_pipe,jpeg_pipe,ppm_pipe',
                             '-i', str(reference), '-vf', 'scale=32:32', '-frames:v', '1',
-                            '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1')
+                            '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1', timeout=15)
                         if len(fingerprints[sku]) != 3072:
                             raise ValueError('reference_invalid')
+                    except (ValueError, TimeoutError):
+                        fingerprints.pop(sku, None)
+                        if sku in references:
+                            raise
+                        image_errors.append(sku)
                     finally:
                         reference.unlink(missing_ok=True)
                 moments = []
                 for index, frame in enumerate(samples):
-                    start, end = index * 5, (index + 1) * 5
+                    start, end = index * 5, min((index + 1) * 5, duration)
                     text = ' '.join(str(s['text']) for s in transcript
                                     if float(s['start']) < end and float(s['end']) > start)
                     ids = search({'tenant_id': tenant, 'products': products, 'q': text, 'limit': 5})['ids']
-                    evidence = {sku: {'transcript': True} for sku in ids if sku in catalogue}
+                    # Search proposes candidates; require a complete name or SKU in the
+                    # transcript before claiming text evidence for that product.
+                    normalized = ' ' + re.sub(r'[^\w]+', ' ', text.casefold()).strip() + ' '
+                    evidence = {sku: {'transcript': True} for sku in ids if sku in catalogue
+                                and any(' ' + re.sub(r'[^\w]+', ' ', str(term).casefold()).strip() + ' '
+                                        in normalized for term in (sku, catalogue[sku].get('name', '')) if term)}
                     for sku, reference in fingerprints.items():
                         score = similarity(frame, reference)
                         if score >= .96:
@@ -127,9 +187,11 @@ class Engine:
                     for sku, proof in evidence.items():
                         moments.append({'start': start, 'end': end, 'product_id': sku,
                                         'evidence': proof, 'approved': False})
-                body = {'id': identifier, 'revision': 1, 'status': 'draft', 'moments': moments,
+                body = {'id': identifier, 'duration': duration, 'revision': 1, 'status': 'draft', 'moments': moments,
                         'receipt': {'route': 'code', 'model_calls': 0, 'media_sha256': hashlib.sha256(video).hexdigest(),
-                                    'vision': 'ffmpeg-rgb-distance-v1', 'samples': len(samples)}}
+                                    'vision': 'ffmpeg-rgb-distance-v1', 'samples': len(samples),
+                                    'reference_images': len(fingerprints), 'image_errors': image_errors,
+                                    'catalogue_images_truncated': len(catalogue) > 100}}
                 self.repository.save(tenant, body)
                 return body
         except BaseException:
@@ -145,7 +207,7 @@ class Engine:
         cleaned = []
         for m in moments:
             start, end = float(m['start']), float(m['end'])
-            if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end <= 600):
+            if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end <= body['duration']):
                 raise ValueError('timestamp')
             if m['product_id'] not in products or type(m['approved']) is not bool:
                 raise ValueError('product')

@@ -1,14 +1,14 @@
 # video-shop
 
 Internal room for store-owned videos and catalogues. Compose `video_room.mount(rig_app,
-Path(DATA_DIR) / 'video-shop')` onto an initialized Rig host. Requires FFmpeg on
-the host; no paid services, new model routes or credentials. Durable data must be
+Path(DATA_DIR) / 'video-shop')` onto an initialized Rig host. The provided Dockerfile supplies FFmpeg; mounting on another host requires FFmpeg there; no paid services, new model routes or credentials. Durable data must be
 on the host's data volume. This change does not alter deployment configuration.
 
 Admin routes reuse Rig admin keys. `POST /v1/rig/video-shop/admin/videos` accepts
 exactly one of `video_base64` or a public HTTPS `url`, optional timestamped `transcript` segments (`start`, `end`, `text`),
 and `references` mapping catalogue SKUs to base64 image bytes. Images must belong
-to the same store catalogue; upload catalogue images alongside the video. FFmpeg
+to the same store catalogue. Catalogue image URLs are fetched automatically over
+guarded HTTPS (up to 100); explicit references replace inaccessible photos. FFmpeg
 samples every five seconds (maximum ten minutes, 32 MiB), compares normalized
 frames to references, and reuses Rig's catalogue search on transcript segments.
 Simple image distance is conservative candidate generation, not general object
@@ -37,3 +37,10 @@ Product detail uses `/v1/rig/products/{sku}`. Adds and checkout use Rig's existi
 service exists here. Listen for `video-shop:cart` to update the store UI and
 `video-shop:state` for loading/error states. Labels can follow incoming Figma
 wording without changing contracts. Call the returned `destroy()` on unmount.
+
+The deployable entry point is `video_shop.video_asgi:app`. Build with `agents/`
+as context using this room’s Dockerfile. It composes the existing Rig host and
+uses its existing database, keys and cart settings. Persist `DATA_DIR/video-shop`.
+Admin GET `/admin/videos` lists recent videos; GET `/admin/videos/{id}/media`
+allows private draft playback during review. See `docs/acceptance/video_shop.md`
+for limits and the offline acceptance recipe.

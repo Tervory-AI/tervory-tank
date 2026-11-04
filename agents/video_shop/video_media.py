@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from .video_engine import MAX_BYTES
 
 
-def download(url):
+def download(url, limit=MAX_BYTES):
     parsed = urlsplit(url)
     if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
             or parsed.port not in (None, 443) or len(url) > 2000):
@@ -31,8 +31,10 @@ def download(url):
         deadline = time.monotonic() + 45
         while chunk := response.read(65536):
             result.extend(chunk)
-            if len(result) > MAX_BYTES or time.monotonic() > deadline:
+            if len(result) > limit or time.monotonic() > deadline:
                 raise ValueError('media_limit')
         return bytes(result)
+    except http.client.HTTPException:
+        raise ValueError('url_response') from None
     finally:
         connection.close()

@@ -50,11 +50,14 @@ async def create(request: Request):
             raise ValueError('one_source')
         video = (await asyncio.to_thread(download, data['url']) if data.get('url')
                  else base64.b64decode(data['video_base64'], validate=True))
+        if not isinstance(data.get('references', {}), dict):
+            raise ValueError('references')
         references = {sku: base64.b64decode(value, validate=True)
                       for sku, value in data.get('references', {}).items()}
-        result = await engine(request).ingest(_tenant(request), video, data.get('transcript', []), references)
+        result = await asyncio.wait_for(
+            engine(request).ingest(_tenant(request), video, data.get('transcript', []), references), 120)
         return _ok(request, result)
-    except (ValueError, KeyError, TypeError, IndexError):
+    except (ValueError, KeyError, TypeError, IndexError, OSError, TimeoutError):
         raise HTTPException(422, 'invalid_media') from None
 
 
@@ -72,7 +75,7 @@ async def review(identifier: str, request: Request):
     await _admin(request)
     data = await body(request)
     try:
-        if type(data['revision']) is not int:
+        if type(data['revision']) is not int or not 1 <= data['revision'] <= 2147483647:
             raise ValueError('revision')
         return _ok(request, await engine(request).review(_tenant(request), identifier,
                                                        data['revision'], data['moments']))
@@ -101,7 +104,7 @@ async def timeline(identifier: str, request: Request):
     products = {str(p.get('sku') or p.get('id')): p for p in
                 await _service(request).store.products(_tenant(request)) if p.get('active', True)}
     moments = [m for m in saved['moments'] if m['approved'] and m['product_id'] in products]
-    return _ok(request, {'id': identifier, 'revision': saved['revision'], 'moments': moments,
+    return _ok(request, {'id': identifier, 'duration': saved.get('duration'), 'revision': saved['revision'], 'moments': moments,
                         'products': {m['product_id']: public_product(shopper_row(products[m['product_id']]))
                                      for m in moments}})
 
@@ -125,3 +128,22 @@ async def widget():
     from fastapi.responses import FileResponse
     return FileResponse(Path(__file__).with_name('widget.js'), media_type='text/javascript',
                         headers={'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff'})
+
+
+@router.get('/admin/videos')
+async def videos(request: Request):
+    await _admin(request)
+    return _ok(request, {'videos': engine(request).repository.list(_tenant(request))})
+
+
+@router.get('/admin/videos/{identifier}/media')
+async def admin_media(identifier: str, request: Request):
+    from fastapi.responses import FileResponse
+    await _admin(request)
+    try:
+        saved = engine(request).repository.get(_tenant(request), identifier)
+    except KeyError:
+        raise HTTPException(404, 'video') from None
+    path = engine(request).repository.directory(_tenant(request)) / (saved['id'] + '.mp4')
+    return FileResponse(path, media_type='video/mp4',
+                        headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
