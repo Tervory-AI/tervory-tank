@@ -1,0 +1,1082 @@
+[
+  {
+    "id": "557:1461",
+    "name": "F1-W12-1440 · Tab autocomplete · Proposed",
+    "width": 1440,
+    "height": 900,
+    "types": {
+      "FRAME": 33,
+      "RECTANGLE": 3,
+      "TEXT": 35,
+      "VECTOR": 8,
+      "INSTANCE": 8
+    },
+    "images": [
+      {
+        "id": "557:1463",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:1477;551:166",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:43",
+      "553:1313",
+      "93:4",
+      "553:1325"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Tab autocomplete",
+      "A suggestion appears at the cursor in the editor.",
+      "Suggested completion",
+      "Tab · Accept\nEsc · Dismiss",
+      "file.txt · line 2",
+      "Ask Tervory, or describe a change to build…",
+      "Auto",
+      "Attach",
+      "Send",
+      "Receipt pending",
+      "1   export function message() {\n2     return \n3   }",
+      "\"new\";",
+      "Tab to accept    Esc to dismiss",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 570,
+    "contentBottom": 233,
+    "outside": []
+  },
+  {
+    "id": "557:1555",
+    "name": "F1-W12-1280 · Tab autocomplete · Proposed",
+    "width": 1280,
+    "height": 800,
+    "types": {
+      "FRAME": 33,
+      "RECTANGLE": 3,
+      "TEXT": 35,
+      "VECTOR": 8,
+      "INSTANCE": 8
+    },
+    "images": [
+      {
+        "id": "557:1557",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:1571;551:168",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:76",
+      "553:1313",
+      "93:4",
+      "553:1325"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Tab autocomplete",
+      "A suggestion appears at the cursor in the editor.",
+      "Suggested completion",
+      "Tab · Accept\nEsc · Dismiss",
+      "file.txt · line 2",
+      "Ask Tervory, or describe a change to build…",
+      "Auto",
+      "Attach",
+      "Send",
+      "Receipt pending",
+      "1   export function message() {\n2     return \n3   }",
+      "\"new\";",
+      "Tab to accept    Esc to dismiss",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 470,
+    "contentBottom": 233,
+    "outside": []
+  },
+  {
+    "id": "557:1649",
+    "name": "F1-W13-1440 · Inline selection · Proposed",
+    "width": 1440,
+    "height": 900,
+    "types": {
+      "FRAME": 34,
+      "RECTANGLE": 3,
+      "TEXT": 35,
+      "VECTOR": 8,
+      "INSTANCE": 9
+    },
+    "images": [
+      {
+        "id": "557:1651",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:1665;551:166",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:43",
+      "553:1313",
+      "93:4",
+      "553:1325"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Inline edit",
+      "Selection attached from the editor.",
+      "Selected code",
+      "file.txt · lines 2–3",
+      "Describe edit",
+      "Ask Tervory, or describe a change to build…",
+      "Auto",
+      "Attach",
+      "Send",
+      "Receipt pending",
+      "1   export function message() {\n2     return \"old\";\n3   }",
+      "Selected lines 2–3",
+      "Edit with Tervory",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 570,
+    "contentBottom": 243,
+    "outside": []
+  },
+  {
+    "id": "557:1746",
+    "name": "F1-W13-1280 · Inline selection · Proposed",
+    "width": 1280,
+    "height": 800,
+    "types": {
+      "FRAME": 34,
+      "RECTANGLE": 3,
+      "TEXT": 35,
+      "VECTOR": 8,
+      "INSTANCE": 9
+    },
+    "images": [
+      {
+        "id": "557:1748",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:1762;551:168",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:76",
+      "553:1313",
+      "93:4",
+      "553:1325"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Inline edit",
+      "Selection attached from the editor.",
+      "Selected code",
+      "file.txt · lines 2–3",
+      "Describe edit",
+      "Ask Tervory, or describe a change to build…",
+      "Auto",
+      "Attach",
+      "Send",
+      "Receipt pending",
+      "1   export function message() {\n2     return \"old\";\n3   }",
+      "Selected lines 2–3",
+      "Edit with Tervory",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 470,
+    "contentBottom": 243,
+    "outside": []
+  },
+  {
+    "id": "557:1843",
+    "name": "F1-W14-1440 · Inline instruction · Proposed",
+    "width": 1440,
+    "height": 900,
+    "types": {
+      "FRAME": 34,
+      "RECTANGLE": 3,
+      "TEXT": 35,
+      "VECTOR": 8,
+      "INSTANCE": 9
+    },
+    "images": [
+      {
+        "id": "557:1845",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:1859;551:166",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:43",
+      "553:1313",
+      "93:4",
+      "553:1325"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Inline edit",
+      "Describe the change for the selected code.",
+      "Edit instruction",
+      "Return the new wording instead of the old wording.",
+      "Propose edit",
+      "Ask Tervory, or describe a change to build…",
+      "Auto",
+      "Attach",
+      "Send",
+      "Receipt pending",
+      "1   export function message() {\n2     return \"old\";\n3   }",
+      "Describe edit",
+      "Return the new wording.",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 570,
+    "contentBottom": 243,
+    "outside": []
+  },
+  {
+    "id": "557:1940",
+    "name": "F1-W14-1280 · Inline instruction · Proposed",
+    "width": 1280,
+    "height": 800,
+    "types": {
+      "FRAME": 34,
+      "RECTANGLE": 3,
+      "TEXT": 35,
+      "VECTOR": 8,
+      "INSTANCE": 9
+    },
+    "images": [
+      {
+        "id": "557:1942",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:1956;551:168",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:76",
+      "553:1313",
+      "93:4",
+      "553:1325"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Inline edit",
+      "Describe the change for the selected code.",
+      "Edit instruction",
+      "Return the new wording instead of the old wording.",
+      "Propose edit",
+      "Ask Tervory, or describe a change to build…",
+      "Auto",
+      "Attach",
+      "Send",
+      "Receipt pending",
+      "1   export function message() {\n2     return \"old\";\n3   }",
+      "Describe edit",
+      "Return the new wording.",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 470,
+    "contentBottom": 243,
+    "outside": []
+  },
+  {
+    "id": "557:2037",
+    "name": "F1-W15-1440 · Inline diff · Proposed",
+    "width": 1440,
+    "height": 900,
+    "types": {
+      "FRAME": 35,
+      "RECTANGLE": 3,
+      "TEXT": 39,
+      "VECTOR": 8,
+      "INSTANCE": 12
+    },
+    "images": [
+      {
+        "id": "557:2039",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:2053;551:166",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:43",
+      "553:1313",
+      "93:4",
+      "553:1325"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Inline edit",
+      "Review the diff in place before applying it.",
+      "file.txt · 1 hunk",
+      "− return \"old\";\n+ return \"new\";",
+      "Accept",
+      "Reject",
+      "Ask Tervory, or describe a change to build…",
+      "Auto",
+      "Attach",
+      "Send",
+      "Receipt pending",
+      "1   export function message() {",
+      "− return \"old\";",
+      "+ return \"new\";",
+      "Accept",
+      "Reject",
+      "4   }",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 570,
+    "contentBottom": 263,
+    "outside": []
+  },
+  {
+    "id": "557:2141",
+    "name": "F1-W15-1280 · Inline diff · Proposed",
+    "width": 1280,
+    "height": 800,
+    "types": {
+      "FRAME": 35,
+      "RECTANGLE": 3,
+      "TEXT": 39,
+      "VECTOR": 8,
+      "INSTANCE": 12
+    },
+    "images": [
+      {
+        "id": "557:2143",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:2157;551:168",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:76",
+      "553:1313",
+      "93:4",
+      "553:1325"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Inline edit",
+      "Review the diff in place before applying it.",
+      "file.txt · 1 hunk",
+      "− return \"old\";\n+ return \"new\";",
+      "Accept",
+      "Reject",
+      "Ask Tervory, or describe a change to build…",
+      "Auto",
+      "Attach",
+      "Send",
+      "Receipt pending",
+      "1   export function message() {",
+      "− return \"old\";",
+      "+ return \"new\";",
+      "Accept",
+      "Reject",
+      "4   }",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 470,
+    "contentBottom": 263,
+    "outside": []
+  },
+  {
+    "id": "557:2245",
+    "name": "F1-W16-1440 · Codebase search · Proposed",
+    "width": 1440,
+    "height": 900,
+    "types": {
+      "FRAME": 33,
+      "RECTANGLE": 2,
+      "TEXT": 33,
+      "VECTOR": 8,
+      "INSTANCE": 5
+    },
+    "images": [
+      {
+        "id": "557:2247",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:2261;551:166",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:43",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Codebase search",
+      "Search this project",
+      "createReceipt",
+      "3 matches · 2 files",
+      "cli/src/receipt.mjs:12",
+      "export function createReceipt(turn) {\n  return { total: turn.cost };\n}",
+      "cli/src/code-mode.mjs:84",
+      "const receipt = createReceipt(turn);",
+      "cli/src/receipt.mjs:29",
+      "export { createReceipt };",
+      "Open first result",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 754,
+    "contentBottom": 559,
+    "outside": []
+  },
+  {
+    "id": "557:2334",
+    "name": "F1-W16-1280 · Codebase search · Proposed",
+    "width": 1280,
+    "height": 800,
+    "types": {
+      "FRAME": 33,
+      "RECTANGLE": 2,
+      "TEXT": 33,
+      "VECTOR": 8,
+      "INSTANCE": 5
+    },
+    "images": [
+      {
+        "id": "557:2336",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:2350;551:168",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:76",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Codebase search",
+      "Search this project",
+      "createReceipt",
+      "3 matches · 2 files",
+      "cli/src/receipt.mjs:12",
+      "export function createReceipt(turn) {\n  return { total: turn.cost };\n}",
+      "cli/src/code-mode.mjs:84",
+      "const receipt = createReceipt(turn);",
+      "cli/src/receipt.mjs:29",
+      "export { createReceipt };",
+      "Open first result",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 654,
+    "contentBottom": 559,
+    "outside": []
+  },
+  {
+    "id": "557:2423",
+    "name": "F1-W17-1440 · Background agents · Proposed",
+    "width": 1440,
+    "height": 900,
+    "types": {
+      "FRAME": 32,
+      "RECTANGLE": 2,
+      "TEXT": 33,
+      "VECTOR": 8,
+      "INSTANCE": 7
+    },
+    "images": [
+      {
+        "id": "557:2425",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:2439;551:166",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:43",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Background agents",
+      "3 agents · This workspace",
+      "Review changed files · Running",
+      "main · 00:42\nReading 3 files",
+      "Open agent",
+      "Run tests · Waiting for Run",
+      "main · npm test",
+      "Review command",
+      "Find receipt flow · Finished",
+      "main · 2 matches found",
+      "View results",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 754,
+    "contentBottom": 564,
+    "outside": []
+  },
+  {
+    "id": "557:2513",
+    "name": "F1-W17-1280 · Background agents · Proposed",
+    "width": 1280,
+    "height": 800,
+    "types": {
+      "FRAME": 32,
+      "RECTANGLE": 2,
+      "TEXT": 33,
+      "VECTOR": 8,
+      "INSTANCE": 7
+    },
+    "images": [
+      {
+        "id": "557:2515",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:2529;551:168",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:76",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Background agents",
+      "3 agents · This workspace",
+      "Review changed files · Running",
+      "main · 00:42\nReading 3 files",
+      "Open agent",
+      "Run tests · Waiting for Run",
+      "main · npm test",
+      "Review command",
+      "Find receipt flow · Finished",
+      "main · 2 matches found",
+      "View results",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 654,
+    "contentBottom": 564,
+    "outside": []
+  },
+  {
+    "id": "557:2603",
+    "name": "F1-W18-1440 · PR review comments · Proposed",
+    "width": 1440,
+    "height": 900,
+    "types": {
+      "FRAME": 32,
+      "RECTANGLE": 2,
+      "TEXT": 32,
+      "VECTOR": 8,
+      "INSTANCE": 7
+    },
+    "images": [
+      {
+        "id": "557:2605",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:2619;551:166",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:43",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "PR review",
+      "#42 · Update receipt examples · Proposed",
+      "cli/src/receipt.mjs · line 18",
+      "Review comment · Open\nHandle a missing cost before formatting the total.",
+      "Open in editor",
+      "Reply",
+      "I will add a default value and a test.",
+      "Add comment",
+      "Resolve thread",
+      "Comments are drafts until submitted.",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 754,
+    "contentBottom": 447,
+    "outside": []
+  },
+  {
+    "id": "557:2692",
+    "name": "F1-W18-1280 · PR review comments · Proposed",
+    "width": 1280,
+    "height": 800,
+    "types": {
+      "FRAME": 32,
+      "RECTANGLE": 2,
+      "TEXT": 32,
+      "VECTOR": 8,
+      "INSTANCE": 7
+    },
+    "images": [
+      {
+        "id": "557:2694",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:2708;551:168",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:76",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "PR review",
+      "#42 · Update receipt examples · Proposed",
+      "cli/src/receipt.mjs · line 18",
+      "Review comment · Open\nHandle a missing cost before formatting the total.",
+      "Open in editor",
+      "Reply",
+      "I will add a default value and a test.",
+      "Add comment",
+      "Resolve thread",
+      "Comments are drafts until submitted.",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 654,
+    "contentBottom": 447,
+    "outside": []
+  }
+]

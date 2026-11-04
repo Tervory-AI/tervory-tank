@@ -1,0 +1,77 @@
+[
+  {
+    "before": "Billing address line / invoice",
+    "after": "Client's billing address line",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Billing city / invoice",
+    "after": "Client's billing city",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Billing state or region / invoice",
+    "after": "Client's billing state or region",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Billing postcode / invoice",
+    "after": "Client's billing postcode",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Billing country / invoice",
+    "after": "Client's billing country",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to address line / invoice",
+    "after": "Address on this invoice",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to city / invoice",
+    "after": "City on this invoice",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to state or region / invoice",
+    "after": "State or region on this invoice",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to postcode / invoice",
+    "after": "Postcode on this invoice",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to country / invoice",
+    "after": "Country on this invoice",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to address line / quote",
+    "after": "Address on this quote",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to city / quote",
+    "after": "City on this quote",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to state or region / quote",
+    "after": "State or region on this quote",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to postcode / quote",
+    "after": "Postcode on this quote",
+    "status": "Changed after approval, awaiting founder"
+  },
+  {
+    "before": "Bill-to country / quote",
+    "after": "Country on this quote",
+    "status": "Changed after approval, awaiting founder"
+  }
+]

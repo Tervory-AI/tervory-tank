@@ -1,0 +1,47 @@
+{
+  "text": "Skip to content\nMenu\n1. Organization\n2. Industry\n3. File\n4. Run\nAdd a CSV\n\nDrop the file here, or choose it. You will see the first 5 rows and match the columns. Nothing is uploaded until you press Start.\n\nDrop a CSV here\n\nChoose a file\nThe first row should be the column names.\nWhat this run costs\nClean names and addresses\nFree\nMatch records you already have\nFree\nFind each website\nFree. If our own search is not enough, we use the cheapest paid search available.\nRead the website\nFree\nPick out what the business does\nFree\nFind contacts\nFree\nCheck social pages\nFree\nEstimate the size of the business\nFree\nApply the industry profile\nFree\nCheck each record and score it\nFree\n\nMost steps are free. A paid step uses the cheapest option available. Pressing Start runs every step. Nothing waits for approval.\n\nBack\nStart",
+  "title": "Autumbra",
+  "width": 375,
+  "height": 1663,
+  "geometry": [
+    {
+      "tag": "DIV",
+      "text": "Back\nStart",
+      "rect": {
+        "x": 28,
+        "y": 1385.890625,
+        "width": 319,
+        "height": 93,
+        "top": 1385.890625,
+        "right": 347,
+        "bottom": 1478.890625,
+        "left": 28
+      }
+    }
+  ],
+  "controls": [
+    {
+      "type": "file",
+      "rect": {
+        "x": 45,
+        "y": 429.390625,
+        "width": 285,
+        "height": 21,
+        "top": 429.390625,
+        "right": 330,
+        "bottom": 450.390625,
+        "left": 45
+      },
+      "font": "13.3333px Arial",
+      "padding": "0px",
+      "pseudoFont": "13.3333px Arial",
+      "pseudoPadding": "1px 6px"
+    }
+  ],
+  "fonts": [
+    "Inter, Inter, sans-serif",
+    "Jost, Jost, sans-serif",
+    "Arial",
+    "\"JetBrains Mono\", \"JetBrains Mono\", ui-monospace, monospace"
+  ]
+}

@@ -242,14 +242,19 @@ async def confirm_draft(bot, actor, operation, args, operation_id):
     if operation == 'lead.confirm':
         from trigger_crm import binding
         binding(actor)  # Missing settings fail before claiming or contacting CRM.
-    row = await bot.pool.fetchrow('''UPDATE tank.trigger_bot_drafts SET state='executing',operation_id=$3
-        WHERE tenant_id=$1 AND id=$2 AND state='draft' AND kind=$4 RETURNING data''',
-        actor.tenant_id, args.draft_id, operation_id, operation.split('.')[0])
-    if not row:
-        raise HTTPException(409)
-    data = obj(row['data'])
-    if digest(data) != args.expected_digest:
-        raise HTTPException(409, 'Confirmed action required')
+    # A stale preview must not consume the draft. Lock, verify and claim together;
+    # commit the claim before contacting CRM/Rig so uncertain sends cannot replay.
+    async with bot.pool.acquire() as conn, conn.transaction():
+        row = await conn.fetchrow('''SELECT data FROM tank.trigger_bot_drafts
+            WHERE tenant_id=$1 AND id=$2 AND state='draft' AND kind=$3 FOR UPDATE''',
+            actor.tenant_id, args.draft_id, operation.split('.')[0])
+        if not row:
+            raise HTTPException(409)
+        data = obj(row['data'])
+        if digest(data) != args.expected_digest:
+            raise HTTPException(409, 'Confirmed action required')
+        await conn.execute('''UPDATE tank.trigger_bot_drafts SET state='executing',operation_id=$3
+            WHERE tenant_id=$1 AND id=$2''', actor.tenant_id, args.draft_id, operation_id)
     try:
         if operation == 'lead.confirm':
             from trigger_crm import confirmed_bot_lead

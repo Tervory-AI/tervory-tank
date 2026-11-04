@@ -1,0 +1,119 @@
+PR #635: current-main Tiger watch preservation and follow-up fixes
+
+Branch: codex/platform-registry
+Fetched main: 4bbff070d70d39e02049c87433b82bcd64737ae8
+Authorized main merge performed once: a271edaa (retained on local refreeze backup).
+Then scripts/refreeze_platform_registry.py prepare replayed the branch on that
+main, with new first freeze commit 7f1e5419e5c50b555335eb7387c4cf7886e9fb61.
+That first commit adds only the golden and snapshot test before extraction.
+Prepare baseline test: 1 passed in 3.27s. Finish: 1 passed in 5.13s.
+Finish verified that all merged-main tools, adapters, schemas, permissions,
+dispatch branch indices, route ordering, lifecycle and comment-stripped SQL are
+unchanged after removing only skala.teachers and its required route/column.
+
+Tiger / #629 retained
+- tank/command_tools/tiger.py:2: adds tiger.watches, pause, resume, remove and bulk.
+- tiger.py:6-7: pause/resume/remove/bulk in REQUEST_BODY_TOOLS and CONFIRMED.
+- tiger.py:17-21: adapters immediately after tiger.read in main order; bulk uses
+  tiger_watch_commands.BulkArgs, paid=True, kind=paid_run.
+- tank/command_tools/__init__.py:7: Tiger adapter segment has seven entries.
+- tank/routes_registry.py:28: early tiger_watch_commands.build_router() between
+  base_lists and tiger_alerts.
+- Main's WatchArgs.every and Tiger code planner additions are preserved unchanged.
+
+Other corrections
+- tank/training.py:561: teachers skill_id declares Query min_length=1,
+  max_length=100 and the exact TeachersArgs pattern. Invalid, empty and
+  200-character inputs are covered by 422 endpoint assertions.
+- tank/graduate.py:471: conditional serving models keep a rollback bar of at
+  least DEFAULT_THRESHOLD (.99), even if policy eval_threshold is .95. Tests
+  cover .98 rollback, .99 hold, a higher configured threshold, and unchanged
+  concrete-model threshold behavior.
+- scripts/refreeze_platform_registry.py:59: finish identifies the first freeze
+  by the snapshot helper's file-add history, rather than unrelated merged commits.
+- scripts/refreeze_platform_registry.py:98,110: prepare excludes commits already
+  on fetched main when replaying; superseded golden-only commits are omitted.
+  This avoids replaying upstream commits introduced by the authorized merge.
+
+Existing gate 3 behavior remains
+Founder-only .99/200 promotion with matching fingerprint; automatic promotion
+holds. Strong fallback for busy, slow, failed, urgent, drifted or refused weak
+routes; shared cap4 and 0.5s bounded scoring. Timed-out scoring retains its slot
+until the thread ends. Concrete answering-model receipts, safe annotation failure,
+both shadow paths suppressed, rollback/configure behavior and revalidation checks.
+One nullable additive teacher_model ALTER, no backfill. Same-tenant UUID ledger
+lookup; code/cache/nonledger teachers stay NULL. Founder zero-cost aggregate read,
+no pair content, private version tenant/region isolation. Unknown teacher_model
+stays NULL without a model="null" alias; known teachers use the existing Model label.
+newest_created_at remains API metadata needing an approved result label.
+No UI, compose, environment or workflow edits.
+Next shared files: workspace/lib/tank.ts and workspace/app/chats/presentation.ts.
+
+run_route change
+Only the two marked serving-resolution and receipt-annotation blocks differ from
+main. Removing them yields SHA256
+3f33cc4218d786327c064f68aaf2a93cd45675c8ad9d751c9ed0753394a6ebe9.
+The annotation block catches UPDATE errors and logs only the exception class.
+
+Validation
+Ruff E9,F over changed Python and git diff --check passed.
+Requested serial local regression, no retries, disposable private PostgreSQL,
+stub gateway/scorer, no external provider calls:
+.venv312/bin/python .platform-proof/with-pg.py tests/test_tiger_watch_commands.py tests/test_command.py tests/test_personal_tokens.py tests/test_platform_routellm_serving.py tests/test_registry_frozen.py tests/test_registry_extensions.py tests/test_platform_registry_integration.py::test_teachers_sources_counts_receipt_and_tenant_isolation --timeout=120 --timeout-method=thread -o faulthandler_timeout=90 --durations=8
+The result and final-head CI ci-ok, tank (1-3), workspace statuses are recorded in
+the PR after execution. CI is the full-suite test of record. No prohibited
+parallel offline suite or 50-run loop was run locally. Founder live acceptance
+remains after merge/deploy; it is not claimed here.
+
+CI contract alignment discovered by the first full run
+Initial run 41722853463 at d5972b6b found stale tests for the mechanical move:
+three source assertions expected router includes in main.py, and the pinned
+routing fixture lacked the two reviewed blocks. A schema-generator round trip
+also inserted a blank separator before generated memory.
+- tests/test_founder_console.py:379 and tests/test_bucket1_integration.py:42 now
+  require the exact early registry entry and one early registration call.
+- tests/test_workers_2.py:307 requires exactly the two worker routers, in order,
+  and one early registration call. Other assertions remain intact.
+- tests/tenant_rls/run_route.pinned now includes only the two reviewed hooks.
+  Before changing it, its full AST was asserted equal to run_route with exactly
+  those hooks removed. The whole-body comparison in test_tenant_rls.py is intact;
+  the independent unchanged-rest SHA256 check remains green.
+- tank/schema.sql moves one blank separator from before the comment regions to
+  before generated memory. No existing SQL statement moves or changes. The real
+  generator is now byte-idempotent. Golden normalization still matches main after
+  excluding the teacher ALTER; finish updated only that column's blank placement.
+Focused contract verification: 81 passed in 17.09s. Finish: 1 passed in 7.84s.
+Shard 3 also exposed a stale Tank alias in tests/test_smoke.py:15: the fresh
+module used setdefault and could register routers on an older app left by prior
+imports. The fixture now replaces its own alias. A subprocess regression in
+registry extensions preloads a different Tank module and requires both OAuth
+client routes exactly once on the newly imported app. The existing MCP coexistence
+assertions remain unchanged. Smoke/MCP/extensions/frozen checks: 8 passed in 9.12s.
+No scanner exceptions, skipped checks or retry behavior were added.
+
+Final re-freeze, only when authorized
+.venv312/bin/python scripts/refreeze_platform_registry.py prepare
+# Resolve any rebase conflicts preserving main and git rebase --continue.
+.venv312/bin/python scripts/refreeze_platform_registry.py finish
+Neither step pushes. Finish refuses every snapshot drift except the teacher
+addition. Run focused regressions and push with an explicit lease after rewriting.
+
+Final current-main integration
+- Untouched main: 5bf17ad19dd0318d30becfff3df4564b433f3344.
+- First freeze commit: 926bb386c687d46bf9e658c5107e1aa7134f89c8.
+- prepare/replay/finish preserves every frozen main contract (catalogues, adapter
+  arguments/order, first dispatch arm, permission/planning schemas, route/lifecycle
+  order and SQL), with only skala.teachers, its route and teacher_model DDL added.
+- Current-main campaign, comparison, plugin, training, Market Lab and Zenas
+  declarations are retained; trigger CRM reads retain their ordinary read dispatch.
+- Current-main policy planner, held_swap_id/fallbacks query fields and ZA shutdown
+  cleanup are retained. Two RouteLLM hooks are the only run_route body changes,
+  proven against current main hash fdd6cbb821586b1ba97cd44a2e37290d8736cb931f063c2ca30ab38424ebcc51.
+- Narrow checks: 88 passed, 48 database-backed skips in 9.73s; one stale
+  mutation-test source anchor failed after main parenthesized Trigger dispatch.
+  Fixed only that anchor; it and Tiger watch regressions: 38 passed in 8.51s.
+- Exact CI Ruff command: All checks passed! No full local suite or retry loop.
+- finish links the canonical replay to the original reviewed head as a second
+  parent. A normal push preserves all remote history; no force-push is required.
+  Future prepare unwraps that link before replay and keeps a recovery backup.
+- Hosted final-head CI is the full-suite test of record.

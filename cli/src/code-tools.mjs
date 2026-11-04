@@ -1,7 +1,7 @@
 import { seatbeltProfile } from './seatbelt.mjs';
 import { constants } from 'node:fs';
 import { lstat, stat, access, realpath, readlink, open, readdir, readFile, writeFile, rename, unlink, mkdtemp, rm } from 'node:fs/promises';
-import { resolve, relative, isAbsolute, sep, dirname, basename } from 'node:path';
+import { resolve, relative, isAbsolute, sep, dirname, basename, delimiter as pathDelimiter } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
@@ -31,18 +31,22 @@ export function secretPath(path) {
 
 // The process output is collected, not streamed: redaction must see complete lines
 // even when a secret arrives split across stdout/stderr chunks.
-export async function processOutput(command, args, { cwd, gitDirectory, gitWorkTree, timeoutMs = LIMITS.commandMs, signal, input, outputBytes = LIMITS.outputBytes, delimiter = '\n', temporaryDirectory } = {}) {
+export async function processOutput(command, args, { cwd, gitDirectory, gitWorkTree, timeoutMs = LIMITS.commandMs, signal, input, outputBytes = LIMITS.outputBytes, delimiter = '\n', temporaryDirectory, windowsVerbatimArguments = false } = {}) {
   return new Promise((resolveResult, reject) => {
     let child; let timer; let killed = false; let size = 0; let total = 0; const chunks = [];
     const stop = () => {
       killed = true;
-      try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); } catch { /* already ended */ }
+      try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL'); else {
+        // taskkill owns the whole Windows process tree, including shell children.
+        const killer = spawn(resolve(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe'), ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+        killer.on('error', () => child.kill('SIGKILL'));
+      } } catch { /* already ended */ }
     };
     if (signal?.aborted) return reject(refused());
     try {
-      child = spawn(command, args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true,
+      child = spawn(command, args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true, windowsVerbatimArguments,
         env: { PATH: process.env.PATH, ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}), LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_LITERAL_PATHSPECS: '1',
-          ...(temporaryDirectory ? { TMPDIR: temporaryDirectory } : {}),
+          ...(temporaryDirectory ? { TMPDIR: temporaryDirectory, ...(process.platform === 'win32' ? { TEMP: temporaryDirectory, TMP: temporaryDirectory } : {}) } : {}),
           ...(gitDirectory ? { GIT_DIR: gitDirectory, GIT_WORK_TREE: gitWorkTree } : {}) },
         stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
     } catch { return reject(refused()); }
@@ -311,8 +315,7 @@ export class CodeFolder {
     return { applied: true };
   }
   async prepareCommand(command) {
-    // No Windows backend here provides the filesystem/network confinement of bwrap.
-    if (process.platform === 'win32') throw refused();
+    if (await this.commandBackend() === 'host') return { command, mounts: [] };
     const match = /^(?:'([^']+)'|"([^"]+)"|([^\s;|&<>]+))(?=\s|$)/.exec(command);
     if (!match) return { command, mounts: [] };
     const executable = match[1] ?? match[2] ?? match[3];
@@ -418,8 +421,44 @@ export class CodeFolder {
     const quoted = "'" + candidate.replaceAll("'", "'\"'\"'") + "'";
     return { command: quoted + command.slice(match[0].length), mounts, runners };
   }
-  async command(command, io, timeoutMs, mounts = []) {
+  #backend;
+  async commandBackend() {
+    return this.#backend ??= this.detectCommandBackend();
+  }
+  async detectCommandBackend() {
     if (process.platform === 'darwin') {
+      try {
+        const probe = await processOutput('/usr/bin/sandbox-exec', ['-p', await seatbeltProfile(this.root, []), '/usr/bin/true'], { cwd: this.root, timeoutMs: 2000 });
+        return probe.code === 0 && !probe.timed_out ? 'seatbelt' : 'host';
+      } catch { return 'host'; }
+    }
+    if (process.platform === 'linux') {
+      for (const directory of (process.env.PATH ?? '').split(pathDelimiter)) {
+        if (!isAbsolute(directory)) continue;
+        try {
+          const probe = await processOutput(resolve(directory, 'bwrap'), ['--unshare-all', '--ro-bind', '/', '/', '/bin/true'], { cwd: this.root, timeoutMs: 2000 });
+          if (probe.code === 0 && !probe.timed_out) return 'bwrap';
+        } catch { /* unavailable sandbox: approval still permits commands */ }
+      }
+    }
+    return 'host';
+  }
+  async command(command, io, timeoutMs = LIMITS.commandMs, mounts = []) {
+    timeoutMs = Math.min(timeoutMs, LIMITS.commandMs);
+    const backend = await this.commandBackend();
+    if (backend === 'host') {
+      const temp = await mkdtemp(resolve(this.root, '.tervory-command-'));
+      try {
+        const windows = process.platform === 'win32';
+        const shell = windows ? resolve(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe') : '/bin/sh';
+        // cmd.exe does not understand the \" escaping Node applies to arguments. Pass the
+        // command verbatim inside one pair of quotes, as Node's own shell: true does (/s
+        // strips exactly that outer pair).
+        return await processOutput(shell, windows ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command],
+          { cwd: this.root, timeoutMs, signal: io.signal, temporaryDirectory: temp, windowsVerbatimArguments: windows });
+      } finally { await rm(temp, { recursive: true, force: true }); }
+    }
+    if (backend === 'seatbelt') {
       await access('/usr/bin/sandbox-exec', constants.X_OK).catch(() => { throw refused(); });
       const profile = await seatbeltProfile(this.root, mounts);
       const temp = await mkdtemp(resolve(this.root, '.tervory-command-'));
@@ -430,10 +469,9 @@ export class CodeFolder {
         return await processOutput('/usr/bin/sandbox-exec', ['-p', profile, '/bin/sh', '-c', command], options);
       } finally { await rm(temp, { recursive: true, force: true }); }
     }
-    if (process.platform !== 'linux') throw refused();
     // A confirmed command must not bypass the folder/secret-file boundary by
     // reading an absolute host path, a symlink, .env or the user's environment.
-    // Use the worker's existing Bubblewrap; no unsandboxed fallback.
+    // Use Bubblewrap when installed; host fallback still requires Run approval.
     const masks = [];
     const scan = async (directory, prefix = '') => {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -463,6 +501,7 @@ export class CodeFolder {
         if (typeof args.command !== 'string' || !args.command || args.command.length > 8000 || /[\x00-\x1f\x7f]/.test(args.command) || redactSecrets(args.command) !== args.command) throw refused();
         const prepared = await this.prepareCommand(args.command);
         io.write(prepared.command + '\n');
+        if (await this.commandBackend() === 'host') io.write('Command runs with your user permissions.\n');
         for (const root of prepared.runners ?? []) io.write(`Read-only runner: ${root}\n`);
         if (io.interactive !== true || (await io.prompt('Run [y/N] '))?.trim().toLowerCase() !== 'y') return { ran: false };
         const result = await this.command(prepared.command, io, timeoutMs, prepared.mounts);

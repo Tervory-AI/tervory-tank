@@ -1,0 +1,140 @@
+{
+  "boxes": [
+    {
+      "tag": "MAIN",
+      "classes": "",
+      "rect": {
+        "x": 310,
+        "y": 0,
+        "width": 820,
+        "height": 505.765625,
+        "top": 0,
+        "right": 1130,
+        "bottom": 505.765625,
+        "left": 310
+      },
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(26, 26, 46)",
+      "borderWidth": 0,
+      "radius": 0
+    },
+    {
+      "tag": "MAIN",
+      "classes": "",
+      "rect": {
+        "x": 360,
+        "y": 24,
+        "width": 720,
+        "height": 361.765625,
+        "top": 24,
+        "right": 1080,
+        "bottom": 385.765625,
+        "left": 360
+      },
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(26, 26, 46)",
+      "borderWidth": 0,
+      "radius": 0
+    }
+  ],
+  "background": "rgb(255, 255, 255)",
+  "blocks": [
+    {
+      "text": "Your Autumbra weekly update",
+      "tag": "H1",
+      "rect": {
+        "x": 392,
+        "y": 76.09375,
+        "width": 656,
+        "height": 45,
+        "top": 76.09375,
+        "right": 1048,
+        "bottom": 121.09375,
+        "left": 392
+      },
+      "font": "system-ui, sans-serif",
+      "size": 30,
+      "weight": "700",
+      "lineHeight": "45px",
+      "color": "rgb(26, 26, 46)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    },
+    {
+      "text": "This is the receipt page linked from your Autumbra owner email. It lists what Autumbra checked, what it found, and what it did for your site this week.",
+      "tag": "P",
+      "rect": {
+        "x": 392,
+        "y": 141.1875,
+        "width": 656,
+        "height": 67.5,
+        "top": 141.1875,
+        "right": 1048,
+        "bottom": 208.6875,
+        "left": 392
+      },
+      "font": "system-ui, sans-serif",
+      "size": 15,
+      "weight": "400",
+      "lineHeight": "22.5px",
+      "color": "rgb(26, 26, 46)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    },
+    {
+      "text": "No receipts for this week yet.",
+      "tag": "P",
+      "rect": {
+        "x": 392,
+        "y": 223.6875,
+        "width": 656,
+        "height": 22.5,
+        "top": 223.6875,
+        "right": 1048,
+        "bottom": 246.1875,
+        "left": 392
+      },
+      "font": "system-ui, sans-serif",
+      "size": 15,
+      "weight": "400",
+      "lineHeight": "22.5px",
+      "color": "rgb(26, 26, 46)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    },
+    {
+      "text": "Nothing from your logs is kept — we read them, acted, and deleted them. If a shield caused a problem, use Undo this block above or the Undo link in that same email.",
+      "tag": "P",
+      "rect": {
+        "x": 392,
+        "y": 270.1875,
+        "width": 656,
+        "height": 68.390625,
+        "top": 270.1875,
+        "right": 1048,
+        "bottom": 338.578125,
+        "left": 392
+      },
+      "font": "system-ui, sans-serif",
+      "size": 15.2,
+      "weight": "400",
+      "lineHeight": "22.8px",
+      "color": "rgb(107, 114, 128)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    }
+  ],
+  "text": "Your Autumbra weekly update\n\nThis is the receipt page linked from your Autumbra owner email. It lists what Autumbra checked, what it found, and what it did for your site this week.\n\nNo receipts for this week yet.\n\nNothing from your logs is kept — we read them, acted, and deleted them. If a shield caused a problem, use Undo this block above or the Undo link in that same email.",
+  "title": "Autumbra",
+  "width": 1440,
+  "height": 900,
+  "controls": [],
+  "fonts": [
+    "Inter, Inter, sans-serif",
+    "system-ui, sans-serif"
+  ]
+}
