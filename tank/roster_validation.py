@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 
 from fastapi import HTTPException
 from gold import PLATFORM_TENANT, encoded, input_hash
@@ -51,13 +52,16 @@ async def prepare(tank, proposed=None, *, remove=False):
                     config['tenant_id'] = str(policy['tenant_id']) if policy.get('tenant_id') else None
                     jobs.append((pkg, config))
             roster_hash = input_hash(sorted(roster, key=encoded))
-            signature = input_hash([tank.box_region(), roster_hash, manifest,
+            previous = await conn.fetchrow('''SELECT roster_hash,epoch FROM tank.roster_checks
+                WHERE tenant_id=$1 AND region=$2 ORDER BY created_at DESC LIMIT 1''', PLATFORM_TENANT, tank.box_region())
+            epoch = previous['epoch'] if previous and previous['roster_hash'] == roster_hash else uuid.uuid4()
+            signature = input_hash([tank.box_region(), roster_hash, str(epoch), manifest,
                                     sorted([p for _, p in jobs], key=encoded)])
-            await conn.execute('''INSERT INTO tank.roster_checks(tenant_id,region,fingerprint,roster_hash)
-                VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING''', PLATFORM_TENANT, tank.box_region(), signature, roster_hash)
+            await conn.execute('''INSERT INTO tank.roster_checks(tenant_id,region,fingerprint,roster_hash,epoch)
+                VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING''', PLATFORM_TENANT, tank.box_region(), signature, roster_hash, epoch)
             package_hashes = {(row[0], row[1]): row[2] for row in manifest}
             for pkg, policy in jobs:
-                proof_key = input_hash([roster_hash, package_hashes[pkg.id, pkg.version], policy])
+                proof_key = input_hash([str(epoch), roster_hash, package_hashes[pkg.id, pkg.version], policy])
                 source = await conn.fetchrow("""SELECT id,completed_at,eval_id,error FROM tank.skill_revalidations
                     WHERE tenant_id=$1 AND proof_key=$2 AND source_job_id IS NULL LIMIT 1 FOR SHARE""", PLATFORM_TENANT, proof_key)
                 await conn.execute('''INSERT INTO tank.skill_revalidations

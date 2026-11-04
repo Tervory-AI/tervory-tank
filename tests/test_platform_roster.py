@@ -85,6 +85,11 @@ async def test_all_approved_evals_precede_policy_write(boundary, monkeypatch, tm
         await conn.execute("UPDATE tank.policy SET auto_promote=false WHERE task_type='base.normalize' AND tenant_id IS NULL")
     # Cached proof makes repeating the same request free.
     assert await skala_revalidation.drain(b.tank) == 0
+    # Returning to the original roster is a new change, so both skills rerun.
+    monkeypatch.setattr(b.tank, '_roster_models', AsyncMock(return_value=[{'model_name': 'luna'}]))
+    reverted = await roster.prepare(b.tank)
+    assert reverted['pending'] == 2
+    assert await skala_revalidation.drain(b.tank) == 2
 
 
 @pytest.mark.asyncio

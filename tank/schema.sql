@@ -2993,6 +2993,9 @@ ALTER TABLE tank.skill_revalidations ADD COLUMN IF NOT EXISTS source_job_id uuid
 CREATE UNIQUE INDEX IF NOT EXISTS skill_revalidation_proof_once ON tank.skill_revalidations(tenant_id,proof_key)
     WHERE proof_key IS NOT NULL AND source_job_id IS NULL;
 
+-- Every observed roster transition requires fresh proof, including a return to an old roster.
+ALTER TABLE tank.roster_checks ADD COLUMN IF NOT EXISTS epoch uuid NOT NULL DEFAULT gen_random_uuid();
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
