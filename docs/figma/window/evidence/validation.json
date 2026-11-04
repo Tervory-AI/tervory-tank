@@ -70,6 +70,34 @@
       "width": 1280,
       "height": 800,
       "sha256": "7ffbf7cccdd426d66a829db393b286191509db591394a0c013f7b98caecd9391"
+    },
+    {
+      "frame": "557:1062",
+      "file": "evidence/W05-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "9c1c08ed94e91bb1a663e77889bc3ff8140d004f0c0f3ab3cad5e61fd09de8a9"
+    },
+    {
+      "frame": "557:1161",
+      "file": "evidence/W05-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "5fdea919c2d14f841d21baa6ded6109c825d9730b039bc2c80bb4d0dbc30026a"
+    },
+    {
+      "frame": "557:1260",
+      "file": "evidence/W06-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "4f3706959e2a4af234fcd8fc4aad1500ac653cf5d845c045bd7637d75b14b755"
+    },
+    {
+      "frame": "557:1360",
+      "file": "evidence/W06-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "55d481c600380cb3dc1df45bff54d7226e1c31a75854775d09045a9296005ed9"
     }
   ]
 }

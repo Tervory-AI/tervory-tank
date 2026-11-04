@@ -16,6 +16,8 @@ Local design-system discovery found no editor-chat composite or Code Connect map
 
 Wording/behavior sources: [CLI code/undo and region contract](../../../cli/README.md), [code-session transport](../../../cli/src/code-mode.mjs), [command approval](../../../cli/src/code-tools.mjs). US uses Workspace/Clerk; ZA uses ZA/Zitadel with no US fallback. Example device codes and old/new file text are the existing offline CLI fixture, never live credentials. `Receipt pending` means no cost is invented. New panel labels/prompts are listed in each item audit under `words` and remain **Proposed**, even when they reuse a source phrase. Accept / Reject and Run are explicitly requested panel labels, not claims that these controls already ship.
 
+Scope split, founder 4 Nov 06:30 PT: this register owns sign-in, empty, conversation, command waiting/running/finished, /undo, plugins/MCP, error and offline only. Multi-file/per-hunk review, receipts/savings, autocomplete, inline edit, codebase search, background agents and PR review comments belong to another Figma chat. Existing Receipt pending is only a placeholder, not a receipt design. Finished command output is illustrative Proposed data, not evidence that the depicted command was run.
+
 ## Frames
 
 | Item / state | Size | Figma frame | Status | Screenshot |
@@ -30,6 +32,10 @@ Wording/behavior sources: [CLI code/undo and region contract](../../../cli/READM
 | W03-1280 · Conversation / proposed edit | 1280×800 | [555:390](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=555-390) | Proposed | [W03-1280.png](evidence/W03-1280.png) |
 | W04-1440 · Command waiting for Run | 1440×900 | [556:1710](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=556-1710) | Proposed | [W04-1440.png](evidence/W04-1440.png) |
 | W04-1280 · Command waiting for Run | 1280×800 | [556:1815](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=556-1815) | Proposed | [W04-1280.png](evidence/W04-1280.png) |
+| W05-1440 · Command running | 1440×900 | [557:1062](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-1062) | Proposed | [W05-1440.png](evidence/W05-1440.png) |
+| W05-1280 · Command running | 1280×800 | [557:1161](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-1161) | Proposed | [W05-1280.png](evidence/W05-1280.png) |
+| W06-1440 · Command finished | 1440×900 | [557:1260](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-1260) | Proposed | [W06-1440.png](evidence/W06-1440.png) |
+| W06-1280 · Command finished | 1280×800 | [557:1360](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-1360) | Proposed | [W06-1280.png](evidence/W06-1280.png) |
 
 ## Evidence and validation
 

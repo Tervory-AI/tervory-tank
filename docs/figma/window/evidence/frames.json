@@ -82,5 +82,37 @@
     "height": 800,
     "state": "Command waiting for Run",
     "status": "Proposed"
+  },
+  {
+    "key": "W05-1440",
+    "id": "557:1062",
+    "width": 1440,
+    "height": 900,
+    "state": "Command running",
+    "status": "Proposed"
+  },
+  {
+    "key": "W05-1280",
+    "id": "557:1161",
+    "width": 1280,
+    "height": 800,
+    "state": "Command running",
+    "status": "Proposed"
+  },
+  {
+    "key": "W06-1440",
+    "id": "557:1260",
+    "width": 1440,
+    "height": 900,
+    "state": "Command finished",
+    "status": "Proposed"
+  },
+  {
+    "key": "W06-1280",
+    "id": "557:1360",
+    "width": 1280,
+    "height": 800,
+    "state": "Command finished",
+    "status": "Proposed"
   }
 ]
