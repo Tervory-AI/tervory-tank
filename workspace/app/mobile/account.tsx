@@ -10,7 +10,7 @@ export function MobileAccount({ name }: { name: string }) {
     try {
       const response = await fetch("/api/mobile/session", { method: "DELETE", headers: { "X-Tervory-Mobile": "1" }, credentials: "same-origin", redirect: "error" });
       if (!response.ok) throw new Error();
-      window.location.replace("/sign-in");
+      window.location.replace("/mobile/signed-out");
     } catch { setError("Sign-out could not be confirmed. Please try again."); setBusy(false); }
   }
   return <div aria-label="Mobile account"><span>{name}</span> <button onClick={() => void signOut()} disabled={busy}>{busy ? "Signing out…" : "Sign out"}</button>{error && <p role="alert">{error}</p>}</div>;

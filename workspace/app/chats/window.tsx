@@ -126,6 +126,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
           if (cancelled) return;
           await choose(saved.thread_id);
           if (cancelled) return;
+          window.history.replaceState(null, "", `/chats?draft=${encodeURIComponent(draft)}`);
           setText(saved.text); setAttachments(saved.attachments);
         } catch { if (!cancelled) setError("The shared item could not be opened. Please share it again."); }
       })();
@@ -223,6 +224,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   async function send(event?: FormEvent, firstMessage?: string) {
     event?.preventDefault(); const requestText = firstMessage ?? text; if (!requestText.trim() || sendingRef.current || busy || cardBusy || !snapshot || !selected) return;
     const id = selected; const files = attachments;
+    window.history.replaceState(null, "", `/chats?thread=${encodeURIComponent(id)}`);
     sendingRef.current = true; setSending(true); setError("");
     // Invalidate any snapshot already in flight before the new stream starts.
     const version = ++generation.current;
