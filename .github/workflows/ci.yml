@@ -258,6 +258,11 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx --no-install playwright install chromium
+      - name: Prepare pinned Trigger acceptance browser dependencies
+        run: |
+          npm ci --prefix tests/trigger_browser_tools --no-audit --no-fund
+          tests/trigger_browser_tools/node_modules/.bin/playwright install chromium
+          echo "TRIGGER_BROWSER_TOOLS=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules" >> "$GITHUB_ENV"
       - name: Prepare CLI acceptance fixtures
         run: |
           npm ci --prefix cli --ignore-scripts --no-audit --no-fund
