@@ -495,6 +495,201 @@ class SecurityDownloadTests(unittest.TestCase):
         self.downloads(recover=False)
 
 
+class ComparisonBaseTests(unittest.TestCase):
+    """Real isolated Git graphs, synthetic PR merges and scanner entrypoints."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Security base test")
+        self.git("config", "user.email", "security-base@localhost")
+        self.commit("old.txt", "old base")
+        self.old = self.git("rev-parse", "HEAD")
+        self.commit("main.txt", "inherited main finding")
+        self.base = self.git("rev-parse", "HEAD")
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        self.git("switch", "-qc", "pr", self.old)
+        self.commit("pr.txt", "new PR finding")
+        self.pr = self.git("rev-parse", "HEAD")
+        self.git("switch", "-q", "main")
+        self.git("merge", "--no-edit", "pr")
+        self.head = self.git("rev-parse", "HEAD")
+        self.event = {"pull_request": {"base": {"ref": "main", "sha": self.old}, "head": {"sha": self.pr}}}
+        self.patcher = patch.object(scan, "git", side_effect=self.git)
+        self.patcher.start()
+        self.addCleanup(self.patcher.stop)
+
+    def git(self, *args):
+        return subprocess.check_output(["git", *args], cwd=self.root, stderr=subprocess.DEVNULL, text=True).strip()
+
+    def commit(self, name, content):
+        (self.root / name).write_text(content + "\n")
+        self.git("add", name)
+        self.git("commit", "-qm", "Fixture commit")
+
+    def select(self, event=None, kind="pull_request"):
+        return scan.event_comparison_base(kind, self.event if event is None else event)
+
+    def group(self, **changes):
+        return {"merge_group": {"base_ref": "refs/heads/main", "base_sha": self.base,
+                                "head_sha": self.head, **changes}}
+
+    def test_stale_pr_base_resolves_to_actual_verified_main_parent(self):
+        self.assertEqual(self.select(), self.base)
+        changed = self.git("diff", "--name-only", self.select(), "HEAD").splitlines()
+        self.assertEqual(changed, ["pr.txt"])
+        self.assertIn("main.txt", self.git("diff", "--name-only", self.old, "HEAD").splitlines())
+
+    def test_current_advertised_base_is_also_verified(self):
+        self.event["pull_request"]["base"]["sha"] = self.base
+        self.assertEqual(self.select(), self.base)
+
+    def test_moving_trusted_main_does_not_replace_event_merge_parent(self):
+        self.commit("later.txt", "later trusted main")
+        later = self.git("rev-parse", "HEAD")
+        self.git("update-ref", "refs/remotes/origin/main", later)
+        self.git("checkout", "-q", self.head)
+        self.assertEqual(self.select(), self.base)
+
+    def test_head_checkout_is_rejected(self):
+        self.git("switch", "-q", "pr")
+        with self.assertRaises(ValueError):
+            self.select()
+
+    def test_wrong_pr_head_is_rejected(self):
+        self.event["pull_request"]["head"]["sha"] = self.old
+        with self.assertRaises(ValueError):
+            self.select()
+
+    def test_swapped_merge_parents_are_rejected(self):
+        self.git("switch", "-q", "pr")
+        self.git("merge", "--no-edit", self.base)
+        with self.assertRaises(ValueError):
+            self.select()
+
+    def test_octopus_merge_is_not_a_pr_merge(self):
+        original = self.git
+        def git(*args):
+            if args[:2] == ("rev-list", "--parents"):
+                return " ".join((self.head, self.base, self.pr, self.old))
+            return original(*args)
+        with patch.object(scan, "git", side_effect=git), self.assertRaises(ValueError):
+            self.select()
+
+    def test_actual_base_must_belong_to_trusted_main(self):
+        self.git("update-ref", "refs/remotes/origin/main", self.old)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.select()
+
+    def test_missing_trusted_main_fails_closed(self):
+        self.git("update-ref", "-d", "refs/remotes/origin/main")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.select()
+
+    def test_advertised_base_must_be_ancestor_of_actual_base(self):
+        self.event["pull_request"]["base"]["sha"] = self.pr
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.select()
+
+    def test_only_main_is_a_trusted_target(self):
+        self.event["pull_request"]["base"]["ref"] = "other"
+        with self.assertRaises(ValueError):
+            self.select()
+
+    def test_missing_nonexistent_and_malformed_shas_fail(self):
+        for value in (None, "", "--all", "a" * 40, "0" * 40):
+            with self.subTest(value_type=type(value).__name__):
+                self.event["pull_request"]["base"]["sha"] = value
+                with self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                    self.select()
+
+    def test_merge_group_keeps_its_explicit_group_base_not_first_parent(self):
+        self.assertEqual(self.select(self.group(base_sha=self.old), "merge_group"), self.old)
+        self.assertEqual(self.select(self.group(), "merge_group"), self.base)
+
+    def test_merge_group_wrong_head_target_untrusted_or_empty_range_fails(self):
+        for changes in ({"head_sha": self.pr}, {"base_ref": "refs/heads/other"},
+                        {"base_sha": self.pr}, {"base_sha": self.head}):
+            with self.subTest(fields=sorted(changes)), self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                self.select(self.group(**changes), "merge_group")
+
+    def test_legacy_main_push_preserves_before_after_range(self):
+        self.git("update-ref", "refs/remotes/origin/main", self.head)
+        event = {"ref": "refs/heads/main", "before": self.base, "after": self.head}
+        self.assertEqual(self.select(event, "push"), self.base)
+        event["before"] = "0" * 40
+        self.assertIsNone(self.select(event, "push"))
+
+    def test_push_wrong_checkout_target_or_empty_range_fails(self):
+        for event in ({"ref": "refs/heads/other", "before": self.base, "after": self.head},
+                      {"ref": "refs/heads/main", "before": self.base, "after": self.pr},
+                      {"ref": "refs/heads/main", "before": self.head, "after": self.head}):
+            with self.subTest(target=event["ref"]), self.assertRaises(ValueError):
+                self.select(event, "push")
+
+    def test_manual_and_scheduled_events_intentionally_audit_everything(self):
+        for kind in ("workflow_dispatch", "schedule"):
+            self.assertIsNone(self.select({}, kind))
+
+    def test_invalid_or_unsupported_event_is_not_a_clean_scan(self):
+        for event, kind in (([], "pull_request"), ({}, "pull_request"), ({}, "pull_request_target")):
+            with self.subTest(kind=kind), self.assertRaises((ValueError, KeyError)):
+                self.select(event, kind)
+
+    def invoke(self, tool, event=None, kind="pull_request", finding=True):
+        payload = self.root / "event.json"
+        payload.write_text(json.dumps(self.event if event is None else event))
+        output = self.root / (tool + "-output")
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": kind, "GITHUB_EVENT_PATH": str(payload)}), \
+                patch.object(sys, "argv", ["security_scan.py", tool, "--event-context", "--output", str(output)]), \
+                patch.object(scan, tool if tool != "gitleaks" else "leaks", return_value=finding) as scanner, \
+                redirect_stdout(io.StringIO()) as stdout:
+            code = scan.main()
+        return code, json.loads((output / (tool + "-status.json")).read_text()), scanner, stdout.getvalue()
+
+    def test_all_three_scanners_receive_the_verified_base_and_keep_new_findings(self):
+        for tool in ("gitleaks", "semgrep", "osv"):
+            with self.subTest(tool=tool):
+                code, status, scanner, _ = self.invoke(tool)
+                self.assertEqual(code, 1)
+                self.assertEqual(status["result"], "findings")
+                self.assertEqual(status["base"], self.base)
+                self.assertEqual(scanner.call_args.args[0], self.base)
+
+    def test_whole_audits_still_fail_on_genuine_findings(self):
+        for tool in ("gitleaks", "semgrep", "osv"):
+            with self.subTest(tool=tool):
+                code, status, scanner, _ = self.invoke(tool, {}, "workflow_dispatch")
+                self.assertEqual(code, 1)
+                self.assertEqual(status["result"], "findings")
+                self.assertIsNone(status["base"])
+                self.assertIsNone(scanner.call_args.args[0])
+
+    def test_bad_context_writes_incomplete_status_without_running_scanners_or_echoing_payload(self):
+        for tool in ("gitleaks", "semgrep", "osv"):
+            with self.subTest(tool=tool):
+                code, status, scanner, stdout = self.invoke(tool, {"private": "do not echo raw event"})
+                self.assertEqual(code, 1)
+                self.assertEqual(status["result"], "incomplete")
+                self.assertIsNone(status["base"])
+                scanner.assert_not_called()
+                self.assertNotIn("do not echo", json.dumps(status) + stdout)
+
+    def test_workflow_uses_verified_event_context_for_every_incremental_scanner(self):
+        # Keep the weekly explicit whole-audit invocation and both policy configs unchanged.
+        ci = (ROOT / ".github/workflows/ci.yml").read_text()
+        weekly = (ROOT / ".github/workflows/security-weekly.yml").read_text()
+        for tool in ("gitleaks", "semgrep", "osv"):
+            line = next(line for line in ci.splitlines() if "security_scan.py " + tool in line)
+            self.assertIn("--event-context", line)
+            self.assertNotIn("--base", line)
+            line = next(line for line in weekly.splitlines() if "security_scan.py " + tool in line)
+            self.assertNotIn("--base", line)
+            self.assertNotIn("--event-context", line)
+
+
 class GitleaksAllowlistTests(unittest.TestCase):
     """Exercise the pinned free CLI; never print the dummy value or scan matches."""
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -12,6 +13,56 @@ import tempfile
 
 def git(*args: str) -> str:
     return subprocess.check_output(["git", *args], text=True).strip()
+
+
+def commit_sha(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{40}", value):
+        raise ValueError("Expected a full commit SHA")
+    return git("rev-parse", "--verify", value + "^{commit}")
+
+
+def trusted_main_ancestor(value: str) -> None:
+    git("merge-base", "--is-ancestor", value, "refs/remotes/origin/main")
+
+
+def event_comparison_base(event_name: str, event: dict) -> str | None:
+    """Bind incremental scans to the checked-out event, never a moving fallback."""
+    if not isinstance(event, dict):
+        raise ValueError("Invalid event object")
+    if event_name in {"workflow_dispatch", "schedule"}:
+        return None  # Intended whole audits must not compare HEAD to origin/main.
+    head = git("rev-parse", "HEAD")
+    if event_name == "pull_request":
+        pr = event["pull_request"]
+        if pr["base"]["ref"] != "main":
+            raise ValueError("PR must target trusted main")
+        advertised = commit_sha(pr["base"]["sha"])
+        expected_head = commit_sha(pr["head"]["sha"])
+        parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()
+        if len(parents) != 3 or parents[0] != head or parents[2] != expected_head:
+            raise ValueError("Expected the event PR's synthetic merge checkout")
+        actual_base = parents[1]
+        git("merge-base", "--is-ancestor", advertised, actual_base)
+        trusted_main_ancestor(actual_base)
+        return actual_base
+    if event_name == "merge_group":
+        group = event["merge_group"]
+        if group["base_ref"] != "refs/heads/main" or commit_sha(group["head_sha"]) != head:
+            raise ValueError("Expected the event's merge group on main")
+        base = commit_sha(group["base_sha"])
+    elif event_name == "push":
+        if event["ref"] != "refs/heads/main" or commit_sha(event["after"]) != head:
+            raise ValueError("Expected the event's main push checkout")
+        if event["before"] == "0" * 40:
+            return None
+        base = commit_sha(event["before"])
+    else:
+        raise ValueError("Unsupported security event")
+    if base == head:
+        raise ValueError("Incremental event cannot use its own head as base")
+    git("merge-base", "--is-ancestor", base, head)
+    trusted_main_ancestor(base)
+    return base
 
 
 def run(args: list[str], allowed: tuple[int, ...] = (0,)) -> int:
@@ -280,16 +331,22 @@ def osv(base: str | None, temp: Path, output: Path) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tool", choices=("gitleaks", "semgrep", "osv"))
-    parser.add_argument("--base", help="PR base SHA, or main's before SHA; omit for weekly")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--base", help="Explicit comparison commit; omit for whole audit")
+    selection.add_argument("--event-context", action="store_true", help="Verify and select the GitHub event's comparison base")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=True)
-    status = {"tool": args.tool, "head": git("rev-parse", "HEAD"), "base": args.base}
+    status = {"tool": args.tool, "head": git("rev-parse", "HEAD"), "base": None}
     try:
         base = None
-        if args.base and set(args.base) != {"0"}:
+        if args.event_context:
+            event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+            base = event_comparison_base(os.environ["GITHUB_EVENT_NAME"], event)
+        elif args.base and set(args.base) != {"0"}:
             base = git("rev-parse", "--verify", f"{args.base}^{{commit}}")
+        status["base"] = base
         # A new-main push with an all-zero before SHA gets a full scan.
         with tempfile.TemporaryDirectory(prefix="security-", dir=args.output.parent) as directory:
             failed = {"gitleaks": leaks, "semgrep": semgrep, "osv": osv}[args.tool](
