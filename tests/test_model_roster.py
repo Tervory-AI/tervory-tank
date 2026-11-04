@@ -27,7 +27,7 @@ def test_every_model_has_a_price_and_a_key_from_the_environment() -> None:
 
 def test_deepseek_and_kimi_are_in_the_roster_with_their_keys() -> None:
     """MODELS-1 (18 Oct 2026): the China-provider ban is removed."""
-    by_name = {m["model_name"]: m for m in CONFIG["model_list"]}
+    by_name = {m["model_name"]: m for m in reversed(CONFIG["model_list"])}
     expected = {
         "deepseek-flash": ("deepseek", "os.environ/DEEPSEEK_API_KEY"),
         "deepseek-pro": ("deepseek", "os.environ/DEEPSEEK_API_KEY"),

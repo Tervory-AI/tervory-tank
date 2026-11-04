@@ -92,7 +92,7 @@ def test_no_room_service_would_leak_when_coolify_deploys_it(path: Path) -> None:
     assert leaks(path.read_text(encoding="utf-8")) == []
 
 
-@pytest.mark.parametrize("room", ["base", "radix", "tiger", "rig"])
+@pytest.mark.parametrize("room", ["base", "radix", "tiger", "rig", "zenas"])
 def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
     text = (ROOT / "agents" / room / "docker-compose.yml").read_text(encoding="utf-8")
     assert is_raw(text), f"agents/{room}/docker-compose.yml must start with {RAW_MARKER!r}"
@@ -100,7 +100,7 @@ def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
 
 @pytest.mark.parametrize("room, sealed", [
     ("base", {"base-sandbox", "base-browser"}),
-    ("tiger", {"tiger-browser"}),
+    ("tiger", {"tiger-browser", "tiger-sandbox"}),
     ("rig", {"rig-sandbox", "rig-browser", "rig-forge"}),
     # Radix is sealed on the live host today; this keeps it so.
     ("radix", {"agent-radix"}),
@@ -155,6 +155,13 @@ def test_raw_compose_files_need_nothing_from_coolify(path: Path) -> None:
         for key, value in (service.get("environment") or {}).items():
             assert isinstance(value, (str, int, float)), f"{name}.{key} must be explicit"
     for key, spec in (compose.get("volumes") or {}).items():
+        if path.parent.name == "zenas":
+            # Existing Zenas room volumes must retain main's declarations.
+            # Its new brain volume still requires its own explicit name below.
+            room_data = "za_agent_data" if path.name == "docker-compose.za.yml" else "agent_zenas_data"
+            if key == room_data:
+                assert spec is None, f"volume {key} must stay unchanged from main"
+                continue
         # The live name, so the data survives the switch from normal mode.
         assert spec and spec.get("name"), f"volume {key} must keep its live name"
 

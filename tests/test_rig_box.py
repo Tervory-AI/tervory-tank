@@ -25,14 +25,20 @@ def test_rig_is_its_own_box_and_only_the_api_is_public():
     assert services["agent-rig"]["networks"] == ["gw", "proxy"]
     assert cfg["networks"]["proxy"] == {"external": True, "name": "59f8cnpelzwsyte1atyjc4fv"}
     labels = services["agent-rig"]["labels"]
-    assert len(labels) == 13
+    assert len(labels) == 15
+    routing = dict(label.split("=", 1) for label in labels)
+    # Matcher coverage is exercised by test_rig_product_host, including real Traefik.
+    api_rule = routing["traefik.http.routers.rig-https.rule"]
+    assert api_rule.startswith("Host(`rig.tervory.com`) && (")
     assert dict(label.split("=", 1) for label in labels) == {
         "traefik.enable": "true",
         "traefik.docker.network": "59f8cnpelzwsyte1atyjc4fv",
-        "traefik.http.routers.rig-http.rule": "Host(`rig.tervory.com`)",
+        "traefik.http.routers.rig-http.rule": api_rule,
+        "traefik.http.routers.rig-http.priority": "1000",
         "traefik.http.routers.rig-http.entrypoints": "http",
         "traefik.http.routers.rig-http.middlewares": "redirect-to-https",
-        "traefik.http.routers.rig-https.rule": "Host(`rig.tervory.com`)",
+        "traefik.http.routers.rig-https.rule": api_rule,
+        "traefik.http.routers.rig-https.priority": "1000",
         "traefik.http.routers.rig-https.entrypoints": "https",
         "traefik.http.routers.rig-https.tls": "true",
         "traefik.http.routers.rig-https.tls.certresolver": "letsencrypt",
