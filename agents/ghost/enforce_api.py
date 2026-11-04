@@ -90,8 +90,8 @@ def register(app, require_tank, bounded_json):
             raise HTTPException(422, str(exc)) from None
 
 
-async def require_lifecycle(request: Request):
-    key = os.environ.get("AUTUMBRA_LIFECYCLE_KEY", "")
+async def verify_lifecycle(request: Request, setting: str):
+    key = os.environ.get(setting, "")
     timestamp = request.headers.get("X-Lifecycle-Timestamp", "")
     signature = request.headers.get("X-Lifecycle-Signature", "")
     try:
@@ -108,8 +108,18 @@ async def require_lifecycle(request: Request):
         raise HTTPException(401, "Lifecycle authentication required.")
 
 
+async def require_lifecycle(request: Request):
+    await verify_lifecycle(request, "AUTUMBRA_LIFECYCLE_KEY")
+
+
+async def require_rig_lifecycle(request: Request):
+    await verify_lifecycle(request, "RIG_LIFECYCLE_KEY")
+
+
 def create_app():
     from .app import bounded_json
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     register(app, require_lifecycle, bounded_json)
+    from .rig_lifecycle import register as register_rig
+    register_rig(app, require_rig_lifecycle)
     return app

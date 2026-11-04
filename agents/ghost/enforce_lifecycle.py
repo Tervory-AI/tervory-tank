@@ -282,6 +282,16 @@ class FixtureComposeBackend:
 class CoolifyEnforceBackend:
     """Dedicated-team Coolify API. No deployment or environment reads, no retries."""
 
+    prefix = PROJECT_PREFIX
+    compose_location = "/agents/ghost/docker-compose.enforce.yml"
+    description_prefix = "autumbra-enforce:"
+    compose_path = None
+    settings_names = COOLIFY_SETTINGS
+    plan_create = staticmethod(plan_create)
+    plan_destroy = staticmethod(plan_destroy)
+    receipt_for = staticmethod(receipt_for)
+    project_name = staticmethod(project_name)
+
     def __init__(self, coolify: Coolify, *, project: str, server: str,
                  environment: str, github_app: str):
         self.coolify = coolify
@@ -290,13 +300,13 @@ class CoolifyEnforceBackend:
 
     @classmethod
     def from_env(cls, http):
-        return cls(Coolify(http, os.environ[COOLIFY_SETTINGS[0]],
-                           os.environ[COOLIFY_SETTINGS[1]],
-                           url_setting=COOLIFY_SETTINGS[0], token_setting=COOLIFY_SETTINGS[1]),
-                   project=os.environ[COOLIFY_SETTINGS[2]],
-                   server=os.environ[COOLIFY_SETTINGS[3]],
-                   environment=os.environ[COOLIFY_SETTINGS[4]],
-                   github_app=os.environ[COOLIFY_SETTINGS[5]])
+        return cls(Coolify(http, os.environ[cls.settings_names[0]],
+                           os.environ[cls.settings_names[1]],
+                           url_setting=cls.settings_names[0], token_setting=cls.settings_names[1]),
+                   project=os.environ[cls.settings_names[2]],
+                   server=os.environ[cls.settings_names[3]],
+                   environment=os.environ[cls.settings_names[4]],
+                   github_app=os.environ[cls.settings_names[5]])
 
     async def _applications(self):
         rows = await self.coolify.call("GET", "/applications", allow_list=True)
@@ -307,19 +317,19 @@ class CoolifyEnforceBackend:
     async def list(self) -> list[dict[str, str]]:
         result = []
         for row in await self._applications():
-            if re.fullmatch(re.escape(PROJECT_PREFIX) + r"-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", row["name"]):
+            if re.fullmatch(re.escape(self.prefix) + r"-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", row["name"]):
                 result.append({"name": row["name"], "uuid": identifier(row.get("uuid", "")),
                                "status": str(row.get("status") or "unknown"),
                                **{key: row.get(key) for key in ("description", "git_repository", "build_pack", "docker_compose_location")}})
         return result
 
     async def create_plan(self, tenant_id: str) -> dict[str, Any]:
-        name = project_name(tenant_id)
+        name = self.project_name(tenant_id)
         rows = await self._applications()
         if any(row["name"] == name for row in rows):
             raise Refused("Enforce project already exists")
-        count = sum(row["name"].startswith(PROJECT_PREFIX) for row in rows)
-        return plan_create(tenant_id.lower(), existing_count=count, cap=DEFAULT_CONTAINER_CAP)
+        count = sum(row["name"].startswith(self.prefix) for row in rows)
+        return self.plan_create(tenant_id.lower(), existing_count=count, cap=DEFAULT_CONTAINER_CAP)
 
     @staticmethod
     def settings_for(plan: dict[str, Any]) -> dict[str, str]:
@@ -329,7 +339,7 @@ class CoolifyEnforceBackend:
 
     @classmethod
     def founder_fills(cls, plan: dict[str, Any]) -> list[str]:
-        names = set(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}", COMPOSE_PATH.read_text()))
+        names = set(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}", (cls.compose_path or COMPOSE_PATH).read_text()))
         return sorted(names - cls.settings_for(plan).keys())
 
     async def create(self, plan: dict[str, Any]) -> dict[str, Any]:
@@ -340,7 +350,7 @@ class CoolifyEnforceBackend:
     async def _create(self, plan: dict[str, Any]) -> dict[str, Any]:
         # Re-plan at the write boundary: neither a body count nor a stale plan is authority.
         plan = await self.create_plan(plan["tenant_id"])
-        receipt = receipt_for(plan)
+        receipt = self.receipt_for(plan)
         receipt["founder_fills"] = self.founder_fills(plan)
         mutated = False
         try:
@@ -349,8 +359,8 @@ class CoolifyEnforceBackend:
                       "environment_name": self.environment, "github_app_uuid": self.github_app,
                       "git_repository": "https://github.com/Tervory-AI/tervory-tank.git",
                       "git_branch": "main", "build_pack": "dockercompose", "name": plan["project"],
-                      "description": "autumbra-enforce:" + plan["tenant_id"],
-                      "docker_compose_location": "/agents/ghost/docker-compose.enforce.yml",
+                      "description": self.description_prefix + plan["tenant_id"],
+                      "docker_compose_location": self.compose_location,
                       "instant_deploy": False, "is_auto_deploy_enabled": False})
             try:
                 app_uuid = identifier(created.get("uuid", ""))
@@ -376,21 +386,21 @@ class CoolifyEnforceBackend:
             return await self._destroy(plan)
 
     async def _destroy(self, plan: dict[str, Any]) -> dict[str, Any]:
-        plan = plan_destroy(plan["tenant_id"].lower())
+        plan = self.plan_destroy(plan["tenant_id"].lower())
         matches = [row for row in await self.list() if row["name"] == plan["project"]]
         if len(matches) > 1:
             raise Refused("Enforce project name is not unique")
         if not matches:
-            return receipt_for(plan, outcome="absent")
+            return self.receipt_for(plan, outcome="absent")
         target = matches[0]
         repository = target.get("git_repository")
         own_repository = (isinstance(repository, str) and repository.lower().removeprefix("https://github.com/").removesuffix(".git") == "tervory-ai/tervory-tank")
-        if (target.get("description") != "autumbra-enforce:" + plan["tenant_id"]
+        if (target.get("description") != self.description_prefix + plan["tenant_id"]
                 or target.get("build_pack") != "dockercompose"
-                or target.get("docker_compose_location") != "/agents/ghost/docker-compose.enforce.yml"
+                or target.get("docker_compose_location") != self.compose_location
                 or not own_repository):
             raise Refused("Enforce resource was not created by Autumbra")
-        receipt = receipt_for(plan)
+        receipt = self.receipt_for(plan)
         receipt["uuid"] = matches[0]["uuid"]
         try:
             await self.coolify.call("DELETE", "/applications/" + matches[0]["uuid"],

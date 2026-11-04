@@ -55,3 +55,11 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 2. Chat bot: the privacy notice and how long conversations are kept (decision 35; 12 months suggested).
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
+
+## Rig store rooms (layout B)
+
+On the existing isolated enforce-lifecycle service only: RIG_COOLIFY_URL, RIG_COOLIFY_TOKEN, RIG_COOLIFY_PROJECT_UUID, RIG_COOLIFY_SERVER_UUID, RIG_COOLIFY_ENVIRONMENT, RIG_COOLIFY_GITHUB_APP_UUID. Use a dedicated Rig-only team/project/environment and the same server UUID as shared Rig. Token permissions: read, write and deploy (Coolify requires deploy for application DELETE); no root or read:sensitive. Do not reuse Autumbra’s token.
+
+On Tank and enforce-lifecycle only: RIG_LIFECYCLE_KEY. It must differ from AUTUMBRA_LIFECYCLE_KEY and all room keys.
+
+Per store application only: RIG_ROOM_DB_PASSWORD (unique URL-safe value), plus the existing names in the create receipt’s founder_fills. The lifecycle supplies RIG_ROOM_TENANT, RIG_ROOM_NAME, RIG_ROOM_DATA_VOLUME, RIG_ROOM_DB_VOLUME and RIG_ROOM_NETWORK; never edit these bindings. Existing R2 settings are needed for the retained bucket snapshot before destroy. See [Rig room operations](RIG-STORE-ROOMS.md).

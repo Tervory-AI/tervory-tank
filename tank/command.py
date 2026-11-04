@@ -42,7 +42,7 @@ TOOLS = {
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.products", "base.compare.apollo", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position", "tiger.alerts", "tiger.watches", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk"],
     "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.calibration.curve", "market_lab.feeds", "market_lab.patterns", "market_lab.gate", "market_lab.briefs", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
-    "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
+    "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment", "rig.store.onboard", "rig.rooms.list", "rig.store.destroy"],
     "tisan": ["tisan.scaffold"],
     "radix": ["radix.infra.scan", "radix.active.consent", "radix.active.consent.withdraw", "radix.report", "radix.deploy.override", "radix.active.scan", "radix.scan", "radix.repo.scan", "radix.repo.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.draft", "zenas.review", "zenas.playbook.add", "zenas.playbooks", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
@@ -123,11 +123,11 @@ def allowed_tools(actor: Actor) -> list[str]:
     squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
-    voice_tools = TOOLS["trigger"] + ["rig.quote.confirm_payment"] if actor.tenant_admin and not actor.founder else []
+    voice_tools = TOOLS["trigger"] + ["rig.quote.confirm_payment", "rig.store.onboard", "rig.rooms.list", "rig.store.destroy"] if actor.tenant_admin and not actor.founder else []
     client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
-                   if (tool != "radix.deploy.override" or actor.founder) and (tool not in {"radix.infra.scan", "radix.active.scan", "radix.active.consent", "radix.active.consent.withdraw"} or actor.founder or actor.tenant_admin) and ((tool != "rig.quote.confirm_payment" and not tool.startswith("market_lab.alerts."))
+                   if (tool != "radix.deploy.override" or actor.founder) and (tool not in {"radix.infra.scan", "radix.active.scan", "radix.active.consent", "radix.active.consent.withdraw"} or actor.founder or actor.tenant_admin) and ((tool not in {"rig.quote.confirm_payment", "rig.store.onboard", "rig.rooms.list", "rig.store.destroy"} and not tool.startswith("market_lab.alerts."))
                    or actor.tenant_admin or actor.founder)]
                   + founder_tools + voice_tools + client_tools + plugin_tools + list(actor.mcp_tools))
 
@@ -1586,6 +1586,9 @@ ADAPTERS = {
     "market_lab.alerts.off": Adapter("POST", "/v1/market-lab/alerts/off", EmptyArgs, "market_lab.alerts.off"),
     "tiger.alerts": Adapter("GET", "/v1/command/tiger/alerts", __import__("tiger_alerts").AlertsArgs, "tiger.alerts"),
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
+    "rig.store.onboard": Adapter("POST", "/v1/access/rig/rooms/onboard", EmptyArgs, "rig.store.onboard"),
+    "rig.rooms.list": Adapter("POST", "/v1/access/rig/rooms/list", EmptyArgs, "rig.rooms.list"),
+    "rig.store.destroy": Adapter("POST", "/v1/access/rig/rooms/destroy", EmptyArgs, "rig.store.destroy"),
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
     "rig.quote.confirm_payment": Adapter("POST", "/v1/access/rig/admin/confirm-store-payment", RigConfirmPaymentArgs, "rig.quote.confirm_payment"),
@@ -1878,6 +1881,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, {}, args
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
+    if action.tool in {"rig.store.onboard", "rig.rooms.list", "rig.store.destroy"}:
+        return adapter.method, path, {}, {}
     if action.tool == "rig.quote.confirm_payment":
         return adapter.method, path, {}, {"data": args}
     if action.tool in {"base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fixes", "autumbra.fix.approve", "autumbra.blocks", "autumbra.blocks.share", *TISAN_CLIENT_TOOLS}:
@@ -2116,7 +2121,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif (action.tool.startswith("trigger.") and action.tool not in {"trigger.crm.list", "trigger.crm.get"}) or action.tool in {"zenas.draft", "zenas.playbook.add", "training.run", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.blocks.share", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fix.approve", "radix.active.consent", "radix.active.consent.withdraw", "radix.active.scan", "radix.deploy.override", "radix.infra.scan"}:
+            elif (action.tool.startswith("trigger.") and action.tool not in {"trigger.crm.list", "trigger.crm.get"}) or action.tool in {"zenas.draft", "zenas.playbook.add", "training.run", "rig.quote.confirm_payment", "rig.store.onboard", "rig.store.destroy", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.blocks.share", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fix.approve", "radix.active.consent", "radix.active.consent.withdraw", "radix.active.scan", "radix.deploy.override", "radix.infra.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -2295,11 +2300,11 @@ async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id
     from trigger_routes import code_receipt
     last = messages[-1] if messages else {}
     text = last.get("content", "").strip()
-    if last.get("role") != "user" or not text.startswith("autumbra."):
+    if last.get("role") != "user" or not text.startswith(("autumbra.", "rig.")):
         return None
     parts = text.split()
     tool = parts[0]
-    fields = {"autumbra.enforce.list": None, "autumbra.enforce.create": "tenant_id",
+    fields = {"rig.store.onboard": None, "rig.rooms.list": None, "rig.store.destroy": None, "autumbra.enforce.list": None, "autumbra.enforce.create": "tenant_id",
               "autumbra.enforce.destroy": "tenant_id", "autumbra.fixes": None,
               "autumbra.fix.approve": "match_id", "autumbra.blocks": "tenant_id",
               "autumbra.blocks.share": "record_ids"}
@@ -2316,7 +2321,7 @@ async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id
             raise HTTPException(422, "Use: autumbra.enforce.create|destroy <tenant-uuid>")
         arguments = {} if fields[tool] is None else {fields[tool]: parts[1]}
     action = validate_action(PlannedAction(tool=tool, arguments=arguments), actor)
-    ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="ghost")
+    ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="rig" if tool.startswith("rig.") else "ghost")
     return SimpleNamespace(content=dump({"text": tool, "actions": [action.model_dump(mode="json")]}), ledger_id=ledger)
 
 

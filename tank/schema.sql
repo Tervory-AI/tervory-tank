@@ -3149,3 +3149,11 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+-- Rig store-room lifecycle registry. No store catalogue or contact data here.
+CREATE TABLE IF NOT EXISTS tank.rig_rooms (
+    tenant_id uuid PRIMARY KEY,
+    coolify_uuid text,
+    state text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);

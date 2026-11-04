@@ -1,0 +1,155 @@
+"""Single-store binding, retained snapshots and the existing host's room corridor."""
+from __future__ import annotations
+
+import json
+import os
+import re
+from pathlib import Path
+from uuid import UUID
+
+import httpx
+from fastapi.responses import JSONResponse, Response
+from rigbox.service import RigError
+from chassis.storage import Storage
+
+PREFIX = '/v1/rig/rooms/'
+
+
+def owner():
+    value = os.environ.get('RIG_ROOM_TENANT', '')
+    return str(UUID(value)) if value else None
+
+
+def require_owner(tenant):
+    bound = owner()
+    if bound and str(UUID(str(tenant))) != bound:
+        raise RigError('forbidden', 'This store has its own Rig room.', 403)
+
+
+def api_base():
+    bound = owner()
+    return 'https://rig.tervory.com' + (PREFIX + bound if bound else '')
+
+
+def room_host(tenant):
+    return 'http://rig-room-' + str(UUID(str(tenant)))
+
+
+async def bind_database(pool):
+    """An existing volume cannot be rebound; every tenant-bearing table is constrained."""
+    bound = owner()
+    if not bound:
+        return
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute('CREATE TABLE IF NOT EXISTS agent_rig.room_owner (singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), tenant_id uuid NOT NULL)')
+            await conn.execute('SELECT pg_advisory_xact_lock(724409)')
+            saved = await conn.fetchval('SELECT tenant_id FROM agent_rig.room_owner')
+            if saved is None:
+                await conn.execute('INSERT INTO agent_rig.room_owner(tenant_id) VALUES($1)', UUID(bound))
+            await conn.execute('ALTER TABLE agent_rig.room_owner ADD COLUMN IF NOT EXISTS frozen boolean NOT NULL DEFAULT false')
+            saved = await conn.fetchval('SELECT tenant_id FROM agent_rig.room_owner')
+            if str(saved) != bound:
+                raise RuntimeError('Rig room volume belongs to another store')
+            await conn.execute('''CREATE OR REPLACE FUNCTION agent_rig.room_write_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+              BEGIN
+                PERFORM pg_advisory_xact_lock(724409);
+                IF (SELECT frozen FROM agent_rig.room_owner) THEN
+                  RAISE EXCEPTION 'Rig room is archived';
+                END IF;
+                RETURN NULL;
+              END $$''')
+            tables = await conn.fetch("SELECT table_name FROM information_schema.columns WHERE table_schema='agent_rig' AND column_name='tenant_id'")
+            for row in tables:
+                name = row['table_name']
+                if not re.fullmatch('[a-z][a-z0-9_]*', name):
+                    raise RuntimeError('Unexpected room table')
+                exists = await conn.fetchval("SELECT 1 FROM pg_constraint WHERE conrelid=$1::regclass AND conname='rig_room_owner'", 'agent_rig.' + name)
+                if name != 'room_owner':
+                    trigger = await conn.fetchval("SELECT 1 FROM pg_trigger WHERE tgrelid=$1::regclass AND tgname='rig_room_freeze'", 'agent_rig.' + name)
+                    if not trigger:
+                        await conn.execute(f'CREATE TRIGGER rig_room_freeze BEFORE INSERT OR UPDATE OR DELETE ON agent_rig.{name} FOR EACH STATEMENT EXECUTE FUNCTION agent_rig.room_write_guard()')
+                if not exists:
+                    await conn.execute(f"ALTER TABLE agent_rig.{name} ADD CONSTRAINT rig_room_owner CHECK (tenant_id = '{bound}'::uuid)")
+
+
+def quiesced():
+    return owner() and (Path(os.environ.get('DATA_DIR', '/data')) / 'room-quiesced').exists()
+
+
+async def archive(service, tenant):
+    """Freeze before snapshot; DELETE cannot lose writes arriving after the snapshot."""
+    require_owner(tenant)
+    if not owner():
+        raise RigError('forbidden', 'Only a store room can be archived.', 403)
+    marker = Path(os.environ.get('DATA_DIR', '/data')) / 'room-quiesced'
+    marker.touch()
+    async with service.store.pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute('SELECT pg_advisory_xact_lock(724409)')
+            await conn.execute('UPDATE agent_rig.room_owner SET frozen=true')
+    async with service.store.pool.acquire() as conn:
+        async with conn.transaction(isolation='serializable'):
+            tables = await conn.fetch("SELECT table_name FROM information_schema.columns WHERE table_schema='agent_rig' AND column_name='tenant_id' ORDER BY table_name")
+            snapshot = {'tenant_id': tenant, 'tables': {}}
+            for row in tables:
+                name = row['table_name']
+                if not re.fullmatch('[a-z][a-z0-9_]*', name):
+                    raise RigError('unavailable', 'Room snapshot could not be completed.', 503)
+                records = await conn.fetch(f'SELECT row_to_json(t)::text AS value FROM agent_rig.{name} t WHERE tenant_id=$1', UUID(tenant))
+                snapshot['tables'][name] = [json.loads(record['value']) for record in records]
+    storage = RoomStorage('rig')
+    try:
+        key = await storage.put(tenant, 'backups', 'room-retained.json', json.dumps(snapshot).encode())
+    finally:
+        await storage.close()
+    return {'archived': True, 'storage_key': key, 'tenant_id': tenant}
+
+
+class RoomStorage(Storage):
+    def _prefix(self, tenant_id, category, *, public):
+        require_owner(tenant_id)
+        return super()._prefix(tenant_id, category, public=public)
+
+
+class RoomGateway:
+    """Explicit room paths only; old issued embeds retain their original runtime."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get('path', '')
+        if scope['type'] == 'http' and quiesced() and path != '/health':
+            return await JSONResponse({'error': {'code': 'unavailable'}}, status_code=503)(scope, receive, send)
+        if scope['type'] != 'http' or not path.startswith(PREFIX):
+            return await self.app(scope, receive, send)
+        try:
+            if owner():  # Never bounce a room request through another room.
+                raise ValueError()
+            tenant, tail = path[len(PREFIX):].split('/', 1)
+            if str(UUID(tenant)) != tenant or not tail.startswith(('v1/rig/', 'widget/')):
+                raise ValueError()
+            if tail.startswith('v1/rig/rooms/'):
+                raise ValueError()
+        except ValueError:
+            return await JSONResponse({'error': {'code': 'not_found'}}, status_code=404)(scope, receive, send)
+        from starlette.requests import Request
+        request = Request(scope, receive)
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 12_000_000:
+                return await Response(status_code=413)(scope, receive, send)
+        # Hop-by-hop/forwarding headers supplied by a shopper cannot name another target.
+        headers = {key: value for key, value in request.headers.items() if key.lower() not in {
+            'host', 'connection', 'transfer-encoding', 'content-length', 'x-forwarded-for', 'x-forwarded-host', 'forwarded'}}
+        try:
+            async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
+                result = await http.request(request.method, room_host(tenant) + ':8000/' + tail,
+                    params=request.query_params.multi_items(), content=bytes(raw), headers=headers, timeout=90)
+            response = Response(result.content, status_code=result.status_code,
+                headers={key: value for key, value in result.headers.items() if key.lower() not in {
+                    'connection', 'transfer-encoding', 'content-length', 'content-encoding'}})
+        except httpx.HTTPError:
+            response = JSONResponse({'error': {'code': 'unavailable', 'message': 'This store room is unavailable.'}}, status_code=503)
+        await response(scope, receive, send)
