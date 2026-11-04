@@ -97,7 +97,7 @@ def test_dispatch_snapshot_detects_dropped_prefix(monkeypatch):
     assert after['market_lab.alerts.email'] != before['market_lab.alerts.email']
 
 
-def test_fresh_tank_fixture_replaces_stale_module_alias():
+def test_fresh_tank_fixture_restores_previous_module_alias():
     import os
     from pathlib import Path
     import subprocess
@@ -112,7 +112,8 @@ import main, runpy, sys
 from http_routes import iter_http_routes
 sys.modules['tank_main'] = main
 fresh = runpy.run_path('tests/test_smoke.py')['mod']
-assert sys.modules['tank_main'] is fresh
+assert fresh is not main
+assert sys.modules['tank_main'] is main
 routes = [(r.path, method) for r in iter_http_routes(fresh.app.routes) for method in (r.methods or [])]
 for endpoint in ('/v1/command/mcp/oauth/start', '/v1/command/mcp/oauth/callback'):
     assert routes.count((endpoint, 'POST')) == 1
