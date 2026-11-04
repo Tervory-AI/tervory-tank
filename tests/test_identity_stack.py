@@ -105,9 +105,12 @@ def test_stack_is_isolated_pinned_and_uses_only_existing_proxy():
     assert env['ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH'] == '/bootstrap/machine-key.json'
     assert services['trigger-signin-login']['volumes'] == ['identity_login_token:/login:ro']
     assert 'identity_bootstrap:/bootstrap' in services['tervory-setup']['volumes']
-    for service in services.values():
+    for name, service in services.items():
         assert 'ports' not in service
-        assert not any('SMTP' in name for name in service.get('environment', {}))
+        # Only the one-shot setup job sees mail settings; it turns email on and sends the setup email.
+        if name != 'tervory-setup':
+            assert not any('SMTP' in key for key in service.get('environment', {}))
+    assert services['tervory-setup']['environment']['TRIGGER_SIGNIN_SMTP_PASSWORD'].startswith('${TRIGGER_SIGNIN_SMTP_PASSWORD:?')
     assert services['identity-backup']['depends_on'] == {'identity-postgres': {'condition': 'service_healthy'}}
     assert 'TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION' in services['tervory-setup']['environment']
     # Existing main backup has no route to this separate private database.

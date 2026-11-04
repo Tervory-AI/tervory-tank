@@ -166,6 +166,8 @@ def main(bootstrap: Path = Path('/bootstrap')):
         result = api.run()
         from branding import configure_branding
         configure_branding(api, bootstrap, Path('/app/brand'), issuer)
+        from email_setup import configure_email
+        configure_email(api, bootstrap)
         from provision import provision
         setup_token = os.environ['TRIGGER_SIGNIN_SETUP_TOKEN']
         with httpx.Client(base_url='http://tank:8000', timeout=30, trust_env=False, follow_redirects=False,

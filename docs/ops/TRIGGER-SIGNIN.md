@@ -38,16 +38,19 @@ trust this same issuer. There is no fallback or Workspace device approval page.
    ZA Tank reads the canonical registry through the authenticated, no-store
    Boston Workspace configuration endpoint; it never accepts a local issuer
    or an alternative if Boston is unavailable.
-5. The native first founder is created from `TRIGGER_SIGNIN_ADMIN_EMAIL` and
-   `TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD`. Setup records that user's native subject
-   in the founder allowlist and grants the Tervory project's `org_admin` in the
-   tenant organisations. Change the temporary password at first Trigger sign-in;
-   enrol a passkey if desired. Later admins are linked by native subject and
-   tenant in the console, never email. Self-registration grants no tenant access.
+5. The first founder account is created from `TRIGGER_SIGNIN_ADMIN_EMAIL`.
+   Its initial password is Coolify-generated and nobody uses it. Setup turns on
+   email from the `TRIGGER_SIGNIN_SMTP_*` settings (the password is referenced
+   from the existing Coolify mail secret by name, never viewed or typed) and
+   sends the founder one setup email to set their own password and, if wanted,
+   a passkey. Setup records the founder's native subject in the founder
+   allowlist and grants the Tervory project's `org_admin` in the tenant
+   organisations. Later admins are linked by native subject and tenant, never
+   email. Self-registration grants no tenant access.
 6. Deploy the Workspace and shared CLI release together. Setup configures native
    branding, the original logo/Inter and Trigger sign-in page/email names against
    the approved [frames](../figma/SIGN-IN-FRAMES.md), using supported APIs only.
-   Configure SMTP in the native console. Preserve upstream email bodies, action
+   Preserve upstream email bodies, action
    URLs and substitutions. Remove obsolete Coolify names listed in the PR.
    Keep retired regional data volumes untouched: no automatic account matching,
    live-data migration or deletion is implied.

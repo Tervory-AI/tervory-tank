@@ -10,7 +10,7 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 **Trigger sign-in, Boston routing (names only):** TRIGGER_SIGNIN_PROXY_NETWORK
 
-One Boston resource serves every country. The initial founder changes the temporary password at first Trigger sign-in and may enrol a passkey. Setup binds the native subject, never email. Only Boston Tank/setup receive the setup token; Workspace receives the read-only configuration token, not a setup credential. The ZA Tank is a consumer, not a second sign-in server.
+One Boston resource serves every country. Setup emails the founder a link to set their own password and, if wanted, a passkey; nobody uses the Coolify-generated initial password. Setup binds the native subject, never email. Only Boston Tank/setup receive the setup token; Workspace receives the read-only configuration token, not a setup credential. The ZA Tank is a consumer, not a second sign-in server.
 
 **Shared email** (the morning report and default alerts): SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 

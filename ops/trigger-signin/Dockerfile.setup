@@ -5,6 +5,7 @@ COPY ops/trigger-signin/requirements-setup.lock /tmp/requirements.lock
 RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock
 COPY ops/trigger-signin/setup.py /app/setup.py
 COPY ops/trigger-signin/provision.py /app/provision.py
+COPY ops/trigger-signin/email_setup.py /app/email_setup.py
 COPY ops/trigger-signin/branding.py ops/trigger-signin/translations.json /app/
 COPY workspace/public/brand/tervory-logo.png workspace/app/fonts/Inter-latin.woff2 /app/brand/
 COPY workspace/app/fonts/OFL-Inter.txt /app/brand/OFL-Inter.txt
