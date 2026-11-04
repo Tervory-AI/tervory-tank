@@ -11,6 +11,7 @@ from test_command import command_pool as command_pool_fixture, runtime as runtim
 
 command_pool = command_pool_fixture
 runtime = runtime_fixture
+registry_refresh = registry.refresh
 
 
 @pytest_asyncio.fixture
@@ -19,6 +20,7 @@ async def registry_client(monkeypatch, command_pool, runtime):
     monkeypatch.setenv('TRIGGER_SIGNIN_SETUP_TOKEN', 'offline-setup-only')
     monkeypatch.setattr(registry, '_records', {})
     monkeypatch.setattr(registry, '_expires', 0.0)
+    monkeypatch.setattr(registry, 'refresh', registry_refresh)
     async with command_pool.acquire() as conn:
         await conn.execute('INSERT INTO tank.case_study_clients(tenant_id) VALUES($1) ON CONFLICT DO NOTHING', TENANT)
     app = FastAPI()

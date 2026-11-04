@@ -2,7 +2,7 @@
 
 Run from the repository: PYTHONPATH=tank:tests python tests/tiger_works/evidence/local_proof.py
 Requires Workspace npm dependencies, Node 22 and Playwright Chromium.
-Only a temporary Workspace copy replaces Clerk with a local identity. Actual
+Only a temporary Workspace copy replaces Trigger sign-in with a local identity. Actual
 server actions, tenant derivation, Tank proxy routes and Tiger handlers run.
 MemoryStore replaces Postgres; fixture checks replace the scheduled job trigger.
 The rendered DOM, price extraction, history and alerts use production code.
@@ -38,7 +38,7 @@ def free_port() -> int:
 
 
 CLIENT = '''"use client";
-export function ClerkProvider({ children }) { return children; }
+export function TriggerSigninProvider({ children }) { return children; }
 export function SignedIn({ children }) { return children; }
 export function SignedOut() { return null; }
 export function UserButton() { return null; }
@@ -48,11 +48,11 @@ export function useAuth() { return { isLoaded: true, userId: "local_fixture_user
 SERVER = '''export async function auth() {
   return { userId: "local_fixture_user", orgId: "org_tiger_local_fixture", orgRole: "org:member" };
 }
-export async function clerkClient() {
+export async function signinDirectory() {
   return { organizations: { getOrganization: async () => ({ name: "local, fixture page" }) } };
 }
 export async function currentUser() { return null; }
-export function clerkMiddleware(callback) { return request => callback(auth, request); }
+export function signinMiddleware(callback) { return request => callback(auth, request); }
 export function createRouteMatcher() { return () => false; }
 '''
 
@@ -94,18 +94,18 @@ async def main() -> None:
             local = Path(temp) / "workspace"
             shutil.copytree(ROOT / "workspace", local, ignore=shutil.ignore_patterns("node_modules", ".next", ".env*", "*.tsbuildinfo"))
             (local / "node_modules").symlink_to(ROOT / "workspace/node_modules", target_is_directory=True)
-            (local / "fixture-clerk-client.js").write_text(CLIENT)
-            (local / "fixture-clerk-server.js").write_text(SERVER)
+            (local / "fixture-signin-client.js").write_text(CLIENT)
+            (local / "fixture-signin-server.js").write_text(SERVER)
             (local / "next.config.ts").write_text('''import path from "node:path";
 export default { devIndicators: false, webpack(config) {
-  config.resolve.alias["@clerk/nextjs$"] = path.resolve("fixture-clerk-client.js");
-  config.resolve.alias["@clerk/nextjs/server$"] = path.resolve("fixture-clerk-server.js");
+  config.resolve.alias["@/app/trigger-signin-provider$"] = path.resolve("fixture-signin-client.js");
+  config.resolve.alias["@/lib/trigger-signin$"] = path.resolve("fixture-signin-server.js");
   return config;
 } };
 ''')
             env = {**os.environ, "TANK_URL": f"http://127.0.0.1:{tank_port}", "TANK_API_KEY": tank.TANK_API_KEY,
-                   "NEXT_TELEMETRY_DISABLED": "1", "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==",
-                   "CLERK_SECRET_KEY": "sk_test_dummy"}
+                   "NEXT_TELEMETRY_DISABLED": "1", "TRIGGER_SIGNIN_KEY": "<retired-build-value>",
+                   }
             with (output / "workspace.log").open("w") as log:
                 process = await asyncio.create_subprocess_exec("node", str(local / "node_modules/next/dist/bin/next"), "dev",
                     "--hostname", "localhost", "--port", str(workspace_port), cwd=local, env=env,

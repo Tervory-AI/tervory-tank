@@ -2,7 +2,7 @@
 
 These are **local, fixture page** screenshots, not a signed-in live service.
 The founder has excluded accounts and credentials from this brief. The harness
-copies Workspace to a temporary directory and substitutes Clerk, tenant identity,
+copies Workspace to a temporary directory and substitutes Trigger sign-in, tenant identity,
 middleware and the authentication shell only in that copy. Production auth is
 unchanged. The actual Base page, controls, server proxy and Tank product router run.
 The four-row reference and public observations are explicit fixtures, never seed data.
@@ -25,7 +25,7 @@ python tests/base_proof/workspace.py
 Use the printed temporary Workspace directory as the working directory:
 
 ```
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy TANK_URL=http://127.0.0.1:8141 TANK_API_KEY=local-fixture npm run dev -- --port 3141
+NEXT_TELEMETRY_DISABLED=1 TANK_URL=http://127.0.0.1:8141 TANK_API_KEY=local-fixture npm run dev -- --port 3141
 ```
 
 Then run `python tests/base_proof/browser.py` from the clone. The fixture labels
@@ -146,7 +146,7 @@ The CI lint command and Workspace production build also passed locally:
 ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
 # All checks passed!
 cd workspace
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npx next build
+NEXT_TELEMETRY_DISABLED=1 npx next build
 # Compiled successfully in 29.3s; type checks passed; 36/36 static pages generated; exit 0.
 ```
 
@@ -165,7 +165,7 @@ Base app/worker with the deployed directory layout, seeds approved skill version
 in that disposable database, and uploads through the real Workspace controls.
 Only outbound public-page/DNS responses are fixtures (`external_pages.py`);
 other external services return unavailable, so the proof cannot spend money or
-read live sites. Loopback calls between the real services use real HTTP. Clerk
+read live sites. Loopback calls between the real services use real HTTP. Trigger sign-in
 is bypassed only in the temporary Workspace copy, with CI's dummy settings.
 No Tank routes, Base steps, collectors or skills are replaced.
 

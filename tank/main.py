@@ -3823,7 +3823,7 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     if path.startswith("regulations/"):
         headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
     if path == "moot/hearing-sources" or path == "moot/hearings" or path.startswith("moot/hearings/"):
-        # Only the Workspace service can attest Clerk-derived actor/tenant identity.
+        # Only the Workspace service can attest Trigger sign-in-derived actor/tenant identity.
         # Discard caller-supplied founder flags; Tank derives that capability.
         import hmac
         supplied_key = request.headers.get("x-tank-key", "")

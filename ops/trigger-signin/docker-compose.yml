@@ -7,7 +7,7 @@
 # TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD, TRIGGER_SIGNIN_DB_PASSWORD, TRIGGER_SIGNIN_ADMIN_EMAIL,
 # TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD, TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION,
 # TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION, TRIGGER_SIGNIN_PROXY_NETWORK (existing proxy network name).
-# No SMTP settings: founder configures SMTP in the Zitadel console.
+# No SMTP settings: founder configures SMTP in the native console.
 # Unmodified upstream v4.20.0, release 22 Oct 2026; API and Login index digests verified.
 x-database: &database
   ZITADEL_DATABASE_POSTGRES_HOST: identity-postgres

@@ -1,4 +1,4 @@
-/* Real admin -> Tank -> Rig -> Postgres -> SMTP proof. Only Clerk's external
+/* Real admin -> Tank -> Rig -> Postgres -> SMTP proof. Only Trigger sign-in's external
  * session boundary and public DNS are replaced with local fixture routing. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -26,7 +26,7 @@ function moduleFrom(relative, bindings) {
 }
 const tank = moduleFrom('workspace/lib/tank.ts',{'@/app/api/zenas/tank':moduleFrom('workspace/app/api/zenas/tank.ts',{})});
 const actions = moduleFrom('workspace/app/rig/admin/actions.ts',{
-  '@clerk/nextjs/server':{auth:async()=>({userId:session.getStore()?.userId,orgRole:session.getStore()?'org:admin':null})},
+  '@/lib/trigger-signin':{auth:async()=>({userId:session.getStore()?.userId,orgRole:session.getStore()?'org:admin':null})},
   '@/lib/tenant':{activeTenant:async()=>session.getStore()},
   '../../review/founder':{isListedFounder:()=>false},
   '@/lib/tank':tank,

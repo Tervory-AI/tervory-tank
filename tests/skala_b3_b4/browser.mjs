@@ -1,4 +1,4 @@
-// Offline browser proof using rows exported by test_lifecycle.py. No live data or Clerk session.
+// Offline browser proof using rows exported by test_lifecycle.py. No live data or Trigger sign-in session.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { readFile, mkdir } from "node:fs/promises";

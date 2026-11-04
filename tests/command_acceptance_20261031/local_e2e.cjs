@@ -1,8 +1,8 @@
 /* Local end-to-end run on one machine: actual CLI -> (us-east: actual Workspace
  * public adapter | za: Tank directly) -> real uvicorn Tank -> real Postgres ->
- * a LiteLLM proxy. The browser step (Clerk-signed-in user clicks Approve) is the
+ * a LiteLLM proxy. The browser step (Trigger sign-in-signed-in user clicks Approve) is the
  * actual Workspace approval module called with an injected signed-in identity,
- * because Next cannot run here without Clerk keys. The Chats API turn uses the
+ * because Next cannot run here without Trigger sign-in keys. The Chats API turn uses the
  * actual /chats/api route module with the same injected identity.
  *
  * Inputs (env): E2E_TANK_US, E2E_TANK_ZA (loopback http), E2E_TANK_KEY (local

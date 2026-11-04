@@ -1,4 +1,4 @@
-"""MCP G1 OAuth server: existing Clerk identity and hash-only CLI credentials.
+"""MCP G1 OAuth server: existing Trigger sign-in identity and hash-only CLI credentials.
 
 Public protocol responses contain no service identity. Only the signed-in
 Workspace corridor may approve a grant; client URLs are never browser redirects

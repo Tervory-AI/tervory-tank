@@ -34,7 +34,7 @@ function harness(fetch, env = {}) {
       if (spec === 'server-only' || spec.endsWith('.css')) return {};
       if (spec === 'next/link') return { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) };
       if (spec === 'next/navigation') return { notFound };
-      if (spec === '@clerk/nextjs/server') return { auth: async () => ({ userId: 'offline-founder' }) };
+      if (spec === '@/lib/trigger-signin') return { auth: async () => ({ userId: 'offline-founder' }) };
       if (spec === '@/lib/admin') return { isFounder: () => true };
       if (spec === './actions') return { look: action, resolve: action, shieldAction: action };
       if (spec === './quarantine-actions') return { releaseBatch: action, rejectBatch: action, removeBatch: action };

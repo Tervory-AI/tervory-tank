@@ -1,4 +1,4 @@
-"""Execute Workspace auth/actions/billing with offline boundaries, no Clerk/Stripe calls."""
+"""Execute Workspace auth/actions/billing with offline boundaries, no Trigger sign-in/Stripe calls."""
 import subprocess
 from pathlib import Path
 
@@ -21,7 +21,7 @@ function load(filename) {
   const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX}}).outputText;
   function local(spec) {
     if (spec === '@/lib/tank') return {rigThreeDRequest: read};
-    if (spec === '@clerk/nextjs/server') return {auth: async () => session};
+    if (spec === '@/lib/trigger-signin') return {auth: async () => session};
     if (spec === 'next/navigation') return {redirect: value => {throw {redirect: value};}};
     if (spec === 'next/cache') return {revalidatePath: () => {}};
     if (spec.startsWith('.') || spec.startsWith('@/')) {

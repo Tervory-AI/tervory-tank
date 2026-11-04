@@ -135,19 +135,21 @@ async def verify(token: str, *, workspace: bool = False) -> dict:
 
 def principal(claims: dict, *, org_id: str | None = None, workspace: bool = False) -> tuple[uuid.UUID, str, bool]:
     try:
-        sub, org = claims['sub'], org_id if org_id is not None else claims[ORG_CLAIM]
+        sub = claims['sub']
         if not isinstance(sub, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', sub):
-            raise ValueError
-        if not isinstance(org, str) or not re.fullmatch(r'[0-9]{1,30}', org):
             raise ValueError
         from main import box_region
         bindings = registry.config('us-east' if workspace else box_region())['organisations']
-        if not isinstance(bindings, dict) or org not in bindings:
+        roles = claims.get(ROLES_CLAIM, {})
+        if not isinstance(bindings, dict) or not isinstance(roles, dict):
+            raise ValueError
+        granted = sorted({org for grants in roles.values() if isinstance(grants, dict)
+                          for org in grants if org in bindings})
+        home = claims.get(ORG_CLAIM)
+        org = org_id if org_id is not None else home if home in granted else next(iter(granted), None)
+        if not isinstance(org, str) or not re.fullmatch(r'[0-9]{1,30}', org) or org not in granted:
             raise ValueError
         tenant = uuid.UUID(bindings[org])
-        roles = claims.get(ROLES_CLAIM, {})
-        if not isinstance(roles, dict) or not any(isinstance(grants, dict) and org in grants for grants in roles.values()):
-            raise ValueError
         admins = roles.get('org_admin', {}) if isinstance(roles, dict) else {}
         tenant_admin = isinstance(admins, dict) and org in admins
         return tenant, sub, tenant_admin

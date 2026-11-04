@@ -9,8 +9,11 @@ import uuid
 import pytest
 
 from test_command import api, command_pool, runtime, TENANT, OTHER  # noqa: F401
-from test_command_streaming import streaming  # noqa: F401
-from test_identity_za import provider as oidc_provider  # noqa: F401
+from test_command_streaming import streaming as streaming_fixture
+import test_identity_za as native_proofs
+
+streaming = streaming_fixture
+oidc_provider = native_proofs.provider
 
 
 WORKER = {'x-tank-key': 'dummy-worker-key'}
@@ -111,8 +114,8 @@ async def test_persisted_pat_cannot_escalate_headers_or_cross_user_and_revokes(a
     # Deliberately non-random test credential. Never accepted by a live service.
     token = f'tv1.us-east.{TENANT.hex}.' + 'x' * 43
     async with pool.acquire() as conn:
-        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin) "
-                           "VALUES($1,'offline-client','us-east','offline-only',$2,true)", TENANT, pat.digest(token))
+        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin,trigger_signin_issuer) "
+                           "VALUES($1,'offline-client','us-east','offline-only',$2,true,'https://auth.tervory.com')", TENANT, pat.digest(token))
     headers = {'authorization': 'Bearer ' + token, 'x-tervory-user': 'founder',
                'x-tervory-tenant': str(OTHER), 'x-tervory-role': 'org:admin'}
     created = await client.post('/v1/command/threads', json={}, headers=headers)
@@ -145,8 +148,8 @@ async def test_cli_public_adapter_reaches_real_tank_with_cancel_barrier(streamin
     async with b.pool.acquire() as conn:
         for user, suffix in [('founder', 'f'), ('offline-client', 'c')]:
             token = f'tv1.us-east.{TENANT.hex}.' + suffix * 43
-            await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin) "
-                               "VALUES($1,$2,'us-east','offline-edge',$3,true)", TENANT, user, pat.digest(token))
+            await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin,trigger_signin_issuer) "
+                               "VALUES($1,$2,'us-east','offline-edge',$3,true,'https://auth.tervory.com')", TENANT, user, pat.digest(token))
     # The subprocess waits on loopback HTTP; keep the async server loop running.
     decoded = await asyncio.to_thread(subprocess.run,
         ['node', str(Path(__file__).with_name('public_edge.cjs'))],
@@ -186,7 +189,7 @@ async def device_login_edge(b, region, za_key=None):
         ledger = await conn.fetchrow("SELECT * FROM tank.ledger WHERE tenant_id=$1 ORDER BY ts DESC LIMIT 1", TENANT)
         state = json.loads(await conn.fetchval("SELECT state FROM tank.command_threads WHERE thread_id=$1", thread))
     # One org-scoped credential for the approving user, used, rotated, then revoked.
-    expected_user = 'zitadel:20001' if region == 'za' else 'offline-client'
+    expected_user = '20001'
     assert (token['region'], token['user_id'], token['device_name']) == (region, expected_user, f'acceptance-{region}')
     assert token['last_used_at'] is not None and token['revoked_at'] is not None
     assert token['expires_at'] is not None and token['refresh_hash'] is not None
@@ -205,14 +208,17 @@ async def device_login_edge(b, region, za_key=None):
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
                     reason='Requires assembled CLI/Workspace and local-only client dependencies')
-async def test_cli_device_login_through_workspace_with_automated_approval(streaming):  # noqa: F811
+@pytest.mark.parametrize('oidc_provider', ['us-east'], indirect=True)
+async def test_cli_device_login_through_workspace_with_automated_approval(streaming, oidc_provider):
+    oidc_provider.claims['urn:zitadel:iam:org:project:roles'] = {'member': {'10001': 'tervory'}}
     await device_login_edge(streaming, 'us-east')
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
                     reason='Requires assembled CLI/Workspace and local-only client dependencies')
-async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkeypatch, oidc_provider):  # noqa: F811
+@pytest.mark.parametrize('oidc_provider', ['za'], indirect=True)
+async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkeypatch, oidc_provider):
     """ZA default login uses fake Zitadel, real JWT verification and real Tank SQL;
     no Workspace approval, Boston proxy or live identity provider is involved."""
     monkeypatch.setenv('TANK_REGION', 'za')
@@ -220,6 +226,7 @@ async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkey
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', 'dummy-za-device-approval-key')
     # A ZA Tank process reads TANK_REGION=za at import; mirror that for the ledger.
     monkeypatch.setattr(streaming.tank, 'DEFAULT_REGION', 'za')
+    oidc_provider.claims['urn:zitadel:iam:org:project:roles'] = {'member': {'10001': 'tervory'}}
     await device_login_edge(streaming, 'za', za_key='dummy-za-device-approval-key')
     assert ('POST', '/oauth/v2/device_authorization') in oidc_provider.calls
     assert ('POST', '/oauth/v2/token') in oidc_provider.calls
@@ -239,8 +246,8 @@ async def test_existing_founder_token_cli_answer_is_visible_in_chats_with_same_r
     b = streaming
     token = f'tv1.us-east.{TENANT.hex}.' + 'f' * 43
     async with b.pool.acquire() as conn:
-        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin) "
-                           "VALUES($1,'founder','us-east','offline-existing-token',$2,true)", TENANT, pat.digest(token))
+        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin,trigger_signin_issuer) "
+                           "VALUES($1,'founder','us-east','offline-existing-token',$2,true,'https://auth.tervory.com')", TENANT, pat.digest(token))
     script = r"""
 const assert = require('node:assert/strict');
 const {pathToFileURL} = require('node:url');

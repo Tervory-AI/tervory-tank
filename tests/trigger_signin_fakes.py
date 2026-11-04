@@ -23,6 +23,9 @@ def set_founders(monkeypatch, subjects):
               'founders': [subject.strip() for subject in subjects.split(',') if subject.strip()]}
     monkeypatch.setattr(registry, '_records', {**registry._records, region: record})
     monkeypatch.setattr(registry, '_issuer', ContextVar('offline_verified_issuer', default=issuer))
+    async def refresh(**kwargs):
+        return None
+    monkeypatch.setattr(registry, 'refresh', refresh)
 
 
 def install_registry(monkeypatch, providers, bindings, *, workspace_client=None):

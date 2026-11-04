@@ -67,7 +67,7 @@ DATABASE_URL=postgresql://postgres@127.0.0.1:54331/market_docs_test \
 
 The browser runner also needs Chromium at `/usr/bin/chromium`, port 3053 free and
 Workspace dependencies installed. It creates an isolated Next wrapper; only that
-wrapper supplies a local identity. Production Clerk code is unchanged. Screenshots
+wrapper supplies a local identity. Production Trigger sign-in code is unchanged. Screenshots
 are **local, fixture page**, not signed-in live proof. No user credentials are
 needed or requested. Only R2's external HTTP transport is stubbed; the real
 storage signing/path logic still runs. Tank itself is never replaced. It starts

@@ -234,7 +234,6 @@ services:
   tank:
     build:
       context: ./tank
-      args:
         # A local build can pass GIT_SHA. On Coolify, Tank reads SOURCE_COMMIT at run time
         # (tank_sha in tank/main.py). Do not use SOURCE_COMMIT as a compose variable: Coolify
         # then creates an empty app variable of that name, which hides the commit it injects.
@@ -421,7 +420,6 @@ services:
       additional_contexts:
         cli: ./cli
       args:
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
     restart: unless-stopped
     environment:
       TANK_URL: http://tank:8000
@@ -440,8 +438,6 @@ services:
       # Records ZA CLI sign-in approvals and lists/revokes ZA CLI sign-ins on the ZA Tank.
       TRIGGER_SIGNIN_SESSIONS_KEY_ZA: ${TRIGGER_SIGNIN_SESSIONS_KEY_ZA:-}
       # New production org id = old org id its data was filed under (not secrets). See workspace/lib/tenant.ts.
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       # Shared with Watch + Enforce: signed owner Undo / receipts email links. Coolify secret NAME only.
       AUTUMBRA_UNDO_TOKEN_SECRET: ${AUTUMBRA_UNDO_TOKEN_SECRET:-}
       # W-2 billing. Empty until set in Coolify; the billing page then says pricing is being finalised.
@@ -461,7 +457,7 @@ services:
       retries: 10
       start_period: 40s
 
-  # Public one-page site. No secrets, no Tank, no Clerk, no marketing tool.
+  # Public one-page site. No secrets, no Tank, no sign-in, no marketing tool.
   # A release address is appended to /data/release-signups.jsonl on site_signups.
   # Coolify still has to attach https://tervory.com to this service on port 3000.
   # app.tervory.com stays on workspace. /internal is on this same service and is noindex.

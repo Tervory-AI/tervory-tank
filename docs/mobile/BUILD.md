@@ -18,8 +18,8 @@ Run the web rows after deployment. Store rows explicitly depend on the separate
 gate 2 merge and versioned installable builds; this branch creates no `mobile/`.
 Gate 1 adds no environment variables or alternate identity configuration.
 
-Gate 2 integration finding: main's Workspace authenticates with Clerk. Existing
-Zitadel support is ZA-only CLI device authorization (`tank/identity_device.py`),
-not a Workspace session issuer. A native wrapper must not treat a Zitadel token
-as a Clerk session or invent an organization mapping. The native gate must prove
+Gate 2 integration finding: main's Workspace authenticates with Trigger sign-in. Existing
+Trigger sign-in support is ZA-only CLI device authorization (`tank/identity_device.py`),
+not a Workspace session issuer. A native wrapper must not treat a Trigger sign-in token
+as a Trigger sign-in session or invent an organization mapping. The native gate must prove
 this boundary before claiming system-browser sign-in works.

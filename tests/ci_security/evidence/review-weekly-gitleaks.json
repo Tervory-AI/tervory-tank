@@ -10,7 +10,7 @@
   "reviewed_finding_count": 43,
   "reviewed_unique_fingerprints": 41,
   "finding_groups": {
-    "dummy_clerk_publishable": 18,
+    "dummy_signin_publishable": 18,
     "dummy_stripe_test": 1,
     "figma_identifiers": 13,
     "public_html_fixture_tokens": 11

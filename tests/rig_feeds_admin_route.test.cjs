@@ -56,7 +56,7 @@ async function main() {
       : { saved: true } };
   } });
   const actions = moduleFrom('workspace/app/rig/admin/actions.ts', {
-    '@clerk/nextjs/server': { auth: async () => ({ userId: 'server-user', orgRole: role }) },
+    '@/lib/trigger-signin': { auth: async () => ({ userId: 'server-user', orgRole: role }) },
     '@/lib/tenant': { activeTenant: async () => active },
     '../../review/founder': { isListedFounder: () => false },
     '@/lib/tank': tank,

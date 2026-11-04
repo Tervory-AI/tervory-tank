@@ -1,4 +1,4 @@
-/** Real Shell/Squad components with offline Clerk/navigation adapters; no copied UI handlers. */
+/** Real Shell/Squad components with offline Trigger sign-in/navigation adapters; no copied UI handlers. */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 const root = new URL("../", import.meta.url);
@@ -22,7 +22,7 @@ export function actualShellHtml(founder: boolean): string {
   }
   modules["next/navigation"] = 'exports.usePathname=()=>"/skala/gold";exports.useSearchParams=()=>new URLSearchParams();exports.useSelectedLayoutSegments=()=>["skala","gold"];';
   modules["next/link"] = 'module.exports=(props)=>require("react").createElement("a",props);';
-  modules["@clerk/nextjs"] = 'exports.useAuth=()=>({isLoaded:false});exports.SignedIn=({children})=>children;exports.OrganizationSwitcher=()=>"Example workspace";exports.UserButton=()=>null;';
+  modules["@/app/trigger-signin-provider"] = 'exports.useAuth=()=>({isLoaded:false});exports.SignedIn=({children})=>children;exports.OrganizationSwitcher=()=>"Example workspace";exports.UserButton=()=>null;';
   const fonts = `@font-face{font-family:Inter;src:url(${new URL("workspace/app/fonts/Inter-latin.woff2",root).href});font-weight:100 900}
     @font-face{font-family:Jost;src:url(${new URL("workspace/app/fonts/Jost-300-latin.woff2",root).href});font-weight:300}
     @font-face{font-family:Mono;src:url(${new URL("workspace/app/fonts/JetBrainsMono-latin.woff2",root).href})}

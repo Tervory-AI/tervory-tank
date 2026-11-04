@@ -65,7 +65,7 @@ def services(output):
     thread = threading.Thread(target=proxy.serve_forever, daemon=True)
     thread.start()
     port = free_port()
-    env = {k: v for k, v in os.environ.items() if not k.startswith(('R2_', 'TANK_KEY_', 'CLERK_', 'NEXT_PUBLIC_CLERK_'))}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(('R2_', 'TANK_KEY_', 'TRIGGER_SIGNIN_', 'TRIGGER_SIGNIN_'))}
     env.update(TANK_API_KEY='placeholder-market-docs-api-key', TANK_KEY_MARKET_LAB=secrets.token_hex(32), TANK_KEY_BASE=secrets.token_hex(32),
         TANK_VAULT_KEY=base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(), LITELLM_MASTER_KEY=secrets.token_hex(32),
         TANK_REGION='us-east', TERVORY_ADMIN_USER_IDS='', REDIS_URL='redis://127.0.0.1:1/0',

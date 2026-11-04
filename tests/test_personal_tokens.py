@@ -28,7 +28,8 @@ def request(token=TOKEN, method='GET', path='/v1/command/tools', **headers):
 
 @pytest.fixture
 def runtime(monkeypatch):
-    conn = SimpleNamespace(fetchrow=AsyncMock(return_value={'token_id': uuid.uuid4(), 'user_id': 'client', 'stale': None}),
+    conn = SimpleNamespace(fetchrow=AsyncMock(return_value={'token_id': uuid.uuid4(), 'user_id': 'client', 'stale': None,
+                                                          'trigger_signin_issuer': 'https://auth.tervory.com'}),
                            execute=AsyncMock(),
                            fetch=AsyncMock(return_value=[{'agent': 'tiger'}]))
     @asynccontextmanager

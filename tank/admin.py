@@ -1,7 +1,7 @@
 """Founder console. Platform-wide, and invisible to everyone else.
 
 Every route on this router returns 404 unless the caller sends the Workspace
-key and a Clerk user id listed in TERVORY_ADMIN_USER_IDS. The numbers are
+key and a Trigger sign-in user id listed in TERVORY_ADMIN_USER_IDS. The numbers are
 our own measurements: a route is proven only when its evals have passed,
 its shadow sample is large enough and in agreement, and clients are not
 rejecting it above the policy's ceiling.
@@ -78,7 +78,7 @@ def num(value: Any, default: float = 0.0) -> float:
 
 
 def founder_allowed(tank_key: str, user_id: str) -> bool:
-    """True only for the Workspace key plus a listed Clerk user id."""
+    """True only for the Workspace key plus a listed Trigger sign-in user id."""
     expected = os.environ.get("TANK_API_KEY", "")
     if not expected or not tank_key or not user_id:
         return False

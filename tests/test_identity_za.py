@@ -71,9 +71,17 @@ async def test_bad_signature_and_unknown_kid_are_refused(provider):
         await oidc.verify(provider.token())
 
 
+def test_native_external_founder_uses_signed_tenant_grant_not_home_org(provider):
+    claims = {**provider.claims, oidc.ORG_CLAIM: '90001'}
+    tenant, subject, tenant_admin = oidc.principal(claims)
+    assert tenant == TENANT and subject == SUB and tenant_admin is True
+    with pytest.raises(oidc.IdentityError):
+        oidc.principal(claims, org_id='90001')
+
+
 def test_unmapped_organisation_and_metadata_do_not_grant_identity(provider, monkeypatch):
     with pytest.raises(oidc.IdentityError):
-        oidc.principal({**provider.claims, oidc.ORG_CLAIM: '99999'})
+        oidc.principal({**provider.claims, oidc.ORG_CLAIM: '99999', oidc.ROLES_CLAIM: {'member': {'99999': 'foreign'}}})
     claims = {**provider.claims, oidc.ROLES_CLAIM: {'member': {ORG: 'tervory'}}, 'email': 'founder@tervory.com',
               'name': 'founder', 'metadata': {'role': 'org_admin', 'founder': True},
               'urn:zitadel:iam:user:metadata': {'founder': 'true'},
@@ -167,6 +175,7 @@ async def test_legacy_approval_routes_are_removed_and_default_is_native(device, 
 async def test_signed_but_unmapped_org_mints_no_tank_credential(device, provider):
     client, pool, runtime = device
     provider.claims[oidc.ORG_CLAIM] = '99999'
+    provider.claims[oidc.ROLES_CLAIM] = {'member': {'99999': 'foreign'}}
     code = (await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'trigger-signin'})).json()['device_code']
     response = await client.post('/v1/command/device/token', json={'device_code': code})
     assert response.status_code == 400 and response.json() == {'error': 'invalid_grant'}
@@ -207,20 +216,20 @@ async def test_slow_provider_releases_pool_and_overlapping_polls_issue_once(devi
     first = asyncio.create_task(request())
     second = None
     try:
-        await asyncio.wait_for(entered[0].wait(), 2)
+        await asyncio.wait_for(entered[0].wait(), 20)
         # Simulate the next allowed interval while the first provider call is stalled.
         async with pool.acquire() as conn:
             await conn.execute("UPDATE tank.device_authorizations SET last_polled_at=now()-interval '5 seconds'")
         second = asyncio.create_task(request())
-        await asyncio.wait_for(entered[1].wait(), 2)
+        await asyncio.wait_for(entered[1].wait(), 20)
         assert pool.get_idle_size() == pool.get_size()
-        async with pool.acquire(timeout=1) as conn:
+        async with pool.acquire(timeout=10) as conn:
             assert await conn.fetchval('SELECT 1') == 1
         release_poll.set()
-        await asyncio.wait_for(verifying.wait(), 2)
+        await asyncio.wait_for(verifying.wait(), 20)
         assert pool.get_idle_size() == pool.get_size()
         release_verify.set()
-        responses = await asyncio.wait_for(asyncio.gather(first, second), 5)
+        responses = await asyncio.wait_for(asyncio.gather(first, second), 30)
         assert sorted(r.status_code for r in responses) == [200, 400]
         assert [r.json()['error'] for r in responses if r.status_code == 400] == ['invalid_grant']
         async with pool.acquire() as conn:

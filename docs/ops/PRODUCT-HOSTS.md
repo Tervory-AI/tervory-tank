@@ -98,7 +98,7 @@ Path prefixes include a slash boundary: `/widget-extra`, `/3d-extra`,
 `/page-extra` and `/v1/rig-extra` do **not** match the agent router. `/` rewrites
 inside Workspace to `/rig`; `/admin` and `/admin/*` rewrite to `/rig/admin` and
 `/rig/admin/*`. Existing `/rig/*`, `/rig-cart/*`, `/_next/*`, sign-in/up and
-Workspace API paths stay in Workspace. Clerk still protects private Rig pages.
+Workspace API paths stay in Workspace. Trigger sign-in still protects private Rig pages.
 The room's old `/` and `/admin` HTML routes remain available internally but no
 longer own those public host paths. Internal room-host calls are unchanged.
 
@@ -114,7 +114,7 @@ router from its saved labels if present. Do not remove the reserved-path routers
 3. **Coolify, rig.** Keep `https://rig.tervory.com` on **agent-rig** too. Deploy its reviewed raw Compose labels with the reserved-path rules above, priority 1000 on both HTTP/HTTPS routers. Keep TLS, gzip, service port 8000 and the proxy network unchanged. Inspect saved/effective labels: there must be no broad agent-rig host-only router. Workspace must have a matching host router with priority below 1000. Do not attach other product hosts to agent-rig.
 4. **Coolify, rooms.** Confirm agent-ghost and the other rooms listed above have none of these public hosts. Leave them that way.
 5. **Redeploy.** Deploy Workspace with the Rig host map and aliases, then attach its domain; verify the existing embeds while agent-rig still has its old host router. Deploy the reviewed agent-rig path split after Workspace is ready. Other rooms do not need a redeploy. Do not remove either Rig domain association during the cutover. Check both backends immediately; if the widget/API checks fail, restore the previous agent-rig labels before continuing.
-6. **Clerk.** On the **same** Clerk application as `app.tervory.com`, add each workspace host as an allowed / satellite domain. Keys stay in Coolify under the existing names `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`. Do not copy the values into git.
+6. **Trigger sign-in.** All product hosts share the Workspace's encrypted secure session on `.tervory.com`; the maintained OIDC client returns through `app.tervory.com`. Setup supplies the app IDs. Set only `TRIGGER_SIGNIN_WORKSPACE_SECRET` in Coolify, never a publishable key or satellite-domain setting. See `docs/ops/TRIGGER-SIGNIN.md`.
 
 ### Smoke
 

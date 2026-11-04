@@ -86,7 +86,7 @@ async def identity(request: Request) -> Actor:
 
 
 async def signed_in_actor(request: Request) -> Actor:
-    """The Clerk-derived user and tenant headers. Call only after the service key is checked."""
+    """The Trigger sign-in-derived user and tenant headers. Call only after the service key is checked."""
     from main import box_region
     user = request.headers.get("x-tervory-user", "").strip()
     tenant = request.headers.get("x-tervory-tenant")

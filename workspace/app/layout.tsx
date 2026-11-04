@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { TriggerSigninProvider } from "./trigger-signin-provider";
+import { TriggerSigninProvider } from "@/app/trigger-signin-provider";
 import { auth } from "@/lib/trigger-signin";
 import { isListedFounder } from "./review/founder";
 import { Shell, type ShellAccess } from "./shell";

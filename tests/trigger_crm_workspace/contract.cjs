@@ -16,7 +16,7 @@ let session = { userId: 'offline-founder', orgId: 'org_offline' };
 const load = Module._load;
 Module._load = function(name, parent, ...rest) {
   if (name === 'server-only') return {};
-  if (name === '@clerk/nextjs/server') return { auth: async () => session };
+  if (name === '@/lib/trigger-signin') return { auth: async () => session };
   return load.call(this, name, parent, ...rest);
 };
 process.env.TANK_URL = 'http://tank.offline.invalid';

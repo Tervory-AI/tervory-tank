@@ -1,4 +1,4 @@
-// Actual page and access helpers, isolated from Clerk and all network services.
+// Actual page and access helpers, isolated from Trigger sign-in and all network services.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -22,14 +22,14 @@ const navigation = {notFound() {throw Error('404');}};
 const founder = load('workspace/app/review/founder.ts', {});
 const access = load('workspace/app/review/access.ts', {
   './founder': founder, 'next/navigation': navigation,
-  '@clerk/nextjs/server': {
+  '@/lib/trigger-signin': {
     auth: async () => ({userId, orgRole}),
-    clerkClient: async () => ({users: {getUser: async () => ({publicMetadata: {jurisdiction: 'us', admission_no: 'fixture-admission'}})}}),
+    signinDirectory: async () => ({users: {getUser: async () => ({publicMetadata: {jurisdiction: 'us', admission_no: 'fixture-admission'}})}}),
   },
 });
 const tenant = {activeTenant: async () => {reads.push('tenant'); return {orgName: 'Fixture'};}};
 const gold = load('workspace/app/skala/gold/access.ts', {
-  '@clerk/nextjs/server': {auth: async () => ({userId})},
+  '@/lib/trigger-signin': {auth: async () => ({userId})},
   'next/navigation': navigation, '@/app/review/access': access, '@/lib/tenant': tenant,
 });
 const page = load('workspace/app/tank/page.tsx', {

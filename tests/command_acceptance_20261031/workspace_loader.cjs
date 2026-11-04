@@ -1,5 +1,5 @@
 /* Load actual workspace/*.ts modules (TypeScript transpile only) into a sandbox
- * with a chosen environment and fetch. Named mocks replace Clerk-bound modules. */
+ * with a chosen environment and fetch. Named mocks replace Trigger sign-in-bound modules. */
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');

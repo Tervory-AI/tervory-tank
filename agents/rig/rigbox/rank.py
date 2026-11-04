@@ -89,7 +89,7 @@ _RELATIONS = (
 _COMPACT = re.compile(r"[^a-z0-9]+")
 _WORD = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
 # Frequency list and shopping glossary. Search does not download either.
-_ENGLISH_PATH = Path(__file__).resolve().parents[1] / "english-20k.txt"
+_ENGLISH_PATH = Path(__file__).resolve().parents[1] / "english-20k.txt.gz"
 _SHOPPING_PATH = Path(__file__).resolve().parents[1] / "shopping.txt"
 # Relation words are not model codes. "go" would otherwise look like a short code.
 _SKIP = frozenset(
@@ -121,8 +121,10 @@ _CATEGORY = 4.0
 
 
 def _load_english(path: Path) -> frozenset[str]:
+    import gzip
     found: set[str] = set()
-    for line in path.read_text(encoding="utf-8").splitlines():
+    text = gzip.decompress(path.read_bytes()).decode('utf-8') if path.suffix == '.gz' else path.read_text(encoding='utf-8')
+    for line in text.splitlines():
         word = line.split("#", 1)[0].strip().lower()
         if word.isalpha():
             found.add(word)

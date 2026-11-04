@@ -18,7 +18,7 @@
 ## Where things are
 - **Repo:** https://github.com/Tervory-AI/tervory-tank (monorepo).
   - `tank/`: router, ledger, Skala, gold, training.
-  - `workspace/`: Next.js 15 app with Clerk; calls Tank server-side only.
+  - `workspace/`: Next.js 15 app with Trigger sign-in; calls Tank server-side only.
   - `agents/<room>/`: one room per agent.
   - `litellm/`: model roster.
   - `jobs/train/`: Hugging Face training.

@@ -1,6 +1,6 @@
 "use client";
 
-import { OrganisationSwitcher, SignoutButton, useSignin } from "./trigger-signin-provider";
+import { OrganisationSwitcher, SignoutButton, useSignin } from "@/app/trigger-signin-provider";
 import Link from "next/link";
 import { usePathname, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";

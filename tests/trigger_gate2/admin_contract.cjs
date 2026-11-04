@@ -1,4 +1,4 @@
-// Offline verification of the actual Clerk binding and Workspace header writer.
+// Offline verification of the actual Trigger sign-in binding and Workspace header writer.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -15,7 +15,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
 let session = {};
 const load = Module._load;
 Module._load = function(name, ...rest) {
-  if (name === '@clerk/nextjs/server') return {auth: async () => session};
+  if (name === '@/lib/trigger-signin') return {auth: async () => session};
   return load.call(this, name, ...rest);
 };
 process.env.TANK_API_KEY = 'dummy-workspace-key';
@@ -48,5 +48,5 @@ global.fetch = async (_url, init) => { sent = init.headers; return Response.json
     assert.equal(sent.has('x-tervory-squad'), false);
   }
   assert.equal(await triggerIdentity(null), null);
-  console.log('PASS: verified Clerk user/org/tenant admin binding; forged role/user/tenant/squad headers cannot grant Trigger authority.');
+  console.log('PASS: verified Trigger sign-in user/org/tenant admin binding; forged role/user/tenant/squad headers cannot grant Trigger authority.');
 })().catch(error => {console.error(error); process.exitCode = 1;});

@@ -37,7 +37,7 @@ async def workspace_actor(request: Request) -> command.Actor:
     return await command.identity(request)
 
 
-# Approving a ZA CLI sign-in happens on the Boston Workspace's Clerk page, but the
+# Approving a ZA CLI sign-in happens on the Boston Workspace's Trigger sign-in page, but the
 # Boston Workspace never holds the ZA TANK_API_KEY, and its ZA homes key
 # (TANK_HOMES_KEY, Boston's TANK_API_KEY_ZA) stays limited to the Zenas homes and
 # feeds routes. So the ZA Tank accepts one dedicated key, TRIGGER_SIGNIN_SESSIONS_KEY

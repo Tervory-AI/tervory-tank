@@ -1,4 +1,4 @@
-"""Real local Next routes, with only Clerk identity replaced in a temporary copy.
+"""Real local Next routes, with only Trigger sign-in identity replaced in a temporary copy.
 
 No live sign-in, credentials, Tank data or network services are used. Production
 middleware, Shell, public page, admin layout and admin page remain the originals.
@@ -16,7 +16,7 @@ import pytest_asyncio
 ROOT = Path(__file__).resolve().parents[2]
 
 CLIENT = '''"use client";
-export function ClerkProvider({children}) { return children; }
+export function TriggerSigninProvider({children}) { return children; }
 export function OrganizationSwitcher() { return null; }
 export function UserButton() { return null; }
 export function useAuth() { return {isLoaded: false, userId: null}; }
@@ -26,7 +26,7 @@ export async function auth() {
   const h = await headers();
   return {userId: h.get("x-offline-user"), orgRole: null};
 }
-export function clerkMiddleware(callback) {
+export function signinMiddleware(callback) {
   return request => callback(async () => ({
     userId: request.headers.get("x-offline-user"),
     redirectToSignIn: () => Response.redirect(new URL("/sign-in", request.url), 307),
@@ -44,12 +44,12 @@ async def local_workspace(tmp_path):
     shutil.copytree(ROOT / 'workspace', local,
                     ignore=shutil.ignore_patterns('node_modules', '.next', '.env*', '*.tsbuildinfo'))
     (local / 'node_modules').symlink_to(ROOT / 'workspace/node_modules', target_is_directory=True)
-    (local / 'offline-clerk-client.js').write_text(CLIENT)
-    (local / 'offline-clerk-server.js').write_text(SERVER)
+    (local / 'offline-signin-client.js').write_text(CLIENT)
+    (local / 'offline-signin-server.js').write_text(SERVER)
     (local / 'next.config.ts').write_text('''import path from "node:path";
 export default { devIndicators: false, webpack(config) {
-  config.resolve.alias["@clerk/nextjs$"] = path.resolve("offline-clerk-client.js");
-  config.resolve.alias["@clerk/nextjs/server$"] = path.resolve("offline-clerk-server.js");
+  config.resolve.alias["@/app/trigger-signin-provider$"] = path.resolve("offline-signin-client.js");
+  config.resolve.alias["@/lib/trigger-signin$"] = path.resolve("offline-signin-server.js");
   return config;
 } };
 ''')
@@ -108,7 +108,7 @@ async def test_public_host_and_direct_page_have_no_shell_admin_keeps_gate(local_
         if proof_dir:
             await page.screenshot(path=proof_dir / f'offline-{host}.png', full_page=True)
 
-    # Inspect the actual middleware's redirect, without visiting real Clerk.
+    # Inspect the actual middleware's redirect, without visiting real Trigger sign-in.
     async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as client:
         for host in ('app.tervory.com', 'protect.tervory.com'):
             response = await client.get(local_workspace + '/admin/autumbra', headers={'x-forwarded-host': host})

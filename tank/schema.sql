@@ -2344,9 +2344,7 @@ DO UPDATE SET cache_scope='none' WHERE tank.policy.cache_scope IS DISTINCT FROM 
 -- snapshot is set only by verified OIDC issuance; refresh/revoke preserve the row.
 ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS identity_tenant_admin boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'workspace'
-    CHECK (provider IN ('workspace', 'trigger-signin'));
-ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
-ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
+    CHECK (provider IN ('workspace', 'zitadel'));
 
 -- B4 saved Base lists: immutable tenant-owned record/evidence snapshots.
 CREATE TABLE IF NOT EXISTS tank.base_saved_lists (
@@ -3128,6 +3126,8 @@ ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
 -- END platform
 
 -- BEGIN trigger_signin
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.oauth_codes ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin_issuer text;
 

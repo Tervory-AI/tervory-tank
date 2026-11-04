@@ -77,11 +77,30 @@ while IFS= read -r f; do
       ;;
   esac
 done <<< "$changed"
-mapfile -t tests < <(printf '%s\n' "${tests[@]}" | sort -u)
+expanded=()
+for test in "${tests[@]}"; do
+  if [ "$(basename "$test")" = conftest.py ]; then
+    while IFS= read -r sibling; do expanded+=("$sibling"); done < <(rg --files "$(dirname "$test")" -g 'test_*.py' | sort)
+  else
+    expanded+=("$test")
+  fi
+done
+mapfile -t tests < <(printf '%s\n' "${expanded[@]}" | sort -u)
 echo "${#tests[@]} test files"
 xdist=()
 python3 -c "import xdist" 2>/dev/null && xdist=(-n auto)
-python3 -m pytest -q -p no:cacheprovider "${xdist[@]}" "${tests[@]}" || failed+=(tests)
+for suite in main tests/tiger_g5 tests/zenas_regulation_alerts; do
+  selected=()
+  for test in "${tests[@]}"; do
+    case "$test" in
+      tests/tiger_g5|tests/tiger_g5/*) group=tests/tiger_g5 ;;
+      tests/zenas_regulation_alerts|tests/zenas_regulation_alerts/*) group=tests/zenas_regulation_alerts ;;
+      *) group=main ;;
+    esac
+    [ "$group" != "$suite" ] || selected+=("$test")
+  done
+  [ ${#selected[@]} -eq 0 ] || python3 -m pytest -q -p no:cacheprovider "${xdist[@]}" "${selected[@]}" || failed+=(tests)
+done
 
 echo
 if [ ${#failed[@]} -eq 0 ]; then

@@ -1,6 +1,6 @@
 """Local fixture page: actual Market Lab view/actions and real Tank.
 
-Only the isolated Next wrapper supplies a local identity, since no Clerk test
+Only the isolated Next wrapper supplies a local identity, since no Trigger sign-in test
 access exists. No production auth file is edited. Captions belong in README.
 """
 import asyncio
@@ -50,7 +50,7 @@ export default async function Page(){const tenant=await activeTenant();return <M
 
 def capture(base, output):
     from playwright.sync_api import sync_playwright
-    report = {'label': 'local, fixture page', 'identity': 'local Next wrapper; not Clerk proof', 'screenshots': [], 'browser_errors': [], 'external_requests': []}
+    report = {'label': 'local, fixture page', 'identity': 'local Next wrapper; not Trigger sign-in proof', 'screenshots': [], 'browser_errors': [], 'external_requests': []}
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path='/usr/bin/chromium', args=['--no-sandbox'])
         try:
