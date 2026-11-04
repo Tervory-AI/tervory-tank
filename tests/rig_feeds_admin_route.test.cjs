@@ -10,6 +10,7 @@ function moduleFrom(relative, bindings, globals = {}) {
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: name => {
+    if (name === '@/lib/trigger-signin-fetch') return { signinFetch: (...args) => globals.fetch(...args) };
     assert(name in bindings, `Unexpected dependency ${name}`); return bindings[name];
   }, process: { env: {} }, URL, Uint8Array, TextDecoder, Set, Error, ...globals });
   return exports;

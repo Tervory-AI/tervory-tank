@@ -1,5 +1,5 @@
 """Part A: exercise Tank's real handlers and SQL with two isolated tenants."""
-from trigger_signin_fakes import set_founders
+from trigger_signin_fakes import set_founders, Provider, ORG, install_registry
 import json
 import os
 import uuid
@@ -11,6 +11,7 @@ import asyncpg
 import httpx
 import pytest
 import pytest_asyncio
+import identity_oidc as oidc
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,6 +40,17 @@ async def boundary(monkeypatch, tmp_path):
         monkeypatch.setattr(tank, "_http", object())
         monkeypatch.setattr(tank, "_agent_keys_synced", True)
         tenants = (uuid.uuid4(), uuid.uuid4())
+        provider = Provider('us-east')
+        install_registry(monkeypatch, [provider], {ORG: str(tenants[0])})
+        set_founders(monkeypatch, 'founder-fixture')
+        monkeypatch.setattr(oidc, 'http_client', lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
+        oidc._cache.clear()
+
+        def native_headers(subject, role='member'):
+            claims = {oidc.ROLES_CLAIM: {role: {ORG: 'Display only'}}}
+            return {'X-Tervory-User': subject, 'x-trigger-signin-org': ORG,
+                    'x-trigger-signin-token': provider.token(sub=subject, **claims),
+                    **({'X-Tervory-Admin': subject} if role == 'org_admin' else {})}
         packages = {}
         calls = []
 
@@ -66,8 +78,10 @@ async def boundary(monkeypatch, tmp_path):
             await conn.execute("INSERT INTO tank.skills(id,version,agent,task_type,state) VALUES('base.public','1.0.0','base','fixture.boundary','approved')")
         monkeypatch.setattr(tank, "_packages", packages)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tank.app), base_url="http://tank", headers={"X-Tank-Key": key}) as client:
-            yield SimpleNamespace(tank=tank, pool=pool, client=client, tenants=tenants, calls=calls, key=key)
+            yield SimpleNamespace(tank=tank, pool=pool, client=client, tenants=tenants, calls=calls, key=key,
+                                  native_headers=native_headers)
     finally:
+        oidc._cache.clear()
         if pool:
             await pool.close()
         await admin.execute(f'DROP DATABASE "{db}" WITH (FORCE)')
@@ -82,9 +96,11 @@ async def test_evals_summary_requires_tenant_and_founder_for_totals(boundary):
         assert result.status_code == 200
         assert result.json() == [{"task_type": "fixture.boundary", "cases": i + 1, "accepted": 0, "rejected": 0, "manual": i + 1}]
     assert (await b.client.get("/v1/evals/summary")).status_code == 422
-    for headers in ({}, {"X-Tervory-Admin": "ordinary-user"}, {"X-Tervory-Role": "founder"}):
+    for headers in ({}, b.native_headers('ordinary-user'), b.native_headers('ordinary-admin', 'org_admin')):
         assert (await b.client.get("/v1/evals/summary", params={"all_tenants": True}, headers=headers)).status_code == 404
-    result = await b.client.get("/v1/evals/summary", params={"all_tenants": True}, headers={"X-Tervory-Admin": "founder-fixture"})
+    for headers in ({"X-Tervory-Admin": "ordinary-user"}, {"X-Tervory-Role": "founder"}):
+        assert (await b.client.get("/v1/evals/summary", params={"all_tenants": True}, headers=headers)).status_code == 401
+    result = await b.client.get("/v1/evals/summary", params={"all_tenants": True}, headers=b.native_headers('founder-fixture', 'org_admin'))
     assert result.status_code == 200 and result.json()[0]["cases"] == 3
 
 
@@ -96,9 +112,11 @@ async def test_skala_private_packages_are_owned_and_founder_gated(boundary):
         assert result.status_code == 200
         assert {r["id"] for r in result.json()} == {"base.public", f"base.private{i}"}
     assert {r["id"] for r in (await b.client.get("/v1/skala")).json()} == {"base.public"}
-    for headers in ({}, {"X-Tervory-Admin": "ordinary-user"}, {"X-Tervory-Role": "founder"}):
+    for headers in ({}, b.native_headers('ordinary-user'), b.native_headers('ordinary-admin', 'org_admin')):
         assert (await b.client.get("/v1/skala", params={"all_tenants": True}, headers=headers)).status_code == 404
-    result = await b.client.get("/v1/skala", params={"all_tenants": True}, headers={"X-Tervory-Admin": "founder-fixture"})
+    for headers in ({"X-Tervory-Admin": "ordinary-user"}, {"X-Tervory-Role": "founder"}):
+        assert (await b.client.get("/v1/skala", params={"all_tenants": True}, headers=headers)).status_code == 401
+    result = await b.client.get("/v1/skala", params={"all_tenants": True}, headers=b.native_headers('founder-fixture', 'org_admin'))
     assert {r["id"] for r in result.json()} == {"base.public", "base.private0", "base.private1"}
 
 
