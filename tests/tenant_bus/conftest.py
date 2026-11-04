@@ -87,6 +87,7 @@ async def database():
         pool = await asyncpg.create_pool(urlunsplit(parsed._replace(path='/' + name)), min_size=1, max_size=5)
         async with pool.acquire() as conn:
             await conn.execute((ROOT / 'tank/schema.sql').read_text())
+            await __import__('tenant_fixture').onboard(conn, __import__('uuid').UUID(A), __import__('uuid').UUID(B))
             await ensure_schema(conn, 'tiger')
             await ensure_tables(conn, 'agent_tiger')
         store = PgStore(pool)

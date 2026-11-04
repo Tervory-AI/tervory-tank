@@ -75,6 +75,7 @@ async def env(monkeypatch):
     schema = (ROOT / 'tank/schema.sql').read_text()
     await pool.execute(schema)
     await pool.execute(schema)
+    await __import__('tenant_fixture').onboard(pool, TENANT, OTHER)
     await pool.execute('CREATE SCHEMA agent_trigger')
     await pool.execute((ROOT / 'agents/trigger/schema.sql').read_text())
     await pool.execute((ROOT / 'agents/trigger/schema.sql').read_text())

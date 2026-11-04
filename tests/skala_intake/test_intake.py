@@ -182,6 +182,7 @@ async def database():
     async with db.acquire() as conn:
         await conn.execute((ROOT / "tank/schema.sql").read_text())
         await conn.execute((ROOT / "tank/schema.sql").read_text())
+        await __import__("tenant_fixture").onboard(conn, TENANT, OTHER)
         await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_trigger")
         await conn.execute((ROOT / "agents/trigger/schema.sql").read_text())
     yield db

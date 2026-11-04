@@ -216,6 +216,7 @@ async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkey
     As in production, Boston's TANK_API_KEY_ZA is the ZA Tank's narrow TANK_HOMES_KEY
     (it cannot approve); approvals use the dedicated TANK_DEVICE_APPROVAL_KEY."""
     monkeypatch.setenv('TANK_REGION', 'za')
+    await streaming.pool.execute("UPDATE tank.tenants SET home_region='za' WHERE tenant_id=ANY($1::uuid[])", [TENANT, OTHER])
     monkeypatch.setenv('TANK_HOMES_KEY', 'dummy-za-homes-key')
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', 'dummy-za-device-approval-key')
     # A ZA Tank process reads TANK_REGION=za at import; mirror that for the ledger.

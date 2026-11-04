@@ -122,11 +122,19 @@ async def test_put_policy_keeps_build_model_off_customer_rows(monkeypatch: pytes
 
 @pytest.mark.asyncio
 async def test_put_policy_allows_the_platform_tenant_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock
+    import roster_validation
+    monkeypatch.setattr(roster_validation, 'ensure', AsyncMock(return_value={'fingerprint':'fixture'}))
     written: list = []
 
     class _Conn:
         async def execute(self, *args):
             written.append(args)
+
+        @asynccontextmanager
+        async def transaction(self):
+            yield self
 
     class _Acquire:
         async def __aenter__(self):
@@ -142,7 +150,8 @@ async def test_put_policy_allows_the_platform_tenant_row(monkeypatch: pytest.Mon
     monkeypatch.setattr(main, "pool", lambda: _Pool())
     body = main.PolicyRow(task_type="zenas.rule_card", tenant_id=PLATFORM, model="build-chatgpt", max_tokens_out=4096)
     assert await main.put_policy("zenas.rule_card", body) == {"ok": True}
-    assert written and written[0][4] == "build-chatgpt"
+    policy_writes = [row for row in written if "INSERT INTO tank.policy" in row[0]]
+    assert policy_writes and policy_writes[0][4] == "build-chatgpt"
 
 
 @pytest.mark.asyncio

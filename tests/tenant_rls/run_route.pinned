@@ -1,8 +1,3 @@
-# Pinned body of tank/main.py run_route for tests/test_tenant_rls.py.
-# Changed on purpose by the prompt-caching PR (cache read/write tokens on the receipt).
-# Changed on purpose by #500: urgent reads the tenant-sealed exact cache (#360 over #424).
-# Metadata-only execution receipt delta: dispatched settings are not resolved defaults.
-# Update this copy only together with a reviewed change to run_route.
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
@@ -26,6 +21,7 @@ async def run_route(
     if foreign:
         # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
+    await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
     client_text = "\n".join(m.content for m in req.messages)
     pool_read = await zenas_pool_prompt(
         client_text, caller=caller, task_type=req.task_type, skill=req.skill
@@ -111,6 +107,10 @@ async def run_route(
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
     cache_policy, cache_probe = dict(policy), None
+    # An exact repeat is served free at every priority: the tenant-sealed exact cache is a
+    # single indexed read, so urgent loses no time and pays no model call (#360). Urgent
+    # reads the exact match only (no semantic form) and still skips the encoder and every
+    # shadow (#424).
     if not _offpeak_dispatch and not holds_identifier and code_problem is None:
         exact_policy = policy if priority != "urgent" else {**policy, "semantic_cache": False}
         hit = await _cache_read(req, exact_policy, identity)
@@ -189,8 +189,16 @@ async def run_route(
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
     sent_at = priority_queue.now()
-    if _offpeak_dispatch and not priority_queue.window_open(price_info.get("offpeak"), sent_at):
-        raise priority_queue.WindowClosed()
+    if req.deadline_at is not None and sent_at >= req.deadline_at:
+        raise HTTPException(408, "Work deadline exceeded before dispatch")
+    if _offpeak_dispatch:
+        expected = (_deferred_snapshot or {}).get("dispatch_multiplier")
+        if expected is None:
+            closed = not priority_queue.window_open(price_info.get("offpeak"), sent_at)
+        else:
+            closed = priority_queue.price_windows.multiplier(price_info.get("offpeak"), sent_at) > expected
+        if closed:
+            raise priority_queue.WindowClosed()
     if _receipt_id is not None:
         async with pool().acquire() as conn:
             await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=$3

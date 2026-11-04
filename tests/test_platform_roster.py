@@ -23,13 +23,13 @@ async def test_all_approved_evals_precede_policy_write(boundary, monkeypatch, tm
     monkeypatch.setattr(skala, 'run_skill', REAL_RUN)
     monkeypatch.setattr(skala, '_run_cache', {})
     for name in ('base.one', 'base.two'):
-        pkg = package(tmp_path, name=name, task=None, code=True)
+        pkg = package(tmp_path, name=name, task='base.normalize' if name == 'base.one' else None, code=True)
         (pkg.path / 'run.py').write_text('async def run(payload, ctx):\n    return {"text": "good"} if payload.get("text") else {"refused": True}\n')
         if fails is True and name == 'base.one':
             (pkg.path / 'run.py').write_text('async def run(payload, ctx):\n    return {"text": "wrong"} if payload.get("text") else {"refused": True}\n')
         b.tank._packages[pkg.id, pkg.version] = pkg
         async with b.pool.acquire() as conn:
-            await conn.execute("INSERT INTO tank.skills(id,version,agent,rung,state,present) VALUES($1,$2,'base',3,'approved',true)", pkg.id, pkg.version)
+            await conn.execute("INSERT INTO tank.skills(id,version,agent,rung,state,present,task_type) VALUES($1,$2,'base',3,'approved',true,$3)", pkg.id, pkg.version, pkg.task_type)
     monkeypatch.setattr(b.tank, '_roster_models', AsyncMock(return_value=[{'model_name': 'luna'}]))
     body = b.tank.PolicyRow(task_type='base.normalize', model='luna', rung=1,
                             system_prompt='New instructions')
@@ -64,6 +64,12 @@ async def test_all_approved_evals_precede_policy_write(boundary, monkeypatch, tm
         assert await conn.fetchval("SELECT system_prompt FROM tank.policy WHERE task_type='base.normalize' AND tenant_id IS NULL") == 'New instructions'
         rows = await conn.fetch("SELECT models_validated FROM tank.skills WHERE state='approved'")
         assert all(json.loads(r['models_validated'])[-1]['validated'] for r in rows)
+    next_policy = body.model_copy(update={'system_prompt':'Another approved instruction'})
+    with pytest.raises(HTTPException) as changed:
+        await b.tank.put_policy(body.task_type, next_policy)
+    assert changed.value.detail['pending'] == 1  # The unchanged skill reuses its exact proof.
+    assert await skala_revalidation.drain(b.tank) == 1
+    await b.tank.put_policy(body.task_type, next_policy)
     monkeypatch.setattr(b.tank, '_roster_models', AsyncMock(return_value=[]))
     with pytest.raises(HTTPException) as unavailable:
         await roster.ensure(b.tank)

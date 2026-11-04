@@ -95,7 +95,7 @@ async def record(tank: Any, result: dict, by: str | None = None) -> dict:
         "model": job["model"], "old_model": job["old_model"], "task_type": job["task_type"],
         "policy_tenant_id": str(job["policy_tenant_id"]) if job["policy_tenant_id"] else None,
         "revalidation_id": str(job["id"]), "eval_id": str(eval_id),
-        "roster_hash": job.get("preflight_hash"),
+        "roster_hash": job.get("preflight_hash"), "proof_key": job.get("proof_key"),
         "score": result["score"], "passed": result["passed"], "total": result["total"],
         "validated": gate, "validated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -129,6 +129,9 @@ async def record(tank: Any, result: dict, by: str | None = None) -> dict:
                 "UPDATE tank.skill_revalidations SET completed_at=now(),eval_id=$3,error=$4 WHERE id=$1 AND tenant_id=$2",
                 job["id"], PLATFORM_TENANT, eval_id, None if gate else "eval_gate_failed",
             )
+            await conn.execute("""UPDATE tank.skill_revalidations SET completed_at=now(),eval_id=$3,error=$4
+                WHERE tenant_id=$1 AND source_job_id=$2 AND completed_at IS NULL""",
+                PLATFORM_TENANT, job['id'], eval_id, None if gate else 'eval_gate_failed')
     result.update(state=new_state, gate="passed" if gate else "failed", model=job["model"])
     return result
 
@@ -156,7 +159,7 @@ async def drain(tank: Any, limit: int = 20) -> int:
         try:
             for _ in range(limit):
                 row = await lock.fetchrow(
-                    """SELECT * FROM tank.skill_revalidations WHERE tenant_id=$1 AND completed_at IS NULL
+                    """SELECT * FROM tank.skill_revalidations WHERE tenant_id=$1 AND completed_at IS NULL AND source_job_id IS NULL
                     AND (preflight_hash IS NULL OR NOT EXISTS(SELECT 1 FROM tank.roster_heads WHERE tenant_id=$1 AND unavailable))
                     ORDER BY queued_at,id LIMIT 1""",
                     PLATFORM_TENANT)

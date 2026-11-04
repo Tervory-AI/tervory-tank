@@ -108,7 +108,7 @@ async def http_api(runtime, monkeypatch, github):
 
     @asynccontextmanager
     async def acquire():
-        yield SimpleNamespace(fetch=fetch)
+        yield SimpleNamespace(fetch=fetch, fetchval=AsyncMock(return_value="us-east"))
 
     monkeypatch.setattr(command, "db", lambda: SimpleNamespace(acquire=acquire))
     app = runtime.app = FastAPI()

@@ -194,6 +194,7 @@ async def test_za_device_approval_key_may_show_approve_and_deny_device_codes(dev
     """Boston never holds the ZA Workspace key; it approves ZA sign-ins with the dedicated key."""
     client, pool, rt = device
     monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    await device[1].execute("UPDATE tank.tenants SET home_region='za' WHERE tenant_id=ANY($1::uuid[])", [TENANT, OTHER])
     monkeypatch.setenv('TANK_HOMES_KEY', HOMES)
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
     grant = await start(client, 'za-laptop')
@@ -219,6 +220,7 @@ async def test_za_homes_key_cannot_approve_device_codes(device, monkeypatch):
     """Least privilege: the ZA homes key (Boston's TANK_API_KEY_ZA) is not widened."""
     client, pool, rt = device
     monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    await device[1].execute("UPDATE tank.tenants SET home_region='za' WHERE tenant_id=ANY($1::uuid[])", [TENANT, OTHER])
     monkeypatch.setenv('TANK_HOMES_KEY', HOMES)
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
     grant = await start(client)
@@ -236,6 +238,7 @@ async def test_za_homes_key_cannot_approve_device_codes(device, monkeypatch):
 async def test_za_device_approval_key_still_needs_user_and_tenant_and_reaches_nothing_else(device, monkeypatch):
     client, pool, rt = device
     monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    await device[1].execute("UPDATE tank.tenants SET home_region='za' WHERE tenant_id=ANY($1::uuid[])", [TENANT, OTHER])
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
     grant = await start(client)
     code = grant['user_code']
@@ -259,6 +262,7 @@ async def test_za_device_approval_key_still_needs_user_and_tenant_and_reaches_no
     assert (await approve(client, us['user_code'], headers=APPROVER_WORKSPACE)).status_code == 401
     assert (await client.get(f"/v1/command/device/approval/{us['user_code']}", headers=APPROVER_WORKSPACE)).status_code == 401
     monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    await device[1].execute("UPDATE tank.tenants SET home_region='za' WHERE tenant_id=ANY($1::uuid[])", [TENANT, OTHER])
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', '')
     assert (await approve(client, code, headers=APPROVER_WORKSPACE)).status_code == 401
     async with pool.acquire() as conn:
@@ -271,6 +275,7 @@ async def test_za_device_approval_key_never_approves_for_a_founder(device, monke
     """Review of #506, should-fix 1: the Boston-held approval key cannot mint a founder credential."""
     client, pool, rt = device
     monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    await device[1].execute("UPDATE tank.tenants SET home_region='za' WHERE tenant_id=ANY($1::uuid[])", [TENANT, OTHER])
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', ' founder , second-founder ')
     grant = await start(client)
@@ -307,6 +312,7 @@ async def test_cli_sign_ins_are_listed_and_revoked_by_their_owner_only(device, m
     user's own CLI credentials, per region (us-east: Workspace key; ZA: the dedicated key)."""
     client, pool, rt = device
     monkeypatch.setattr(rt, 'box_region', lambda: box)
+    await pool.execute("UPDATE tank.tenants SET home_region=$2 WHERE tenant_id=ANY($1::uuid[])", [TENANT, OTHER], box)
     monkeypatch.setenv('TANK_HOMES_KEY', HOMES)
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
     key = WORKSPACE if box == 'us-east' else APPROVER_WORKSPACE
@@ -349,6 +355,7 @@ async def test_cli_sign_ins_are_listed_and_revoked_by_their_owner_only(device, m
 async def test_za_sign_in_key_lists_and_revokes_only_never_mints_and_never_for_founders(device, monkeypatch):
     client, pool, rt = device
     monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    await device[1].execute("UPDATE tank.tenants SET home_region='za' WHERE tenant_id=ANY($1::uuid[])", [TENANT, OTHER])
     monkeypatch.setenv('TANK_HOMES_KEY', HOMES)
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
     founder = {**APPROVER_WORKSPACE, 'x-tervory-user': 'founder'}

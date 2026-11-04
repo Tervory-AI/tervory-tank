@@ -36,6 +36,9 @@ const closed = [];
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   res.on('close', () => closed.push(url.pathname));
+  if (url.pathname.startsWith('/v1/tenants/')) {
+    res.writeHead(200, {'content-type':'application/json'}); res.end(JSON.stringify({home_region:'us-east'})); return;
+  }
   if (url.pathname === '/v1/models') {
     if (mode.roster === 'stall') { res.writeHead(200, { 'content-type': 'application/json' }); res.write('['); return; }
     res.writeHead(200, { 'content-type': 'application/json' }); res.end('[]'); return;
@@ -85,7 +88,7 @@ const server = http.createServer((req, res) => {
   const sent = [];
   const recording = (url, init) => {
     const p = new URL(String(url)).pathname;
-    sent.push({ url: String(url), signal: init?.signal, kind: p === '/v1/models' ? mode.roster ?? 'ok' : mode[p] ?? 'silent' });
+    sent.push({ url: String(url), signal: init?.signal, kind: p.startsWith('/v1/tenants/') ? 'ok' : p === '/v1/models' ? mode.roster ?? 'ok' : mode[p] ?? 'silent' });
     return globalThis.fetch(url, init);
   };
   const { tank, route } = make(recording);

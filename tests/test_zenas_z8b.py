@@ -335,7 +335,9 @@ class _Conn:
             return self.row
         return {"rejected": 0, "judged": 0}
 
-    async def fetchval(self, sql: str, *_args: object) -> bool:
+    async def fetchval(self, sql: str, *_args: object) -> bool | str:
+        if "FROM tank.tenants" in sql:
+            return main.box_region()
         assert "tank.controls" in sql
         return False
 

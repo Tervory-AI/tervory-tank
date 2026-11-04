@@ -42,6 +42,8 @@ class Conn:
 
     async def fetchval(self, sql, *args):
         self.reads.append((sql, args))
+        if 'home_region FROM tank.tenants' in sql:
+            return 'us-east'
         if 'tank.controls' in sql:
             return self.value
         return 4

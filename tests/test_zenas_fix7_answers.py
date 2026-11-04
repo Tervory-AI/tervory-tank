@@ -77,6 +77,8 @@ class _Room:
 def us_room(monkeypatch: pytest.MonkeyPatch) -> _Room:
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setenv("ZENAS_AGENT_URL", "http://agent-zenas:8000")
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(__import__('tenant_regions'), 'home', AsyncMock(return_value='us-east'))
     room = _Room({"ok": False, "reason": "could not verify"})
     monkeypatch.setattr(main, "_http", room)
     return room

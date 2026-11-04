@@ -147,6 +147,7 @@ async def test_issuer_unset_and_boston_keep_existing_device_flow(device, monkeyp
 async def test_za_oidc_issue_refresh_revoke_and_verified_roles(device, provider, monkeypatch):
     client, pool, runtime = device
     runtime.box_region = lambda: 'za'
+    await __import__('tenant_fixture').onboard(device[1], TENANT, region='za')
     result = await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'zitadel'})
     assert result.status_code == 200
     start = result.json()
@@ -193,6 +194,7 @@ async def test_za_oidc_issue_refresh_revoke_and_verified_roles(device, provider,
 async def test_boston_approval_key_still_works_while_zitadel_is_enabled(device, provider, monkeypatch, selection):
     client, pool, runtime = device
     runtime.box_region = lambda: 'za'
+    await __import__('tenant_fixture').onboard(device[1], TENANT, region='za')
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', 'dummy-za-approval-key')
     started = await client.post('/v1/command/device/code', json={'device_name': 'legacy-synthetic', **selection})
     assert started.status_code == 200
@@ -212,6 +214,7 @@ async def test_boston_approval_key_still_works_while_zitadel_is_enabled(device, 
 async def test_signed_but_unmapped_org_mints_no_tank_credential(device, provider):
     client, pool, runtime = device
     runtime.box_region = lambda: 'za'
+    await __import__('tenant_fixture').onboard(device[1], TENANT, region='za')
     provider.claims[oidc.ORG_CLAIM] = '99999'
     code = (await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'zitadel'})).json()['device_code']
     response = await client.post('/v1/command/device/token', json={'device_code': code})
@@ -224,6 +227,7 @@ async def test_signed_but_unmapped_org_mints_no_tank_credential(device, provider
 async def test_slow_provider_releases_pool_and_overlapping_polls_issue_once(device, provider, monkeypatch):
     client, pool, runtime = device
     runtime.box_region = lambda: 'za'
+    await __import__('tenant_fixture').onboard(device[1], TENANT, region='za')
     wrapped = (await client.post('/v1/command/device/code', json={
         'device_name': 'concurrent-synthetic', 'approval': 'zitadel'})).json()['device_code']
     entered = [asyncio.Event(), asyncio.Event()]

@@ -72,8 +72,8 @@ def lookups(monkeypatch):
         async def fetch(self, *_):
             return []
 
-        async def fetchval(self, *_):
-            return None
+        async def fetchval(self, sql, *_):
+            return 'za' if 'FROM tank.tenants' in sql else None
 
         async def execute(self, *_):
             return None

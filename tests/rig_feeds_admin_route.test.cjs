@@ -11,7 +11,7 @@ function moduleFrom(relative, bindings, globals = {}) {
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: name => {
     assert(name in bindings, `Unexpected dependency ${name}`); return bindings[name];
-  }, process: { env: {} }, URL, Uint8Array, TextDecoder, Set, Error, ...globals });
+  }, process: { env: {} }, URL, Headers, AbortSignal, AbortController, setTimeout, clearTimeout, Uint8Array, TextDecoder, Set, Error, ...globals });
   return exports;
 }
 
@@ -50,6 +50,7 @@ async function main() {
   const forwarded = [];
   const regionTransport = moduleFrom('workspace/app/api/zenas/tank.ts', {});
   const tank = moduleFrom('workspace/lib/tank.ts', { '@/app/api/zenas/tank': regionTransport }, { fetch: async (url, options) => {
+    const registry = require('./platform/registry_fixture.cjs')(url); if (registry) return registry;
     forwarded.push({ url, options });
     return { ok: true, json: async () => url.endsWith('/mapping')
       ? { preview_id: 'server-preview', fields: ['code'], columns: { sku: 'code' }, required: ['sku'] }

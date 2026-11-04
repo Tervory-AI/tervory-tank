@@ -46,6 +46,7 @@ async def api(monkeypatch):
             await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_trigger")
             await conn.execute((ROOT / "agents/trigger/schema.sql").read_text())
             await conn.execute((ROOT / "tank/schema.sql").read_text())
+            await __import__("tenant_fixture").onboard(conn, A, B)
         monkeypatch.setattr(main, "_pool", pool)
         monkeypatch.setattr(main, "TANK_API_KEY", "local-fixture")
         monkeypatch.setattr(main, "box_region", lambda: "us-east")

@@ -183,6 +183,7 @@ def test_ssrf_and_query_secret_destinations_refused(setup,monkeypatch,url):
 @pytest.mark.asyncio
 async def test_real_identity_requires_service_key_user_and_home_box(setup,monkeypatch):
     setup.dependency_overrides.clear()
+    monkeypatch.setattr(command, 'assert_tenant_home', AsyncMock(return_value='us-east'))
     monkeypatch.setitem(sys.modules,'main',SimpleNamespace(TANK_API_KEY='dummy-workspace-key',box_region=lambda:'us-east'))
     fake_transport(monkeypatch,lambda req:httpx.Response(200,json={'results':[],'count':0}))
     assert (await request(setup)).status_code == 401

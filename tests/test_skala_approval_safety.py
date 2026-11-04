@@ -366,6 +366,11 @@ async def test_retire_route_handles_missing_package(database, tmp_path, monkeypa
     async with database.acquire() as conn:
         await conn.execute("UPDATE tank.skills SET present=false WHERE id=$1 AND version=$2", absent.id, absent.version)
         await conn.execute("UPDATE tank.skills SET approved_at=now()-interval '30 days' WHERE id=$1 AND version=$2", current.id, current.version)
+        await conn.execute("""INSERT INTO tank.ledger(tenant_id,agent,skill,task_type,rung,model,outcome,ts)
+            SELECT $1,$2,$3,$4,3,$5,'delivered',ts FROM
+            (VALUES (now()-interval '30 days'),(now())) AS live(ts)""",
+            PLATFORM, current.agent, current.ref, current.task_type or current.id, 'skill:'+current.ref)
+
     monkeypatch.setattr(main, "pool", lambda: database)
     monkeypatch.setattr(main, "_packages", {})
     result = await main.retire_skill(absent.id, absent.version, main.Approval(by="founder"))

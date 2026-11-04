@@ -22,6 +22,7 @@ memory = memory_fixture
 @pytest.mark.asyncio
 async def test_remember_chat_sse_saves_id_receipt_and_inspectable_record(memory, command_pool, monkeypatch):
     m = memory
+    await __import__('tenant_fixture').onboard(command_pool, m.tenant)
     monkeypatch.setenv("TANK_API_KEY", "dummy-offline")
     monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "offline-founder")
 

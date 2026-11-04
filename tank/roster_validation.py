@@ -55,12 +55,19 @@ async def prepare(tank, proposed=None, *, remove=False):
                                     sorted([p for _, p in jobs], key=encoded)])
             await conn.execute('''INSERT INTO tank.roster_checks(tenant_id,region,fingerprint,roster_hash)
                 VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING''', PLATFORM_TENANT, tank.box_region(), signature, roster_hash)
+            package_hashes = {(row[0], row[1]): row[2] for row in manifest}
             for pkg, policy in jobs:
+                proof_key = input_hash([roster_hash, package_hashes[pkg.id, pkg.version], policy])
+                source = await conn.fetchrow("""SELECT id,completed_at,eval_id,error FROM tank.skill_revalidations
+                    WHERE tenant_id=$1 AND proof_key=$2 AND source_job_id IS NULL LIMIT 1 FOR SHARE""", PLATFORM_TENANT, proof_key)
                 await conn.execute('''INSERT INTO tank.skill_revalidations
-                    (tenant_id,policy_tenant_id,task_type,old_model,model,policy,skill_id,version,preflight_hash)
-                    VALUES($1,$2,$3,$4,$4,$5::jsonb,$6,$7,$8) ON CONFLICT DO NOTHING''',
+                    (tenant_id,policy_tenant_id,task_type,old_model,model,policy,skill_id,version,preflight_hash,
+                     proof_key,source_job_id,completed_at,eval_id,error)
+                    VALUES($1,$2,$3,$4,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT DO NOTHING''',
                     PLATFORM_TENANT, policy['tenant_id'], policy['task_type'], policy['model'],
-                    encoded(policy), pkg.id, pkg.version, signature)
+                    encoded(policy), pkg.id, pkg.version, signature, proof_key,
+                    source['id'] if source else None, source['completed_at'] if source else None,
+                    source['eval_id'] if source else None, source['error'] if source else None)
             result = await conn.fetchrow('''SELECT count(*) FILTER(WHERE completed_at IS NULL) AS pending,
                 count(*) FILTER(WHERE error IS NOT NULL) AS failed FROM tank.skill_revalidations
                 WHERE tenant_id=$1 AND preflight_hash=$2''', PLATFORM_TENANT, signature)

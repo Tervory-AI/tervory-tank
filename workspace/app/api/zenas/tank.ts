@@ -35,9 +35,14 @@ function withHome(path: string, init: RequestInit, home: Region = homeRegion(), 
 }
 
 export async function zenas(path: string, init: RequestInit = {}): Promise<Response> {
-  const { tenantFetch } = await import("@/lib/tank");
   const call = withHome(path, init);
-  return tenantFetch(`${TANK_URL}/v1/zenas/${call.path}`, {
+  const headers = new Headers(init.headers);
+  let tenant = headers.has("x-tervory-tenant") || headers.has("x-moot-tenant") || new URLSearchParams(path.split("?")[1] ?? "").has("tenant_id");
+  if (typeof init.body === "string") {
+    try { tenant ||= typeof (JSON.parse(init.body) as {tenant_id?: unknown})?.tenant_id === "string"; } catch { /* Tank validates malformed JSON. */ }
+  }
+  const transport = tenant ? (await import("@/lib/tank")).tenantFetch : fetch;
+  return transport(`${TANK_URL}/v1/zenas/${call.path}`, {
     ...call.init,
     headers: {
       "content-type": "application/json",

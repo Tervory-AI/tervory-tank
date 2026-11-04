@@ -789,7 +789,9 @@ async def _startup() -> None:
     with open(SCHEMA_PATH, encoding="utf-8") as f:
         ddl = f.read()
     async with (_admin_pool or raw_pool).acquire() as conn:
-        await conn.execute(ddl)
+        async with conn.transaction():
+            await conn.execute("SELECT set_config('tank.schema_apply','on',true)")
+            await conn.execute(ddl)
         # A one-shot task (chat, draft) that was mid-flight when Tank restarted did not finish.
         # Base batches are not in this list: Base resumes them in its own room.
         await conn.execute(
@@ -3811,7 +3813,7 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     foreign = home_region_refusal(_request_home(raw, request.query_params.get("home_region")), box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
-    tenant_values = [request.headers.get("x-tervory-tenant"), request.query_params.get("tenant_id")]
+    tenant_values = [request.headers.get("x-tervory-tenant"), request.headers.get("x-moot-tenant"), request.query_params.get("tenant_id")]
     try:
         document = json.loads(raw) if raw else {}
     except (ValueError, UnicodeError):

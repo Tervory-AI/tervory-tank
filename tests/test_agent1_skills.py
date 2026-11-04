@@ -52,6 +52,7 @@ async def test_schema_export_submission_and_existing_run_guard(monkeypatch, tmp_
         await tank.register_packages()
         tenant, other = uuid.uuid4(), uuid.uuid4()
         async with pool.acquire() as conn:
+            await __import__("tenant_fixture").onboard(conn, tenant, other)
             await conn.execute("UPDATE tank.skills SET state='approved' WHERE id='base.normalize' AND version='1.0.0'")
             await conn.execute("UPDATE tank.skills SET state='retired' WHERE id='base.resolve'")
             before = await conn.fetch("SELECT * FROM tank.skills ORDER BY id,version")

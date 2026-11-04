@@ -18,6 +18,16 @@ import main
 database = _database
 
 
+@pytest.fixture(autouse=True)
+def onboarded_fixture_home(monkeypatch):
+    # These route/seat unit seams already provide an onboarded local tenant;
+    # registry persistence and cross-box denial are exercised in test_platform_regions.
+    async def stored_home(tank, tenant):
+        assert isinstance(tenant, uuid.UUID)
+        return tank.box_region()
+    monkeypatch.setattr(__import__('tenant_regions'), 'home', stored_home)
+
+
 def req(task='fixture'):
     return main.RouteRequest(tenant_id=TENANT,task_type=task,
                              messages=[main.Message(role='user',content='Hello')])

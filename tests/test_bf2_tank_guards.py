@@ -67,6 +67,8 @@ class _Conn:
 
     async def fetchval(self, sql: str, *args: object) -> object:
         self.queries.append((sql, args))
+        if "FROM tank.tenants" in sql:
+            return main.box_region()
         if "tank.controls" in sql:
             return False  # Fixture has paid work enabled.
         raise AssertionError(f"unexpected scalar query: {sql}")
@@ -268,6 +270,9 @@ async def test_rollback_refuses_a_name_litellm_cannot_call(monkeypatch: pytest.M
 
 @pytest.mark.asyncio
 async def test_rollback_still_writes_a_real_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    from unittest.mock import AsyncMock
+    import roster_validation
+    monkeypatch.setattr(roster_validation, 'ensure', AsyncMock(return_value={'fingerprint':'fixture'}))
     conn = _Conn(row={"model": "haiku", "previous_model": "luna"})
     monkeypatch.setattr(main, "pool", lambda: _Pool(conn))
     result = await main.rollback("tier0.answer", main.PromoteBody(by="founder"))

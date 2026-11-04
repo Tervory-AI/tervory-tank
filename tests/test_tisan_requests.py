@@ -141,6 +141,7 @@ async def client(runtime, command_pool, tmp_path, monkeypatch):
     monkeypatch.setenv('DATA_DIR', str(tmp_path))
     monkeypatch.setenv('TANK_KEY', 'placeholder-room')
     monkeypatch.setattr(command, 'db', lambda: command_pool)
+    await __import__('tenant_fixture').onboard(command_pool, TENANT, OTHER)
     runtime.pool = lambda: command_pool
     room = FastAPI()
     publish.mount(room, promotion)

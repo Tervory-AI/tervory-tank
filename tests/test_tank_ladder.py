@@ -18,7 +18,7 @@ async def ladder(boundary, monkeypatch):  # noqa: F811 -- pytest fixture injecti
     monkeypatch.setattr(b.tank, "_packages", skala.load_packages())
     await b.tank.register_packages()
     async with b.pool.acquire() as conn:
-        await conn.execute("UPDATE tank.skills SET state='approved' WHERE id IN ('base.normalize','base.extract')")
+        await conn.execute("UPDATE tank.skills SET state='approved' WHERE (id='base.normalize' AND version='1.0.0') OR (id='base.extract' AND version='2.0.0')")
         # The fixture explicitly approves and selects code. Fresh production seeds
         # leave unapproved versions on the automatic Luna fallback.
         await conn.execute("""UPDATE tank.policy SET model='skill:'||task_type||'@'||
@@ -177,6 +177,12 @@ async def test_fixture_graduation_requires_founder_then_serves_two_tenants(ladde
     import asyncio
     from datetime import datetime, timezone
     b = ladder
+    # This test's served gateway roster is a fixture, never a paid metadata call.
+    from pathlib import Path
+    from unittest.mock import AsyncMock
+    import yaml
+    rows = [b.tank._roster_row(row) for row in yaml.safe_load(Path('litellm/config.yaml').read_text())['model_list']]
+    monkeypatch.setattr(b.tank, '_roster_models', AsyncMock(return_value=[row for row in rows if row and not b.tank._build_row(row)]))
     expected = {}
     async with b.pool.acquire() as conn:
         await conn.execute("""UPDATE tank.policy SET model='haiku',rung=1,candidate_model='skill:base.normalize@1.0.0',
@@ -218,6 +224,9 @@ async def test_fixture_graduation_requires_founder_then_serves_two_tenants(ladde
     for tenant in b.tenants:
         denied = await b.client.post(route, json={}, headers={"X-Tervory-Tenant": str(tenant)})
         assert denied.status_code == 404
+    approved = await b.client.post(route, json={"by": "founder-fixture"}, headers={"X-Tervory-Admin": "founder-fixture"})
+    assert approved.status_code == 409, approved.text
+    await __import__('skala_revalidation').drain(b.tank, limit=100)
     approved = await b.client.post(route, json={"by": "founder-fixture"}, headers={"X-Tervory-Admin": "founder-fixture"})
     assert approved.status_code == 200, approved.text
     async with b.pool.acquire() as conn:

@@ -1465,15 +1465,15 @@ export async function tenantDestination(tenantId: string, signal?: AbortSignal):
 export async function tenantFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
   const url = new URL(input, TANK_URL);
   if (url.origin !== new URL(TANK_URL).origin || !url.pathname.startsWith("/v1/") ||
-      url.pathname.startsWith("/v1/tenants/") || url.pathname.startsWith("/v1/command/device/")) return globalThis.fetch(input, init);
+      url.pathname.startsWith("/v1/tenants/") || url.pathname.startsWith("/v1/command/device/")) return fetch(input, init);
   const headers = new Headers(init.headers);
-  if (/^Bearer /i.test(headers.get("authorization") ?? "")) return globalThis.fetch(input, init);
+  if (/^Bearer /i.test(headers.get("authorization") ?? "")) return fetch(input, init);
   let body = init.body;
   let parsed: Record<string, unknown> | undefined;
   if (typeof body === "string") {
     try { const value: unknown = JSON.parse(body); if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>; } catch { /* Original validation handles malformed JSON. */ }
   }
-  const tenants = [headers.get("x-tervory-tenant"), url.searchParams.get("tenant_id"), parsed?.tenant_id];
+  const tenants = [headers.get("x-tervory-tenant"), headers.get("x-moot-tenant"), url.searchParams.get("tenant_id"), parsed?.tenant_id];
   if (Array.isArray(parsed?.requests)) tenants.push(...parsed.requests.map((r: { tenant_id?: unknown }) => r.tenant_id));
   const ids = [...new Set(tenants.filter((value): value is string => typeof value === "string" && value.length > 0))];
   const user = headers.get("x-tervory-user");
@@ -1481,7 +1481,7 @@ export async function tenantFetch(input: string | URL, init: RequestInit = {}): 
   // Existing founder reports may inspect a different tenant via a GET query.
   const reportTenant = founder && (init.method ?? "GET") === "GET" ? url.searchParams.get("tenant_id") : null;
   if (ids.length > 1 && !reportTenant) throw new Error("A request must belong to one workspace.");
-  if (!ids.length) return globalThis.fetch(input, init);
+  if (!ids.length) return fetch(input, init);
   const owner = await tenantDestination(reportTenant ?? ids[0], init.signal ?? undefined);
   if (url.searchParams.has("home_region")) url.searchParams.set("home_region", owner.home);
   if (parsed && "home_region" in parsed) body = JSON.stringify({ ...parsed, home_region: owner.home });
@@ -1493,7 +1493,7 @@ export async function tenantFetch(input: string | URL, init: RequestInit = {}): 
   }
   for (const key of Object.keys(forwarded)) if (key.toLowerCase() === "x-tank-key") forwarded[key] = owner.key;
   if (!headers.has("x-tank-key")) forwarded["x-tank-key"] = owner.key;
-  return globalThis.fetch(`${owner.url}${url.pathname}${url.search}`, { ...init, body, headers: init.headers instanceof Headers ? new Headers(forwarded) : forwarded, redirect: init.redirect ?? "error" });
+  return fetch(`${owner.url}${url.pathname}${url.search}`, { ...init, body, headers: init.headers instanceof Headers ? new Headers(forwarded) : forwarded, redirect: init.redirect ?? "error" });
 }
 
 /** Founder onboarding writes only UUID/home metadata to configured Tank registries.

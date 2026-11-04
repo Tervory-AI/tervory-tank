@@ -59,6 +59,7 @@ def test_scope_cannot_come_from_arguments(runtime, tool, args):
 @pytest.mark.parametrize("region,source", [("us-east", "federal-register"), ("za", "laws-africa")])
 async def test_confirm_watch_lifecycle_receipt_refusals_and_isolation(api, runtime, monkeypatch, region, source):
     client, pool = api
+    await __import__("tenant_fixture").onboard(pool, TENANT, OTHER, region=region)
     runtime.box_region = lambda: region
     runtime.pool = lambda: pool
     runtime.app = tank_main.app

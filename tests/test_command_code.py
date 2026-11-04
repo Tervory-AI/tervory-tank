@@ -101,6 +101,7 @@ async def test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_tr
     b.gateway.parts = [json.dumps({'answer': 'done', 'requests': [{'name': 'read_file', 'arguments': {'path': 'test.py'}}]})]
     token = f'tv1.{region}.{TENANT.hex}.' + ('placeholder' + 'x' * 43)[:43]
     async with b.pool.acquire() as conn:
+        await __import__("tenant_fixture").onboard(conn, TENANT, region=region)
         await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
                            "VALUES($1,'founder',$2,'placeholder-code',$3)", TENANT, region, pat.digest(token))
     bearer = {'authorization': 'Bearer ' + token}
