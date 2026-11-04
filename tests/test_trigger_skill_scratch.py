@@ -17,7 +17,7 @@ import pytest
 
 SKILLS = Path(__file__).resolve().parents[1] / "tank" / "skills"
 COMPONENTS = ["proselint", "agent_style", "house_style", "readability", "voice_check"]
-TEXT = {"text": "I want to sleep, perchance to dream. I would argue that this is a good test."}
+TEXT = {"text": "Placeholder: I want to sleep, perchance to dream. I would argue that this is a good test."}
 
 
 def _load(component: str, version: str):
@@ -101,8 +101,9 @@ async def test_clean_call_matches_1_0_0_and_leaves_nothing(component, private_tm
     ("timeout", asyncio.TimeoutError), ("cancel", asyncio.CancelledError),
 ])
 @pytest.mark.asyncio
-async def test_killed_engine_leaves_no_scratch_folder(how, raised, private_tmp):
-    _, error = await _call("proselint", "1.1.0", private_tmp, how)
+@pytest.mark.parametrize("component", COMPONENTS)
+async def test_killed_engine_leaves_no_scratch_folder(component, how, raised, private_tmp):
+    _, error = await _call(component, "1.1.0", private_tmp, how)
     assert isinstance(error, raised)
     assert _scratch(private_tmp) == []
 
@@ -127,3 +128,20 @@ def test_engine_refuses_to_run_without_an_empty_scratch_folder(tmp_path):
                               input=b"{}", capture_output=True, timeout=60)
         assert done.returncode != 0
     assert sorted(p.name for p in tmp_path.iterdir()) == ["busy"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("component", COMPONENTS)
+async def test_spawn_failure_removes_owned_scratch(component, private_tmp, monkeypatch):
+    module = _load(component, "1.1.0")
+    fake = _Asyncio()
+
+    async def fail_spawn(*args, **kwargs):
+        assert len(_scratch(private_tmp)) == 1
+        raise OSError("placeholder spawn failure")
+
+    monkeypatch.setattr(fake, "create_subprocess_exec", fail_spawn)
+    module.asyncio = fake
+    with pytest.raises(OSError, match="placeholder spawn failure"):
+        await module.run(dict(TEXT), None)
+    assert _scratch(private_tmp) == []
