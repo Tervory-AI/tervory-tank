@@ -1,0 +1,198 @@
+ML3 resumed verification; working directory /workspace/codex-market-lab-ml3
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL .venv/bin/python -m pytest tests/test_market_lab_ml3.py tests/test_candidate_eval_runtime.py tests/test_command_code.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml3-resume-targeted.txt 2>&1
+Exit: 0
+..................ss.sssss............                               [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+31 passed, 7 skipped, 3 warnings, 1372 subtests passed in 89.13s (0:01:29)
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL .venv/bin/python -m pytest tests/test_market_lab*.py tests/test_autumbra*.py tests/test_ghost*.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml3-resume-regressions.txt 2>&1
+Exit: 0
+...................................s.....................s.............. [ 14%]
+.s...............s...................................................... [ 28%]
+...........s..........................s................................. [ 42%]
+........................................................................ [ 57%]
+...................................s.................................... [ 71%]
+........................................................................ [ 85%]
+s....................................................................... [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_autumbra_dogfood_hf.py:45
+  /workspace/codex-market-lab-ml3/tests/test_autumbra_dogfood_hf.py:45: PytestUnknownMarkWarning: Unknown pytest.mark.integration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.integration
+
+tank/main.py:752
+  /workspace/codex-market-lab-ml3/tank/main.py:752: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tank/main.py:806
+  /workspace/codex-market-lab-ml3/tank/main.py:806: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tank/agent_skills.py:531
+  /workspace/codex-market-lab-ml3/tank/agent_skills.py:531: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tank/skala_intake.py:71
+  /workspace/codex-market-lab-ml3/tank/skala_intake.py:71: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tank/skala_intake.py:77
+  /workspace/codex-market-lab-ml3/tank/skala_intake.py:77: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:192
+  /workspace/codex-market-lab-ml3/tank/skala_revalidation.py:192: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+496 passed, 8 skipped, 15 warnings in 177.11s (0:02:57)
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL .venv/bin/python -m pytest tests/test_market_lab_ml3.py::test_missing_owned_exact_command_turn_never_reaches_model tests/test_market_lab_ml3.py::test_room_feeds_returns_registered_key_names_without_values --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml3-resume-new-checks.txt 2>&1
+Exit: 0
+..                                                                       [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 passed, 3 warnings in 15.97s
+
+$ .venv/bin/python -m pytest tests/test_market_lab_ml3.py::test_confirmed_alert_setup_ensures_existing_tenant_warning_jobs --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml3-resume-scheduling.txt 2>&1
+Exit: 0
+.                                                                        [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 3 warnings in 3.51s
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL .venv/bin/python -m pytest tests/test_market_lab_ml3.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml3-resume-final.txt 2>&1
+Exit: 0
+..............                                                           [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-ml3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+14 passed, 3 warnings in 66.71s (0:01:06)
+
+$ .venv/bin/python -m ruff check agents/market_lab/core/intel.py agents/market_lab/core/ml3.py tank/market_lab_ml3.py tests/test_market_lab_ml3.py --select E9,F
+Exit: 0
+All checks passed!
+
+$ .venv/bin/python -m py_compile agents/market_lab/core/intel.py agents/market_lab/core/ml3.py tank/market_lab_ml3.py agents/market_lab/app.py agents/ghost/app.py agents/tiger/alert_email.py
+Exit: 0 (no output)
+
+$ git diff --check
+Exit: 0 (no output)
+
+$ git fetch origin main && git merge --no-edit origin/main
+Exit: 0; automatic merge, no conflicts; merge commit 623b6740.
+Subsequent fetch/merge-before-push commands returned already up to date.
+
+$ gh pr list --head codex/market-lab-ml3 --state all --json number,state,url
+Exit: 0
+[]
+
+$ gh run list --branch codex/market-lab-ml3 --limit 10 --json databaseId,event,status,conclusion,url
+Exit: 0
+[]
+
+CI Tank: no run exists yet; result pending the PR Claude opens.
+Local full Tank suite, Docker build, Workspace TypeScript/build and founder live proof are not claimed.

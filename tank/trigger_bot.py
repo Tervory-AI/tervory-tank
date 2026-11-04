@@ -153,7 +153,8 @@ class Bot:
                 VALUES($1,$2,'trigger',$3::jsonb)''', ledger, tenant, json.dumps(counts))
             return counts
 
-    async def ask(self, tenant, text, *, conversation_id=None, visitor_id=None, contact=None, address="command"):
+    async def ask(self, tenant, text, *, conversation_id=None, visitor_id=None, contact=None, address="command",
+                  force_handover=False, reply_gate=None):
         visitor_id = visitor_id or uuid4()
         conversation_id = conversation_id or uuid4()
         config = await self.pool.fetchrow('SELECT * FROM tank.trigger_bot_config WHERE tenant_id=$1', tenant)
@@ -166,7 +167,7 @@ class Bot:
         if conversation is None:
             raise HTTPException(404)
         result = None
-        if conversation['status'] == 'bot':
+        if conversation['status'] == 'bot' and not force_handover:
             try:
                 result = await respond(tenant, text, retrieve=self.retrieve, route=self.route,
                                        live_rig=self.live_rig, receipt=self.receipt, voice=self.voice)
@@ -182,6 +183,8 @@ class Bot:
                 WHERE tenant_id=$1 AND id=$2 AND visitor_id=$3 FOR UPDATE''', tenant, conversation_id, visitor_id)
             if current != 'bot':
                 result.update(state=current, answer=None, sources=[], cited=[], outcome='handed_over')
+            if result['answer'] is not None and reply_gate is not None and not await reply_gate(conn, result):
+                result.update(state='handed_over', answer=None, sources=[], cited=[], outcome='handed_over')
             await conn.execute('''INSERT INTO tank.trigger_bot_messages
                 (tenant_id,id,conversation_id,question,answer,retrieved,cited,outcome,ledger_id)
                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)''', tenant, message_id, conversation_id, text,
@@ -207,7 +210,8 @@ class Bot:
         if not contact or not contact.get('name') or not (contact.get('email') or contact.get('phone')):
             return None
         draft = uuid4()
-        values = {'first_name': contact['name'], 'email': contact.get('email'), 'phone': contact.get('phone'),
+        values = {'first_name': contact.get('first_name') or contact['name'], 'last_name': contact.get('last_name'),
+                  'email': contact.get('email'), 'phone': contact.get('phone'),
                   'description': text, 'source_ref': str(conversation), 'assigned_to': [], 'contacts': [], 'teams': []}
         await self.pool.execute('''INSERT INTO tank.trigger_bot_drafts(tenant_id,id,conversation_id,kind,data)
             VALUES($1,$2,$3,'lead',$4::jsonb)''', tenant, draft, conversation, json.dumps({k: v for k, v in values.items() if v is not None}))

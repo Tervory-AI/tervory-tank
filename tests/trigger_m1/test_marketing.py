@@ -189,8 +189,9 @@ def test_dst_iana_zone_requires_real_local_offset(stamp, zone, valid):
 
 
 @pytest.mark.asyncio
-async def test_other_channels_stay_scheduled_due_in_own_local_calendar(m1):
-    ident = await post(m1, 'facebook')
+@pytest.mark.parametrize('channel', ['instagram', 'linkedin', 'x'])
+async def test_other_channels_stay_scheduled_due_in_own_local_calendar(m1, channel):
+    ident = await post(m1, channel)
     await scheduled(m1, ident)
     assert await Publisher(m1.store).once(TENANT) is None
     data = await m1.store.calendar(TENANT, Calendar(start=utc_now().date(), period='week'))

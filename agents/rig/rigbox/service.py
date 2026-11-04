@@ -313,7 +313,7 @@ class Service:
         text = (query or "").strip()
         shop = await self._shop(tenant_id)
         if shop.get("search"):
-            from rigbox.cn import shop_search
+            from rigbox.guided_search import shop_search
 
             cap = _limit(limit)
             version = await self._catalogue_version(tenant_id)
@@ -500,13 +500,14 @@ class Service:
             raise RigError("not_found", "No such product.", 404)
         shop = await self._shop(tenant_id)
         if shop.get("search"):
-            from rigbox.cn import present_detail
+            from rigbox.guided_search import present_detail
 
             return present_detail(
                 detail,
                 await self._active(tenant_id),
                 await self._approved_fits(tenant_id),
                 str(shop.get("centre_sku") or ""),
+                vocabulary=shop.get("vocabulary"),
             )
         return detail
 
@@ -520,9 +521,9 @@ class Service:
             raise RigError("not_found", "No such product.", 404)
         built = build_setups(bundle)
         if (await self._shop(tenant_id)).get("search"):
-            from rigbox.cn import enrich_setups
+            from rigbox.guided_search import enrich_setups
 
-            built = enrich_setups(built, bundle["products"], bundle["fits"])
+            built = enrich_setups(built, bundle["products"], bundle["fits"], vocabulary=(await self._shop(tenant_id)).get("vocabulary"))
         centre = _centre(bundle["products"], product_id)
         for setup in built["setups"]:
             setup["why"] = await self._compose_why(
@@ -555,9 +556,9 @@ class Service:
             raise RigError("not_found", "No such product.", 404)
         await self._annotate_graph(tenant_id, bundle, built)
         if (await self._shop(tenant_id)).get("search"):
-            from rigbox.cn import enrich_graph
+            from rigbox.guided_search import enrich_graph
 
-            built = enrich_graph(built, bundle["products"], bundle["fits"])
+            built = enrich_graph(built, bundle["products"], bundle["fits"], vocabulary=(await self._shop(tenant_id)).get("vocabulary"))
         await self.store.put_answer(tenant_id, "graph", product_id, version, built)
         return built
 
@@ -619,13 +620,14 @@ class Service:
             _restore_choices(priced, body["setup"])
             shop = await self._shop(tenant_id)
             if shop.get("search"):
-                from rigbox.cn import prepare_reservation
+                from rigbox.guided_search import prepare_reservation
 
                 problem = prepare_reservation(
                     priced,
                     products,
                     await self._approved_fits(tenant_id),
                     str(shop.get("centre_sku") or ""),
+                    vocabulary=shop.get("vocabulary"),
                 )
                 if problem:
                     raise RigError("invalid", problem, 422)
@@ -634,19 +636,24 @@ class Service:
             product = await self.product(tenant_id, str(body["product_id"]))
             shop = await self._shop(tenant_id)
             if shop.get("search"):
-                from rigbox.cn import prepare_reservation
+                from rigbox.guided_search import prepare_reservation
 
                 problem = prepare_reservation(
                     {"parts": [{"product": product, "choice": ""}]},
                     await self._active(tenant_id),
                     await self._approved_fits(tenant_id),
                     str(shop.get("centre_sku") or ""),
+                    vocabulary=shop.get("vocabulary"),
                 )
                 if problem:
                     raise RigError("invalid", problem, 422)
             payload = {"kind": "product", "product": product}
         else:
             raise RigError("invalid", "A setup or a product is required.", 422)
+        # A visitor request is metadata, never an invented price or invoice.
+        request = {key: body[key] for key in ("title", "request", "quantity") if body.get(key) is not None}
+        if request:
+            payload["request"] = request
         wanted = ([part["product"]["id"] for part in payload["setup"]["parts"]]
                   if payload["kind"] == "setup" else [payload["product"]["id"]])
         private = []
@@ -1017,7 +1024,13 @@ class Service:
     async def _shop(self, tenant_id: str) -> dict[str, Any]:
         retailer = await self.store.retailer(tenant_id) or {}
         shop = retailer.get("shop")
-        return shop if isinstance(shop, dict) else {}
+        if not isinstance(shop, dict):
+            return {}
+        if "vocabulary" in shop:
+            from rigbox.vocabulary import validate
+            checked = validate(shop["vocabulary"])
+            return {**shop, "vocabulary": checked} if checked else {key: value for key, value in shop.items() if key != "vocabulary"}
+        return shop
 
 
 def _market_average(rows: list[dict[str, Any]], currency: str) -> dict[str, Any] | None:

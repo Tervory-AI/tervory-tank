@@ -1,0 +1,27 @@
+Collected cases: 1669
+Original Docker exec client exit: 143; no terminal pytest summary was captured.
+The test container remained running with OOMKilled=false.
+Recorded pytest progress markers: 1591 pass, 16 skip, 1 failure (1608 total).
+Completion run repeats the last boundary case and runs the remaining 61 cases (62 total).
+The browser failure is reproduced in rig-browser-environment-error.txt; the supported-path rerun passes in rig-browser-rerun.txt.
+
+Recorded skipped cases:
+tests/test_rig_box_containers.py::test_rig_real_box_public_api_and_sealed_execution
+tests/test_rig_box_runtime.py::test_real_hermes_answers_from_standin_catalogue_with_tank_receipts
+tests/test_rig_cost_guard.py::test_full_custom_nation_export_is_not_a_cost_oracle[rank]
+tests/test_rig_cost_guard.py::test_full_custom_nation_export_is_not_a_cost_oracle[cn-shop-search]
+tests/test_rig_forge_containers.py::test_real_container_isolation_and_private_health
+tests/test_rig_forge_pipeline.py::test_neutral_samples_pass_all_real_tools[ai-sample.glb]
+tests/test_rig_forge_pipeline.py::test_neutral_samples_pass_all_real_tools[scan.obj]
+tests/test_rig_forge_pipeline.py::test_defective_scan_stops_before_conversion[hole]
+tests/test_rig_forge_pipeline.py::test_defective_scan_stops_before_conversion[inside_out]
+tests/test_rig_forge_pipeline.py::test_receipt_delivery_failure_prevents_next_step
+tests/test_rig_forge_pipeline.py::test_image_environment_never_contains_tank_credentials
+tests/test_agent1_container_runtime.py::test_real_private_browser_and_other_room_boundary
+tests/test_agent1_container_runtime.py::test_unprivileged_sibling_exec_is_offline_and_separates_runs
+tests/test_agent1_hermes_runtime.py::test_actual_hermes_calls_pipeline_via_tank_with_receipts
+tests/test_agent1_pilot.py::test_recorded_atf_fixture_through_real_tank
+tests/test_agent1_public_render.py::test_example_com_through_render_with_internal_browser
+
+Recorded failed case:
+tests/test_rig_pr90_independent.py::test_browser_search_accessories_compare_admin

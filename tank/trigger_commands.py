@@ -13,6 +13,28 @@ VOICE_PREFIX = re.compile(r'\s*trigger(?:\.voice\.|[, ]+voice[ .]+)(show|set|rol
 
 async def plan(actor, text: str, task_id):
     from command import authorized_actor, require_tool, db, unpack
+    crm = re.fullmatch(r'\s*trigger\.crm\.(list|get|write)\b\s*:?[ \t]*(.*)', text, re.IGNORECASE | re.DOTALL)
+    if crm:
+        from command import PlannedAction, validate_action
+        actor = await authorized_actor(actor)
+        tool = 'trigger.crm.' + crm[1].lower()
+        require_tool(actor, tool)
+        source = crm[2].strip()
+        try:
+            if source.startswith('{'):
+                args = json.loads(source)
+            elif crm[1].lower() == 'list':
+                resource, _, query = source.partition(' ')
+                args = {'resource': resource, **(json.loads(query) if query.strip() else {})}
+            elif crm[1].lower() == 'get':
+                resource, record_id = source.split()
+                args = {'resource': resource, 'record_id': record_id}
+            else:
+                raise ValueError
+            action = validate_action(PlannedAction(tool=tool, arguments=args), actor)
+        except (ValueError, TypeError):
+            raise HTTPException(422, 'Invalid CRM request') from None
+        return {'text': '', 'actions': [action.model_dump(mode='json')]}
     explicit = re.fullmatch(r'\s*trigger\.(revise|voice\.learn|write\.batch|scorecard)\s*:?[ \t]*(.*)', text, re.I | re.S)
     if explicit:
         actor = await authorized_actor(actor)

@@ -1,0 +1,62 @@
+ML4 review follow-up, 3 November 2026 (Pacific).
+Tested code head: 76a727b308eb86b3bf5f166476796435b2402626.
+Cloud machine only. No GitHub API, provider request or model download.
+
+Setup:
+UV_CACHE_DIR=/workspace/.uv-cache uv venv /workspace/ml4-venv
+UV_CACHE_DIR=/workspace/.uv-cache uv pip install --python /workspace/ml4-venv/bin/python -r tank/requirements.txt pytest==9.1.1 pytest-asyncio==1.4.1 pytest-timeout==2.4.0 pytest-socket==0.8.1 ruff==0.17.2 -r agents/market_lab/feeds/requirements.txt qdrant-client==1.20.0
+# Passed, Python 3.12.14. No model weights downloaded or encoder loaded.
+# Initial uv invocation failed because its default cache was read-only; the
+# explicitly writable task cache above succeeded. No dependency files changed.
+
+env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH docker --host=unix:///var/run/docker.sock run -d --name ml4-review-postgres -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=ml4_review_test -p 127.0.0.1:55441:5432 postgres:16-alpine
+# Passed, local-only disposable Postgres. Resolved image:
+# postgres@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+
+/workspace/ml4-venv/bin/python -m pytest tests/test_market_lab_ml4.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q
+30 passed in 1.07s
+
+MEMORY_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55441/ml4_review_test /workspace/ml4-venv/bin/python -m pytest tests/test_market_lab_ml4_memory.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -v
+tests/test_market_lab_ml4_memory.py::test_private_save_fake_encoder_founder_only_publish_and_other_tenant_sql_reads PASSED [100%]
+8 passed in 3.75s
+# The other seven cases verify every configured pair survives de-identification.
+# This is LOCAL proof, not a CI test line.
+
+Initial broader run (without the opt-in database variable):
+/workspace/ml4-venv/bin/python -m pytest tests/test_market_lab*.py tests/market_lab_feeds/ tests/market_lab_keyless_feeds/ --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q
+1 failed, 237 passed, 7 skipped in 19.77s
+# test_tank_research_job_writes_only_claims_with_openable_sources used an
+# incomplete JobContext fixture with no memory. Updated it to carry a sentinel
+# memory and assert the ledger receives that exact object.
+
+/workspace/ml4-venv/bin/python -m pytest tests/test_market_lab_gate2.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q
+10 passed, 1 skipped in 0.45s
+
+MEMORY_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55441/ml4_review_test /workspace/ml4-venv/bin/python -m pytest tests/test_market_lab*.py tests/market_lab_feeds/ tests/market_lab_keyless_feeds/ --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q
+...................................s.....................s.............. [ 29%]
+...........................s...............s............................ [ 58%]
+.....................................s.................................. [ 88%]
+............................s                                            [100%]
+239 passed, 6 skipped in 19.09s
+
+DATABASE_URL=postgresql://postgres@127.0.0.1:55441/ml4_review_test /workspace/ml4-venv/bin/python -m pytest tests/test_market_lab_real_tank.py tests/test_market_lab_warning_real_tank.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 --basetemp=/tmp/ml4-real-tank-proof -q
+..                                                                       [100%]
+2 passed in 24.76s
+
+Startup excerpt from the warning job's services.log, actual Tank main:app:
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:58187 (Press CTRL+C to quit)
+
+/workspace/ml4-venv/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+All checks passed!
+/workspace/ml4-venv/bin/ruff check agents/market_lab/app.py agents/market_lab/core/patterns.py agents/market_lab/core/warnings.py agents/market_lab/core/warning_store.py --select E9,F
+All checks passed!
+git diff --check
+# exit 0
+
+Public CI page inspected (read only, no API):
+curl --fail --silent --show-error --location https://github.com/Tervory-AI/tervory-tank/actions/runs/41650676148/job/125967924379 -o /tmp/ml4-ci-tank.html
+# Code head 76a727b. Tank started; no completed result observed at this read.
+# Public page: "Sign in to view logs".
+# No CI PASSED line or final CI pass is claimed. No login or rerun attempted.

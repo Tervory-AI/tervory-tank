@@ -9,7 +9,8 @@
 # internal network must not also join a non-internal one, except the declared
 # corridor services (matched by compose service name):
 #   agent-base, base-brain and base-browser-gateway on tervory-gw-base;
-#   tiger-browser-gateway on tervory-gw-tiger;
+#   tiger-brain and tiger-browser-gateway on tervory-gw-tiger;
+#   zenas-brain on this box's tervory-gw-zenas;
 #   agent-rig, rig-brain and rig-browser-gateway on tervory-gw-rig;
 #   egress-proxy on egress (compose names it <project>_egress).
 # Trigger and Radix passive-egress use the exact compose attachments below;
@@ -38,7 +39,7 @@ set -uo pipefail
 DOCKER="${DOCKER:-docker}"
 
 # Rooms whose compose files declare sealed services; each must be found and sealed.
-EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost)
+EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost agent-tisan)
 # Watch is confined to its declared corridor; each Enforce has exactly one internal network.
 
 # service name -> the one non-internal network it may also join
@@ -47,6 +48,17 @@ declare -A CORRIDOR=(
   [base-brain]="tervory-gw-base"
   [base-browser-gateway]="tervory-gw-base"
   [tiger-browser-gateway]="tervory-gw-tiger"
+  [tiger-brain]="tervory-gw-tiger"
+  [market-lab-brain]="tervory-gw-market_lab"
+  [market-lab-browser-gateway]="tervory-gw-market_lab"
+  [radix-brain]="tervory-gw-radix"
+  [radix-browser-gateway]="tervory-gw-radix"
+  [tisan-brain]="tervory-gw-tisan"
+  [tisan-browser-gateway]="tervory-gw-tisan"
+  [trigger-brain]="tervory-gw-trigger"
+  [trigger-browser-gateway]="tervory-gw-trigger"
+  [ghost-brain]="tervory-gw-ghost"
+  [zenas-brain]="tervory-gw-zenas"
   [agent-rig]="tervory-gw-rig"
   [rig-brain]="tervory-gw-rig"
   [rig-browser-gateway]="tervory-gw-rig"
@@ -184,14 +196,39 @@ for id in $ids; do
   expected_nets=""
   case "$service" in
     agent-ghost|ghost-browser) expected_nets="tervory-gw-ghost" ;;
+    agent-tisan) expected_nets="tervory-gw-tisan ${project}_figma_internal" ;;
+    figma-egress-proxy) expected_nets="${project}_figma_internal ${project}_egress" ;;
     agent-trigger) expected_nets="tervory-gw-trigger ${project}_checkers" ;;
     trigger-languagetool) expected_nets="${project}_checkers" ;;
     passive-egress) expected_nets="tervory-gw-radix ${project}_proxy-link ${project}_egress" ;;
     agent-rig) expected_nets="tervory-gw-rig 59f8cnpelzwsyte1atyjc4fv" ;;
     rig-brain) expected_nets="tervory-gw-rig ${project}_sandbox ${project}_forge-control" ;;
+    tiger-brain) expected_nets="tervory-gw-tiger ${project}_sandbox" ;;
+    agent-zenas) expected_nets="tervory-gw-zenas" ;;
+    market-lab-brain) expected_nets="tervory-gw-market_lab ${project}_sandbox" ;;
+    market-lab-sandbox) expected_nets="${project}_sandbox" ;;
+    market-lab-browser) expected_nets="${project}_browser" ;;
+    market-lab-browser-gateway) expected_nets="tervory-gw-market_lab ${project}_browser" ;;
+    radix-brain) expected_nets="tervory-gw-radix ${project}_sandbox" ;;
+    radix-sandbox) expected_nets="${project}_sandbox" ;;
+    radix-browser) expected_nets="${project}_browser" ;;
+    radix-browser-gateway) expected_nets="tervory-gw-radix ${project}_browser" ;;
+    tisan-brain) expected_nets="tervory-gw-tisan ${project}_sandbox" ;;
+    tisan-sandbox) expected_nets="${project}_sandbox" ;;
+    tisan-browser) expected_nets="${project}_browser" ;;
+    tisan-browser-gateway) expected_nets="tervory-gw-tisan ${project}_browser" ;;
+    trigger-brain) expected_nets="tervory-gw-trigger ${project}_sandbox" ;;
+    trigger-sandbox) expected_nets="${project}_sandbox" ;;
+    trigger-browser) expected_nets="${project}_browser" ;;
+    trigger-browser-gateway) expected_nets="tervory-gw-trigger ${project}_browser" ;;
+    ghost-brain) expected_nets="tervory-gw-ghost ${project}_sandbox" ;;
+    ghost-sandbox) expected_nets="${project}_sandbox" ;;
+    zenas-brain) expected_nets="tervory-gw-zenas ${project}_sandbox" ;;
     rig-forge) expected_nets="${project}_forge-control ${project}_forge-egress" ;;
     rig-forge-egress) expected_nets="${project}_forge-egress ${project}_forge-outbound" ;;
     rig-sandbox) expected_nets="${project}_sandbox" ;;
+    tiger-sandbox) expected_nets="${project}_sandbox" ;;
+    zenas-sandbox) expected_nets="${project}_sandbox" ;;
     rig-browser) expected_nets="${project}_browser" ;;
     rig-browser-gateway) expected_nets="tervory-gw-rig ${project}_browser" ;;
   esac
@@ -207,7 +244,23 @@ for id in $ids; do
       elif [[ "$service" == "agent-ghost" || "$service" == "ghost-browser" ]]; then
         continue
       elif [[ "$service" == "agent-trigger" && "$net" == "tervory-gw-trigger" ]] ||
-           [[ "$service" == "passive-egress" && "$net" == "${project}_egress" ]]; then
+           [[ "$service" == "passive-egress" && "$net" == "${project}_egress" ]] ||
+           [[ "$service" == "agent-tisan" && "$net" == "tervory-gw-tisan" ]] ||
+           [[ "$service" == "figma-egress-proxy" && "$net" == "${project}_egress" ]]; then
+        continue
+      elif [[ ( "$service" == "market-lab-brain" || "$service" == "market-lab-browser-gateway" ) && "$net" == "tervory-gw-market_lab" ]]; then
+        continue
+      elif [[ ( "$service" == "radix-brain" || "$service" == "radix-browser-gateway" ) && "$net" == "tervory-gw-radix" ]]; then
+        continue
+      elif [[ ( "$service" == "tisan-brain" || "$service" == "tisan-browser-gateway" ) && "$net" == "tervory-gw-tisan" ]]; then
+        continue
+      elif [[ ( "$service" == "trigger-brain" || "$service" == "trigger-browser-gateway" ) && "$net" == "tervory-gw-trigger" ]]; then
+        continue
+      elif [[ ( "$service" == "ghost-brain" ) && "$net" == "tervory-gw-ghost" ]]; then
+        continue
+      elif [[ "$service" == "tiger-brain" && "$net" == "tervory-gw-tiger" ]]; then
+        continue
+      elif [[ ( "$service" == "agent-zenas" || "$service" == "zenas-brain" ) && "$net" == "tervory-gw-zenas" ]]; then
         continue
       elif [[ "$service" != "agent-rig" && "$net" != "tervory-gw-rig" && !( "$service" == "rig-forge-egress" && "$net" == "${project}_forge-outbound" ) ]]; then
         internal_flag "$net"
@@ -275,7 +328,28 @@ is_expected() {
 for uuid in "${ROOMS[@]}"; do
   room="${ROOM_NAME[$uuid]}"
   required_services=""
-  [[ "$room" == "agent-ghost" ]] && required_services="agent-ghost ghost-browser"
+  if [[ "$room" == "agent-tiger" && ( -n "${APP_SERVICES[$uuid/tiger-brain]+set}" || -n "${APP_SERVICES[$uuid/tiger-sandbox]+set}" ) ]]; then
+    required_services="tiger-brain tiger-sandbox"
+  fi
+  if [[ ( "$room" == "agent-zenas" || "$room" == "agent-zenas-za" ) && ( -n "${APP_SERVICES[$uuid/zenas-brain]+set}" || -n "${APP_SERVICES[$uuid/zenas-sandbox]+set}" ) ]]; then
+    required_services="zenas-brain zenas-sandbox"
+  fi
+  [[ "$room" == "agent-ghost" ]] && required_services+=" agent-ghost ghost-browser"
+  if [[ "$room" == "agent-market-lab" && ( -n "${APP_SERVICES[$uuid/market-lab-brain]+set}" || -n "${APP_SERVICES[$uuid/market-lab-sandbox]+set}" || -n "${APP_SERVICES[$uuid/market-lab-browser]+set}" || -n "${APP_SERVICES[$uuid/market-lab-browser-gateway]+set}" ) ]]; then
+    required_services+=" market-lab-brain market-lab-sandbox market-lab-browser market-lab-browser-gateway"
+  fi
+  if [[ "$room" == "agent-radix" && ( -n "${APP_SERVICES[$uuid/radix-brain]+set}" || -n "${APP_SERVICES[$uuid/radix-sandbox]+set}" || -n "${APP_SERVICES[$uuid/radix-browser]+set}" || -n "${APP_SERVICES[$uuid/radix-browser-gateway]+set}" ) ]]; then
+    required_services+=" radix-brain radix-sandbox radix-browser radix-browser-gateway"
+  fi
+  if [[ "$room" == "agent-tisan" && ( -n "${APP_SERVICES[$uuid/tisan-brain]+set}" || -n "${APP_SERVICES[$uuid/tisan-sandbox]+set}" || -n "${APP_SERVICES[$uuid/tisan-browser]+set}" || -n "${APP_SERVICES[$uuid/tisan-browser-gateway]+set}" ) ]]; then
+    required_services+=" tisan-brain tisan-sandbox tisan-browser tisan-browser-gateway"
+  fi
+  if [[ "$room" == "agent-trigger" && ( -n "${APP_SERVICES[$uuid/trigger-brain]+set}" || -n "${APP_SERVICES[$uuid/trigger-sandbox]+set}" || -n "${APP_SERVICES[$uuid/trigger-browser]+set}" || -n "${APP_SERVICES[$uuid/trigger-browser-gateway]+set}" ) ]]; then
+    required_services+=" trigger-brain trigger-sandbox trigger-browser trigger-browser-gateway"
+  fi
+  if [[ "$room" == "agent-ghost" && ( -n "${APP_SERVICES[$uuid/ghost-brain]+set}" || -n "${APP_SERVICES[$uuid/ghost-sandbox]+set}" ) ]]; then
+    required_services+=" ghost-brain ghost-sandbox"
+  fi
   if [[ "$room" == "autumbra-enforce" || -n "${APP_SERVICES[$uuid/enforce]+set}" ]]; then
     required_services+=" enforce egress-proxy health-observer health-egress-proxy"
   fi

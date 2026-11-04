@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from core.pure import shift_detect, surge_detect
@@ -56,12 +56,8 @@ def metadata(row: dict) -> dict:
     return result
 
 
-def calibration(rows: list[dict], tenant_id: str) -> dict:
-    """Only resolved originals with a frozen probability enter reliability bins.
-
-    Group by kind, feed and horizon. Historical rows without these metadata are
-    excluded rather than assigned a guessed confidence or mixed into another cohort.
-    """
+def resolved_originals(rows: list[dict], tenant_id: str):
+    """The shared calibration/gate qualification and original-ID deduplication."""
     owned = [r for r in rows if str(r["tenant_id"]) == str(tenant_id)]
     originals = {str(r["id"]): r for r in owned if r.get("outcome") is None}
     resolved: dict[str, dict] = {}
@@ -73,7 +69,6 @@ def calibration(rows: list[dict], tenant_id: str) -> dict:
         for source in row.get("sources") or []:
             if isinstance(source, dict) and str(source.get("resolves")) in originals:
                 resolved.setdefault(str(source["resolves"]), row)
-    groups: dict[tuple, list] = defaultdict(list)
     for ident, result in resolved.items():
         original = originals[ident]
         if any(
@@ -89,9 +84,16 @@ def calibration(rows: list[dict], tenant_id: str) -> dict:
             original["resolve_by"]
         ):
             continue
-        groups[
-            (original["kind"], original["feed"], original["horizon_seconds"])
-        ].append((probability, int(result["outcome"] == "hit")))
+        yield original, result
+
+
+def calibration(rows: list[dict], tenant_id: str) -> dict:
+    """Resolved originals with a frozen probability, grouped by kind/feed/horizon."""
+    groups: dict[tuple, list] = defaultdict(list)
+    for original, result in resolved_originals(rows, tenant_id):
+        groups[(original["kind"], original["feed"], original["horizon_seconds"])].append(
+            (float(original["confidence"]), int(result["outcome"] == "hit"))
+        )
     curves = []
     for (kind, feed, horizon), values in sorted(groups.items()):
         buckets: dict[int, list] = defaultdict(list)
@@ -117,3 +119,34 @@ def calibration(rows: list[dict], tenant_id: str) -> dict:
             }
         )
     return {"tenant_id": str(tenant_id), "curves": curves}
+
+
+def gate(rows: list[dict], tenant_id: str, *, now: datetime | None = None) -> dict:
+    """A cohort opens 90 days after its earliest qualifying resolved original.
+
+    Unresolved, unmeasurable, premature and foreign resolutions cannot age it.
+    The clock is injectable for tests, never a tenant override setting.
+    """
+    at = clock(now or datetime.now(UTC))
+    groups = {}
+    for row in rows:
+        if str(row["tenant_id"]) != str(tenant_id) or row.get("outcome") is not None:
+            continue
+        if any(row.get(key) is None for key in ("kind", "feed", "horizon_seconds")):
+            continue
+        groups.setdefault((row["kind"], row["feed"], row["horizon_seconds"]), [])
+    for original, result in resolved_originals(rows, tenant_id):
+        if clock(result["resolved_at"]) > at or clock(original["made_at"]) > at:
+            continue
+        groups[(original["kind"], original["feed"], original["horizon_seconds"])].append(original)
+    cohorts = []
+    for (kind, feed, horizon), originals in sorted(groups.items()):
+        first = min((clock(row["made_at"]) for row in originals), default=None)
+        opens_at = first + timedelta(days=90) if first is not None else None
+        days = max(0, (at - first).days) if first is not None else 0
+        opened = bool(originals) and days >= 90
+        cohorts.append({"kind": kind, "feed": feed, "horizon_seconds": horizon,
+                        "open": opened, "opens_at": opens_at.isoformat() if opens_at else None,
+                        "days_covered": days, "resolved_count": len(originals),
+                        "reason": None if opened else "insufficient_history" if originals else "no_resolved_originals"})
+    return {"tenant_id": str(tenant_id), "cohorts": cohorts}

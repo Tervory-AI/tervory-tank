@@ -2,21 +2,24 @@ name: ci
 
 # Security runs on every PR, including docs-only changes. Build jobs still use ci_scope.py.
 on:
+  workflow_dispatch:
   pull_request:
   # Merge queue (3 Nov, founder): the queue tests each group of PRs merged onto main
   # before it lands, so branches no longer merge main to stay current.
   merge_group:
     types: [checks_requested]
-  push:
-    branches: [main]
+  # No push trigger on main (3 Nov, founder): the merge queue (merge method MERGE) already
+  # ran this whole workflow on the exact commit that lands, so a run on the push was a
+  # pure repeat. workflow_dispatch (above) still runs everything on main by hand:
+  # ci_scope.py gets no DIFF_BASE for a dispatch and selects the full suite.
 
 permissions:
   contents: read
 
 # Cancel superseded runs (CI-2). A newer push to the same pull request cancels the
-# older run. Runs on main are never cancelled: each main run gets its own group
-# (run_id), so it never waits behind or gets replaced by another main run. Since
-# 27 Oct the deploy no longer waits for them (deploy-on-merge runs on the push). (With a shared group, GitHub cancels a *pending*
+# older run. Merge-queue and manual runs are never cancelled: each gets its own group
+# (run_id), so it never waits behind or gets replaced by another run. Since
+# 27 Oct the deploy no longer waits for CI (deploy-on-merge runs on the push). (With a shared group, GitHub cancels a *pending*
 # run when a newer one queues, even with cancel-in-progress false.)
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -44,17 +47,17 @@ jobs:
       - name: Gitleaks — PR commits or main push
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         env:
-          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'origin/main' }}
         run: python3 .github/scripts/security_scan.py gitleaks --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
       - name: Semgrep — new high findings
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         env:
-          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'origin/main' }}
         run: python3 .github/scripts/security_scan.py semgrep --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
       - name: OSV-Scanner — new vulnerable versions
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         env:
-          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'origin/main' }}
         run: python3 .github/scripts/security_scan.py osv --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
       - name: Save security results
         if: always()
@@ -65,9 +68,28 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  lint:
+    # Founder, 3 Nov: the full suite runs once, in the merge queue (the exact commit that lands).
+    # A pull request gets the fast checks only: this lint, security and the changes scope.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12.14"
+      - name: Lint
+        run: |
+          python -m pip install --disable-pip-version-check "ruff==0.17.2"
+          ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+
   changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    # 5, not 2 (3 Nov): in a merge-queue run the full-history checkout plus post steps took
+    # 2m22s, the job was cancelled, ci-ok failed and the queue dropped a green PR (#625).
+    timeout-minutes: 5
     outputs:
       run: ${{ steps.scope.outputs.run }}
       full: ${{ steps.scope.outputs.full }}
@@ -143,7 +165,7 @@ jobs:
   tank:
     needs: [changes, runner]
     # Run even when "pick runner" was skipped; then the runner falls back to ubuntu-latest.
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     # Full suite: about 14 minutes on the hosted 4-core runner (run 41229068797: 808 s of tests in
@@ -190,6 +212,37 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r tank/requirements.txt -r tank/requirements-dev.txt
           pip install --require-hashes -r agents/rig/forge/requirements.lock
+      - name: Prepare pinned k6 for offline Tisan smoke tests
+        run: |
+          python3 - <<'PYK6'
+          import hashlib, io, os, platform, re, tarfile, urllib.request
+          from pathlib import Path
+          source = Path("agents/tisan/Dockerfile").read_text()
+          def pin(name, pattern):
+              found = re.search(r"^ARG " + name + r"=(" + pattern + r")$", source, re.M)
+              if not found:
+                  raise SystemExit("missing Dockerfile k6 pin: " + name)
+              return found.group(1)
+          version = pin("K6_VERSION", r"[0-9]+\.[0-9]+\.[0-9]+")
+          architecture = {"x86_64": "amd64", "aarch64": "arm64"}[platform.machine()]
+          expected = pin("K6_SHA_" + architecture.upper(), r"[a-f0-9]{64}")
+          name = f"k6-v{version}-linux-{architecture}"
+          url = f"https://github.com/grafana/k6/releases/download/v{version}/{name}.tar.gz"
+          with urllib.request.urlopen(url, timeout=60) as response:
+              archive = response.read(100_000_001)
+          if len(archive) > 100_000_000 or hashlib.sha256(archive).hexdigest() != expected:
+              raise SystemExit("k6 checksum mismatch")
+          folder = Path(os.environ["RUNNER_TEMP"]) / "tisan-k6"
+          folder.mkdir(exist_ok=True)
+          with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as packed:
+              binary = packed.extractfile(name + "/k6")
+              if binary is None:
+                  raise SystemExit("k6 executable missing")
+              (folder / "k6").write_bytes(binary.read())
+          (folder / "k6").chmod(0o755)
+          with open(os.environ["GITHUB_PATH"], "a") as output:
+              output.write(str(folder) + "\n")
+          PYK6
       - name: Prepare Chromium for required READ-1 browser tests
         run: |
           browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
@@ -206,6 +259,33 @@ jobs:
       - name: Install workspace packages for offline billing and Node tests
         working-directory: workspace
         run: npm ci --no-audit --no-fund
+      - name: Prepare CLI acceptance fixtures
+        run: |
+          npm ci --prefix cli --ignore-scripts --no-audit --no-fund
+          # Setup may fetch pinned dependencies; the acceptance tests themselves stay offline.
+          node --input-type=module - <<'JS'
+          import { PLATFORMS } from './cli/scripts/build-release.mjs';
+          import { readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const lock = JSON.parse(readFileSync('cli/package-lock.json'));
+          for (const platform of Object.keys(PLATFORMS)) {
+            const name = '@napi-rs/keyring-' + platform;
+            const version = lock.packages['node_modules/' + name].version;
+            execFileSync('npm', ['cache', 'add', name + '@' + version], { stdio: 'inherit' });
+          }
+          JS
+          if ! command -v bwrap >/dev/null; then
+            if [ "$RUNNER_ENVIRONMENT" != github-hosted ]; then
+              echo "Self-hosted CLI acceptance needs preinstalled Bubblewrap."
+              exit 1
+            fi
+            sudo apt-get update
+            sudo apt-get install -y bubblewrap
+          fi
+          # Kernel changes are restricted to disposable hosted runners.
+          if [ "$RUNNER_ENVIRONMENT" = github-hosted ] && test -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Lint
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
         # This lane cannot edit an approved skill in place.
@@ -266,7 +346,7 @@ jobs:
 
   workspace:
     needs: [changes, runner]
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
@@ -320,7 +400,7 @@ jobs:
   # Any skipped or missing test fails the job, so it never passes silently.
   command-acceptance:
     needs: [changes]
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     services:
@@ -392,7 +472,7 @@ jobs:
     needs: [changes]
     # Only when the savings pages (or what they render) change. Founder, 27 Oct: no
     # check runs on a pull request it cannot affect.
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.savings == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.savings == 'true' }}
     # Chromium system dependencies need sudo; keep this job on GitHub hosted runners.
     runs-on: ubuntu-latest
     # 8 minutes timed out twice on 22 Oct and cancelled CI on main. Usually ~1 minute.
@@ -450,7 +530,7 @@ jobs:
   # when any failed or was cancelled.
   ci-ok:
     if: always()
-    needs: [security, changes, tank, workspace, command-acceptance, savings-page]
+    needs: [security, lint, changes, tank, workspace, command-acceptance, savings-page]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

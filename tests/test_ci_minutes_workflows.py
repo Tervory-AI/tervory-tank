@@ -37,13 +37,13 @@ def _triggers(workflow: dict) -> dict:
 def test_docs_only_changes_skip_on_push_and_pull_request(path: Path) -> None:
     triggers = _triggers(_load(path))
     # merge_group (3 Nov): the merge queue runs CI on each queued group before it lands.
-    assert set(triggers) == {"pull_request", "merge_group", "push"}
+    # No push trigger (3 Nov, founder): the queue already tested the exact commit that lands
+    # on main. workflow_dispatch stays so main can still be tested by hand.
+    assert set(triggers) == {"pull_request", "merge_group", "workflow_dispatch"}
     assert triggers["merge_group"] == {"types": ["checks_requested"]}
     # The security job runs on every PR, docs-only included, so there is no
     # paths-ignore. Build jobs skip docs-only changes through ci_scope.py instead.
-    for event in ("pull_request", "push"):
-        assert "paths-ignore" not in (triggers[event] or {})
-    assert triggers["push"]["branches"] == ["main"]
+    assert "paths-ignore" not in (triggers["pull_request"] or {})
     scope = _scope_module().select(["docs/ops/self-hosted-runner.md", "README.md"])
     assert scope["run"] is False
     assert "needs.changes.outputs.run == 'true'" in _load(path)["jobs"]["tank"]["if"]
@@ -55,14 +55,14 @@ def test_no_workflow_uses_pull_request_target(path: Path) -> None:
     assert "pull_request_target" not in _triggers(_load(path))
 
 
-def test_ci_keeps_job_names_and_main_push_trigger() -> None:
+def test_ci_keeps_job_names_and_no_main_push_trigger() -> None:
     text = CI.read_text(encoding="utf-8")
     jobs = _load(CI)["jobs"]
-    assert set(jobs) == {"security", "changes", "runner", "tank", "workspace", "command-acceptance", "savings-page", "ci-ok"}
+    assert set(jobs) == {"security", "lint", "changes", "runner", "tank", "workspace", "command-acceptance", "savings-page", "ci-ok"}
     # ci-ok is the one check the merge queue requires: it waits for every other job.
     assert jobs["ci-ok"]["if"] == "always()"
     assert set(jobs["ci-ok"]["needs"]) == set(jobs) - {"runner", "ci-ok"}
-    assert "push:" in text and "branches: [main]" in text
+    assert "push" not in _triggers(_load(CI)) and "branches: [main]" not in text
     assert _load(CI)["permissions"] == {"contents": "read"}
 
 
@@ -405,14 +405,16 @@ def test_second_push_to_pull_request_cancels_the_first(path: Path) -> None:
 
 
 @pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
-def test_main_runs_are_never_cancelled_or_replaced(path: Path) -> None:
-    first = _github("push", run_id="9001")
-    second = _github("push", run_id="9002")
+@pytest.mark.parametrize("event", ["merge_group", "workflow_dispatch"])
+def test_main_runs_are_never_cancelled_or_replaced(path: Path, event: str) -> None:
+    # Runs that gate or test main: the merge queue, and a manual run (no push run since 3 Nov).
+    first = _github(event, run_id="9001")
+    second = _github(event, run_id="9002")
     assert not _cancels(path, first) and not _cancels(path, second)
-    # Each main run has its own group: it never waits as "pending" behind another
-    # main run, so GitHub can never replace it with a newer one.
+    # Each such run has its own group: it never waits as "pending" behind another
+    # one, so GitHub can never replace it with a newer one.
     assert _group(path, first) != _group(path, second)
-    # A pull request can never share a group with a main run.
+    # A pull request can never share a group with one of them.
     assert _group(path, _github("pull_request", pr=1)) not in {_group(path, first), _group(path, second)}
 
 
@@ -461,3 +463,24 @@ def test_savings_page_limit_and_caches() -> None:
     assert "esbuild@0.28.2" in pinned
     assert "1.64.1" in steps[caches["~/.npm"]]["with"]["key"]
     assert "0.28.2" in steps[caches["~/.npm"]]["with"]["key"]
+
+
+def test_manual_ci_head_runs_full_suite_without_a_push_or_pr_base(monkeypatch):
+    module = _scope_module()
+    monkeypatch.setenv('EVENT_NAME', 'workflow_dispatch')
+    monkeypatch.setenv('DIFF_BASE', '')
+    monkeypatch.setenv('DIFF_HEAD', 'placeholder-head')
+    paths = module.changed_paths()
+    assert paths == ['unknown-change']
+    scope = module.select(paths)
+    assert scope['run'] and scope['full'] and scope['tests'] == ['.']
+
+
+def test_full_suite_runs_once_in_the_merge_queue_not_on_pull_requests() -> None:
+    """Founder, 3 Nov: a PR runs the fast checks; the merge queue runs the full suite once."""
+    jobs = _load(ROOT / ".github/workflows/ci.yml")["jobs"]
+    for name in ("tank", "workspace", "command-acceptance", "savings-page"):
+        assert "github.event_name != 'pull_request'" in jobs[name]["if"], name
+    for name in ("security", "lint", "changes"):
+        assert "event_name" not in str(jobs[name].get("if", "")), name
+    assert "ruff check tank tests --select E9,F" in str(jobs["lint"]["steps"])

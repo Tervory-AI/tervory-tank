@@ -14,6 +14,7 @@ const encode = (kind, data) => `event: ${kind}\ndata: ${JSON.stringify(data)}\n\
 function harness({ answers = [], token = TOKEN, refusal = false } = {}) {
   let saved = token; let output = ''; const calls = []; const stored = [];
   const io = {
+    interactive: true,
     write: value => { output += value; },
     prompt: async () => answers.shift() ?? null,
   };
@@ -63,7 +64,7 @@ function deviceHarness({ region = 'us-east', outcomes = ['authorization_pending'
     assert.equal(init.headers.Authorization, undefined);
     if (call.path.endsWith('/device/code')) {
       return Response.json({ device_code: `tvd1.${region}.${'d'.repeat(43)}`, user_code: 'BCDF-GHJK', interval: 5, expires_in: 600,
-        verification_uri_complete: 'https://evil.example/phish' });
+        ...(region === 'za' ? { identity_provider: 'zitadel', verification_uri: 'https://auth-za.tervory.com/device', verification_uri_complete: 'https://auth-za.tervory.com/device?code=BCDF-GHJK' } : { verification_uri_complete: 'https://evil.example/phish' }) });
     }
     if (call.path.endsWith('/device/token')) {
       const next = outcomes.shift();
@@ -97,11 +98,12 @@ test('login is a browser device approval: no paste prompt, polls, stores a refre
   assert(!h.output().includes('must not print'));
 });
 
-test('ZA login goes straight to the ZA Tank and approval still opens the one Workspace', async () => {
+test('ZA login goes straight to the ZA Tank and opens ZA Zitadel', async () => {
   const h = deviceHarness({ region: 'za', outcomes: ['grant'] });
   await run(['login', '--region', 'za'], h);
   assert(h.calls.every(call => call.origin === 'https://za.tervory.com'));
-  assert.deepEqual(h.opened, ['https://app.tervory.com/cli/device?code=BCDF-GHJK&region=za']);
+  assert.deepEqual(h.opened, ['https://auth-za.tervory.com/device?code=BCDF-GHJK']);
+  assert.equal(h.calls[0].body.approval, 'zitadel');
   assert.equal(JSON.parse(h.saved()).region, 'za');
   await assert.rejects(run(['login', '--region', 'eu'], h), /only --region/);
   await assert.rejects(run(['models', '--region', 'za'], h), /Invalid command option/);

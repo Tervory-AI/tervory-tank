@@ -1,7 +1,7 @@
 """Rig's own Locate fulfilment: orders and supplier purchase orders in Rig's Postgres.
 
-Tervory no longer uses Odoo, so a store-confirmed accepted quote is recorded here, not in
-an ERP. One accepted quote makes exactly one row in agent_rig.locate_orders
+A store-confirmed accepted quote is recorded here. One accepted quote makes
+exactly one row in agent_rig.locate_orders
 (what the shopper bought, at the held price) and one draft row in
 agent_rig.supplier_purchase_orders (what the store buys from the approved
 source, at the source's live price). Both are keyed by (tenant, quote), so a
@@ -18,7 +18,7 @@ Sandbox only, like the rest of Locate ordering (RIG_LOCATE_ORDER_MODE=sandbox).
 Nothing here opens a socket or sends mail.
 
 The interface (Fulfilment) is what QuoteService calls. RigOrders is the only
-implementation. There is no Odoo or other ERP order path.
+implementation. There is no external ERP order path.
 """
 
 from __future__ import annotations
@@ -53,7 +53,8 @@ class Fulfilment(Protocol):
     """Order placement after the store confirms receiving its own payment."""
 
     async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
-                                  price: dict[str, Any], ship: dict[str, Any] | None = None) -> dict[str, Any]:
+                                  price: dict[str, Any], ship: dict[str, Any] | None = None,
+                                  quantity: int = 1) -> dict[str, Any]:
         """Record the order and its draft supplier PO. Idempotent per (tenant, quote)."""
         ...
 
@@ -97,8 +98,10 @@ class RigOrders:
 
     async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
                                   price: dict[str, Any], ship: dict[str, Any] | None = None,
-                                  env: dict[str, str] | None = None) -> dict[str, Any]:
+                                  env: dict[str, str] | None = None, quantity: int = 1) -> dict[str, Any]:
         sandbox_orders(env)
+        if type(quantity) is not int or not 1 <= quantity <= 100:
+            raise DeliveryError("order_rejected")
         try:
             source, offer, live = located["source"], located["offer"], located["live"]
             product_id, source_id = str(located["product_sku"]), str(source["id"])
@@ -116,7 +119,7 @@ class RigOrders:
                     "vendor_name": str(source.get("vendor_name") or "").strip(),
                     "order_email": str(source.get("order_email") or "").strip(),
                     "item_sku": str(offer.get("sku") or ""), "item_url": str(offer.get("url") or ""),
-                    "quantity": 1, "unit_cost": _amount(live.get("price")),
+                    "quantity": quantity, "unit_cost": _amount(live.get("price")),
                     "currency": _currency(live.get("currency")), "ship_to": address,
                     "neutral_slip": neutral, "instructions": NEUTRAL_SLIP if neutral else "", "sent": None}
         try:

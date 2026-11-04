@@ -43,8 +43,8 @@ UMD and the 3D frontend assets. It leaves the 3D engine and forge unchanged.
 
 For deployment, pass the stack's existing `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
 `SMTP_PASSWORD` and `SMTP_FROM` to the Rig service. SMTP uses verified STARTTLS.
-A new email-only store uses that transport; existing webhook/Odoo configuration
-continues to select those senders. Delivery errors use the existing retry state
+A new email-only store uses that transport; explicit webhook configuration
+continues to select that sender. Delivery errors use the existing retry state
 and safe error codes. An SMTP acknowledgement lost after acceptance can cause a
 repeat email; retries preserve the same Message-ID and quote reference.
 

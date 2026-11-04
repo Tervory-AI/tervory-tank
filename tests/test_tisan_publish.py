@@ -56,6 +56,9 @@ def build(root, *, member=None, passed=True):
             archive.addfile(member, io.BytesIO(b'x' * member.size))
     manifest = {'ok': passed, 'slug': 'site', 'build': 1, 'files': sorted(contents),
                 'checks': [{'name': 'npm test', 'ok': passed}], 'detail': ''}
+    manifest['checks'].append({'name': 'radix.repo', 'ok': passed, 'tenant_id': TENANT,
+        'scan_id': str(uuid.uuid4()), 'archive_sha256': hashlib.sha256((folder / '1.tar.gz').read_bytes()).hexdigest(),
+        'critical': 0, 'scan_complete': True})
     (folder / '1.json').write_text(json.dumps(manifest))
     return contents, manifest
 

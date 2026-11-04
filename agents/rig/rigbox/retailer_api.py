@@ -15,7 +15,7 @@ from rigbox.service import RigError
 from rigbox.quotes.senders import DeliveryError
 
 router = APIRouter()
-OPERATIONS = {"confirm-store-payment", "panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
+OPERATIONS = {"commerce-connect", "commerce-orders", "store-delivery", "confirm-store-payment", "panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
 
 
 @router.post("/internal/retailer/{operation}")
@@ -43,7 +43,15 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
     service = request.app.state.rig
     retailer = Retailer(service)
     try:
-        if operation == "watch-tenants":
+        if operation in {"commerce-connect", "commerce-orders", "store-delivery"}:
+            from rigbox.cart_api import cart, commerce_operation
+            from rigbox.commerce import CommerceError
+            try:
+                result = await commerce_operation(cart(request), tenant,
+                    {"commerce-connect": "connect", "commerce-orders": "orders"}.get(operation, operation), data)
+            except CommerceError:
+                raise ValueError() from None
+        elif operation == "watch-tenants":
             if tenant != "00000000-0000-0000-0000-000000000001":
                 raise RigError("unauthorized", "Retailer control authentication required.", 403)
             with tenant_scope(None, administrative=True):

@@ -1,0 +1,64 @@
+bringing up nodes...
+bringing up nodes...
+
+...................F................F................................... [ 12%]
+........................................................................ [ 24%]
+........................................................................ [ 36%]
+........................................................................ [ 48%]
+........................................................................ [ 60%]
+........................................................................ [ 72%]
+..................s.s................................................... [ 84%]
+........................................................................ [ 96%]
+..................                                                       [100%]
+=================================== FAILURES ===================================
+___________ test_existing_volumes_are_byte_for_byte_unchanged[ghost] ___________
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+room = 'ghost'
+
+    @pytest.mark.parametrize('room', ROOMS)
+    def test_existing_volumes_are_byte_for_byte_unchanged(room):
+        saved = json.loads((Path(__file__).parent / 'snapshots' / (room + '.json')).read_text())
+        text = (ROOT / 'agents' / room / 'docker-compose.yml').read_text()
+        section = text.split('\nvolumes:\n', 1)[1].split('networks:\n', 1)[0]
+        for kind in ('brain', 'browser'):
+            section = re.sub(r'(?m)^  ' + room + '_' + kind + r'_data:\n(?:    .*\n)*', '', section)
+>       assert section == (saved['volumes'] if saved['volumes'] is not None else '\n')
+E       AssertionError: assert '  agent_ghos...eat_queues:\n' == '  agent_ghos...eat_queues:\n'
+E
+E             agent_ghost_data:
+E         -   ghost_browser_data:
+E             threat_queues:
+
+tests/room_brains/test_rooms.py:91: AssertionError
+_ test_normal_mode_would_put_sealed_services_on_coolifys_network[radix-sealed3] _
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+room = 'radix', sealed = {'agent-radix'}
+
+    @pytest.mark.parametrize("room, sealed", [
+        ("base", {"base-sandbox", "base-browser"}),
+        ("tiger", {"tiger-browser", "tiger-sandbox"}),
+        ("rig", {"rig-sandbox", "rig-browser", "rig-forge"}),
+        # Radix is sealed on the live host today; this keeps it so.
+        ("radix", {"agent-radix"}),
+    ])
+    def test_normal_mode_would_put_sealed_services_on_coolifys_network(room: str, sealed: set[str]) -> None:
+        text = (ROOT / "agents" / room / "docker-compose.yml").read_text(encoding="utf-8")
+        without_marker = "\n".join(line for line in text.splitlines() if line.strip() != RAW_MARKER)
+        found = leaks(without_marker)
+>       assert {item.split()[0] for item in found} == sealed
+E       AssertionError: assert {'agent-radix...adix-sandbox'} == {'agent-radix'}
+E
+E         Extra items in the left set:
+E         'radix-browser-gateway'
+E         'radix-sandbox'
+E         'radix-brain'
+E         'radix-browser'
+E         Use -v to get more diff
+
+tests/test_room_seal.py:112: AssertionError
+=========================== short test summary info ============================
+FAILED tests/room_brains/test_rooms.py::test_existing_volumes_are_byte_for_byte_unchanged[ghost]
+FAILED tests/test_room_seal.py::test_normal_mode_would_put_sealed_services_on_coolifys_network[radix-sealed3]
+2 failed, 590 passed, 2 skipped, 125 warnings in 382.58s (0:06:22)

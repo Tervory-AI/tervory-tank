@@ -182,7 +182,8 @@ export async function session(store, transport = fetch, now = Date.now) {
 async function login(region, signIn, { store, transport, io }) {
   const name = String(io.deviceName?.() ?? 'tervory-cli').replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim().slice(0, 100) || 'tervory-cli';
   const start = await deviceCall(region, 'code', { device_name: name, ...(signIn === 'zitadel' ? { approval: 'zitadel' } : {}) }, transport);
-  if (start.error || typeof start.device_code !== 'string') throw new Error('Login refused by Tank.');
+  if (start.error || typeof start.device_code !== 'string'
+      || (signIn === 'zitadel' && start.identity_provider !== 'zitadel')) throw new Error('Login refused by Tank.');
   // Existing Workspace approval is unchanged; Zitadel URLs must match the fixed ZA origin.
   const url = identityApprovalUrl(start, region);
   io.write(`Approve this device in your browser (${safe(name)}, ${region}):\n  ${url}\nConfirm the page shows code ${start.user_code}.\n`);
@@ -357,7 +358,7 @@ export function receiptLines(receipt) {
 export async function confirmCard(tank, card, io) {
   io.write(`${safe(card.summary)}\n`);
   // Any response except an explicit yes cancels, including EOF.
-  const answer = await io.prompt('Confirm [y/N] ');
+  const answer = io.interactive !== true ? null : await io.prompt('Confirm [y/N] ');
   const action = /^(y|yes)$/i.test(answer?.trim() ?? '') ? 'confirm' : 'cancel';
   return tank.json(`/v1/command/cards/${encodeURIComponent(card.card_id)}`, { action });
 }
@@ -476,7 +477,7 @@ export async function run(argv, { store, transport, io, env = process.env }) {
         || (signIn !== undefined && (region !== 'za' || signIn !== 'zitadel'))) {
       throw new Error('Login accepts only --region us-east or --region za; ZA also accepts --sign-in zitadel.');
     }
-    return login(region, signIn, { store, transport, io });
+    return login(region, signIn ?? (region === 'za' ? 'zitadel' : undefined), { store, transport, io });
   }
   if (flags.region !== undefined || flags['sign-in'] !== undefined) throw new Error('Invalid command option.');
   if (name === 'logout') return logout({ store, transport, io });

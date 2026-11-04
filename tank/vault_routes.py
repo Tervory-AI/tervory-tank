@@ -22,6 +22,7 @@ from tenant_db import activate_tenant
 
 VAULTS = {f'{room}.vault': room for room in ('base', 'tiger', 'rig', 'tisan', 'radix', 'zenas')}
 VAULTS['lab.vault'] = 'market_lab'
+VAULTS['ghost.vault'] = 'ghost'
 LIMIT = 32 * 1024 * 1024
 
 
@@ -48,6 +49,35 @@ def public_url(value) -> str:
 def build_router(tank):
     router = APIRouter(prefix='/v1/vaults')
 
+    @router.post('/rig.vault/commerce/resolve')
+    async def rig_commerce_resolve(request: Request):
+        # The existing private retailer corridor, never a browser response.
+        # Reuse the vault's tenant/name AAD; no second encryption or key store.
+        expected = os.environ.get('RIG_RETAILER_KEY', '')
+        supplied = request.headers.get('x-rig-retailer-key', '')
+        if not expected or not supplied or not hmac.compare_digest(expected.encode(), supplied.encode()):
+            return JSONResponse({'error': {'code': 'unauthorized'}}, status_code=401)
+        data = await body(request)
+        try:
+            owner = uuid.UUID(str(data['tenant_id']))
+            name = clean(data['name'], 100)
+        except (ValueError, KeyError, TypeError):
+            return JSONResponse({'error': {'code': 'invalid'}}, status_code=422)
+        activate_tenant(owner)
+        async with tank.pool().acquire() as conn:
+            enabled = await conn.fetchval("SELECT 1 FROM tank.tenant_squad WHERE tenant_id=$1 AND agent='rig'", owner)
+            encrypted = await conn.fetchval("SELECT sealed FROM tank.vault_items WHERE tenant_id=$1 AND vault='rig.vault' AND kind='secrets' AND name=$2", owner, name) if enabled else None
+        if not encrypted:
+            return JSONResponse({'error': {'code': 'not_found'}}, status_code=404)
+        try:
+            value = open_seal(encrypted, f'plugins:v1:{owner}:rig.vault:secret:{name}')['value']
+            credential = json.loads(value)
+            if not isinstance(credential, dict):
+                raise ValueError()
+        except Exception:
+            return JSONResponse({'error': {'code': 'unavailable'}}, status_code=503)
+        return JSONResponse({'credential': credential}, headers={'Cache-Control': 'no-store'})
+
     async def authorize(request: Request, vault: str, tenant) -> tuple[uuid.UUID, str, str]:
         key = request.headers.get('x-tank-key', '')
         if not key or not tank.TANK_API_KEY or not hmac.compare_digest(key.encode(), tank.TANK_API_KEY.encode()):
@@ -69,9 +99,17 @@ def build_router(tank):
             fail(403, 'This request must stay on its home server.')
         activate_tenant(owner)
         admins = {x.strip() for x in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if x.strip()}
-        async with tank.pool().acquire() as conn:
-            if user not in admins and not await conn.fetchval('SELECT 1 FROM tank.tenant_squad WHERE tenant_id=$1 AND agent=$2', owner, room):
-                fail(403, 'This product is not enabled for your workspace.')
+        if room == 'ghost':
+            # Autumbra has no tenant_squad grant on main. Connect is an explicit
+            # opt-in by this workspace's administrator, never a grant of tools.
+            from command import identity
+            actor = await identity(request)
+            if actor.tenant_id != owner or not (actor.founder or actor.tenant_admin):
+                fail(403, 'A workspace administrator must connect this tool.')
+        else:
+            async with tank.pool().acquire() as conn:
+                if user not in admins and not await conn.fetchval('SELECT 1 FROM tank.tenant_squad WHERE tenant_id=$1 AND agent=$2', owner, room):
+                    fail(403, 'This product is not enabled for your workspace.')
         return owner, room, user
 
     async def body(request: Request) -> dict:
@@ -290,4 +328,6 @@ def build_router(tank):
                 await conn.execute('DELETE FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind=$3 AND name=$4', owner, vault, kind, ident)
         return reply({'ok': True})
 
+    from autumbra_connect import register as register_autumbra_connect
+    register_autumbra_connect(router, tank, authorize, body, save, reply)
     return router

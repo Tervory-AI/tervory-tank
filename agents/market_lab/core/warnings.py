@@ -34,6 +34,8 @@ async def run(
     clock = now or datetime.now(timezone.utc)
     module = load_engine(engine)
     plan = module.warning_plan()
+    pending_patterns = []
+    memory = getattr(ledger, "memory", None)
     async with ledger.conn.transaction():
         await ledger.conn.execute(
             "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", tenant + ":warnings"
@@ -44,7 +46,12 @@ async def run(
                 await store.import_series(ledger, tenant, engine, item, clock)
                 active.add(item["source"] + ":" + item["ref"])
         series = await store.series(ledger, tenant, clock)
+        from core.event_signals import series as event_series
+        from feeds.keys import key_is_set
+        series.update(await event_series(ledger, tenant, plan, series, clock))
         for config in plan["pairs"]:
+            if config.get("key_name") and not key_is_set(config["key_name"]):
+                continue
             upstream = next(
                 (
                     s
@@ -92,10 +99,9 @@ async def run(
                     UUID(tenant),
                     pair_key,
                 )
-                if (
-                    old
-                    and store.decoded(old["summary"]).get("fingerprint") == fingerprint
-                ):
+                previous = store.decoded(old["summary"]) if old else {}
+                changed = previous.get("fingerprint") != fingerprint
+                if not changed:
                     doc_id = str(old["document_id"])
                 else:
                     doc_id = await store.evidence(
@@ -113,6 +119,10 @@ async def run(
                     "href": source_link(doc_id),
                     "fingerprint": fingerprint,
                 }
+                pending_pattern = changed or previous.get("pattern_pending", True)
+                if pending_pattern and memory is not None:
+                    pending_patterns.append((pair_key, config, stats, doc_id))
+                summary["pattern_pending"] = pending_pattern
                 await ledger.conn.execute(
                     """INSERT INTO agent_market_lab.warning_pairs (tenant_id,pair_key,document_id,summary,updated_at)
                     VALUES ($1,$2,$3,$4::jsonb,$5) ON CONFLICT (tenant_id,pair_key) DO UPDATE
@@ -187,7 +197,18 @@ async def run(
                 )
                 # Freeze only the completed, non-overlapping history available
                 # at issuance. Future outcomes never revise this confidence.
-                prediction.update(confidence=stats["hit_rate"], kind=config["id"], feed=config["source"])
+                from core.warning_bridge import call
+                try:
+                    reliability = await call("confidence", {"tenant_id": tenant, "hits": stats["hits"], "total": count})
+                except RuntimeError:
+                    # An optional calculation corridor must not prevent the
+                    # warning itself. Unavailable confidence stays unknown.
+                    reliability = None
+                prediction.update(confidence=reliability["confidence"] if reliability else None,
+                                  kind=config["id"], feed=config["source"])
+                if reliability:
+                    prediction["sources"].append({"confidence_method": "wilson_lower_95",
+                                                  "hits": stats["hits"], "total": count})
                 await ledger.save_prediction(prediction)
                 await ledger.conn.execute(
                     """INSERT INTO agent_market_lab.warnings
@@ -207,6 +228,17 @@ async def run(
                     clock,
                 )
         await resolve(ledger, tenant, series, clock)
+    # Immutable source documents must commit before a separate Hermes request.
+    # Stable memory IDs make concurrent or lost-response retries harmless.
+    for pair_key, config, stats, doc_id in pending_patterns:
+        from core.patterns import remember
+        if await remember(memory, tenant, config, stats, doc_id):
+            await ledger.conn.execute(
+                """UPDATE agent_market_lab.warning_pairs
+                SET summary=jsonb_set(summary,'{pattern_pending}','false'::jsonb)
+                WHERE tenant_id=$1 AND pair_key=$2 AND document_id=$3""",
+                UUID(tenant), pair_key, UUID(doc_id),
+            )
     return await listing(ledger, tenant)
 
 
@@ -342,7 +374,8 @@ async def listing(ledger: PostgresLedger, tenant: str) -> dict:
                 "href": href,
             },
             {
-                "text": f"{data['upstream_name']} {direction} {change:.1f}% in {period}."
+                "text": current["point"]["event_title"] if data["config"].get("trigger") == "event"
+                else f"{data['upstream_name']} {direction} {change:.1f}% in {period}."
                 if change is not None
                 else f"{data['upstream_name']} changed in {period}.",
                 "href": source_link(str(row["document_id"]), "upstream"),

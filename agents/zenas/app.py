@@ -57,6 +57,7 @@ from agents.zenas.core.service import (  # noqa: E402
     extract_case_facts,
     judgment_from_pool_row,
     ladder_metrics,
+    list_playbooks,
     list_matters,
     mark_stale,
     match_matters,
@@ -123,6 +124,10 @@ class _TankModel:
     async def complete(self, messages: list[dict[str, str]], *, task_type: str, provider: str) -> dict[str, Any]:
         del provider
         data = await self.tank.route(self.tenant_id, task_type, messages)
+        from agents.zenas.core.answer_failures import route_failure
+        failed = route_failure(data)
+        if failed is not None:
+            return failed
         return {
             "content": str(data.get("content") or ""),
             "cost_usd": float(data.get("cost_usd") or 0),
@@ -866,6 +871,16 @@ async def post_playbook(body: PlaybookIn) -> dict[str, Any]:
         template=body.template,
         positions=body.positions,
     )
+    _fail(result)
+    return result
+
+
+@app.get("/playbooks")
+async def get_playbooks(tenant_id: UUID, home_region: str) -> dict[str, Any]:
+    store = _store()
+    await store.apply_schema()
+    result = await list_playbooks(store, tenant_id=str(tenant_id), home_region=home_region,
+                                  box_region=_box_region())
     _fail(result)
     return result
 

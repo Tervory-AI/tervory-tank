@@ -166,6 +166,33 @@ See [Rig's box runbook](../../agents/rig/BOX.md) for the authenticated question,
 receipt and public-health checks. Stand-in catalogue data only on Boston; live
 ZA shopper data is not part of this pilot.
 
+## Tiger brain provision (TG3, 3 Nov 2026)
+
+Tiger's optional Hermes image reuses `agents/rig/Dockerfile.brain` and its pinned
+upstream build. The shared standby entrypoint exposes Tiger health only; it has
+no task API. No caller or escalation is added: `tiger.price_extract`,
+`tiger.price_structured` and `tiger.price_ocr` are code skills.
+
+Both `tiger-brain` (2 GiB limit) and `tiger-sandbox` (512 MiB limit) carry the
+Compose `brain` profile. Normal deployments exclude both. The separate
+`TIGER_BRAIN_ENABLED` setting defaults to false and remains reserved for a future
+caller. The brain joins only the Tiger corridor and its own sandbox network;
+the executor joins only that internal sandbox network, with a read-only root,
+tmpfs workspaces, dropped capabilities and no volume or Tank key. Only brain and
+executor receive `SANDBOX_KEY_TIGER`; use the existing `coolify-ops` room-setup
+with that extra name, without exposing its value.
+
+**Capacity update, 3 Nov 2026:** the dated Boston `ops/box-memory.sh` snapshot is
+recorded in the Zenas section below, with raw per-container usage and limits.
+Keep Tiger's profile disabled until the founder enables it. The snapshot and
+requested limits are not capacity approval.
+
+After an authorized normal deploy, run `bash ops/seal-check.sh` on Boston and
+require `agent-tiger ... sealed` with no Tiger brain/sandbox running. Recheck the
+founder's existing Tiger /chats tools. If the optional profile is later enabled,
+both services must be present and pass the exact-network checks; use
+`agents/base/check_brain_isolation.py` with Tiger's five container names.
+
 ## Regions
 
 South African clients and South African law stay in South Africa. United States clients stay in the United States. Same code, deployed twice. The region is `TANK_REGION`: `za` or `us-east`. It is not a fork.
@@ -177,3 +204,120 @@ Tank is the only public service, at `za.tervory.com`. The corridor `tervory-gw-z
 On `/v1/route`, `/v1/tasks` and `/v1/skala/*/run`, a missing home is this server's `TANK_REGION`, so the live Workspace and agent rooms keep working. An empty, unknown, or other-region home is refused and nothing is stored. `/v1/zenas/*` does not fill a missing home in. The home on that request is a cross-check. The authoritative home is `agent_zenas.tenants.home_region`. The founder sets it once, to `za` or `us-east`, from `/admin/homes`, and that call goes through this proxy to `POST /tenants`. The column is not added here. In `za`, a prompt that still contains a personal identifier is refused for every provider that is not running in South Africa. No such model is active yet. `za-local` is a commented slot in `litellm/config.za.yaml`.
 
 The pool-loader service is not in this file. It is added on the ZA box only, and it uses this stack's database.
+
+## Zenas standby brain, both boxes (3 Nov 2026)
+
+`zenas-brain` and `zenas-sandbox` reuse the pinned Rig Hermes image, shared
+health-only standby and Base WASI sandbox. No task API or caller is added.
+Both services use the `brain` profile; `ZENAS_BRAIN_ENABLED` defaults to false.
+The brain has a 2 GiB / 1 CPU limit, the sandbox 512 MiB / 0.5 CPU: planned
+additional limits of 2.5 GiB and 1.5 CPU per box. Both roots are read-only;
+workspaces are tmpfs, capabilities dropped and privileges/PIDs bounded. Each
+brain has its own regional data volume; the sandbox has no persistent volume,
+Tank key, provider key or bucket. All service URLs resolve inside that box.
+The room's existing bucket and data remain regional.
+
+Tank enables only the owning Zenas room key. Requests require a matching local
+home region; ZA never forwards to Boston. Before model policy or gateway work,
+the existing approved `zenas.scope` rules run in code, including criminal
+refusal; ambiguous/out-of-scope prompts cannot fall back to a model here.
+Only the room's existing approved skills export; candidate submission remains
+Base-only. No model policy or provider is added.
+
+Boston measurement, **3 Nov 2026, 14:20 PST (22:20 UTC)**, run read-only with
+`ops/box-memory.sh` on `ammosync-us-boston`, before this task's test containers:
+
+| Measure | Bytes / count |
+| --- | ---: |
+| Total memory | 33,648,410,624 |
+| Used memory | 10,821,517,312 |
+| Available memory | 22,826,893,312 |
+| All container memory limits | 32,078,036,992 |
+| Running container memory limits | 32,078,036,992 |
+| Containers / running | 64 / 61 |
+| Containers with no memory limit | 29 |
+
+Per-running-container usage and limits are retained in
+[the raw Boston snapshot](../../tests/zenas_brain/evidence/boston-memory.txt).
+Available memory is a snapshot, not an allocation; the plan's limits are not
+measured usage and do not authorize enabling either brain.
+
+**ZA: pending, read after deploy with ops/box-memory.sh**. Planned additional
+limits remain 2.5 GiB / 1.5 CPU; no ZA SSH target or credentials are available to
+builders, and none are requested. Keep both disabled defaults until the founder
+turns the brain on. No larger box is requested.
+
+Both room files use Raw Compose. Existing room volume declarations and mounts
+remain unchanged from main on both boxes. The brain mounts only its own new
+`zenas_brain_data`; it never mounts room data. Any future room-data access must
+use the room's existing tools through Tank.
+After an authorized profile deployment, run `ops/seal-check.sh` on each host and
+require Zenas brain and sandbox sealed. The isolation checker takes three Zenas
+container names; Base/Tiger retain five. Hosted CI and both postdeploy host
+proofs remain separate from local offline verification.
+
+## Remaining squad standby brains (3 Nov 2026)
+
+Each room below is provisioned independently, using the pinned Rig Hermes build,
+`agents/_brain/standby.py` health-only entrypoint and Base's WASI sandbox. No model
+caller, escalation, paid route, approved skill or candidate-submission permission
+is added. Owning keys use Tank's existing policy, paid-work pause, model refusal,
+tenant accounting and receipts. A room value outside the fixed allowlist is
+refused before SQL. These new rooms remain in the existing US-only brain region
+boundary; no ZA deployment or forwarding is introduced.
+
+| Room | Flag (default false) | New optional limits |
+| --- | --- | --- |
+| Market Lab | `MARKET_LAB_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Radix | `RADIX_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Tisan | `TISAN_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Trigger | `TRIGGER_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Autumbra Watch (`ghost`) | `GHOST_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; existing Watch browser unchanged |
+
+All added services carry profile `brain`. A normal Compose deployment starts
+none of them. The flag is reserved for a future caller: enabling a profile or
+setting a flag does not itself add model work. Founder enablement and capacity
+approval remain required. Existing volumes and their mounts are unchanged from
+main `de113044`; each brain mounts only its new brain volume, each new browser
+only its new browser volume, and sandboxes/gateways have no persistent volume.
+Private sandbox and browser networks are per project, internal and disjoint.
+Brain/gateway corridor attachments are the owning room's existing Tank corridor,
+as in Tiger; no other room's corridor or keys are supplied. Public browsing uses
+the existing checked proxy. Vault/login access is not provisioned for new rooms. Radix retains its existing
+internal corridor and restricted egress; this gate grants no broader browser
+network route.
+
+Boston snapshot: **3 Nov 2026 16:35 PST (4 Nov 00:35 UTC)**, read-only
+`ops/box-memory.sh`, before this task's test containers:
+
+| Measurement | Bytes |
+| --- | ---: |
+| Total | 33,648,410,624 |
+| Used | 11,334,434,816 |
+| Available | 22,313,975,808 |
+| All container limits | 32,212,254,720 |
+| Running container limits | 32,212,254,720 |
+
+Planned additional limits for all five profiles together: **21 GiB
+(22,548,578,304 bytes) and 10.5 CPUs**. These are caps, not measured usage; the
+combined memory caps exceed this snapshot's available memory. Do not enable the
+squad together on the basis of this measurement. Keep every new profile off.
+
+65 containers, 62 running; 29 have no memory limit. See the complete per-container
+[snapshot](../../tests/room_brains/evidence/boston-memory.txt). Available memory is
+a snapshot, not an allocation; summed limits and unlimited containers require
+fresh host checks before enabling any profile. No larger box is requested.
+
+This is deployment configuration. Each room compose change redeploys that room;
+Tank changes also redeploy the main stack and its configured ZA counterpart.
+Raw Compose Deployment must be enabled in Coolify for the files carrying its
+marker. Preserve the existing Compose project identity when switching modes so
+unchanged room volumes retain their current identity. No volume migration or
+replacement is part of this work. Hermes also receives Trigger and Watch's owning
+keys and joins their existing corridors, so their optional memory URLs are reachable.
+Watch's brain receives no Coolify, Enforce, edge, SMTP or Undo settings. It mounts
+none of the existing room, browser or threat-queue volumes. Enforce's compose and
+air gap are unchanged; Enforce is excluded from the brain room map. After
+deployment, run `ops/seal-check.sh` and,
+if the optional profile is authorized, the isolation checker with the room's
+container names. Offline fixtures do not replace that host check.

@@ -134,7 +134,7 @@ async def test_upsert_runs_exactly_affected_approved_skills_once(env, tmp_path, 
 
 
 @pytest.mark.asyncio
-async def test_failure_demotes_and_later_passing_model_never_auto_approves(env, tmp_path):
+async def test_failed_swap_keeps_approval_and_newer_passing_swap_releases(env, tmp_path):
     await policy(env)
     pkg = package(tmp_path)
     await seed(env, pkg)
@@ -146,7 +146,7 @@ async def test_failure_demotes_and_later_passing_model_never_auto_approves(env, 
     validated = json.loads(row["models_validated"])
     assert [(v["model"], v["validated"]) for v in validated] == [("astra", False), ("sol", True)]
     assert validated[0]["score"] == 0.2  # Saved "good" fixture outputs were not reused.
-    assert row["state"] == "staging" and row["last_eval_score"] == 1
+    assert row["state"] == "approved" and row["last_eval_score"] == 1
     assert await env.db.fetchval("SELECT count(*) FROM tank.skill_approvals WHERE tenant_id=$1", PLATFORM_TENANT) == 0
     proof = os.environ.get("SKALA_B3_PROOF_DIR")
     if proof:
@@ -172,8 +172,10 @@ async def test_graduation_and_policy_rollback_are_captured(env, tmp_path):
     async with env.db.acquire() as conn:
         async with conn.transaction():
             await env.tank._apply_move(conn, move, before, "founder")
-    assert [(r["old_model"], r["model"]) for r in await jobs(env)] == [("luna", "sol"), ("sol", "luna")]
-    assert await skala_revalidation.drain(env.tank) == 2 and len(env.calls) == 8
+    assert [(r["old_model"], r["model"]) for r in await jobs(env)] == [("luna", "sol")]
+    assert await env.db.fetchval("SELECT model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", TASK) == "luna"
+    assert await skala_revalidation.drain(env.tank) == 1 and len(env.calls) == 4
+    assert await env.db.fetchval("SELECT model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", TASK) == "luna"
 
 
 @pytest.mark.asyncio
@@ -291,7 +293,7 @@ async def test_missing_package_is_failed_without_spending(env, tmp_path):
     env.tank._packages.clear()
     assert await skala_revalidation.drain(env.tank) == 1
     row = await env.db.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", pkg.id, pkg.version)
-    assert row["state"] == "staging" and not json.loads(row["models_validated"])[0]["validated"]
+    assert row["state"] == "approved" and not json.loads(row["models_validated"])[0]["validated"]
     assert env.calls == [] and (await jobs(env))[0]["error"] == "eval_gate_failed"
 
 
@@ -347,7 +349,7 @@ async def test_background_worker_drains_policy_swap_and_stops_before_pool(env, t
             while not (await jobs(env))[0]["completed_at"]:
                 await asyncio.sleep(.01)
         row = await env.db.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", "base.b3", "1.0.0")
-        assert row["state"] == "staging" and float(row["last_eval_score"]) == .2
+        assert row["state"] == "approved" and float(row["last_eval_score"]) == .2
         proof = os.environ.get("SKALA_B3_PROOF_DIR")
         if proof:
             folder = Path(proof)
