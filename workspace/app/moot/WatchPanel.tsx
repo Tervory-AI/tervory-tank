@@ -6,6 +6,7 @@ export type WatchTurn = { role: string; text: string };
 
 export type WatchRecord = {
   matchId: string;
+  verificationStatus?: "unverified";
   published: boolean;
   title: string;
   fairnessReading: string;
@@ -21,6 +22,7 @@ export function WatchPanel({ row }: { row: WatchRecord }) {
   return (
     <main className="moot-watch" aria-label="Moot watch">
       <h1>{row.title}</h1>
+      <p>unverified</p>
       <p>Public watch page (text edition). Nothing spoken here — that is later work.</p>
 
       <section aria-label="Transcript">
