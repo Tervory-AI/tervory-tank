@@ -255,17 +255,13 @@ empty sandbox; macOS allows only their selected executable targets and verified 
 directories remain unavailable. Secret paths inside runtimes are hidden.
 `$HOME`, `~/.config`, `~/.ssh` and keychain directories are never mounted. Other
 host folders remain unavailable. Use a leading executable, rather than hiding
-an external runtime behind a shell wrapper or an environment assignment. There is no
-unsandboxed fallback. If Bubblewrap is unavailable or cannot create the sandbox,
-commands are refused. macOS probes its Seatbelt profile before executing a
-command and refuses a missing executable or invalid profile. Its temporary files
+an external runtime behind a shell wrapper or an environment assignment. When Bubblewrap or Seatbelt is absent, approved commands run with your user permissions and the same restricted environment, timeout and output cap. Windows uses cmd.exe with AutoRun disabled. This host fallback can access files and networking permitted to your account; approval is the boundary. An installed sandbox with an invalid profile still refuses execution. macOS probes its Seatbelt profile before executing a command. Its temporary files
 stay inside the selected folder; system libraries and explicitly selected
 runtimes are read-only. Secret paths, home configuration, SSH and keychain/keyring paths
 remain inaccessible and networking is denied. The CLI kills the command's process
 group when it exits, including background children. A child calling `setsid()`
 can still escape that process-group cleanup on macOS and remain alive inside
-the sandbox; Seatbelt does not provide a die-with-parent guarantee. Windows
-commands remain refused.
+the sandbox; Seatbelt does not provide a die-with-parent guarantee. Windows commands use the same Run approval. Timeout and cancellation terminate the Windows process tree with taskkill /T /F.
 
 The unchanged Seatbelt base is from [OpenAI Codex, commit
 6b2a2757de696c2506ee460c49c66a8e2bed65e0](https://github.com/openai/codex/blob/6b2a2757de696c2506ee460c49c66a8e2bed65e0/codex-rs/sandboxing/src/seatbelt_base_policy.sbpl),
@@ -322,12 +318,7 @@ HTTPS distribution remains checksum-only until signed files are published.
 
 `cli.yml` runs `npm test` on Linux, macOS and Windows. Windows also builds both
 native archives twice and runs the x64 launcher. POSIX installer and POSIX
-sandbox-success cases have explicit platform skips on Windows; command refusal,
-login, ZA routing, file edits, undo, cards and signature checks run natively.
-Windows commands are refused because no Windows filesystem/network confinement
-backend is implemented here. A Job Object alone would limit processes without
-providing Bubblewrap's read/write and network boundary. There is no insecure
-fallback; file tools, edits, undo and remote Tervory cards remain available.
+sandbox-success cases have explicit platform skips on Windows; approved command execution, denial, output limits, timeout, login, ZA routing, file edits, undo, cards and signature checks run natively. Windows approved commands use the host shell; Linux/macOS retain their sandbox when installed.
 
 Offline verification uses a fake OIDC server and fake Tank. The Python identity
 suite also verifies real signed JWTs against fake discovery/JWKS and checks

@@ -1,3 +1,7 @@
+## 0.6.0
+
+Approved commands run on Windows and on hosts without Bubblewrap or Seatbelt, with a restricted environment, 120-second timeout and 64 KB output bound.
+
 # Changelog
 
 ## 0.6.0 — 2026-11-04
