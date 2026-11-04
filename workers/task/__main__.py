@@ -55,8 +55,11 @@ def _serve_proxy(costs: list[float], ledger_ids: list[str]) -> None:
     def sync_send(url: str, payload: dict[str, object], tank_key: str) -> dict[str, object]:
         with httpx.Client(timeout=120, follow_redirects=False) as client:
             response = client.post(url, json=payload, headers={"X-Tank-Key": tank_key})
-        response.raise_for_status()
-        data = response.json()
+            response.raise_for_status()
+            data = response.json()
+            if 'paid_run_id' in data:
+                from workers.paid_transport import result
+                data = result(client, url, tank_key, str(payload['tenant_id']), data)
         costs.append(float(data.get("cost_usd") or 0))
         ledger = data.get("ledger_id")
         if isinstance(ledger, str) and ledger:
