@@ -749,6 +749,7 @@ class TaskCreate(BaseModel):
 
 
 class Feedback(BaseModel):
+    verdict: Literal["useful", "not_useful", "wrong"] | None = None
     tenant_id: uuid.UUID
     feedback: Literal["accepted", "rejected"]
     note: str | None = Field(default=None, max_length=1000)
@@ -952,6 +953,7 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
         if problem:
             raise HTTPException(409, problem)
     await __import__("routing_data").validate_fallbacks(__import__("sys").modules[__name__], body.model, body.fallbacks)
+    await __import__("roster_validation").before_policy_change(__import__("sys").modules[__name__])
     async with pool().acquire() as conn:
         async with conn.transaction():
             await conn.execute(
@@ -2085,6 +2087,7 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
 
 async def _move_task(task_type: str, *, by: str = "tank", automatic: bool = True) -> graduate.Move | None:
     """Promote a proven candidate, or roll back a promotion that slipped in its first 7 days."""
+    await __import__("roster_validation").before_policy_change(__import__("sys").modules[__name__])
     async with pool().acquire() as conn:
         async with conn.transaction():
             row = await conn.fetchrow(_POLICY_MOVE + " FOR UPDATE", task_type)
@@ -2686,7 +2689,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if caller:
         body = body.model_copy(update={"agent": caller})
-    foreign = home_region_refusal(call_home(body.home_region, box_region()), box_region())
+    foreign = home_region_refusal(await __import__("tenant_regions").resolve_home(__import__("sys").modules[__name__], body.tenant_id, body.home_region), box_region())
     if foreign:
         raise HTTPException(403, foreign)
     if "#moa." in body.task_type:
@@ -2797,6 +2800,7 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
         raise HTTPException(422, "A batch has one tenant and one task type")
     if "#moa." in task or override_allowed(task):
         raise HTTPException(422, "This task requires the foreground route")
+    await __import__("tenant_regions").check_batch_home(__import__("sys").modules[__name__], body.requests)
     fingerprint = hashlib.sha256(json.dumps(body.model_dump(mode="json", exclude={"id"}), sort_keys=True).encode()).hexdigest()
     async with pool().acquire() as conn:
         existing = await conn.fetchrow("SELECT id,request_hash FROM tank.batches WHERE id=$1 AND tenant_id=$2", body.id, tenant)
@@ -3115,6 +3119,10 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
         await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1", task_id)
     try:
         res = await run_route(req, task_id=task_id)
+        if isinstance(res, priority_queue.QueuedResponse):
+            await __import__("workspace_board").queued_task(
+                __import__("sys").modules[__name__], task_id, req.tenant_id, res)
+            return
         async with pool().acquire() as conn:
             await conn.execute(
                 "UPDATE tank.tasks SET status='done', result=$2, ledger_id=$3, finished_at=now() WHERE id=$1",
@@ -3138,7 +3146,7 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
 @tenant_path("body")
 async def create_task(body: TaskCreate) -> dict[str, Any]:
     box = box_region()
-    home = call_home(body.home_region, box)
+    home = await __import__("tenant_regions").resolve_home(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
@@ -3513,7 +3521,7 @@ async def run_one_skill(
     caller: str | None = Depends(require_key),
 ) -> dict[str, Any]:
     box = box_region()
-    home = call_home(body.home_region, box)
+    home = await __import__("tenant_regions").resolve_home(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
@@ -3871,15 +3879,17 @@ async def zenas_proxy(path: str, request: Request) -> Response:
 async def ledger_feedback(ledger_id: uuid.UUID, body: Feedback) -> dict[str, Any]:
     """A person's verdict on one answer. The tenant_id in the body must match the row,
     so one tenant can never rate — or even discover — another tenant's calls."""
+    if body.verdict is not None and body.feedback != ("accepted" if body.verdict == "useful" else "rejected"):
+        raise HTTPException(422, "Feedback and verdict do not agree.")
     async with pool().acquire() as conn:
         updated = await conn.fetchval(
             """
             UPDATE tank.ledger
-            SET feedback=$3, feedback_note=$4, feedback_at=now(), feedback_by=$5
+            SET feedback=$3, feedback_note=$4, feedback_at=now(), feedback_by=$5, feedback_kind=$6
             WHERE id=$1 AND tenant_id=$2 AND outcome='delivered'
             RETURNING id
             """,
-            ledger_id, body.tenant_id, body.feedback, body.note, body.by,
+            ledger_id, body.tenant_id, body.feedback, body.note, body.by, body.verdict,
         )
     if updated is None:
         raise HTTPException(status_code=404, detail="no delivered call with that id for this tenant")
@@ -3890,11 +3900,11 @@ async def ledger_feedback(ledger_id: uuid.UUID, body: Feedback) -> dict[str, Any
             INSERT INTO tank.evals (task_type, input, expected, tolerance, source, tenant_id, ledger_id, verdict, note)
             SELECT t.task_type, t.messages, jsonb_build_object('text', t.content), 'semantic', 'tester_feedback',
                    t.tenant_id, t.ledger_id, $2, $3
-            FROM tank.transcripts t WHERE t.ledger_id = $1
+            FROM tank.transcripts t WHERE t.ledger_id = $1 AND t.tenant_id = $4
             ON CONFLICT (ledger_id) WHERE ledger_id IS NOT NULL
             DO UPDATE SET verdict = EXCLUDED.verdict, note = EXCLUDED.note
             """,
-            ledger_id, body.feedback, body.note,
+            ledger_id, body.feedback, body.note, body.tenant_id,
         )
     async with pool().acquire() as conn:
         async with conn.transaction():

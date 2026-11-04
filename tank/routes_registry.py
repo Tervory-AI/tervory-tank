@@ -55,6 +55,9 @@ ROUTES = (
     ('late', 'mcp_client_oauth', 'router', None, True),
     ('late', 'memory_routes', 'router', None, True),
     ('late', 'skala_revalidation', 'install', ('app', 'tank'), False),
+    ('early', 'tenant_regions', 'build_router', ('tank',), True),
+    ('early', 'workspace_board', 'build_router', ('tank',), True),
+    ('early', 'morning_report', 'build_router', ('tank',), True),
 )
 
 def register_routes(tank: Any, phase: str) -> None:
@@ -78,6 +81,7 @@ class ProductHook:
 PRODUCT_HOOKS = (
     ProductHook("_bot_task", "trigger_bot", "refresh_loop"),
     ProductHook("_marketing_task", "trigger_publisher", "publish_loop"),
+    ProductHook("_morning_report_task", "morning_report", "loop"),
 )
 
 

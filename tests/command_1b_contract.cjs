@@ -1,3 +1,4 @@
+const legacyDirectory = require('./tenant_directory_fixture.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -24,7 +25,7 @@ mock('workspace/lib/tenant.ts', {activeTenant:async()=>currentIdentity});
 mock('workspace/lib/admin.ts', {isFounder:()=>founder});
 process.env.TANK_API_KEY = 'dummy-command-key';
 process.env.TANK_URL = 'http://same-box.invalid';
-global.fetch = async (url, init) => { upstreamCalls.push({url:String(url),init}); if(String(url).endsWith('/v1/models')) return Response.json([{name:'test-model',provider_model:'provider/test-model',input_usd_per_m:.1,output_usd_per_m:.5}]); return upstream(url,init); };
+global.fetch = legacyDirectory(async (url, init) => { upstreamCalls.push({url:String(url),init}); if(String(url).endsWith('/v1/models')) return Response.json([{name:'test-model',provider_model:'provider/test-model',input_usd_per_m:.1,output_usd_per_m:.5}]); return upstream(url,init); });
 const route = require('../workspace/app/chats/api/[...path]/route.ts');
 const request = (target, method='GET', body, origin='https://workspace.invalid') => route[method](new Request(`https://workspace.invalid/chats/api/${target}`, {method,headers:{origin,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}),{params:Promise.resolve({path:target.split('?')[0].split('/')})});
 const encoder = new TextEncoder();

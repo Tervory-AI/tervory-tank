@@ -84,8 +84,8 @@ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
                     """INSERT INTO tank.ledger
                     (tenant_id,region,agent,skill,task_type,rung,model,priority,tokens_in,tokens_out,
                      cost_usd,latency_ms,cache_hit,outcome,error,
-                     routellm_model,routellm_score,routellm_threshold,routellm_weak_model,routellm_config,routellm_status)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,'standard',$8,$9,$10,$11,false,$12,$13,$14,$15,$16,$17,$18,$19)""",
+                     routellm_model,routellm_score,routellm_threshold,routellm_weak_model,routellm_config,routellm_status,revalidation_id)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,'standard',$8,$9,$10,$11,false,$12,$13,$14,$15,$16,$17,$18,$19,$20)""",
                     PLATFORM_TENANT, tank.box_region(), pkg.agent, pkg.ref + "#preview",
                     job["task_type"], 3 if tank.graduate.is_skill(target) else 1, target,
                     receipt.get("tokens_in", 0), receipt.get("tokens_out", 0), cost,
@@ -96,6 +96,7 @@ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
                     served_decision["weak_model"] if served_decision else None,
                     served_decision["config"] if served_decision else None,
                     "served" if served_decision else None,
+                    job["id"],
                 )
     ctx._model = model
     return ctx
@@ -114,6 +115,11 @@ async def record(tank: Any, result: dict, by: str | None = None) -> dict:
         "score": result["score"], "passed": result["passed"], "total": result["total"],
         "validated": gate, "validated_at": datetime.now(timezone.utc).isoformat(),
     }
+    captured = job["policy"]
+    captured = json.loads(captured) if isinstance(captured, str) else captured
+    roster = captured.get("_roster_fingerprint")
+    if roster:
+        validation["roster_fingerprint"] = roster
     async with tank.pool().acquire() as conn:
         async with conn.transaction():
             await tank.skala.lock_approvals(conn)
@@ -145,10 +151,18 @@ async def record(tank: Any, result: dict, by: str | None = None) -> dict:
                 "UPDATE tank.skill_revalidations SET completed_at=now(),eval_id=$3,error=$4 WHERE id=$1 AND tenant_id=$2",
                 job["id"], PLATFORM_TENANT, eval_id, None if gate else "eval_gate_failed",
             )
-            await conn.execute(
-                "SELECT tank.finish_policy_swap($1,$2,$3)",
-                job["task_type"], job["policy_tenant_id"], job.get("swap_id"),
-            )
+            pending_roster = await conn.fetchval(
+                """SELECT EXISTS(SELECT 1 FROM tank.skill_revalidations
+                WHERE tenant_id=$1 AND completed_at IS NULL AND policy ? '_roster_fingerprint')""",
+                PLATFORM_TENANT)
+            observed_roster = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM tank.roster_observations WHERE tenant_id=$1 AND region=$2)",
+                PLATFORM_TENANT, tank.box_region())
+            if not pending_roster and not observed_roster:
+                await conn.execute(
+                    "SELECT tank.finish_policy_swap($1,$2,$3)",
+                    job["task_type"], job["policy_tenant_id"], job.get("swap_id"),
+                )
     result.update(state=new_state, gate="passed" if gate else "failed", model=job["model"])
     return result
 
@@ -184,7 +198,12 @@ async def drain(tank: Any, limit: int = 20) -> int:
                 token = ACTIVE.set(job)
                 try:
                     pkg = tank.get_package(job["skill_id"], job["version"])
-                    if pkg.task_type != job["task_type"]:
+                    captured = job["policy"]
+                    captured = json.loads(captured) if isinstance(captured, str) else captured
+                    code_only = captured.get("_roster_code") and pkg.task_type is None
+                    if not job["model"]:
+                        raise ValueError("No serving policy for this approval")
+                    if not code_only and pkg.task_type != job["task_type"]:
                         raise ValueError("Package task type changed")
                     # The exact handler used by /v1/skala/{id}/{version}/evals.
                     await tank.run_skill_evals(pkg.id, pkg.version)
@@ -194,6 +213,29 @@ async def drain(tank: Any, limit: int = 20) -> int:
                 finally:
                     ACTIVE.reset(token)
                 count += 1
+            # A target eval may finish before another skill's roster eval.
+            # Keep its completed receipt and re-read live membership before
+            # releasing a held proposal; never re-run a completed paid eval.
+            held_exists = await lock.fetchval("SELECT EXISTS(SELECT 1 FROM tank.policy WHERE held_swap_id IS NOT NULL)")
+            if not held_exists:
+                return count
+            try:
+                await __import__("roster_validation").before_policy_change(tank)
+            except Exception as exc:
+                log.warning("Skala policy release deferred: %s", type(exc).__name__)
+                return count
+            async with lock.transaction():
+                await tank.skala.lock_approvals(lock)
+                pending = await lock.fetchval(
+                    """SELECT EXISTS(SELECT 1 FROM tank.skill_revalidations
+                    WHERE tenant_id=$1 AND completed_at IS NULL AND policy ? '_roster_fingerprint')""",
+                    PLATFORM_TENANT)
+                if not pending:
+                    held = await lock.fetch(
+                        "SELECT task_type,tenant_id,held_swap_id FROM tank.policy WHERE held_swap_id IS NOT NULL ORDER BY task_type,tenant_id")
+                    for proposal in held:
+                        await lock.execute("SELECT tank.finish_policy_swap($1,$2,$3)",
+                            proposal["task_type"], proposal["tenant_id"], proposal["held_swap_id"])
         finally:
             await lock.execute("SELECT pg_advisory_unlock($1)", WORKER_LOCK)
     return count
@@ -203,7 +245,14 @@ def install(app: Any, tank: Any) -> None:
     task = None
 
     async def work():
+        next_roster = 0.0
         while True:
+            if time.monotonic() >= next_roster:
+                next_roster = time.monotonic() + 60
+                try:
+                    await __import__("roster_validation").observe(tank)
+                except Exception as exc:
+                    log.warning("Skala roster observation: %s", type(exc).__name__)
             try:
                 await drain(tank)
             except Exception:

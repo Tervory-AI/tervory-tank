@@ -1,3 +1,4 @@
+const legacyDirectory = require('./tenant_directory_fixture.cjs');
 // Offline response-contract checks against the actual Workspace server client.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -72,7 +73,7 @@ const {commandTools} = require('../workspace/lib/tank.ts');
 const identity = {tenantId: 'tenant-owned', userId: 'user-owned'};
 let payload;
 let redirect = false;
-global.fetch = async (url, init) => {
+global.fetch = legacyDirectory(async (url, init) => {
   assert.equal(String(url), 'http://tank.invalid/v1/command/tools');
   assert.equal(init.headers.get('x-tervory-tenant'), identity.tenantId);
   assert.equal(init.headers.get('x-tervory-user'), identity.userId);
@@ -84,7 +85,7 @@ global.fetch = async (url, init) => {
   assert.equal(init.headers.get('x-tank-key'), 'offline-test-placeholder');
   if (redirect) return new Response(null, {status: 302, headers: {location: 'https://outside.invalid'}});
   return Response.json(payload);
-};
+});
 
 (async () => {
   const {stdout} = await catalogue();

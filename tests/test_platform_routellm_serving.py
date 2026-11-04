@@ -189,7 +189,7 @@ async def test_revalidation_resolves_target_and_records_concrete_model(monkeypat
     tank._llm = llm
     monkeypatch.setattr(routing, 'score', lambda _prompt: .2)
     context = SimpleNamespace(calls=0, cost_usd=0)
-    job = {'policy': row, 'model': row['model'], 'task_type': 'placeholder.task', 'policy_tenant_id': TENANT}
+    job = {'id': uuid.uuid4(), 'policy': row, 'model': row['model'], 'task_type': 'placeholder.task', 'policy_tenant_id': TENANT}
     token = revalidation.ACTIVE.set(job)
     try:
         result = revalidation.eval_context(tank, SimpleNamespace(agent='placeholder', ref='placeholder.skill@1.0.0'), context)
@@ -199,7 +199,8 @@ async def test_revalidation_resolves_target_and_records_concrete_model(monkeypat
     assert output['content'] == 'placeholder-result' and calls[0][0] == 'placeholder-weak'
     sql, args = statements[-1]
     assert 'routellm_status' in sql and args[6] == 'placeholder-weak'
-    assert args[-1] == 'served' and args[-5] == .2
+    assert args[18] == 'served' and args[14] == .2
+    assert 'revalidation_id' in sql and args[19] == job['id']
 
 
 @pytest.mark.asyncio

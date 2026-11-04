@@ -40,7 +40,8 @@ async def test_identity_roles_and_region(runtime, monkeypatch):
 
     @asynccontextmanager
     async def acquire():
-        yield SimpleNamespace(fetch=AsyncMock(return_value=[{'agent': 'tiger'}]))
+        yield SimpleNamespace(fetch=AsyncMock(return_value=[{'agent': 'tiger'}]),
+                              fetchval=AsyncMock(return_value=None))
 
     monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=acquire))
     headers = {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-tenant': str(TENANT),

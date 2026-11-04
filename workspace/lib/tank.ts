@@ -214,7 +214,7 @@ export async function personalCommandRequest(request: Request, path: string[],
 
 /** Founder memory inspection; identity comes from the server's goldIdentity check. */
 export function memoryRecord(identity: { tenantId: string; userId: string; role: string }, id: string): Promise<Response> {
-  return fetch(new URL(`/v1/memory/records/${encodeURIComponent(id)}`, TANK_URL), {
+  return tenantFetch(identity.tenantId, new URL(`/v1/memory/records/${encodeURIComponent(id)}`, TANK_URL), {
     method: "GET", cache: "no-store", redirect: "error",
     headers: {
       "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId,
@@ -231,7 +231,7 @@ export function rigPriceHistory(identity: { tenantId: string; userId: string }, 
     if (value !== null) url.searchParams.set(key, value);
   }
   if (!url.searchParams.has("tenant_id")) url.searchParams.set("tenant_id", identity.tenantId);
-  return fetch(url, { cache: "no-store", redirect: "error", headers: {
+  return tenantFetch(query.get("tenant_id") ?? identity.tenantId, url, { cache: "no-store", redirect: "error", headers: {
     "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId,
   } });
 }
@@ -245,7 +245,7 @@ export async function caseStudyRequest(identity: { tenantId: string; userId: str
     const value = query.get(key);
     if (value !== null) url.searchParams.set(key, value);
   }
-  return fetch(url, {
+  return tenantFetch(query.get("tenant_id") ?? identity.tenantId, url, {
     method: path === "ensure" ? "POST" : "GET", cache: "no-store",
     // Observe ensure redirects as non-retryable HTTP failures; never follow them.
     redirect: path === "ensure" ? "manual" : "error", signal,
@@ -307,7 +307,7 @@ export async function ensureCaseStudyReports(identity: { tenantId: string; userI
 export async function baseProductRequest(tenantId: string, path: string, query: URLSearchParams = new URLSearchParams(), body?: Record<string, unknown>): Promise<Response> {
   const parameters = new URLSearchParams(query);
   parameters.set("tenant_id", tenantId);
-  return fetch(`${TANK_URL}/v1/base-product/${path}${body ? "" : `?${parameters}`}`, {
+  return tenantFetch(tenantId, `${TANK_URL}/v1/base-product/${path}${body ? "" : `?${parameters}`}`, {
     method: body ? "POST" : "GET", cache: "no-store", redirect: "error",
     headers: { "Content-Type": "application/json", "X-Tank-Key": TANK_API_KEY },
     ...(body ? { body: JSON.stringify({ ...body, tenant_id: tenantId }) } : {}),
@@ -319,7 +319,7 @@ export type RigThreeDOperation = "capabilities" | "dashboard" | "submit" | "appr
 export async function rigThreeDRequest(
   tenantId: string, operation: RigThreeDOperation, payload: Record<string, unknown> = {}, actor = "",
 ): Promise<Response> {
-  const response = await fetch(`${TANK_URL}/v1/rig/3d/workspace/${operation}`, {
+  const response = await tenantFetch(tenantId, `${TANK_URL}/v1/rig/3d/workspace/${operation}`, {
     method: "POST", cache: "no-store", redirect: "error",
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY, "x-tervory-user": actor },
     body: JSON.stringify({ tenant_id: tenantId, payload }),
@@ -369,11 +369,9 @@ export type RouteResult = {
 };
 
 async function tank<T>(path: string, init: RequestInit): Promise<T> {
-  const res = await fetch(`${TANK_URL}${path}`, {
-    ...init,
-    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY, ...(init.headers ?? {}) },
-    cache: "no-store",
-  });
+  const headers = new Headers(init.headers);
+  headers.set("content-type", "application/json");
+  const res = await tenantFetch(requestTenant(path, init), new URL(path, TANK_URL), {...init, headers});
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 300)}`);
@@ -483,10 +481,11 @@ export function sendFeedback(
   feedback: "accepted" | "rejected",
   by: string,
   note?: string,
+  verdict?: "useful" | "not_useful" | "wrong",
 ): Promise<{ ok: true }> {
   return tank<{ ok: true }>(`/v1/ledger/${ledgerId}/feedback`, {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenantId, feedback, by, note: note ?? null }),
+    body: JSON.stringify({ tenant_id: tenantId, feedback, by, note: note ?? null, verdict }),
   });
 }
 
@@ -720,7 +719,7 @@ export type TigerAlert = {
 };
 
 async function tigerCall<T>(path: string, init: RequestInit): Promise<T> {
-  const res = await fetch(`${TANK_URL}${path}`, {
+  const res = await tenantFetch(requestTenant(path, init), `${TANK_URL}${path}`, {
     ...init,
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY, ...(init.headers ?? {}) },
     cache: "no-store",
@@ -793,7 +792,7 @@ async function vaultFetch(path: string, userId: string, squad: string, init: Req
   headers.set("x-tervory-user", userId);
   headers.set("x-tervory-squad", squad);
   if (typeof init.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
-  return fetch(`${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
+  return tenantFetch(requestTenant(path, init), `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
 }
 
 async function vaultJson<T>(path: string, userId: string, squad: string, init: RequestInit): Promise<T> {
@@ -1213,7 +1212,7 @@ export async function setCommandSquad(userId: string, tenantId: string, agent: s
 // single deadline covers both fetch and JSON, even if upstream ignores abort.
 export const CLIENT_STARTUP_LIMITS = { requestMs: 1500 };
 async function startupSquadRequest<T>(userId: string, tenantId: string, path: string, init: RequestInit): Promise<T> {
-  return boundedFetch(new URL(`/v1/command/squads${path}`, TANK_URL), {
+  return tenantBoundedFetch(tenantId, new URL(`/v1/command/squads${path}`, TANK_URL), {
     ...init, cache: "no-store",
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY,
       ...commandSquadHeaders(userId, tenantId) },
@@ -1246,12 +1245,16 @@ export class CommandRequestError extends Error {
 }
 export async function commandRequest(identity: { tenantId: string; userId: string; tenantAdmin?: boolean }, path: string, init: RequestInit = {}, options: { passThroughErrors?: boolean } = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
-  const url = new URL(`/v1/command/${path}`, TANK_URL);
+  let target;
+  try { target = await tenantDestination(identity.tenantId); }
+  catch { throw new CommandRequestError(503, "home_unavailable", "This workspace home is unavailable."); }
+  const url = new URL(`/v1/command/${path}`, target.url);
   url.searchParams.delete("tenant_id");
   url.searchParams.delete("user_id");
   const headers = new Headers(init.headers);
   if (!headers.has("content-type")) headers.set("content-type", "application/json");
-  headers.set("x-tank-key", TANK_API_KEY);
+  headers.set("x-tank-key", target.key);
+  headers.set("x-tervory-home-region", target.home ?? (process.env.TANK_REGION === "za" ? "za" : "us-east"));
   headers.set("x-tervory-user", identity.userId);
   headers.set("x-tervory-tenant", identity.tenantId);
   headers.set("x-tervory-admin", identity.userId);
@@ -1309,7 +1312,7 @@ export type AccessConnection = { room: string; site: string; terms: string; revo
 export type AccessQueueItem = { id: string; tenant_id: string; room: string; site: string; reason: string; status: string; created_at: string; live_available: boolean };
 export type AccessPanel = { connections: AccessConnection[]; policies: { site: string; terms: string; rotation_days: number }[]; feeds: { distributor: string; site: string; source: string; fetched_at: string; row_count: number }[]; meta_enabled: boolean };
 export async function accessRequest<T>(actor: AccessIdentity, path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`${TANK_URL}/v1/access/${path}`, {
+  const response = await tenantFetch(actor.tenantId, `${TANK_URL}/v1/access/${path}`, {
     method: body === undefined ? "GET" : "POST", cache: "no-store",
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY,
       "x-tervory-user": actor.userId, "x-tervory-tenant": actor.tenantId },
@@ -1419,7 +1422,7 @@ export async function marketLabRequest<T>(
   tenantId: string, operation: "overview" | "ask" | "document" | "refresh",
   payload: { question?: string; document_id?: string; offset?: number; row?: number; row_kind?: "point" | "event" } = {},
 ): Promise<T> {
-  const response = await fetch(`${TANK_URL}/v1/market-lab/${operation}`, {
+  const response = await tenantFetch(tenantId, `${TANK_URL}/v1/market-lab/${operation}`, {
     method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(operation === "ask" ? 190000 : 35000),
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
     body: JSON.stringify({ ...payload, tenant_id: tenantId }),
@@ -1443,7 +1446,7 @@ export type WarningCalculation = {
   outcome?: "hit" | "miss" | "not_measurable"; score?: number | null; window_start?: string; window_end?: string; original?: string;
 };
 export async function marketWarningRequest<T>(tenantId: string, operation: "list" | "feedback", payload: { warning_id?: string; event_id?: string; useful?: boolean; actor?: string } = {}): Promise<T> {
-  const response = await fetch(`${TANK_URL}/v1/market-lab/warnings/${operation}`, {
+  const response = await tenantFetch(tenantId, `${TANK_URL}/v1/market-lab/warnings/${operation}`, {
     method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(120000),
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
     body: JSON.stringify({ ...payload, tenant_id: tenantId }),
@@ -1463,7 +1466,7 @@ export async function triggerCrmRead(
   if (!TANK_API_KEY) throw new Error("crm_unavailable");
   const url = new URL(`/v1/trigger/crm/${target}`, TANK_URL);
   url.search = parameters.toString();
-  return fetch(url, {
+  return tenantFetch(identity.tenantId, url, {
     method: "GET", cache: "no-store", redirect: "error", signal,
     headers: {
       "accept": "application/json", "x-tank-key": TANK_API_KEY,
@@ -1471,4 +1474,120 @@ export async function triggerCrmRead(
       "x-tervory-tenant": identity.tenantId,
     },
   });
+}
+
+
+/** Private content uses a separately enabled full Workspace key, never a homes key. */
+function contentTank(region: Region): { url: string; key: string } | null {
+  if (region === (process.env.TANK_REGION === "za" ? "za" : "us-east")) return TANK_API_KEY ? { url: TANK_URL, key: TANK_API_KEY } : null;
+  const suffix = region === "za" ? "ZA" : "US";
+  const key = (process.env["TANK_CONTENT_API_KEY_" + suffix] ?? "").trim();
+  const url = (process.env["TANK_URL_" + suffix] ?? "").trim().replace(/\/+$/, "");
+  if (!key || !url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password ? { url, key } : null;
+  } catch { return null; }
+}
+
+/** The US directory receives a tenant UUID, never the content being routed. */
+export async function tenantDestination(tenantId: string, timeoutMs = 10_000): Promise<{ url: string; key: string; home: Region | null }> {
+  const directory = contentTank("us-east");
+  if (!directory) throw new Error("The tenant region directory is not configured.");
+  const response = await boundedFetch(
+    new URL("/v1/tenants/" + encodeURIComponent(tenantId) + "/home", directory.url),
+    { method: "GET", headers: { "x-tank-key": directory.key }, cache: "no-store" }, timeoutMs,
+    async response => ({ status: response.status, body: await response.json().catch(() => null) }),
+  );
+  const body = response.body;
+  const object = body !== null && typeof body === "object" && !Array.isArray(body);
+  if (response.status === 404 && object && Object.hasOwn(body, "detail") &&
+      body.detail !== null && typeof body.detail === "object" && Object.hasOwn(body.detail, "code") &&
+      body.detail.code === "tenant_home_missing") {
+    return { url: TANK_URL, key: TANK_API_KEY, home: null };
+  }
+  if (response.status !== 200 || !object || !Object.hasOwn(body, "tenant_id") ||
+      !Object.hasOwn(body, "home_region") || body.tenant_id !== tenantId ||
+      !["us-east", "za"].includes(body.home_region)) {
+    throw new Error("The tenant home region is unavailable.");
+  }
+  const home = body.home_region as Region;
+  const target = contentTank(home);
+  if (!target) throw new Error("The tenant home region is not connected for content.");
+  return { ...target, home };
+}
+
+export function requestTenant(path: string, init: RequestInit): string | null {
+  const query = new URL(path, TANK_URL).searchParams.get("tenant_id");
+  let bodyTenant: string | null = null;
+  if (typeof init.body === "string") {
+    try {
+      const value = JSON.parse(init.body);
+      bodyTenant = value && typeof value === "object" && !Array.isArray(value) &&
+        Object.hasOwn(value, "tenant_id") && typeof value.tenant_id === "string" ? value.tenant_id : null;
+    } catch { /* No JSON tenant on this request. */ }
+  }
+  if (query && bodyTenant && query !== bodyTenant) throw new Error("Conflicting tenant identities.");
+  return query || bodyTenant;
+}
+
+
+export async function workspaceRequest<T>(identity: {tenantId: string; userId: string},
+                                         path: string, init: RequestInit = {}): Promise<T> {
+  const target = await tenantDestination(identity.tenantId);
+  const headers = new Headers(init.headers);
+  headers.set("content-type", "application/json");
+  headers.set("x-tank-key", target.key);
+  headers.set("x-tervory-user", identity.userId);
+  headers.set("x-tervory-tenant", identity.tenantId);
+  headers.set("x-tervory-home-region", target.home ?? (process.env.TANK_REGION === "za" ? "za" : "us-east"));
+  headers.delete("x-tervory-squad");
+  headers.delete("x-tervory-role");
+  return boundedFetch(new URL("/v1/workspace" + path, target.url),
+    {...init, headers, cache: "no-store"}, 30_000, async response => {
+      if (!response.ok) throw new CommandRequestError(response.status, "request_failed", "This result is unavailable.");
+      return await response.json() as T;
+    });
+}
+
+export async function onboardTenantHome(userId: string, actingTenant: string, tenantId: string, home: Region) {
+  const target = contentTank("us-east");
+  if (!target) throw new Error("The tenant region directory is not configured.");
+  return boundedFetch(new URL("/v1/tenants/" + encodeURIComponent(tenantId) + "/home", target.url),
+    {method: "PUT", cache: "no-store", headers: {"content-type": "application/json",
+      "x-tank-key": target.key, "x-tervory-user": userId, "x-tervory-tenant": actingTenant},
+      body: JSON.stringify({home_region: home})}, 10_000, async response => {
+        if (!response.ok) throw new CommandRequestError(response.status, "onboarding_failed", "The home region was not set.");
+        return await response.json();
+      });
+}
+
+function regionalCall(target: {url: string; key: string; home: Region | null}, raw: URL | string, init: RequestInit) {
+  const source = new URL(String(raw), TANK_URL);
+  if (source.origin !== new URL(TANK_URL).origin) throw new Error("Unknown workspace endpoint.");
+  const url = new URL(source.pathname + source.search, target.url);
+  const headers = new Headers(init.headers);
+  headers.set("x-tank-key", target.key);
+  headers.set("x-tervory-home-region", target.home ?? (process.env.TANK_REGION === "za" ? "za" : "us-east"));
+  return {url, init: {...init, headers, cache: "no-store" as RequestCache, redirect: "manual" as RequestRedirect}};
+}
+
+/** Resolve authority before transporting private content. Never follow a redirect. */
+export async function tenantFetch(tenant: string | null, raw: URL | string, init: RequestInit = {}): Promise<Response> {
+  const target = tenant ? await tenantDestination(tenant) : {url: TANK_URL, key: TANK_API_KEY, home: null};
+  const call = regionalCall(target, raw, init);
+  const response = await fetch(call.url, call.init);
+  if (isRedirect(response)) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new RedirectError(response.status);
+  }
+  return response;
+}
+
+async function tenantBoundedFetch<T>(tenant: string, raw: URL | string, init: RequestInit, timeoutMs: number,
+                                   read: (response: Response) => Promise<T>): Promise<T> {
+  const until = Date.now() + timeoutMs;
+  const target = await tenantDestination(tenant, Math.min(timeoutMs, 10_000));
+  const call = regionalCall(target, raw, init);
+  return boundedFetch(call.url, call.init, Math.max(1, until - Date.now()), read);
 }

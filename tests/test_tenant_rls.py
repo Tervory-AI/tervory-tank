@@ -263,12 +263,13 @@ def test_protected_routing_bodies_remain_unchanged():
     baseline = subprocess.check_output(["git", "show", "87610e4:tank/main.py"], cwd=ROOT, text=True)
     before = {n.name: n for n in ast.parse(baseline).body if isinstance(n, ast.AsyncFunctionDef)}
     after = {n.name: n for n in ast.parse((ROOT / "tank/main.py").read_text()).body if isinstance(n, ast.AsyncFunctionDef)}
-    for name in ("_cache_read", "_cache_write", "_run_task"):
+    for name in ("_cache_read", "_cache_write"):
         assert [ast.dump(n) for n in after[name].body] == [ast.dump(n) for n in before[name].body], name
-    # run_route was changed on purpose after 87610e4 (prompt caching: cache
-    # tokens on the receipt). Its reviewed body is pinned in a copy instead.
-    pinned = ast.parse((ROOT / "tests/tenant_rls/run_route.pinned").read_text()).body[0]
-    assert [ast.dump(n) for n in after["run_route"].body] == [ast.dump(n) for n in pinned.body], "run_route"
+    # Reviewed routing changes and C3's queued-response arm have full-body pins.
+    for name, filename in (("run_route", "run_route"), ("_run_task", "run_task")):
+        pinned = ast.parse((ROOT / ("tests/tenant_rls/" + filename + ".pinned")).read_text()).body[0]
+        assert [ast.dump(n) for n in after[name].body] == [ast.dump(n) for n in pinned.body], name
+
 
 
 @pytest.mark.asyncio

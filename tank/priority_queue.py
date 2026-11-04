@@ -182,6 +182,13 @@ async def _finish(tank, conn, job, result=None, *, error=None, uncertain=False):
     await conn.execute("""UPDATE tank.offpeak_jobs SET status=$3,result=$4::jsonb,error=$5,finished_at=now()
         WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], state,
         json.dumps(result, default=str) if result is not None else None, error)
+    if job.get('task_id'):
+        content = result.get('content') if isinstance(result, dict) else None
+        await conn.execute("""UPDATE tank.tasks SET status=$4,result=$5,error=$6,
+            ledger_id=$3,finished_at=now()
+            WHERE id=$1 AND tenant_id=$2 AND (ledger_id IS NULL OR ledger_id=$3)""",
+            job['task_id'], job['tenant_id'], job['id'], 'failed' if error else 'done',
+            content, error)
     if error:
         await conn.execute("""UPDATE tank.ledger SET outcome=$3,error=$4
             WHERE id=$1 AND tenant_id=$2 AND outcome IN ('queued','sent')""",
