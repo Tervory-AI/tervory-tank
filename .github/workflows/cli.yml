@@ -172,3 +172,47 @@ jobs:
           export PATH="$(brew --prefix gnu-tar)/libexec/gnubin:$(brew --prefix coreutils)/libexec/gnubin:$(brew --prefix openssl@3)/bin:/usr/bin:/bin:$PATH"
           npm test
         working-directory: cli
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - name: Prepare GNU archive tools and consistent Git fixtures
+        run: |
+          mkdir -p "$RUNNER_TEMP/cli-w4-tests"
+          echo "TMPDIR=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
+          echo "TEMP=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
+          echo "TMP=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
+          echo 'C:\Program Files\Git\usr\bin' >> "$GITHUB_PATH"
+          git config --global core.autocrlf false
+          git config --global core.symlinks true
+          # Checkout happened before the Git configuration above; restore LF blobs.
+          git checkout-index --force --all
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: cli
+      - name: Full CLI suite, including Windows command refusal
+        run: npm test
+        working-directory: cli
+      - name: Build Windows archives twice and compare bytes
+        run: |
+          node cli/scripts/build-release.mjs --platforms win32-x64-msvc,win32-arm64-msvc --out "$RUNNER_TEMP/cli-a"
+          node cli/scripts/build-release.mjs --platforms win32-x64-msvc,win32-arm64-msvc --out "$RUNNER_TEMP/cli-b"
+          diff -r "$RUNNER_TEMP/cli-a" "$RUNNER_TEMP/cli-b"
+      - name: Run the built Windows x64 launcher
+        shell: pwsh
+        run: |
+          $version = node -p 'require("./cli/package.json").version'
+          & "$env:SystemRoot/System32/tar.exe" -xzf "$env:RUNNER_TEMP/cli-a/releases/$version/tervory-cli-$version-win32-x64-msvc.tar.gz" -C "$env:RUNNER_TEMP"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item "$env:RUNNER_TEMP/tervory-cli-$version" "$env:RUNNER_TEMP/$version"
+          $env:TERVORY_NO_UPDATE_CHECK = '1'
+          & "$env:RUNNER_TEMP/$version/tervory.cmd" version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

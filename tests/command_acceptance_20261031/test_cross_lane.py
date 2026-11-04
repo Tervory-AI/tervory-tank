@@ -10,6 +10,7 @@ import pytest
 
 from test_command import api, command_pool, runtime, TENANT, OTHER  # noqa: F401
 from test_command_streaming import streaming  # noqa: F401
+from test_identity_za import provider as oidc_provider  # noqa: F401
 
 
 WORKER = {'x-tank-key': 'dummy-worker-key'}
@@ -185,11 +186,12 @@ async def device_login_edge(b, region, za_key=None):
         ledger = await conn.fetchrow("SELECT * FROM tank.ledger WHERE tenant_id=$1 ORDER BY ts DESC LIMIT 1", TENANT)
         state = json.loads(await conn.fetchval("SELECT state FROM tank.command_threads WHERE thread_id=$1", thread))
     # One org-scoped credential for the approving user, used, rotated, then revoked.
-    assert (token['region'], token['user_id'], token['device_name']) == (region, 'offline-client', f'acceptance-{region}')
+    expected_user = 'zitadel:20001' if region == 'za' else 'offline-client'
+    assert (token['region'], token['user_id'], token['device_name']) == (region, expected_user, f'acceptance-{region}')
     assert token['last_used_at'] is not None and token['revoked_at'] is not None
     assert token['expires_at'] is not None and token['refresh_hash'] is not None
     assert (auth['status'], auth['token_id'], auth['tenant_id']) == ('consumed', token['token_id'], TENANT)
-    assert owner == 'offline-client'  # identity came from the credential row, not headers
+    assert owner == expected_user  # identity came from the credential row, not headers
     assert ledger['region'] == region and ledger['cost_usd'] is not None
     receipt = next(r for receipts in state['receipts'].values() for r in receipts) if isinstance(state['receipts'], dict) \
         else state['receipts'][0]
@@ -210,17 +212,18 @@ async def test_cli_device_login_through_workspace_with_automated_approval(stream
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
                     reason='Requires assembled CLI/Workspace and local-only client dependencies')
-async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkeypatch):  # noqa: F811
-    """B: za.tervory.com is Tank only (no Workspace). Approval still happens on the
-    one Workspace, which records it on the ZA Tank via TANK_URL_ZA/TANK_API_KEY_ZA.
-    As in production, Boston's TANK_API_KEY_ZA is the ZA Tank's narrow TANK_HOMES_KEY
-    (it cannot approve); approvals use the dedicated TANK_DEVICE_APPROVAL_KEY."""
+async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkeypatch, oidc_provider):  # noqa: F811
+    """ZA default login uses fake Zitadel, real JWT verification and real Tank SQL;
+    no Workspace approval, Boston proxy or live identity provider is involved."""
     monkeypatch.setenv('TANK_REGION', 'za')
     monkeypatch.setenv('TANK_HOMES_KEY', 'dummy-za-homes-key')
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', 'dummy-za-device-approval-key')
     # A ZA Tank process reads TANK_REGION=za at import; mirror that for the ledger.
     monkeypatch.setattr(streaming.tank, 'DEFAULT_REGION', 'za')
     await device_login_edge(streaming, 'za', za_key='dummy-za-device-approval-key')
+    assert ('POST', '/oauth/v2/device_authorization') in oidc_provider.calls
+    assert ('POST', '/oauth/v2/token') in oidc_provider.calls
+    assert ('GET', '/keys') in oidc_provider.calls
 
 
 @pytest.mark.asyncio
