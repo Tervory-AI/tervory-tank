@@ -16,6 +16,16 @@ File and line references for the current branch. Gate heads and verification sta
 | `agents/rig/forge/service.py` | [83](../../agents/rig/forge/service.py#L83) | Wait for a GPU approval without giving the forge a Tank credential. |
 | `agents/rig/rig_brain/forge.py` | [30](../../agents/rig/rig_brain/forge.py#L30), [135](../../agents/rig/rig_brain/forge.py#L135), [144](../../agents/rig/rig_brain/forge.py#L144), [156](../../agents/rig/rig_brain/forge.py#L156) | Relay read-only approval status through the existing forge corridor. |
 | `agents/rig/rig_brain/runner.py` | [27](../../agents/rig/rig_brain/runner.py#L27) | Install the same SDK approval wait adapter. |
+| `docs/acceptance/autumbra.md` | [189](../../docs/acceptance/autumbra.md#L189) | Paid-rung founder testing-sheet row. |
+| `docs/acceptance/base.md` | [1](../../docs/acceptance/base.md#L1) | Paid-rung founder testing-sheet row. |
+| `docs/acceptance/market_lab.md` | [103](../../docs/acceptance/market_lab.md#L103) | Paid-rung founder testing-sheet row. |
+| `docs/acceptance/radix.md` | [1](../../docs/acceptance/radix.md#L1) | Paid-rung founder testing-sheet row. |
+| `docs/acceptance/rig.md` | [205](../../docs/acceptance/rig.md#L205) | Paid-rung founder testing-sheet row. |
+| `docs/acceptance/tank.md` | [1](../../docs/acceptance/tank.md#L1) | Paid-rung founder testing-sheet row. |
+| `docs/acceptance/tiger.md` | [1](../../docs/acceptance/tiger.md#L1) | Paid-rung founder testing-sheet row. |
+| `docs/acceptance/tisan.md` | [151](../../docs/acceptance/tisan.md#L151) | Paid-rung founder testing-sheet row. |
+| `docs/acceptance/trigger.md` | [1](../../docs/acceptance/trigger.md#L1) | Paid-rung founder testing-sheet row. |
+| `docs/acceptance/zenas.md` | [1](../../docs/acceptance/zenas.md#L1) | Paid-rung founder testing-sheet row. |
 | `docs/ops/FOUNDER-SETTINGS.md` | [58](../../docs/ops/FOUNDER-SETTINGS.md#L58) | Register per-tenant Ask/Auto setting and existing platform master stop. |
 | `docs/paid-steps/CHANGEINDEX.md` | [1](../../docs/paid-steps/CHANGEINDEX.md#L1) | File and line index for review. |
 | `docs/paid-steps/FRAMES.md` | [1](../../docs/paid-steps/FRAMES.md#L1) | Frame IDs, implementation details, exact logo checksum and visual evidence. |
@@ -38,6 +48,7 @@ File and line references for the current branch. Gate heads and verification sta
 | `tank/schema.sql` | [3152](../../tank/schema.sql#L3152) | Add registry, tenant preferences/audit, approval/continuation and call-journal tables; RLS and receipt metadata. |
 | `tank/skala_revalidation.py` | [45](../../tank/skala_revalidation.py#L45), [73](../../tank/skala_revalidation.py#L73), [176](../../tank/skala_revalidation.py#L176) | Keep pending evaluations queued and reuse their stable paid-run identity. |
 | `tank/vendor_meter.py` | [234](../../tank/vendor_meter.py#L234), [280](../../tank/vendor_meter.py#L280) | Give Base skill requests trusted stable run identities with their private record attribution. |
+| `tests/acceptance/test_paid_steps.py` | [1](../../tests/acceptance/test_paid_steps.py#L1) | Ten real HTTP/card/receipt fixture paths plus one-row-one-case guard. |
 | `tests/paid_steps_browser_build.cjs` | [1](../../tests/paid_steps_browser_build.cjs#L1) | Bundle real React modules with existing Next webpack; fixture only identity/navigation and transport. |
 | `tests/paid_steps_settings.cjs` | [1](../../tests/paid_steps_settings.cjs#L1) | Execute the real Next API with authenticated fixture boundaries. |
 | `tests/test_agent1_brain_route.py` | [42](../../tests/test_agent1_brain_route.py#L42), [137](../../tests/test_agent1_brain_route.py#L137) | Explicit SDK protocol admission fixture; verify the paid-step master refusal audit path. |
