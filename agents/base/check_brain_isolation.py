@@ -1,4 +1,4 @@
-"""Deployment gate for Base/Tiger's five or Zenas's three-container topology.
+"""Deployment gate for per-room brain and private-tool topologies.
 
 Run on the authorized cloud Docker host, never on a laptop:
 python agents/base/check_brain_isolation.py ROOM BRAIN SANDBOX [BROWSER GATEWAY]
@@ -27,8 +27,8 @@ assert result['exit_code']==0 and 'OFFLINE' in result['output'], result
 
 
 def main(names):
-    if len(names) not in {3, 5}:
-        raise SystemExit("Supply ROOM BRAIN SANDBOX and optional BROWSER GATEWAY container names")
+    if len(names) not in {3, 4, 5}:
+        raise SystemExit("Supply ROOM BRAIN SANDBOX and optional BROWSER [GATEWAY] container names")
     rows = [json.loads(docker("inspect", name))[0] for name in names]
     room, brain, sandbox = rows[:3]
     for row in rows:
@@ -43,10 +43,12 @@ def main(names):
         keys = {v.split("=", 1)[0] for v in row["Config"]["Env"]}
         assert not keys & {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "LITELLM_MASTER_KEY"}, "model key in room"
     service = room["Config"].get("Labels", {}).get("com.docker.compose.service")
-    room_name = {"agent-base": "base", "agent-tiger": "tiger", "agent-zenas": "zenas"}.get(service)
+    room_name = {"agent-base": "base", "agent-tiger": "tiger", "agent-zenas": "zenas", "agent-market-lab": "market_lab", "agent-radix": "radix", "agent-tisan": "tisan", "agent-trigger": "trigger", "agent-ghost": "ghost"}.get(service)
     assert room_name is not None, "unsupported room"
-    assert len(rows) == (3 if room_name == "zenas" else 5), "room tool topology mismatch"
-    assert brain["Config"].get("Labels", {}).get("com.docker.compose.service") == room_name + "-brain", "brain belongs to another room"
+    stem = room_name.replace("_", "-")
+    provisioned = room_name in {"market_lab", "radix", "tisan", "trigger", "ghost"}
+    assert len(rows) == (3 if room_name == "zenas" else 4 if room_name == "ghost" else 5), "room tool topology mismatch"
+    assert brain["Config"].get("Labels", {}).get("com.docker.compose.service") == stem + "-brain", "brain belongs to another room"
     if room_name == "zenas":
         region = next((v.partition("=")[2] for v in room["Config"]["Env"] if v.startswith("TANK_REGION=")), "")
         brain_region = next((v.partition("=")[2] for v in brain["Config"]["Env"] if v.startswith("TANK_REGION=")), "")
@@ -54,9 +56,16 @@ def main(names):
         assert brain["HostConfig"].get("ReadonlyRootfs"), "brain root must be read-only"
         volume_name = "tervory-zenas-" + ("za" if region == "za" else "us") + "-brain-data"
         assert [m.get("Name") for m in brain["Mounts"] if m["Type"] == "volume"] == [volume_name], "brain volume belongs to another region"
+    if provisioned:
+        assert brain["HostConfig"].get("ReadonlyRootfs"), "brain root must be read-only"
+        assert "ALL" in brain["HostConfig"].get("CapDrop", []), "brain must drop all capabilities"
+        assert any("no-new-privileges" in option for option in brain["HostConfig"].get("SecurityOpt", [])), "brain can gain privileges"
+        assert [m.get("Name") for m in brain["Mounts"] if m["Type"] == "volume"] == ["tervory-" + stem + "-brain-data"], "brain mounts room/foreign data"
+        keys = {v.split("=", 1)[0] for v in brain["Config"]["Env"]}
+        assert keys <= {"BRAIN_ROOM", "TANK_URL", "TANK_KEY", "TANK_REGION", "HERMES_URL", "SANDBOX_KEY", "DATA_DIR", "PATH", "LANG", "PYTHON_VERSION", "PYTHON_SHA256", "GPG_KEY", "PYTHONPATH", "PYTHONUNBUFFERED", "HERMES_BUNDLED_SKILLS", "HERMES_OPTIONAL_SKILLS", room_name.upper() + "_URL", room_name.upper() + "_BROWSER_URL", room_name.upper() + "_SANDBOX_URL"}, "unexpected brain setting"
     corridor_name = "tervory-gw-" + room_name
     sandbox_host = sandbox["Config"].get("Labels", {}).get("com.docker.compose.service")
-    assert sandbox_host == room_name + "-sandbox", "sandbox belongs to another room"
+    assert sandbox_host == stem + "-sandbox", "sandbox belongs to another room"
     sandbox_keys = {value.split("=", 1)[0] for value in sandbox["Config"]["Env"]}
     assert "TANK_KEY" not in sandbox_keys, "Tank key in sandbox"
     assert sandbox["HostConfig"].get("ReadonlyRootfs"), "sandbox root must be read-only"
@@ -65,16 +74,29 @@ def main(names):
     assert not any(m["Type"] == "volume" for m in sandbox["Mounts"]), "sandbox must not mount room/session data"
     assert "/work" in sandbox["HostConfig"].get("Tmpfs", {}), "sandbox lacks isolated tmpfs work"
     memberships = [set(row["NetworkSettings"]["Networks"]) for row in rows]
-    assert memberships[0] == {corridor_name}, "room corridor mismatch"
+    project = room["Config"].get("Labels", {}).get("com.docker.compose.project", "")
+    room_extra = {"radix": {project + "_proxy-link"}, "tisan": {project + "_figma_internal"}, "trigger": {project + "_checkers"}}.get(room_name, set())
+    assert memberships[0] == {corridor_name} | room_extra, "room corridor mismatch"
     sandbox_net, = memberships[2]
     assert memberships[1] == {corridor_name, sandbox_net}
     private = [(sandbox_net, {brain["Id"], sandbox["Id"]})]
     if len(rows) == 5:
         browser, gateway = rows[3:]
+        assert browser["Config"].get("Labels", {}).get("com.docker.compose.service") == stem + "-browser", "browser belongs to another room"
+        assert gateway["Config"].get("Labels", {}).get("com.docker.compose.service") == stem + "-browser-gateway", "gateway belongs to another room"
+        if provisioned:
+            assert [m.get("Name") for m in browser["Mounts"] if m["Type"] == "volume"] == ["tervory-" + stem + "-browser-data"], "browser shares room/foreign data"
+            assert "TANK_KEY" not in {v.split("=", 1)[0] for v in browser["Config"]["Env"]}, "Tank key in browser"
         browser_net, = memberships[3]
         assert sandbox_net != browser_net
         assert memberships[4] == {corridor_name, browser_net}
         private.append((browser_net, {browser["Id"], gateway["Id"]}))
+    if len(rows) == 4:
+        browser = rows[3]
+        assert browser["Config"].get("Labels", {}).get("com.docker.compose.service") == "ghost-browser", "Watch browser belongs to another room"
+        assert memberships[3] == {corridor_name}, "Watch browser corridor mismatch"
+        brain_volumes = {m.get("Name") for m in brain["Mounts"] if m["Type"] == "volume"}
+        assert not brain_volumes & {m.get("Name") for m in browser["Mounts"] if m["Type"] == "volume"}, "Watch browser shares brain data"
     for network, members in private:
         info = json.loads(docker("network", "inspect", network))[0]
         assert info["Internal"], "private network has external egress"
@@ -86,7 +108,7 @@ def main(names):
             continue
         peer = json.loads(docker("inspect", identity))[0]
         service = peer["Config"].get("Labels", {}).get("com.docker.compose.service")
-        assert service in {"tank", "postgres", "hermes", "searxng"}, "unexpected corridor neighbour"
+        assert service in {"tank", "postgres", "hermes", "searxng"} | ({"passive-egress"} if room_name == "radix" else set()), "unexpected corridor neighbour"
     room_script = '''import asyncio, os, asyncpg
 async def run():
     conn = await asyncpg.connect(os.environ['DATABASE_URL'])
@@ -103,7 +125,8 @@ async def run():
 asyncio.run(run())
 '''
     room_script = room_script.replace("'agent_base'", repr("agent_" + room_name)).replace("Base can read", room_name.title() + " can read")
-    docker("exec", names[0], "python", "-c", room_script)
+    if room_name != "ghost":
+        docker("exec", names[0], "python", "-c", room_script)
     proof = "import socket; s=socket.socket(); s.settimeout(3); assert s.connect_ex(('1.1.1.1',443)) != 0"
     sandbox_check = sandbox_probe_script(sandbox_host)
     docker("exec", names[1], "python", "-c", sandbox_check)
@@ -113,7 +136,8 @@ asyncio.run(run())
     docker("exec", names[2], "python", "-c", proof)
     if len(rows) == 5:
         docker("exec", names[3], "python", "-c", proof)
-    print("PASS " + room_name.title() + " topology, private tools, volumes, keys, database role and denied direct egress")
+    detail = "topology, private tools, volumes, keys and denied sandbox egress" if room_name == "ghost" else "topology, private tools, volumes, keys, database role and denied direct egress"
+    print("PASS " + room_name.title() + " " + detail)
 
 
 if __name__ == "__main__":

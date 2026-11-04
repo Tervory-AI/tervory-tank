@@ -1,8 +1,7 @@
-"""Provisioned Hermes runtimes, without a task API or pipeline caller.
+"""Provisioned Hermes runtimes with health only, no task API or model caller.
 
-Tiger's extraction stays code; Zenas keeps its existing civil-only tools.
-Starting either optional container
-does not authorize model work; a future escalation needs its own implementation.
+Starting a container does not authorize model work. Any future escalation must
+use the owning room's approved tools and Tank's existing guards and accounting.
 """
 
 import os
@@ -10,7 +9,7 @@ import os
 from fastapi import FastAPI
 
 ROOM = os.environ.get("BRAIN_ROOM", "tiger")
-if ROOM not in {"tiger", "zenas"}:
+if ROOM not in {"tiger", "zenas", "ghost", "trigger", "tisan", "radix", "market_lab"}:
     raise ValueError("Unsupported standby room")
 
 app = FastAPI()
