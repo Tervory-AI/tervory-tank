@@ -260,7 +260,8 @@ def test_browser_envelope_interoperates_with_tank(keys):
 
 
 @pytest.mark.asyncio
-async def test_hand_back_preserves_same_live_page(keys, monkeypatch, tmp_path):
+async def test_hand_back_preserves_same_live_page(keys, monkeypatch, tmp_path, room="base"):
+    monkeypatch.setenv("ACCESS_ROOM", room)
     tenant = str(uuid.uuid4()); site = "https://dealer.example"; handle = str(uuid.uuid4())
     events = []
     async def rpc(*args, **kwargs): return {"state": "public"}
@@ -271,11 +272,11 @@ async def test_hand_back_preserves_same_live_page(keys, monkeypatch, tmp_path):
     item = browser.LivePage(tenant, site, SimpleNamespace(content=content, evaluate=evaluate), SimpleNamespace(storage_state=state), None, None,
                             tmp_path / "cookies", site, "", {"human": True})
     monkeypatch.setattr(browser, "held", {handle: item}); monkeypatch.setattr(browser, "access_locks", {})
-    payload = vault.envelope("base", "control", {"action": "live", "tenant_id": tenant, "site": site, "handle": handle,
+    payload = vault.envelope(room, "control", {"action": "live", "tenant_id": tenant, "site": site, "handle": handle,
                                                 "input": {"action": "hand_back"}})
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app, client=("10.0.27.3", 40000)), base_url="http://browser") as client:
         response = await client.post("/access/control", json=payload)
-    assert response.status_code == 200 and vault.open_envelope("base", "result", response.json())["ready"]
+    assert response.status_code == 200 and vault.open_envelope(room, "result", response.json())["ready"]
     assert browser.held[handle] is item and item.ready and events == ["cookies saved"]
 
 

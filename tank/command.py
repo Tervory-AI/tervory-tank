@@ -2212,7 +2212,7 @@ async def tiger_code_plan(actor: Actor, messages: list[dict], task_id):
         action = validate_action(PlannedAction(tool=tool, arguments=args), actor)
         ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent='tiger')
         return SimpleNamespace(content=dump({'text': tool, 'actions': [action.model_dump(mode='json')]}), ledger_id=ledger)
-    match = re.fullmatch(r'(tiger\.match(?:\.(?:confirm|reject))?|tiger\.position|tiger\.alerts)(?:\s+([0-9a-fA-F-]{36}))?', text)
+    match = re.fullmatch(r'(tiger\.match(?:\.(?:confirm|reject|undo))?|tiger\.matches|tiger\.position|tiger\.alerts)(?:\s+([0-9a-fA-F-]{36}))?', text)
     if not match:
         return None
     tool, identifier = match.groups()

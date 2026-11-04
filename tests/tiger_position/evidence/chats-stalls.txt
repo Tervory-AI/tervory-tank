@@ -1,0 +1,1 @@
+chats_command_stall: commandRequest, the roster read and the PAT proxy JSON end at their bounds under stalls, trickles + gc; heartbeats keep streams alive
