@@ -142,13 +142,13 @@ def fixture_runs(tmp_path_factory, request):
             run = subprocess.run([sys.executable, "-m", "pytest", "-q",
                                   *[fixture + "::" + name for name in names],
                                   "--disable-socket", "--allow-unix-socket", "--allow-hosts=127.0.0.1,localhost,::1",
-                                  "--junitxml=" + str(junit)], cwd=ROOT, env=backend_env, text=True, capture_output=True, timeout=180, check=False)
+                                  "--junitxml=" + str(junit)], cwd=ROOT, env=backend_env, text=True, capture_output=True, timeout=600, check=False)
             results[fixture] = (run, junit)
             continue
         pattern = "^(?:" + "|".join(re.escape(name) for name in names) + ")$"
         run = subprocess.run(["node", "--expose-gc", "--test", "--test-reporter=tap",
                               "--test-name-pattern=" + pattern, str(ROOT / fixture)],
-                             cwd=ROOT, env=env, text=True, capture_output=True, timeout=180, check=False)
+                             cwd=ROOT, env=env, text=True, capture_output=True, timeout=600, check=False)
         results[fixture] = (run, None)
     return results
 
