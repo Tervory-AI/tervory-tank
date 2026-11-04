@@ -138,3 +138,91 @@ report arithmetic with deterministic inputs. All printed report latencies now
 also are unit values (.01/.02/.03 seconds), never a benchmark. The separate
 overload regression still requires dropped arrivals to be reported, and dropped
 arrivals still fail the limits.
+
+## Backlog completion — 4 November 2026
+
+This section supersedes the old six/eight-test preparation results, not the
+founder's capacity acceptance. Source/preflight is complete for review; **no
+capacity measurement has run** and every report still has `capacity_valid: false`.
+
+### Current-main and replacement check
+
+Checked GitHub main `fa34a9f0d9e8323358ebb47c82ba5e9f2eed9fab` and PR #456 head
+`ce1b93b29a14d3fe0f01c4778cc80e733c282ebe`. GitHub returned 404 for each of this
+PR's three `tests/rig_stress/` files on that main commit. Repository code searches
+for `rigstress`, `rig_stress` and stress tests, plus the PR search for `stress`,
+found no replacement Rig saturation harness. #486 is offline functional CI, not a
+capacity runner. Current `agents/rig/rigbox/api.py:175,260,322` still binds GET
+search, POST setups and POST quote to the exact routes used here. Current root
+AGENTS.md was read. #456 is mergeable; no verified conflict exists, so main was
+not merged, in accordance with this assignment. GitHub will test the PR merge.
+
+### Completed safeguards
+
+* Reject nonfinite, negative, boolean and malformed observations. Unknown memory
+  or queue measurements fail rather than looking idle; zero/invalid memory totals
+  do not crash the report or prove capacity.
+* Require explicit nonempty integer 2xx `expected_statuses` per operation. A 500
+  or redirect cannot be declared a successful observation. Reject unreviewed
+  operation fields, including arbitrary headers. Existing exact route/method and
+  RFC1918 allowlist checks remain.
+* Reject missing/literal-false spare confirmation **before any Docker inspection**;
+  the network's Internal field must be literal True. This confirms operator input,
+  not independent proof of a spare host.
+* Exercise CLI refusal and preflight-only behavior; it never calls `traffic()`.
+* Replace loopback HTTP and thread-pool test workers with HTTP and asynchronous
+  doubles. All 13 tests now require no socket, Docker service or worker threads.
+  They assert requests, error/redirect rejection, close behavior, overload reporting,
+  exact thresholds and isolation metadata. These are functional checks only.
+
+### Accessible inventory and the one capacity blocker
+
+No connected Coolify/server-inventory tool is available in this session. Read-only
+inspection covered the historical inventory in this PR and current-main
+`docs/ops/AUTUMBRA-ENFORCE-ISOLATION.md`. That document identifies a disposable
+GitHub CI DNS-isolation probe and says live isolation is unproven; it does **not**
+assign a Rig stress server. It is not a replacement workload or spare assignment.
+The 30 October Boston/ZA entries above are historical production inventory,
+not evidence those hosts are spare today. Neither production host was inspected
+or used. No hardware, cloud resource, container or test network was provisioned.
+
+**One remaining capacity blocker: an explicitly assigned, approved isolated Rig
+stress target/workload package.** It must identify the dedicated server/network,
+30 isolated tenant stores, resource ownership/cleanup boundary and reviewed request
+profile/fixtures. A boolean or private IP alone is not an assignment. No such
+package was found in accessible sources; this does not assert that none exists
+outside those sources.
+
+This assignment is what the missing real adapters must bind to:
+
+| Adapter/input | Exact missing contract; no substitute measurement claimed |
+| --- | --- |
+| Shopper workload/auth | Reviewed tenant identity, search query parameters, body contracts and existing authentication-by-name on the assigned isolated Rig target. The primitive has exact paths and optional JSON body only; it does not yet model query parameters, embed/origin authentication, shopper journeys or a representative mix. Fixture existence is not ingestion or validation of a real catalogue. Never run a production quote handoff. |
+| Forge queue | Isolated forge submission/status contract using existing admin job routes, fixture/artifact ownership, enqueue/start times for one and two concurrent jobs, completion and cleanup. No queue wait may be inferred from HTTP response time. The reserved forge fixture is not executed. |
+| Host/container metrics | Target-side read-only host and per-container memory/CPU/disk-I/O sampling every 30s, with timestamps, memory denominators and coverage of each 900s level. No local CI memory stands in for that host. Docker inspect metadata alone is not a measurement adapter. |
+| Matrix and teardown | Execute N=5/10/20/30 only after the above bindings are reviewed; stop on first failure; verify cleanup of test-owned resources only. The preflight CLI intentionally has no execute mode and cannot run this matrix. |
+
+No clients-per-box number, minimum server size, cost or saturation result can be
+derived from these offline tests. No provider/model/SMTP call, credential access,
+production SQL/load/mutation, deployment or Skala action was performed.
+
+### Focused verification on this revision
+
+Own checkout: `/home/ammosync/.codex/rig-stress-456-20261104` (the session permits
+writes there, not `/workspace`). Shell GitHub fetch was attempted once and failed
+with `Could not resolve host: github.com`; publication uses the connected GitHub
+Git-object API with a normal fast-forward and expected old head, never force.
+An initial baseline/local threaded test attempt stalled in this restricted
+session and was interrupted; it is not claimed as a passing run. The replacement
+socket/thread-free regression run completed:
+
+```sh
+python3 -m py_compile tests/rig_stress/harness.py tests/rig_stress/test_harness.py
+timeout 20s python3 -m unittest discover -s tests/rig_stress -v
+git diff --check
+```
+
+Results: compile exit 0; **13 tests passed in 0.191s**, exit 0; diff check exit 0.
+No full local suite was run. Final-head hosted CI and the published head are
+recorded in #456. The earlier capped-container output is historical, not rerun
+or capacity evidence for this revision. Founder review/merge remains outstanding.
