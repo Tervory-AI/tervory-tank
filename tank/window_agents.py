@@ -20,9 +20,6 @@ from vault import open_seal, seal
 PLATFORM = uuid.UUID('00000000-0000-0000-0000-000000000001')
 REPO = re.compile(r'[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*\Z')
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS tank.window_agent_credentials (
- tenant_id uuid NOT NULL, user_id text NOT NULL, name text NOT NULL, sealed text NOT NULL,
- PRIMARY KEY(tenant_id,user_id,name));
 CREATE TABLE IF NOT EXISTS tank.window_agent_jobs (
  tenant_id uuid NOT NULL, user_id text NOT NULL, job_id uuid NOT NULL, thread_id uuid NOT NULL,
  repo text NOT NULL, credential_name text NOT NULL, prompt text NOT NULL,
@@ -34,7 +31,7 @@ CREATE TABLE IF NOT EXISTS tank.window_agent_dispatch (
  created_at timestamptz NOT NULL DEFAULT now(), claimed boolean NOT NULL DEFAULT false, PRIMARY KEY(tenant_id,job_id));
 DO $$ DECLARE tab text; BEGIN
  IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
-  FOREACH tab IN ARRAY ARRAY['window_agent_credentials','window_agent_jobs','window_agent_dispatch'] LOOP
+  FOREACH tab IN ARRAY ARRAY['window_agent_jobs','window_agent_dispatch'] LOOP
    EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',tab);
    EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',tab);
    IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=('tank.'||tab)::regclass AND polname='tenant_access') THEN
@@ -96,13 +93,18 @@ class Finish(Lease):
     sha: str | None = Field(default=None, pattern=r'^[a-f0-9]{40}$')
 
 
+def vault_name(actor):
+    # Existing vault_items storage; separate user vaults inside the tenant.
+    return 'window.agents.' + hashlib.sha256(actor.user_id.encode()).hexdigest()
+
+
 def context(actor, name):
-    return f'window-agents:v1:{actor.tenant_id}:{actor.user_id}:{name}'
+    return f'plugins:v1:{actor.tenant_id}:{vault_name(actor)}:secret:{name}'
 
 
 async def credential(conn, actor, name):
-    value = await conn.fetchval('SELECT sealed FROM tank.window_agent_credentials WHERE tenant_id=$1 AND user_id=$2 AND name=$3',
-                                actor.tenant_id, actor.user_id, name)
+    value = await conn.fetchval("SELECT sealed FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='secrets' AND name=$3",
+                                actor.tenant_id, vault_name(actor), name)
     if value is None:
         raise HTTPException(404, 'Named GitHub credential not found in your vault.')
     return open_seal(value, context(actor, name))['value']
@@ -111,14 +113,14 @@ async def credential(conn, actor, name):
 @router.put('/vault/github', status_code=204)
 async def save_credential(body: Credential, actor: command.Actor = Depends(actor_identity)):
     async with command.db().acquire() as conn:
-        await conn.execute('INSERT INTO tank.window_agent_credentials VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,user_id,name) DO UPDATE SET sealed=EXCLUDED.sealed',
-                           actor.tenant_id, actor.user_id, body.name, seal({'value': body.value}, context(actor, body.name)))
+        await conn.execute("INSERT INTO tank.vault_items(tenant_id,vault,kind,name,metadata,sealed) VALUES($1,$2,'secrets',$3,$4::jsonb,$5) ON CONFLICT(tenant_id,vault,kind,name) DO UPDATE SET sealed=EXCLUDED.sealed,metadata=EXCLUDED.metadata",
+                           actor.tenant_id, vault_name(actor), body.name, json.dumps({'name': body.name}), seal({'value': body.value}, context(actor, body.name)))
 
 
 @router.get('/vault/github')
 async def names(actor: command.Actor = Depends(actor_identity)):
     async with command.db().acquire() as conn:
-        rows = await conn.fetch('SELECT name FROM tank.window_agent_credentials WHERE tenant_id=$1 AND user_id=$2 ORDER BY name', actor.tenant_id, actor.user_id)
+        rows = await conn.fetch("SELECT name FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='secrets' ORDER BY name", actor.tenant_id, vault_name(actor))
     return [r['name'] for r in rows]
 
 

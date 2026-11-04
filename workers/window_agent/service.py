@@ -12,7 +12,8 @@ import httpx
 
 from workers.podman_run import build_argv, choose_runtime, container_name, kill_argv, task_argv, task_tank_url
 from workers.secrets_io import _write
-from workers.service import Runner, split, tank_hosts
+from workers.service import split, tank_hosts
+from workers.window_agent.runtime import ContainerRunner
 from workers.tank_status import tank_key
 from workers.task_run import parse_result
 
@@ -42,7 +43,7 @@ def argv_for(settings, name, runtime, directory, job):
 class WindowJobs:
     def __init__(self, settings, control, client, runner=None):
         self.settings, self.control, self.client = settings, control, client
-        self.runner = runner or Runner()
+        self.runner = runner or ContainerRunner()
         self.built = False
 
     async def call(self, path, body=None):
@@ -98,14 +99,17 @@ class WindowJobs:
                 pass  # Durable heartbeat expiry preserves an uncertain result.
             raise
         finally:
-            # Stop descendants even after HTTP failure, cancellation, timeout or shutdown.
-            await self.runner(kill_argv(name), timeout_s=30)
-            if launched and not launched.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(launched), timeout=30)
-                except (TimeoutError, RuntimeError):
+            try:
+                if launched and not launched.done():
                     launched.cancel()
-            shutil.rmtree(directory, ignore_errors=True)
+                    try:
+                        await launched
+                    except asyncio.CancelledError:
+                        pass
+                # Also cover failures before the launch coroutine started.
+                await self.runner(kill_argv(name), timeout_s=30)
+            finally:
+                shutil.rmtree(directory, ignore_errors=True)
 
     async def serve(self):
         while True:

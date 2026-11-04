@@ -100,6 +100,7 @@ async def agent_db(monkeypatch):
     try:
         async with pool.acquire() as conn:
             await conn.execute('CREATE SCHEMA tank; CREATE TABLE tank.command_threads(thread_id uuid PRIMARY KEY,tenant_id uuid,user_id text,title text,state jsonb)')
+            await conn.execute("CREATE TABLE tank.vault_items(tenant_id uuid,vault text,kind text,name text,metadata jsonb,sealed text, PRIMARY KEY(tenant_id,vault,kind,name))")
             await conn.execute(SCHEMA)
             await conn.execute(SCHEMA)  # Every Tank restart is safe.
         monkeypatch.setattr(command, 'db', lambda: pool)
@@ -156,7 +157,7 @@ async def test_durable_queue_tenant_and_user_isolation_cancel_and_recovery(agent
         lost = (await client.post('/v1/window-agents/worker/next', json={})).json()
         async with pool.acquire() as conn:
             await conn.execute("UPDATE tank.window_agent_jobs SET heartbeat=now()-interval '3 minutes' WHERE tenant_id=$1 AND job_id=$2", original.tenant_id, uuid.UUID(lost['job_id']))
-            stored = await conn.fetchval('SELECT sealed FROM tank.window_agent_credentials WHERE tenant_id=$1 AND user_id=$2 AND name=$3', original.tenant_id, 'alice', 'github')
+            stored = await conn.fetchval("SELECT sealed FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='secrets' AND name=$3", original.tenant_id, agents.vault_name(original), 'github')
             assert token not in stored
         assert (await client.post('/v1/window-agents/worker/next', json={})).json() is None
         rows = (await client.get('/v1/window-agents/jobs')).json()
@@ -173,17 +174,47 @@ async def test_rls_policies_install_idempotently_and_hide_other_tenants(agent_db
         await conn.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
         await conn.execute(SCHEMA)
         await conn.execute(SCHEMA)
-        await conn.execute('INSERT INTO tank.window_agent_credentials VALUES($1,$2,$3,$4)', owner, 'alice', 'github', 'sealed')
+        await conn.execute("INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt) VALUES($1,'alice',$2,$3,'alice/project','github','fix')", owner, uuid.uuid4(), uuid.uuid4())
         await conn.execute(f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOBYPASSRLS')
         try:
             await conn.execute(f'GRANT USAGE ON SCHEMA tank TO "{role}"')
-            await conn.execute(f'GRANT SELECT ON tank.window_agent_credentials TO "{role}"')
+            await conn.execute(f'GRANT SELECT ON tank.window_agent_jobs TO "{role}"')
             async with conn.transaction():
                 await conn.execute(f'SET LOCAL ROLE "{role}"')
                 await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(stranger))
-                assert await conn.fetchval('SELECT count(*) FROM tank.window_agent_credentials') == 0
+                assert await conn.fetchval('SELECT count(*) FROM tank.window_agent_jobs') == 0
                 await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(owner))
-                assert await conn.fetchval('SELECT count(*) FROM tank.window_agent_credentials') == 1
+                assert await conn.fetchval('SELECT count(*) FROM tank.window_agent_jobs') == 1
         finally:
             await conn.execute(f'DROP OWNED BY "{role}"')
             await conn.execute(f'DROP ROLE "{role}"')
+
+
+@pytest.mark.asyncio
+async def test_container_runner_cancellation_stops_child(tmp_path):
+    import asyncio
+    import os
+    import sys
+    from workers.window_agent.runtime import ContainerRunner
+    pidfile = tmp_path / 'pid'
+    code = 'import os,sys,time; open(sys.argv[1],"w").write(str(os.getpid())); time.sleep(60)'
+    stop = 'import os,sys,signal; os.kill(int(open(sys.argv[1]).read()),signal.SIGTERM)'
+    runner = ContainerRunner()
+    running = asyncio.create_task(runner([sys.executable, '-c', code, str(pidfile)], timeout_s=90,
+                                         kill=[sys.executable, '-c', stop, str(pidfile)]))
+    try:
+        for _ in range(500):
+            if pidfile.exists():
+                break
+            await asyncio.sleep(.01)
+        assert pidfile.exists()
+        pid = int(pidfile.read_text())
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(running, 15)
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+    finally:
+        if not running.done():
+            running.cancel()
+            await asyncio.gather(running, return_exceptions=True)

@@ -18,8 +18,8 @@ ROOT = Path('/work/repo')
 HELPER = 'credential.helper=!python3 -m workers.window_agent.credential'
 
 
-def run(argv, cwd=ROOT):
-    result = subprocess.run(argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300, check=False)
+def run(argv, cwd=ROOT, *, timeout=300):
+    result = subprocess.run(argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False)
     if result.returncode:
         raise RuntimeError('Repository command failed')
     return result.stdout.decode().strip()
@@ -36,7 +36,7 @@ async def task(job, token, client):
     run(['git', 'checkout', '-b', branch])
     for argv in git_identity():
         run(argv)
-    run(['node', '/opt/tervory/workers/window_agent/loop.mjs'])
+    run(['node', '/opt/tervory/workers/window_agent/loop.mjs'], timeout=5400)
     run(['git', 'add', '--all'])
     # A no-change task produces no misleading empty PR.
     run(['git', 'commit', '-m', 'Apply background task'])
