@@ -228,6 +228,64 @@ async def test_review_read_requires_tiger_entitlement(corridor):
 
 
 @pytest.mark.asyncio
+async def test_review_keeps_stored_evidence_readable_when_catalogue_is_unavailable(corridor, monkeypatch):
+    row = (await publish(corridor, markup(gtin13=None)))['matches'][0]
+    monkeypatch.setattr(access, 'tiger_catalogue', AsyncMock(side_effect=HTTPException(503)))
+    response = await corridor.client.get('/v1/access/tiger/matches')
+    assert response.status_code == 200
+    actual = response.json()['matches'][0]
+    assert actual['id'] == row['id'] and actual['identifiers'] == row['identifiers']
+    assert actual['product']['name'] is None
+
+
+@pytest.mark.asyncio
+async def test_review_buttons_use_real_durable_cards_and_decision_routes(corridor, monkeypatch):
+    match = (await publish(corridor, markup(gtin13=None)))['matches'][0]
+    app = corridor.client._transport.app
+    app.include_router(command.router)
+    app.dependency_overrides[command.identity] = lambda: corridor.actor.current
+    monkeypatch.setattr(sys.modules['main'], 'app', app, raising=False)
+    monkeypatch.setattr(sys.modules['main'], 'TANK_API_KEY', 'placeholder-service-key', raising=False)
+    thread = (await corridor.client.post('/v1/command/threads', json={'title': 'Tiger'})).json()['thread_id']
+    for operation, state in [('reject','rejected'),('undo','suggested'),('confirm','confirmed')]:
+        card = await corridor.client.post(f'/v1/command/threads/{thread}/actions', json={
+            'tool': 'tiger.match.' + operation, 'arguments': {'match_id': match['id']}})
+        assert card.status_code == 200, card.text
+        response = await corridor.client.post('/v1/command/cards/' + card.json()['card_id'], json={'action': 'confirm'})
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result['status'] == 'confirmed', result
+        assert result['result']['match']['state'] == state
+        assert result['result']['cost_usd'] == 0
+    assert await corridor.pool.fetchval('SELECT state FROM agent_tiger.matches WHERE id=$1', UUID(match['id'])) == 'confirmed'
+
+
+@pytest.mark.asyncio
+async def test_saved_site_checks_use_only_own_latest_run_and_immutable_sightings(corridor):
+    ctx = await seeded_run(corridor, [OWN])
+    root = UUID(ctx.job_id)
+    progress = {'sites': [{'site': SITE, 'status': 'human_check', 'pages': 12, 'warnings': []},
+                          {'site': 'https://unsaved.example', 'status': 'completed', 'pages': 500}]}
+    await corridor.pool.execute('UPDATE agent_tiger.match_runs SET progress=$2::jsonb WHERE job_id=$1', root, json.dumps(progress))
+    await corridor.pool.execute("UPDATE agent_tiger.jobs SET finished_at=now(),status='completed',result=$2::jsonb WHERE id=$1", root, json.dumps(progress))
+    first_finished = await corridor.pool.fetchval('SELECT finished_at FROM agent_tiger.jobs WHERE id=$1', root)
+    await corridor.pool.execute("""INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input,result,status,finished_at)
+        VALUES($1,$2,'competitor_match',$3::jsonb,$4::jsonb,'completed',now()+interval '1 hour')""",
+        uuid4(), TENANT, json.dumps({'root_job_id': str(root)}), json.dumps(progress))
+    match = (await publish(corridor, markup(gtin13=None)))['matches'][0]
+    for _ in range(2):
+        await corridor.pool.execute('INSERT INTO agent_tiger.match_sightings(tenant_id,job_id,root_job_id,match_id,evidence) VALUES($1,$2,$3,$4,$5::jsonb)',
+            TENANT, uuid4(), root, UUID(match['id']), json.dumps(match))
+    checks = (await corridor.client.get('/v1/access/tiger/matches')).json()['site_checks']
+    assert len(checks) == 1 and checks[0]['url'] == SITE
+    assert checks[0]['pages'] == 12 and checks[0]['matches'] == 1
+    assert checks[0]['status'] == 'human_check' and checks[0]['checked_at']
+    assert checks[0]['checked_at'] == first_finished.isoformat()
+    corridor.actor.current = command.Actor(OTHER, 'offline-user', False, frozenset({'tiger'}))
+    assert (await corridor.client.get('/v1/access/tiger/matches')).json()['site_checks'] == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('html', [markup(gtin13='5012345678900'), markup(gtin13=None, brand=None, mpn=None, name='own')])
 async def test_mismatch_and_title_only_never_write_links_or_watches(corridor, html):
     assert (await publish(corridor, html))['matches'] == []

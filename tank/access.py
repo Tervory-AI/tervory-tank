@@ -1554,9 +1554,78 @@ async def tiger_matches(actor: Actor = Depends(identity)):
         rows = await conn.fetch("""SELECT * FROM agent_tiger.matches
             WHERE tenant_id=$1 AND state IN ('suggested','rejected')
             ORDER BY checked_at DESC,id DESC LIMIT 100""", actor.tenant_id)
-    result = {'tenant_id': str(actor.tenant_id), 'matches': [tiger_match_out(row) for row in rows],
+        checks = await tiger_site_checks(conn, actor.tenant_id)
+    try:
+        catalogue = {row['sku']: row for row in await tiger_catalogue(actor.tenant_id)} if rows else {}
+    except HTTPException as exc:
+        if exc.status_code < 500:
+            raise
+        catalogue = {}  # Stored identifiers/SKUs remain readable during a Rig outage.
+    matches = []
+    for row in rows:
+        product = catalogue.get(row['sku'], {})
+        matches.append({**tiger_match_out(row), 'product': {key: product.get(key) for key in ('name','brand','mpn')}})
+    result = {'tenant_id': str(actor.tenant_id), 'matches': matches, 'site_checks': checks,
               'ledger_id': str(ledger), 'cost_usd': 0, 'model_calls': 0}
     return tiger_bounded_card(result, 'matches')
+
+
+async def tiger_site_checks(conn, tenant) -> list[dict]:
+    """Latest saved discovery summaries; never infer checks from a vault link."""
+    runs = await conn.fetch("""SELECT r.job_id,r.progress
+        FROM agent_tiger.match_runs r JOIN agent_tiger.jobs j ON j.id=r.job_id AND j.tenant_id=$1
+        WHERE r.tenant_id=$1 AND r.progress IS NOT NULL
+        ORDER BY j.created_at DESC,j.id DESC LIMIT 100""", tenant)
+    if not runs:
+        return []
+    roots = [r['job_id'] for r in runs]
+    # A summary first appears in the slice that finished that site. Later slices
+    # repeat it while checking other sites; they must not refresh its timestamp.
+    times = await conn.fetch("""SELECT coalesce(j.input->>'root_job_id',j.id::text) AS root,
+        site.value->>'site' AS site,min(j.finished_at) AS checked_at
+        FROM agent_tiger.jobs j CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(j.result->'sites')='array' THEN j.result->'sites' ELSE '[]'::jsonb END) site(value)
+        WHERE j.tenant_id=$1 AND j.kind='competitor_match'
+        AND (j.id=ANY($2::uuid[]) OR j.input->>'root_job_id'=ANY($3::text[])) GROUP BY 1,2""",
+        tenant, roots, [str(root) for root in roots])
+    stamps = {}
+    for row in times:
+        try:
+            stamps[row['root'], origin(row['site'])] = row['checked_at']
+        except (HTTPException, ValueError, TypeError):
+            continue
+    sightings = await conn.fetch("""SELECT DISTINCT root_job_id,match_id,evidence->>'url' AS url
+        FROM agent_tiger.match_sightings WHERE tenant_id=$1 AND root_job_id=ANY($2::uuid[])""",
+        tenant, roots)
+    found = {}
+    for row in sightings:
+        try:
+            found.setdefault((row['root_job_id'], origin(row['url'])), set()).add(row['match_id'])
+        except (HTTPException, ValueError, TypeError):
+            continue
+    saved = set(await tiger_sources(conn, tenant))
+    result, seen = [], set()
+    for run in runs:
+        progress = json.loads(run['progress']) if isinstance(run['progress'], str) else run['progress']
+        for site in progress.get('sites', []):
+            try:
+                url = origin(site['site'])
+            except (HTTPException, ValueError, TypeError, KeyError):
+                continue
+            if url not in saved or url in seen:
+                continue
+            seen.add(url)
+            warnings = site.get('warnings') or []
+            skipped = {w.get('url') for w in warnings if w.get('reason') == 'robots' and w.get('url')}
+            status = 'human_check' if site.get('status') == 'human_check' else 'robots' if skipped else 'checked' if site.get('status') == 'completed' else None
+            pages = site.get('pages')
+            result.append({'url': url, 'pages': pages if type(pages) is int and pages >= 0 else None,
+                'matches': len(found.get((run['job_id'], url), set())),
+                'checked_at': stamps[str(run['job_id']), url].isoformat() if stamps.get((str(run['job_id']), url)) else None,
+                'status': status, 'skipped': len(skipped) if skipped else None})
+            if len(result) == 100:
+                return result
+    return result
 
 
 def tiger_positions(products: list[dict], matches: list[dict], observations: dict[str, dict]) -> list[dict]:
@@ -1580,7 +1649,7 @@ def tiger_positions(products: list[dict], matches: list[dict], observations: dic
         price = money(own.get('price'))
         comparable = [(money(c['price']),c['url']) for c in competitors if c['currency'] == own.get('currency') and money(c['price']) is not None]
         cheapest = min(comparable) if comparable else None
-        rows.append({'sku': own['sku'], 'own_price': own.get('price'), 'currency': own.get('currency'), 'competitors': competitors,
+        rows.append({'sku': own['sku'], 'name': own.get('name'), 'own_price': own.get('price'), 'currency': own.get('currency'), 'competitors': competitors,
             'cheapest': {'price': str(cheapest[0]), 'url': cheapest[1]} if cheapest else None,
             'rank': 1 + sum(p < price for p,_ in comparable) if price is not None and comparable else None,
             'difference': str(price - cheapest[0]) if price is not None and cheapest else None})

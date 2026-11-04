@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: position excludes overdue readings but retains their real last reading
+ok 1 - position excludes overdue readings but retains their real last reading
+  ---
+  duration_ms: 15.597565
+  type: 'test'
+  ...
+# Subtest: ties, currency, zero denominator and unknown schedules never invent a position
+ok 2 - ties, currency, zero denominator and unknown schedules never invent a position
+  ---
+  duration_ms: 1.89797
+  type: 'test'
+  ...
+# Subtest: unsafe links and missing values cannot turn into fabricated prices or checks
+ok 3 - unsafe links and missing values cannot turn into fabricated prices or checks
+  ---
+  duration_ms: 0.407612
+  type: 'test'
+  ...
+# Subtest: site counts join only saved links and keep real zero distinct from unavailable
+ok 4 - site counts join only saved links and keep real zero distinct from unavailable
+  ---
+  duration_ms: 0.306052
+  type: 'test'
+  ...
+# Subtest: server loader isolates failed reads and never reports them as empty matches
+ok 5 - server loader isolates failed reads and never reports them as empty matches
+  ---
+  duration_ms: 63.669474
+  type: 'test'
+  ...
+# Subtest: foreign tenant responses never enter the views
+ok 6 - foreign tenant responses never enter the views
+  ---
+  duration_ms: 53.185767
+  type: 'test'
+  ...
+# Subtest: server action takes identity only from the current session and validates input first
+ok 7 - server action takes identity only from the current session and validates input first
+  ---
+  duration_ms: 4.527014
+  type: 'test'
+  ...
+# Subtest: Tank helper uses durable proposals and confirmations without a model turn
+ok 8 - Tank helper uses durable proposals and confirmations without a model turn
+  ---
+  duration_ms: 167.975395
+  type: 'test'
+  ...
+# Subtest: frame-only examples never appear in production Tiger sources
+ok 9 - frame-only examples never appear in production Tiger sources
+  ---
+  duration_ms: 1.545879
+  type: 'test'
+  ...
+# Subtest: an unframed site outcome never claims a successful check
+ok 10 - an unframed site outcome never claims a successful check
+  ---
+  duration_ms: 101.300136
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 853.856222
