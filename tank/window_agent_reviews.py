@@ -43,6 +43,26 @@ DO $$ BEGIN
   END IF;
  END IF;
 END $$;
+CREATE TABLE IF NOT EXISTS tank.window_agent_deliveries(
+ tenant_id uuid NOT NULL, hook_id uuid NOT NULL, delivery_id uuid NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tenant_id,hook_id,delivery_id),
+ FOREIGN KEY(tenant_id,hook_id) REFERENCES tank.window_agent_webhooks(tenant_id,hook_id));
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.window_agent_deliveries ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.window_agent_deliveries FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.window_agent_deliveries'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.window_agent_deliveries FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.window_agent_deliveries'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.window_agent_deliveries AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
 """
 
 
@@ -110,7 +130,7 @@ async def configure_hook(body: Webhook, actor: command.Actor = Depends(agents.ac
             await conn.execute('INSERT INTO tank.window_agent_webhooks VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,hook_id) DO UPDATE SET enabled=EXCLUDED.enabled,credential_name=EXCLUDED.credential_name', actor.tenant_id, actor.user_id, hook_id, repo, body.credential_name, body.enabled)
     origin = public_origin()
     return JSONResponse({'hook_id': str(hook_id), 'enabled': body.enabled,
-                         'url': f'{origin}/v1/window-agents/webhooks/{actor.tenant_id}/{hook_id}',
+                         'url': f"{origin}{'/v1/command' if origin == 'https://app.tervory.com' else '/v1'}/window-agents/webhooks/{actor.tenant_id}/{hook_id}",
                          'secret': value if body.enabled else None}, headers={'Cache-Control': 'no-store'})
 
 
@@ -123,38 +143,47 @@ async def receive_hook(tenant_id: uuid.UUID, hook_id: uuid.UUID, request: Reques
         if len(raw) > 1_000_000:
             raise HTTPException(413, 'Webhook is too large.')
     async with command.db().acquire() as conn:
-        row = await conn.fetchrow('SELECT * FROM tank.window_agent_webhooks WHERE tenant_id=$1 AND hook_id=$2 AND enabled=true', tenant_id, hook_id)
-        if not row:
-            raise HTTPException(404, 'Webhook not found.')
-        actor = command.Actor(tenant_id, row['user_id'], False)
-        encrypted = await conn.fetchval("SELECT sealed FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='secrets' AND name=$3", tenant_id, hook_vault(actor), str(hook_id))
-    secret = open_seal(encrypted, hook_context(actor, hook_id))['value']
-    expected = 'sha256=' + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
-    supplied = request.headers.get('x-hub-signature-256', '')
-    if not re.fullmatch(r'sha256=[0-9a-f]{64}', supplied) or not hmac.compare_digest(supplied, expected):
-        raise HTTPException(401, 'Webhook signature refused.')
-    if request.headers.get('x-github-event') == 'ping':
-        return {'accepted': True}
-    if request.headers.get('x-github-event') != 'pull_request':
-        return {'accepted': False}
-    try:
-        uuid.UUID(request.headers.get('x-github-delivery', ''))
-        data = json.loads(raw)
-        if data.get('action') not in {'opened', 'synchronize', 'reopened', 'ready_for_review'}:
-            return {'accepted': False}
-        pull = data['pull_request']
-        number, sha = data['number'], pull['head']['sha']
-        if (type(number) is not int or number < 1 or not re.fullmatch(r'[0-9a-f]{40}', sha)
-                or data['repository']['full_name'].casefold() != row['repo']
-                or pull['base']['repo']['full_name'].casefold() != row['repo']):
-            raise ValueError()
-        # Duplicate deliveries and distinct actions for the same head share one job.
-        request_id = uuid.uuid5(hook_id, f'{number}:{sha}')
-        task = agents.Start(repo=row['repo'], credential_name=row['credential_name'],
-                            prompt=f'Review pull request #{number} at {sha}', request_id=request_id)
-    except (ValueError, TypeError, KeyError, AttributeError):
-        raise HTTPException(422, 'Webhook payload refused.') from None
-    return await agents.enqueue(task, actor, kind='review', pull_number=number, target_sha=sha)
+        async with conn.transaction():
+            row = await conn.fetchrow('SELECT * FROM tank.window_agent_webhooks WHERE tenant_id=$1 AND hook_id=$2 AND enabled=true', tenant_id, hook_id)
+            if not row:
+                raise HTTPException(404, 'Not Found')
+            actor = command.Actor(tenant_id, row['user_id'], False)
+            encrypted = await conn.fetchval("SELECT sealed FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='secrets' AND name=$3", tenant_id, hook_vault(actor), str(hook_id))
+            secret = open_seal(encrypted, hook_context(actor, hook_id))['value']
+            expected = 'sha256=' + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+            supplied = request.headers.get('x-hub-signature-256', '')
+            if not re.fullmatch(r'sha256=[0-9a-f]{64}', supplied) or not hmac.compare_digest(supplied, expected):
+                raise HTTPException(404, 'Not Found')
+            # Verify the hook's own HMAC before parsing the body or recording delivery.
+            try:
+                delivery = uuid.UUID(request.headers.get('x-github-delivery', ''))
+            except ValueError:
+                raise HTTPException(422, 'Webhook payload refused.') from None
+            claimed = await conn.fetchval('INSERT INTO tank.window_agent_deliveries(tenant_id,hook_id,delivery_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING delivery_id', tenant_id, hook_id, delivery)
+            if claimed is None:
+                raise HTTPException(409, 'Delivery already processed.')
+            if request.headers.get('x-github-event') == 'ping':
+                return {'accepted': True}
+            if request.headers.get('x-github-event') != 'pull_request':
+                return {'accepted': False}
+            try:
+                data = json.loads(raw)
+                if data.get('action') not in {'opened', 'synchronize', 'reopened', 'ready_for_review'}:
+                    return {'accepted': False}
+                pull = data['pull_request']
+                number, sha = data['number'], pull['head']['sha']
+                if (type(number) is not int or number < 1 or not re.fullmatch(r'[0-9a-f]{40}', sha)
+                        or data['repository']['full_name'].casefold() != row['repo']
+                        or pull['base']['repo']['full_name'].casefold() != row['repo']):
+                    raise ValueError()
+                request_id = uuid.uuid5(hook_id, f'{number}:{sha}')
+                task = agents.Start(repo=row['repo'], credential_name=row['credential_name'],
+                                    prompt=f'Review pull request #{number} at {sha}', request_id=request_id)
+            except (ValueError, TypeError, KeyError, AttributeError):
+                raise HTTPException(422, 'Webhook payload refused.') from None
+            # Delivery claim and durable enqueue commit atomically. Distinct deliveries
+            # for the same head still share one job and therefore one review charge.
+            return await agents.enqueue_on(conn, task, actor, kind='review', pull_number=number, target_sha=sha)
 
 
 def install(app, tank):
@@ -164,6 +193,6 @@ def install(app, tank):
     @asynccontextmanager
     async def lifespan(application):
         async with previous(application):
-            await agents.migrate(tank, SCHEMA, ['window_agent_webhooks'])
+            await agents.migrate(tank, SCHEMA, ['window_agent_webhooks', 'window_agent_deliveries'])
             yield
     app.router.lifespan_context = lifespan

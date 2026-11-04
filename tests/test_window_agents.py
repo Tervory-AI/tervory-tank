@@ -130,7 +130,7 @@ async def test_durable_queue_tenant_and_user_isolation_cancel_and_recovery(agent
     start = {'repo': 'alice/project', 'credential_name': 'github', 'prompt': 'Fix the counter', 'request_id': job_id}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url='http://test') as client:
         token = 'github_pat_' + 'test' * 8
-        assert (await client.put('/v1/window-agents/vault/github', json={'name': 'github', 'value': token})).status_code == 204
+        assert (await client.post('/v1/window-agents/vault/github', json={'name': 'github', 'value': token})).status_code == 200
         assert (await client.post('/v1/window-agents/jobs', json=start)).status_code == 202
         # Idempotent enqueue cannot create a second paid task.
         assert (await client.post('/v1/window-agents/jobs', json=start)).status_code == 202
@@ -235,7 +235,7 @@ async def test_receipts_are_existing_command_receipts_and_private_to_the_job_own
     application.dependency_overrides[agents.actor_identity] = lambda: actor[0]
     job_id = uuid.uuid4()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url='http://test') as client:
-        await client.put('/v1/window-agents/vault/github', json={'name': 'github', 'value': 'github_pat_' + 'test' * 8})
+        await client.post('/v1/window-agents/vault/github', json={'name': 'github', 'value': 'github_pat_' + 'test' * 8})
         await client.post('/v1/window-agents/jobs', json={'repo': 'alice/project', 'credential_name': 'github', 'prompt': 'fix', 'request_id': str(job_id)})
         receipt_path = f'/v1/window-agents/jobs/{job_id}/receipt'
         assert (await client.get(receipt_path)).json()['status'] == 'pending'
@@ -360,3 +360,13 @@ async def test_feature_migrations_grant_only_the_existing_application_role(agent
         async with agent_db.acquire() as conn:
             await conn.execute(f'DROP OWNED BY "{role}"')
             await conn.execute(f'DROP ROLE "{role}"')
+
+
+def test_real_workspace_public_proxy_and_signed_webhook_transport():
+    import os
+    import subprocess
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(['node', '--test', 'workers/window_agent/test/public-edge.test.mjs'],
+                            cwd=root, env={**os.environ, 'COMMAND_TEST_TOOLS': str(root / 'cli/node_modules')},
+                            capture_output=True, text=True, timeout=120, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -93,21 +93,35 @@ async def test_enabled_webhook_verifies_signature_deduplicates_head_and_stays_us
     application.dependency_overrides[command.worker] = lambda: None
     token = 'github_pat_' + 'test' * 8
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url='http://test') as client:
-        await client.put('/v1/window-agents/vault/github', json={'name': 'github', 'value': token})
+        await client.post('/v1/window-agents/vault/github', json={'name': 'github', 'value': token})
         config = {'repo': 'alice/project', 'credential_name': 'github', 'enabled': True}
         response = await client.post('/v1/window-agents/webhooks', json=config)
         assert response.status_code == 200
         hook = response.json()
         assert response.headers['cache-control'] == 'no-store'
-        path = httpx.URL(hook['url']).path
+        assert '/v1/command/window-agents/webhooks/' in hook['url']
+        path = httpx.URL(hook['url']).path.replace('/v1/command/', '/v1/')
         payload = {'action': 'opened', 'number': 9, 'repository': {'full_name': 'alice/project'},
                    'pull_request': {'head': {'sha': 'a' * 40}, 'base': {'repo': {'full_name': 'alice/project'}}}}
         raw = json.dumps(payload).encode()
         headers = {'x-github-event': 'pull_request', 'x-github-delivery': str(uuid.uuid4()),
                    'x-hub-signature-256': 'sha256=' + hmac.new(hook['secret'].encode(), raw, hashlib.sha256).hexdigest()}
-        assert (await client.post(path, content=raw)).status_code == 401
+        bad = await client.post(path, content=raw, headers={**headers, 'x-hub-signature-256': 'sha256=' + '0' * 64})
+        wrong_path = path.rsplit('/', 1)[0] + '/' + str(uuid.uuid4())
+        wrong = await client.post(wrong_path, content=raw, headers=headers)
+        wrong_tenant = await client.post(path.replace(str(owner.tenant_id), str(uuid.uuid4())), content=raw, headers=headers)
+        assert bad.status_code == wrong.status_code == wrong_tenant.status_code == 404
+        assert bad.json() == wrong.json() == {'detail': 'Not Found'}
+        assert (await client.post(path, content=b'x' * 1_000_001, headers=headers)).status_code == 413
+        assert (await client.get('/v1/window-agents/jobs')).json() == []
+        async with agent_db.acquire() as conn:
+            assert await conn.fetchval('SELECT count(*) FROM tank.window_agent_deliveries WHERE tenant_id=$1', owner.tenant_id) == 0
         first = await client.post(path, content=raw, headers=headers)
         assert first.status_code == 202
+        assert (await client.post(path, content=raw, headers=headers)).status_code == 409
+        changed = json.dumps({**payload, 'number': 10}).encode()
+        changed_headers = {**headers, 'x-hub-signature-256': 'sha256=' + hmac.new(hook['secret'].encode(), changed, hashlib.sha256).hexdigest()}
+        assert (await client.post(path, content=changed, headers=changed_headers)).status_code == 409
         again = await client.post(path, content=raw, headers={**headers, 'x-github-delivery': str(uuid.uuid4())})
         assert again.json() == first.json()
         rows = (await client.get('/v1/window-agents/jobs')).json()

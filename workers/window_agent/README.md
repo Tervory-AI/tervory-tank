@@ -21,7 +21,8 @@ vault. Jobs carry its name only. Tasks push a `worker/window-<uuid>` branch to t
 user's repository and create a draft PR against its actual default branch. There
 is no merge operation. Reviews read the PR diff without executing repository code,
 validate comment locations and bind comments to the reviewed commit. An explicitly
-enabled, HMAC-verified webhook deduplicates deliveries for the same PR head; queued
+enabled, HMAC-verified webhook rejects repeated delivery IDs transactionally with
+enqueue and deduplicates distinct deliveries for the same PR head; queued
 obsolete heads are superseded before a model call. Manual reviews use the latest
 head when the worker starts.
 
@@ -55,6 +56,11 @@ podman run --rm --label tervory.test=1 --name codex-agents-fake-github-e2e \
   --entrypoint python3 tervory-window-agent:1 \
   /opt/tervory/workers/window_agent/test/e2e.py --check-command
 ```
+
+Boston user calls reuse the existing `/v1/command/window-agents/` public corridor
+and an exact method/path allowlist; ZA calls the local public Tank directly. A
+POST-only Boston webhook adapter forwards bounded raw bytes and GitHub headers to
+local Tank. Neither adapter forwards service identity or worker endpoints.
 
 The extension lives in `Tervory-AI/tervory-window`, at
 `extensions/tervory-agents/`. Its README lists the Figma frames required before

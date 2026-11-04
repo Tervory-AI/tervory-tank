@@ -112,11 +112,12 @@ async def credential(conn, actor, name):
     return open_seal(value, context(actor, name))['value']
 
 
-@router.put('/vault/github', status_code=204)
+@router.post('/vault/github')
 async def save_credential(body: Credential, actor: command.Actor = Depends(actor_identity)):
     async with command.db().acquire() as conn:
         await conn.execute("INSERT INTO tank.vault_items(tenant_id,vault,kind,name,metadata,sealed) VALUES($1,$2,'secrets',$3,$4::jsonb,$5) ON CONFLICT(tenant_id,vault,kind,name) DO UPDATE SET sealed=EXCLUDED.sealed,metadata=EXCLUDED.metadata",
                            actor.tenant_id, vault_name(actor), body.name, json.dumps({'name': body.name}), seal({'value': body.value}, context(actor, body.name)))
+    return {'saved': True}
 
 
 @router.get('/vault/github')
@@ -128,26 +129,30 @@ async def names(actor: command.Actor = Depends(actor_identity)):
 
 async def enqueue(body: Start, actor, *, kind='task', pull_number=None, target_sha=None):
     async with command.db().acquire() as conn:
-        async with conn.transaction():
-            # Serialise duplicate requests before creating their receipt thread.
-            await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', f'{actor.tenant_id}:{body.request_id}')
-            previous = await conn.fetchrow('SELECT * FROM tank.window_agent_jobs WHERE tenant_id=$1 AND job_id=$2', actor.tenant_id, body.request_id)
-            if previous:
-                if previous['user_id'] != actor.user_id:
-                    raise HTTPException(404, 'Job not found.')
-                if (previous['repo'], previous['credential_name'], previous['prompt'], previous['kind'], previous['pull_number'], previous['target_sha']) != (body.repo, body.credential_name, body.prompt, kind, pull_number, target_sha):
-                    raise HTTPException(409, 'Request already used for another task.')
-                return {'job_id': str(body.request_id)}
-            await credential(conn, actor, body.credential_name)
-            thread_id = uuid.uuid4()
-            state = {'messages': [], 'steps': {}, 'cards': {}, 'receipts': [], 'active_turn': None}
-            await conn.execute('INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,$4,$5::jsonb)',
-                               thread_id, actor.tenant_id, actor.user_id, body.repo, json.dumps(state))
-            await conn.execute('INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt,kind,pull_number,target_sha) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
-                               actor.tenant_id, actor.user_id, body.request_id, thread_id, body.repo, body.credential_name, body.prompt, kind, pull_number, target_sha)
-            await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(PLATFORM))
-            await conn.execute('INSERT INTO tank.window_agent_dispatch(tenant_id,job_id,owner_tenant) VALUES($1,$2,$3)', PLATFORM, body.request_id, actor.tenant_id)
-            await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(actor.tenant_id))
+        return await enqueue_on(conn, body, actor, kind=kind, pull_number=pull_number, target_sha=target_sha)
+
+
+async def enqueue_on(conn, body: Start, actor, *, kind='task', pull_number=None, target_sha=None):
+    async with conn.transaction():
+        # Serialise duplicate requests before creating their receipt thread.
+        await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', f'{actor.tenant_id}:{body.request_id}')
+        previous = await conn.fetchrow('SELECT * FROM tank.window_agent_jobs WHERE tenant_id=$1 AND job_id=$2', actor.tenant_id, body.request_id)
+        if previous:
+            if previous['user_id'] != actor.user_id:
+                raise HTTPException(404, 'Job not found.')
+            if (previous['repo'], previous['credential_name'], previous['prompt'], previous['kind'], previous['pull_number'], previous['target_sha']) != (body.repo, body.credential_name, body.prompt, kind, pull_number, target_sha):
+                raise HTTPException(409, 'Request already used for another task.')
+            return {'job_id': str(body.request_id)}
+        await credential(conn, actor, body.credential_name)
+        thread_id = uuid.uuid4()
+        state = {'messages': [], 'steps': {}, 'cards': {}, 'receipts': [], 'active_turn': None}
+        await conn.execute('INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,$4,$5::jsonb)',
+                           thread_id, actor.tenant_id, actor.user_id, body.repo, json.dumps(state))
+        await conn.execute('INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt,kind,pull_number,target_sha) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+                           actor.tenant_id, actor.user_id, body.request_id, thread_id, body.repo, body.credential_name, body.prompt, kind, pull_number, target_sha)
+        await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(PLATFORM))
+        await conn.execute('INSERT INTO tank.window_agent_dispatch(tenant_id,job_id,owner_tenant) VALUES($1,$2,$3)', PLATFORM, body.request_id, actor.tenant_id)
+        await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(actor.tenant_id))
     return {'job_id': str(body.request_id)}
 
 
