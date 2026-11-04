@@ -113,7 +113,7 @@ const token = "tb1.za." + "a".repeat(32) + ".rk_pub_" + "b".repeat(48),
       },
     },
   })("app/trigger/actions.ts");
-  const settings = await actions.readTrigger("bot/settings");
+  const settings = await actions.readTrigger("bot", "settings");
   assert.equal(settings.settings.name, "placeholder store");
   await actions.proposeTrigger("trigger.bot.settings", { enabled: false });
   await actions.confirmTrigger(id, id);
@@ -122,7 +122,7 @@ const token = "tb1.za." + "a".repeat(32) + ".rk_pub_" + "b".repeat(48),
   assert.equal(actionsCalls[0].identity.tenantAdmin, true);
   assert.equal(actionsCalls[0].identity.tenantId, id);
   await assert.rejects(() =>
-    actions.readTrigger("bot/settings?tenant_id=placeholder-other"),
+    actions.readTrigger("bot", "settings?tenant_id=placeholder-other"),
   );
   assert.equal(actionsCalls.length, 3);
   console.log(
