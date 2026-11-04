@@ -275,7 +275,7 @@ async def test_founder_pause_stops_bench_before_reservation_and_network(database
         assert result['status']=='paused' and not called
         assert await conn.fetchval('SELECT count(*) FROM tank.bench_calls WHERE tenant_id=$1',PLATFORM_TENANT)==0
         assert await conn.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)==0
-        assert await conn.fetchval("SELECT count(*) FROM tank.control_log WHERE tenant_id=$1 AND task='fixture' AND path='bench'",PLATFORM_TENANT)==1
+        assert await conn.fetchval("SELECT count(*) FROM tank.control_log WHERE tenant_id=$1 AND task='fixture.benchmark' AND path='paid_steps'",PLATFORM_TENANT)==1
 
 
 @pytest.mark.asyncio

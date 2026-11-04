@@ -87,6 +87,7 @@ def zenas_scope_rules(package_path: Path):
 
 class Chat(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    paid_run_id: uuid.UUID | None = None
     model: str = "policy"
     messages: list[dict[str, Any]] = Field(min_length=1, max_length=512)
     tools: list[dict[str, Any]] | None = Field(default=None, max_length=64)
@@ -106,7 +107,7 @@ class Chat(BaseModel):
 
 
 def validate_chat(body: Chat) -> None:
-    if len(json.dumps(body.model_dump())) > 1_000_000:
+    if len(json.dumps(body.model_dump(exclude={"paid_run_id"}))) > 1_000_000:
         raise HTTPException(413, "Conversation is too large.")
     for message in body.messages:
         if message.get("role") not in {"system", "developer", "user", "assistant", "tool"}:
@@ -174,8 +175,11 @@ def input_tokens(payload: dict) -> int:
 
 async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str, *, room: str = ROOM) -> dict:
     import paid_steps
-    digest = paid_steps.fingerprint(body.model_dump())
-    run = paid_steps.Run(tenant, uuid.uuid5(task or tenant, digest), digest)
+    room = room_text(room)
+    validate_chat(body)
+    digest = paid_steps.fingerprint(body.model_dump(exclude={"paid_run_id"}))
+    identity = body.paid_run_id or (uuid.uuid5(task,digest) if task else uuid.uuid4())
+    run = paid_steps.Run(tenant, identity, digest)
     with paid_steps.run_scope(run):
         return await paid_steps.checkpoint(paid_steps.fingerprint(["agent.chat", digest]),
             lambda: _complete(tank, body, tenant, task, region, room=room))
@@ -192,7 +196,7 @@ async def _complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | 
         # Scan the whole supplied conversation, including tool results/arguments.
         # This is the room's existing classifier, with no model scope fallback.
         scope = zenas_scope_rules(package.path).classify(
-            json.dumps(body.model_dump(exclude_none=True), ensure_ascii=False), "za" if region == "za" else "us")
+            json.dumps(body.model_dump(exclude_none=True,exclude={"paid_run_id"}), ensure_ascii=False), "za" if region == "za" else "us")
         if scope.get("criminal") or not scope.get("in_scope"):
             raise HTTPException(403, scope["reason"])
     policy = await tank.load_policy(task_type, tenant)
@@ -225,7 +229,7 @@ async def _complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | 
     if refusal:
         raise HTTPException(403, refusal)
     # Policy chooses the route; a model name in an SDK request cannot override it.
-    payload = body.model_dump(exclude_none=True, exclude={"model", "stream", "stream_options", "max_completion_tokens", "user", "reasoning_effort"})
+    payload = body.model_dump(exclude_none=True, exclude={"paid_run_id", "model", "stream", "stream_options", "max_completion_tokens", "user", "reasoning_effort"})
     payload.update(model=model, messages=messages, stream=False,
                    max_tokens=min(body.max_tokens or body.max_completion_tokens or policy["max_tokens_out"], policy["max_tokens_out"]))
     # Match Hermes' minimum 64k context, reserving the requested output budget.

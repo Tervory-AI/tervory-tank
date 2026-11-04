@@ -58,11 +58,7 @@ def build_router(tank) -> APIRouter:
     @router.post("/reserve")
     async def reserve(body: Reserve, request: Request):
         auth(body, request)
-        import paid_steps
-        with paid_steps.run_scope(paid_steps.Run(body.tenant_id, body.job_id,
-                paid_steps.fingerprint(body.model_dump()))):
-            decision = await paid_steps.admit("rig.forge." + body.method, tenant_id=body.tenant_id,
-                owner="rig", kind="gpu", source="tank/rig_forge_routes.py", task="rig.forge." + body.method)
+        await controls.refuse_paid(task="rig.forge.gpu",path="rig.forge.reserve")
         async with tank.pool().acquire() as conn:
             async with conn.transaction():
                 # A reservation has one immutable request and one launch claim.
@@ -90,6 +86,10 @@ def build_router(tank) -> APIRouter:
                 # outcomes retain their entire charge until operator reconciliation.
                 if used + upper > limit["total_budget_usd"]:
                     raise HTTPException(409, "The configured GPU budget is exhausted.")
+                import paid_steps
+                with paid_steps.run_scope(paid_steps.Run(body.tenant_id,body.job_id,paid_steps.fingerprint(body.model_dump()))):
+                    decision = await paid_steps.admit("rig.forge."+body.method,tenant_id=body.tenant_id,
+                        owner="rig",kind="gpu",source="tank/rig_forge_routes.py",task="rig.forge."+body.method)
                 result = {"tenant_id": str(body.tenant_id), "job_id": str(body.job_id),
                           "method": body.method, "image": limit["image"], "flavor": limit["flavor"],
                           "timeout_seconds": body.timeout_seconds, "reserved_usd": str(upper),

@@ -223,10 +223,10 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
         if (event.seq !== undefined) { if (event.seq <= lastSeq) return; lastSeq = event.seq; }
         const data = event.data;
         if (event.type === "error") { rejected = true; throw new Error(String(data.message)); }
-        if (event.type === "done") completed = true;
+        if (event.type === "done" || (event.type === "step" && data.phase_finished === true)) completed = true;
         setSnapshot(current => {
           if (!current) return current;
-          if (event.type === "step") return { ...current, steps: upsert(current.steps, data as unknown as Step, "step_id") };
+          if (event.type === "step") return { ...current, messages: data.phase_finished === true ? current.messages.filter(message => message.message_id !== localId) : current.messages, steps: upsert(current.steps, data as unknown as Step, "step_id") };
           if (event.type === "card" && visibleCard(data as unknown as Card, founder)) return { ...current, cards: upsert(current.cards, data as unknown as Card, "card_id") };
           if (event.type === "receipt") return applyReceipt(current, data as unknown as Receipt, localId);
           if (event.type === "token") return { ...current, messages: current.messages.map(message => message.message_id !== localId ? message : { ...message, content: (data.replace === true ? "" : message.content) + String(data.text ?? "") }) };

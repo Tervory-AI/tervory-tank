@@ -91,6 +91,11 @@ async def real_tank(monkeypatch):
 
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=tank.app), base_url="http://tank",
         headers={"X-Tank-Key": "local-routellm-test"})
+    import paid_http
+    from paid_steps_fixtures import configure_paid_auto
+    configure_paid_auto(monkeypatch,lambda:tank.pool())
+    original_paid = paid_http.Client
+    monkeypatch.setattr(paid_http,"Client",lambda *a,**kw:original_paid(*a,**{**kw,"transport":httpx.MockTransport(provider)}))
     original = httpx.AsyncClient
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: original(*a, **{**kw, "transport": httpx.MockTransport(provider)}))
     monkeypatch.setattr(routing, "score", router)
@@ -142,7 +147,12 @@ async def test_real_tank_off_shadow_cost_judge_isolation_and_founder_gate(real_t
         assert sample["agreement"] == 1 and sample["method"] == "judge"
         shadow = await conn.fetchrow("SELECT * FROM tank.ledger WHERE id=$1", sample["candidate_ledger_id"])
         assert shadow["routellm_model_cost_usd"] == Decimal(".002")
-        assert shadow["cost_usd"] == Decimal(".003")  # Includes the real judge receipt cost.
+        assert shadow["cost_usd"] == Decimal(".002"), (shadow["cost_usd"],shadow["cost_status"],shadow["paid_step_mode"],shadow["model"])
+        # Candidate and judge now have distinct paid-step receipts. Their sum
+        # includes the judge once, without duplicating it on the candidate row.
+        assert await conn.fetchval("SELECT sum(cost_usd) FROM tank.ledger WHERE tenant_id=$1 AND task_type=$2",
+            b.tank.PLATFORM_TENANT,"routellm.proof#shadow") == Decimal(".003")
+        assert shadow["paid_step_mode"] == "automatic"
         assert shadow["routellm_sample_tenant"] == a and shadow["tenant_id"] == b.tank.PLATFORM_TENANT
         assert not await conn.fetchval("SELECT count(*) FROM tank.shadow WHERE tenant_id=$1", other)
         assert (await b.tank._load_evidence(conn, {"task_type": "routellm.proof", "candidate_model": "flash-lite"})).samples == 0

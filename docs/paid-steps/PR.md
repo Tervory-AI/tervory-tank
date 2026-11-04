@@ -27,31 +27,30 @@ Tank changes deploy Boston and ZA through existing deployment selection. Shared 
 
 The registry reads visible tenant/global policies and local configured fallback metadata. Runtime admission registers newly reached exact seats. A model switch does not authorize another model or another task. Unknown prices are treated as paid. A configured Context.dev free pass bypasses approval; a missing quote never grants spending permission. Apollo price-book metadata is not a runnable vendor rung and has no phantom switch.
 
-## Gate 1 validation
+## Validation and CI status
 
-Offline disposable Postgres: `PAID_STEPS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:<test-port>/postgres python -m pytest tests/test_paid_steps.py -n 2 -q` — 34 passed. Includes ten actual `main.run_route` product paths, approval cards, denial, RLS, master stop, receipt provenance, no repeated paid dispatch, actual approved Base Brave function through the Base client, and synchronous SDK wait/deny/foreign-tenant checks. External provider traffic uses in-process fixtures only.
+All paid-step provider calls use offline fixtures and disposable loopback Postgres. No live acceptance or production configuration change is claimed.
 
-`python -m pytest tests/test_command.py -n 2 -q` — 38 passed, 48 skipped (existing optional integration prerequisites).
+Commands run:
 
-`python -m pytest tests/test_base_context_dev.py tests/test_perplexity_research.py -n 2 -q` — 62 passed, 1 skipped. These protocol tests explicitly configure an admission fixture; default-Ask behavior is tested separately against real Postgres.
+- `python -m pytest tests/test_paid_steps.py tests/acceptance/test_paid_steps.py tests/test_paid_steps_settings.py -n 2 -q --assert=plain --timeout=600 --disable-socket --allow-unix-socket --allow-hosts=localhost,127.0.0.1,::1`: 67 passed, including the four real-chat continuation cases (add `tests/test_paid_steps_chats.py` to the command).
+- `python -m pytest tests/test_paid_steps_chats.py -n 2 -q` with those offline flags: four real /chats cases passed: approval, denial, approval before persistence, and a private member request resumed after a separate admin-thread approval.
+- RouteLLM shadow/accounting: 14 passed. Batch cap/dispatch: six passed. CLI client protocol: 35 passed. Settings browser proofs cover 375, 390 and 1440px, independent switches, master pause, errors and no horizontal scroll.
+- `ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"`: passed.
+- `workspace/node_modules/.bin/tsc --project workspace/tsconfig.json --noEmit`: passed, including the final chat phase flag.
+- `PRECHECK_SKIP_SEMGREP=1 scripts/precheck.sh`: latest run passed lint, Gitleaks and OSV with Semgrep skipped. Its broad test stage was interrupted after stack inspection confirmed the unchanged approved Base scrape email regex was still processing the 400 KB fixture. This is not a passing precheck. Earlier broad runs exposed fixture assumptions repaired here, a local integration DSN prerequisite, and a 600-second timeout in the unchanged approved Base scrape email matcher. No approved package or timeout suppression was changed.
 
-`ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"` — passed.
+Local Semgrep is stopped at the founder's direction and will not run again. An earlier local scan reached its tool timeout, not a reported finding. No scanner exception was added.
 
-`workspace/node_modules/.bin/tsc --project workspace/tsconfig.json --noEmit` — passed.
+[CI run 41899625731](https://github.com/Tervory-AI/tervory-tank/actions/runs/41899625731) tested gate-3 head `e948ab5451a536ff43eb7c6cb53196fa428c710e`. Lint and Workspace passed. Tank and command-acceptance failures led to the fixes below; final-head CI remains required. The manually dispatched security job scanned full history/manifests and reported existing findings in unchanged files. CI is not claimed green.
 
-Precheck and final-head CI results will be appended after completion. No live acceptance or production configuration change is claimed.
+## Runtime and regression repairs
 
-Local Semgrep reached its 900-second limit (`TimeoutExpired`, result `incomplete`). Per the founder's instruction, the next precheck uses `PRECHECK_SKIP_SEMGREP=1`; CI still runs Semgrep. No finding was waived and no scanner exception was added.
+The continuation transaction commits its pending confirmation card before ending the current /chats stream phase. Approval arriving before continuation persistence is recovered; resumption restores the original task and private thread. Denial records its reason and ends the original task. Unattended CLI callers leave paid approval pending. Completed approvals cannot starve new cards.
 
-`PYTHONPATH=tank python -m pytest tests/test_moa_integration.py tests/test_core1_proof.py -n 2 -q` — 39 passed, 25 skipped. Optional Postgres integration prerequisites were not enabled in this run.
+SDK callers retry with an opaque run identity after approval; independent identical requests remain independent. Receipt costs use numeric SQL parameters. Input/region guards run before journal access. Batch price/cap refusals remain retryable without ambiguous dispatch claims. Registry metadata grants and schema generation boundaries are tested. Existing protocol fixtures explicitly choose Auto or mock their dispatch boundary; real default-Ask proofs use Postgres. RLS function pins and the repository's one-door audit inventory reflect the changed continuation paths.
 
-Latest focused regressions: 59 passed, 4 skipped before the final no-op chat snapshot fix; the remaining rejected-receipt snapshot regression is included in the current rerun. Direct Research-card approval and denial continuations: 2 passed. Task-worker approve/resume and deny: 2 passed. The paid-step backend contract: 1 passed. Final precheck results are recorded below once complete.
-
-Local regression repairs: the reader email matcher now bounds token lengths to avoid quadratic matching on long plain-text tool results; a copied flat Base app under repo-local TMPDIR no longer discovers the parent repository's skill packages. Both existing regression cases pass. Chat snapshot reads only enter an edit transaction when an approval card needs an update.
-
-Current focused validation: 58 passed, 4 skipped (paid runtime, ten HTTP acceptance rows, settings transport and command cross-lane regressions); two direct Research-card continuation cases passed separately after their addition. Off-peak hold/dispatch and provider-batch receipt/tenant-isolation checks: 2 passed. Settings browser/transport at 375, 390 and 1440: 4 passed. Workspace typecheck passed.
-
-The broad precheck found a room-corridor protocol fixture missing explicit admission setup; its shared fixture now checks the real master stop before its fixture model dispatch. A separate room topology run hit the existing 30-second seal-check subprocess limit under host load; no seal-check behavior or timeout has been changed. Full precheck and CI status remain pending; no green full-suite result is claimed.
+The reader email matcher bounds token lengths to avoid quadratic matching on long plain-text tool results. A copied flat Base app under repo-local TMPDIR no longer discovers its parent repository's skill packages. Neither repair edits an approved skill package.
 
 ## Gate 2: settings
 
@@ -64,3 +63,7 @@ PR #685 landed while this task was running. `/settings/paid-steps` implements it
 Ten product paid-rung rows (Base, Tiger, Market Lab, Rig, Tisan, Radix, Zenas, Trigger, Autumbra and Tank/model routing) have ten matching offline HTTP cases and a row/case guard. Each exercises Ask → existing confirmation card → approved receipt, idempotent replay, Auto → automatic receipt, and master pause → no paid dispatch. `python -m pytest tests/acceptance/test_paid_steps.py -n 2 -q` — 11 passed, also included in the 58-case focused run above.
 
 Final focused settings/runtime check: `PAID_STEPS_TEST_DATABASE_URL=<loopback throwaway Postgres> PYTHONPATH=tank:tests python -m pytest tests/test_paid_steps.py tests/test_paid_steps_settings.py -n 2 -q --assert=plain --timeout=600 --disable-socket --allow-unix-socket --allow-hosts=localhost,127.0.0.1,::1` — **49 passed**. The same flags on `tests/acceptance/test_paid_steps.py` — **11 passed**, including actual task/model names in confirmation cards. Registry task/model display columns are additive; stable authorization IDs do not change. Final Workspace typecheck passed.
+
+Final SQL parameter/tenant regression: `python -m pytest tests/test_ledger_sql_param.py -n 2 -q` with offline flags — **39 passed**. Master-pause benchmark regression — **2 passed**.
+
+Final local limitations: repository-wide secret and one-door audit tests hit their 300-second test limits while scanning unchanged fixtures/source; no finding was returned before timeout. A core-baseline concurrency test hit its existing two-second transaction deadline; five other cases passed before stop. These limits are recorded, not suppressed or marked successful. Final-head CI is required. The paid-step focused suite (67 cases), SQL/tenant parameter suite (39), CLI protocol (35), shadow accounting (14), batch cap/dispatch (6) and Workspace typecheck passed.

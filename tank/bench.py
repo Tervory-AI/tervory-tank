@@ -215,15 +215,19 @@ async def bench_model(pool, policy: dict, model: str, cases: list[dict], book: d
         await paid_steps.save_background(pause, {"kind": "benchmark", "policy": policy, "model": model,
             "cases": cases, "region": region, "cap": str(cap), "comparison": comparison})
         return {'model': model, 'score': None, 'cost_per_call': None, 'status': 'paused'}
+    except HTTPException as exc:
+        if exc.status_code != 503:
+            raise
+        return {'model':model,'score':None,'cost_per_call':None,'status':'paused'}
     if approval is None:
-        return await _bench_model(pool, policy, model, cases, book, region, cap, comparison)
+        return await _bench_model(pool, policy, model, cases, book, region, cap, comparison, paid=False)
     with paid_steps.run_scope(paid_steps.Run(PLATFORM_TENANT, approval["run_id"], approval["request_hash"])):
         paid_steps.remember(paid_steps.current.get(), approval)
         return await paid_steps.checkpoint(paid_steps.fingerprint(["benchmark", payload]),
             lambda: _bench_model(pool, policy, model, cases, book, region, cap, comparison))
 
 
-async def _bench_model(pool, policy: dict, model: str, cases: list[dict], book: dict, region: str, cap: Decimal, comparison: str) -> dict:
+async def _bench_model(pool, policy: dict, model: str, cases: list[dict], book: dict, region: str, cap: Decimal, comparison: str, *, paid: bool = True) -> dict:
     suite_hash = hashlib.sha256(encoded({'cases': cases, 'system_prompt': policy.get('system_prompt'),
         'max_tokens_out': policy['max_tokens_out'], 'tolerance': policy.get('number_tolerance')}).encode()).hexdigest()
     run_id = await pool.fetchval('''INSERT INTO tank.bench_runs(tenant_id,region,task_type,model,comparison_model,suite_hash,expected_n)
@@ -232,7 +236,7 @@ async def _bench_model(pool, policy: dict, model: str, cases: list[dict], book: 
     scores, costs = [], []
     for case in cases:
         try:
-            await controls.refuse_paid(paid=True,
+            await controls.refuse_paid(paid=paid,
                                        task=policy['task_type'], path='bench')
         except HTTPException:
             status, error = 'paused', 'Paid benchmark work is paused or pause state is unavailable.'

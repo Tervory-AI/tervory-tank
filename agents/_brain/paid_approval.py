@@ -3,6 +3,7 @@
 No provider, credential handoff or approval write. This runs only in the isolated
 Hermes process and leaves requests to every other destination unchanged.
 """
+import json
 import time
 from urllib.parse import urlsplit
 
@@ -36,6 +37,11 @@ def install(base, key, tenant, *, wait=time.sleep):
                 state = check.json()['state']
                 check.close()
                 if state == 'approved':
+                    payload = json.loads(request.content)
+                    payload['paid_run_id'] = detail.get('resume_run_id',detail['run_id'])
+                    request = httpx.Request(request.method,request.url,
+                        headers={name:value for name,value in request.headers.items() if name.lower()!='content-length'},
+                        json=payload,extensions=request.extensions)
                     break
                 if state == 'denied':
                     raise RuntimeError('Paid step denied by tenant administrator')

@@ -35,10 +35,9 @@ async def database(monkeypatch):
     admin = await asyncpg.connect(url)
     name = 'placeholder_paid_' + uuid.uuid4().hex
     await admin.execute(f'CREATE DATABASE "{name}"')
-    options = dict(host=urlsplit(url).hostname, port=urlsplit(url).port or 5432,
-                   user=urlsplit(url).username, password=urlsplit(url).password, database=name)
-    pool = await asyncpg.create_pool(**options, min_size=1, max_size=5)
-    schema = (ROOT / 'tank/schema.sql').read_text().split('-- Paid ladder steps:', 1)[1]
+    placeholder_dsn = urlsplit(url)._replace(path='/'+name).geturl()
+    pool = await asyncpg.create_pool(placeholder_dsn,min_size=1,max_size=5)
+    schema = (ROOT / 'tank/schema.sql').read_text().split('-- Paid ladder steps:', 1)[1].split('-- END PAID LADDER STEPS',1)[0]
     async with pool.acquire() as conn:
         await conn.execute('CREATE SCHEMA tank; CREATE TABLE tank.ledger(id uuid,tenant_id uuid); ALTER TABLE tank.ledger ENABLE ROW LEVEL SECURITY')
         await conn.execute(schema[schema.index('CREATE TABLE'):])
@@ -393,8 +392,7 @@ async def routing_pool():
     admin = await asyncpg.connect(url)
     name = 'placeholder_paid_router_' + uuid.uuid4().hex
     await admin.execute(f'CREATE DATABASE "{name}"')
-    pool = await asyncpg.create_pool(host=urlsplit(url).hostname,port=urlsplit(url).port or 5432,
-                user=urlsplit(url).username,password=urlsplit(url).password,database=name,min_size=1,max_size=5)
+    pool = await asyncpg.create_pool(urlsplit(url)._replace(path='/'+name).geturl(),min_size=1,max_size=5)
     try:
         async with pool.acquire() as conn:
             await conn.execute((ROOT / 'tank/schema.sql').read_text())
@@ -561,7 +559,7 @@ def test_hermes_waits_only_for_its_tenant_and_never_writes_approval(monkeypatch,
             return httpx.Response(200, json={'state': decision})
         if len(calls) == 1:
             return httpx.Response(409,json={'detail':{'code':'paid_step_approval_required',
-                'approval_id':approval_id,'tenant_id':str(B if decision == 'foreign' else A)}})
+                'approval_id':approval_id,'run_id':'00000000-0000-4000-8000-000000000996','tenant_id':str(B if decision == 'foreign' else A)}})
         return httpx.Response(200,json={'choices':[{'message':{'content':'placeholder answer'}}]})
     original = module.install('https://tank.example', 'placeholder-room-key', str(A), wait=lambda _:None)
     try:
@@ -577,8 +575,9 @@ def test_hermes_waits_only_for_its_tenant_and_never_writes_approval(monkeypatch,
         httpx.Client.send = original
 
 
-@pytest.mark.asyncio
-async def test_settings_require_admin_and_do_not_change_another_tenant(database, monkeypatch):
+@pytest.mark.asyncio(loop_scope='module')
+async def test_settings_require_admin_and_do_not_change_another_tenant(router_database, monkeypatch):
+    database=router_database
     import httpx
     from fastapi import FastAPI
     import command
@@ -589,6 +588,7 @@ async def test_settings_require_admin_and_do_not_change_another_tenant(database,
     step = p.model_step('base.placeholder','placeholder-model')
     async with database[0].acquire() as conn:
         await p.register(conn,step,'base','model','placeholder fixture')
+        await conn.execute("INSERT INTO tank.policy(tenant_id,task_type,model) VALUES($1,'base.placeholder','placeholder-model')",A)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app),base_url='http://placeholder') as client:
         result = await client.put('/v1/command/paid-steps/'+step,json={'mode':'auto'})
         assert result.status_code == 200 and result.json()['mode'] == 'auto'
@@ -612,18 +612,16 @@ async def test_configured_fallback_requires_its_own_approval_without_repaying_pr
 
 @pytest.mark.asyncio
 async def test_continuation_resumes_once_and_failure_is_inspectable(database, monkeypatch):
-    import command
     from unittest.mock import AsyncMock
     pool, _ = database
     with p.run_scope(run()):
         with pytest.raises(p.ApprovalRequired) as stopped:
             await admission('base')
-    await p.save_background(stopped.value, {'kind':'command.turn','thread_id':str(uuid.uuid4()),
-        'user_id':'placeholder-admin','tenant_admin':True,'turn_id':str(uuid.uuid4()),
-        'messages':[],'model':'auto','priority':None})
+    await p.save_background(stopped.value, {'kind':'tank.task','task_id':str(uuid.uuid4()),
+        'request':{'tenant_id':str(A),'messages':[{'role':'user','content':'placeholder request'}]}})
     await p.decide(A,stopped.value.approval_id,user='placeholder-admin',approve=True,reason='placeholder approved')
     work = AsyncMock(side_effect=RuntimeError('placeholder unavailable'))
-    monkeypatch.setattr(command,'finish_turn',work)
+    monkeypatch.setattr(__import__('main'),'_run_task',work)
     with pytest.raises(RuntimeError):
         await p.resume(A,stopped.value.approval_id)
     await p.resume(A,stopped.value.approval_id)
@@ -661,6 +659,7 @@ async def test_registry_lists_configured_seats_defaults_and_tenant_boundaries(ro
         assert (await client.put('/v1/command/paid-steps/'+primary,json={'mode':'invalid'})).status_code == 422
         actor = command.Actor(other,'placeholder-admin',False,tenant_admin=True)
         assert primary not in {item['step_id'] for item in (await client.get('/v1/command/paid-steps')).json()['steps']}
+        assert (await client.put('/v1/command/paid-steps/'+primary,json={'mode':'auto'})).status_code==404
 
 
 @pytest.mark.asyncio(loop_scope='module')
@@ -850,3 +849,103 @@ async def test_direct_research_card_waits_and_resumes_once(database,monkeypatch,
         async with pool.acquire() as conn:
             row = await command.owned(conn,tid,actor)
         assert command.unpack(row['state'])['cards'][card_id]['status'] == ('confirmed' if approve else 'cancelled')
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_tenant_role_can_backfill_registry_but_not_rewrite_audit(database):
+    pool,_ = database
+    role='placeholder_paid_role_'+uuid.uuid4().hex
+    async with pool.acquire() as conn:
+        await conn.execute(f'CREATE ROLE "{role}" NOLOGIN')
+        try:
+            await conn.execute(f'GRANT USAGE ON SCHEMA tank TO "{role}"')
+            await p.bootstrap_access(conn,role)
+            async with conn.transaction():
+                await conn.execute(f'SET LOCAL ROLE "{role}"')
+                await conn.execute("SELECT set_config('app.tenant_id',$1,true)",str(A))
+                await p.register(conn,'base.placeholder.role','base','model','placeholder',task='base.placeholder')
+                await p.register(conn,'base.placeholder.role','base','model','placeholder',task='base.placeholder',model='placeholder-model')
+                assert await conn.fetchval("SELECT model FROM tank.paid_steps WHERE step_id=$1",'base.placeholder.role')=='placeholder-model'
+                assert not await conn.fetchval("SELECT has_table_privilege(current_user,'tank.paid_step_settings_log','UPDATE')")
+        finally:
+            await conn.execute(f'DROP OWNED BY "{role}"')
+            await conn.execute(f'DROP ROLE "{role}"')
+
+
+@pytest.mark.asyncio(loop_scope='module')
+async def test_sdk_request_without_task_uses_opaque_resume_and_keeps_new_calls_distinct(router_database,monkeypatch):
+    import agent_skills
+    import httpx
+    import main
+    from fastapi import FastAPI
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    pool,_=router_database
+    monkeypatch.setenv('TANK_KEY_BASE','placeholder-base-key')
+    policy={'model':'placeholder-sdk-model','rung':1,'priority':'standard','max_tokens_out':256}
+    rt=SimpleNamespace(pool=lambda:pool,load_policy=AsyncMock(return_value=policy),
+        _roster_models=AsyncMock(return_value=[{'model_name':'placeholder-sdk-model','model_info':{
+            'input_cost_per_token':0.001,'output_cost_per_token':0.001}}]),
+        box_region=lambda:'us-east',model_call_refusal=lambda *a,**kw:None,
+        graduate=main.graduate,LITELLM_URL='http://placeholder-sdk',LITELLM_MASTER_KEY='placeholder-sdk-key')
+    original=httpx.AsyncClient
+    calls=[]
+    def gateway(request):
+        value=__import__('json').loads(request.content)
+        assert 'paid_run_id' not in value
+        calls.append(value)
+        return httpx.Response(200,json={'choices':[{'message':{'role':'assistant','content':'placeholder answer'},'finish_reason':'stop'}],
+            'usage':{'prompt_tokens':1,'completion_tokens':1}},headers={'x-litellm-response-cost':'0.002'})
+    monkeypatch.setattr(agent_skills.httpx,'AsyncClient',lambda **kwargs:original(transport=httpx.MockTransport(gateway)))
+    app=FastAPI()
+    app.add_middleware(p.ApprovalMiddleware)
+    app.include_router(agent_skills.build_router(rt))
+    headers={'X-Tank-Key':'placeholder-base-key','X-Tenant-ID':str(A),'X-Home-Region':'us-east'}
+    body={'messages':[{'role':'user','content':'placeholder SDK request'}]}
+    async with original(transport=httpx.ASGITransport(app),base_url='http://placeholder') as client:
+        path='/v1/agents/base/chat/completions'
+        waiting=await client.post(path,headers=headers,json=body)
+        assert waiting.status_code==409 and not calls
+        detail=waiting.json()['detail']
+        await p.decide(A,uuid.UUID(detail['approval_id']),user='placeholder-admin',approve=True,reason='placeholder approved')
+        resumed={**body,'paid_run_id':detail['run_id']}
+        first=await client.post(path,headers=headers,json=resumed)
+        assert first.status_code==200,first.text
+        assert (await client.post(path,headers=headers,json=resumed)).json()==first.json()
+        assert len(calls)==1
+        distinct=await client.post(path,headers=headers,json=body)
+        assert distinct.status_code==409 and distinct.json()['detail']['run_id']!=detail['run_id']
+        assert (await client.post(path,headers=headers,json={**body,'paid_run_id':'placeholder-invalid'})).status_code==422
+
+
+@pytest.mark.asyncio
+async def test_resolved_card_history_does_not_hide_new_pending_approvals(database,monkeypatch):
+    import command
+    import httpx
+    from fastapi import FastAPI
+    pool,_=database
+    monkeypatch.setattr(command,'db',lambda:pool)
+    actor=command.Actor(A,'placeholder-admin',False,tenant_admin=True)
+    schema=(ROOT/'tank/schema.sql').read_text()
+    async with pool.acquire() as conn:
+        await conn.execute(schema[schema.index('CREATE TABLE IF NOT EXISTS tank.command_threads'):schema.index('CREATE TABLE IF NOT EXISTS tank.command_builds')])
+        await p.register(conn,'base.placeholder.paid','base','model','placeholder')
+    app=FastAPI()
+    app.include_router(command.router)
+    app.dependency_overrides[command.identity]=lambda:actor
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app),base_url='http://placeholder') as client:
+        tid=uuid.UUID((await client.post('/v1/command/threads',json={'title':'placeholder history'})).json()['thread_id'])
+    async with command.editing(tid,actor) as (conn,row,state):
+        for _ in range(105):
+            key=uuid.uuid4()
+            await conn.execute("""INSERT INTO tank.paid_step_approvals
+                (id,tenant_id,run_id,step_id,request_hash,state,authorization_mode,delivery_thread_id)
+                VALUES($1,$2,$3,'base.placeholder.paid',$4,'approved','automatic',$5)""",key,A,uuid.uuid4(),p.fingerprint({'placeholder':True}),tid)
+            state['cards'][str(key)]={'card_id':str(key),'kind':'paid_run','tool':'paid_steps.approve','status':'confirmed','summary':'placeholder history'}
+    with p.run_scope(run()):
+        with pytest.raises(p.ApprovalRequired) as stopped:
+            await admission('base')
+    await p.sync_cards(tid,actor)
+    async with pool.acquire() as conn:
+        row=await command.owned(conn,tid,actor)
+    assert command.unpack(row['state'])['cards'][str(stopped.value.approval_id)]['status']=='pending'

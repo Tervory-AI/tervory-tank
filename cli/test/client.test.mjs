@@ -449,3 +449,13 @@ test('review of #506 B2: a customer receipt on a historic pin keeps the Auto lin
   const [auto] = receiptLines({ rows: [{ cost_usd: 0.02, baseline_cost_usd: 0.5, saved_usd: 0.48 }] });
   assert.equal(auto, 'Step 1 | cost 0.02 | would have cost 0.5 | saved 0.48');
 });
+
+test('paid-step pause leaves an unattended approval pending without inventing an answer', async () => {
+  const calls=[];let output='';
+  const card={card_id:'placeholder-approval',kind:'paid_run',tool:'paid_steps.approve',summary:'placeholder paid step',status:'pending'};
+  const tank={request:async()=>new Response(encode('step',{step_id:'placeholder-turn',status:'planned',actor:'Tervory',label:'placeholder step',paused:true,phase_finished:true})+encode('card',card)),json:async(...args)=>{calls.push(args);throw new Error('Unattended approval must not be decided');}};
+  await showTurn(tank,'placeholder-thread','placeholder request','auto',[],{write:text=>{output+=text;},interactive:false});
+  assert.equal(calls.length,0);
+  assert(output.includes('placeholder paid step'));
+  assert(!output.includes('stream interrupted'));
+});

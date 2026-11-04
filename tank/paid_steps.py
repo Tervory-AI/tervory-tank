@@ -15,7 +15,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 PRODUCTS = ("base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas", "trigger", "autumbra", "model")
@@ -210,9 +210,10 @@ async def decide(tenant_id: uuid.UUID, approval_id: uuid.UUID, *, user: str, app
                 WHERE tenant_id=$1 AND id=$2 RETURNING *""", tenant_id, approval_id, target, user, reason.strip()))
             if not approve and row.get("continuation"):
                 data = json.loads(row["continuation"]) if isinstance(row["continuation"],str) else row["continuation"]
-                if data.get("kind") == "tank.task":
+                if data.get("kind") in {"tank.task","command.turn"}:
+                    task_id=data.get("task_id",data.get("turn_id"))
                     await conn.execute("""UPDATE tank.tasks SET status='failed',error='Paid step denied by tenant administrator',finished_at=now()
-                        WHERE tenant_id=$1 AND id=$2""",tenant_id,uuid.UUID(data["task_id"]))
+                        WHERE tenant_id=$1 AND id=$2""",tenant_id,uuid.UUID(task_id))
             return decision
 
 
@@ -261,7 +262,7 @@ def build_router():
         admin(actor)
         async with db().acquire() as conn:
             async with conn.transaction():
-                if not await conn.fetchval("SELECT EXISTS(SELECT 1 FROM tank.paid_steps WHERE step_id=$1)", step_id):
+                if step_id not in await sync_registry(conn,actor.tenant_id):
                     raise HTTPException(404, "Paid step not found")
                 await conn.execute("""INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by)
                     VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,step_id) DO UPDATE
@@ -285,9 +286,15 @@ def build_router():
         row = await decide(actor.tenant_id, approval_id, user=actor.user_id, approve=body.approve, reason=body.reason)
         if body.approve:
             kick(row)
+        else:
+            await finish_denied_command(row)
         return {k: row[k] for k in ("id", "step_id", "state", "reason", "decided_at")}
 
-    from main import require_key
+    async def require_key(request: Request, x_tank_key: str = Header(default="")):
+        # Resolve runtime authority when a request arrives, not while unrelated
+        # routers are assembled with a substituted main module in protocol tests.
+        import main
+        return await main.require_key(request, x_tank_key)
 
     @router.get("/receipt/{run_id}")
     async def receipt(run_id: uuid.UUID, actor=Depends(identity)):
@@ -400,42 +407,55 @@ async def sync_cards(thread_id, actor):
     async with command.db().acquire() as conn:
         row = await command.owned(conn, thread_id, actor)
         cards = command.unpack(row["state"])["cards"]
+        unresolved = [uuid.UUID(key) for key,card in cards.items()
+                      if card.get("tool")=="paid_steps.approve" and card.get("status")=="pending"]
         pending = await conn.fetch("""SELECT id,state FROM tank.paid_step_approvals
-            WHERE tenant_id=$1 AND (delivery_thread_id=$2 OR (delivery_thread_id IS NULL AND state='pending'))
-            ORDER BY created_at LIMIT 100""", actor.tenant_id, thread_id)
+            WHERE tenant_id=$1 AND ((delivery_thread_id=$2 AND id=ANY($3::uuid[]) AND state<>'pending')
+                OR (delivery_thread_id IS NULL AND state='pending'))
+            ORDER BY created_at LIMIT 100""", actor.tenant_id, thread_id,unresolved)
     statuses = {"pending": "pending", "approved": "confirmed", "denied": "cancelled"}
     if not any(cards.get(str(item["id"]), {}).get("status") != statuses[item["state"]] for item in pending):
         return
     async with command.editing(thread_id, actor) as (conn, row, state):
-        approvals = await conn.fetch("""SELECT a.id,a.step_id,a.state,a.authorization_mode,a.reason,a.continuation,p.model,p.task_type
-            FROM tank.paid_step_approvals a JOIN tank.paid_steps p USING(step_id)
-            WHERE a.tenant_id=$1 AND (a.delivery_thread_id=$2 OR (a.delivery_thread_id IS NULL AND a.state='pending'))
-            ORDER BY a.created_at LIMIT 100 FOR UPDATE OF a SKIP LOCKED""", actor.tenant_id, thread_id)
-        for approval in approvals:
-            key = str(approval["id"])
-            status = {"pending": "pending", "approved": "confirmed", "denied": "cancelled"}[approval["state"]]
-            card = state["cards"].get(key)
-            if card and card["status"] == status:
-                continue
-            await conn.execute("""UPDATE tank.paid_step_approvals SET delivery_thread_id=$3
-                WHERE tenant_id=$1 AND id=$2 AND delivery_thread_id IS NULL""", actor.tenant_id, approval["id"], thread_id)
-            card = {"card_id": key, "kind": "paid_run",
-                    "summary": f"{approval['task_type']} · {approval['model']}" if approval["model"] else approval["step_id"],
-                    "tool": "paid_steps.approve", "arguments": {"step_id": approval["step_id"]},
-                    "status": status, "result": {"authorization_mode": approval["authorization_mode"], "reason": approval["reason"]}}
-            state["cards"][key] = card
-            continuation = approval["continuation"]
-            if isinstance(continuation,str):
-                continuation = json.loads(continuation)
-            if status == "cancelled" and continuation and continuation.get("kind") == "command.action":
-                original = state["cards"].get(continuation["card_id"])
-                if original and original.get("paid_approval_id") == key:
-                    original.update(status="cancelled",retry_safe=False)
-                    original.pop("paid_approval_id",None)
-                    await command.event(conn,row,"card",command.public_card(original))
-            await command.event(conn, row, "card", command.public_card(card))
-            await command.step(conn, row, state, {"step_id": key, "label": approval["step_id"],
-                               "actor": "Tervory", "status": "planned" if status == "pending" else "done"})
+        await _sync_cards_locked(conn,row,state,thread_id,actor)
+
+
+async def _sync_cards_locked(conn,row,state,thread_id,actor):
+    import command
+    if not (actor.tenant_admin or actor.founder):
+        return
+    unresolved = [uuid.UUID(key) for key,card in state["cards"].items()
+                  if card.get("tool")=="paid_steps.approve" and card.get("status")=="pending"]
+    approvals = await conn.fetch("""SELECT a.id,a.step_id,a.state,a.authorization_mode,a.reason,a.continuation,p.model,p.task_type
+        FROM tank.paid_step_approvals a JOIN tank.paid_steps p USING(step_id)
+        WHERE a.tenant_id=$1 AND ((a.delivery_thread_id=$2 AND a.id=ANY($3::uuid[]) AND a.state<>'pending')
+            OR (a.delivery_thread_id IS NULL AND a.state='pending'))
+        ORDER BY a.created_at LIMIT 100 FOR UPDATE OF a SKIP LOCKED""", actor.tenant_id, thread_id,unresolved)
+    for approval in approvals:
+        key = str(approval["id"])
+        status = {"pending": "pending", "approved": "confirmed", "denied": "cancelled"}[approval["state"]]
+        card = state["cards"].get(key)
+        if card and card["status"] == status:
+            continue
+        await conn.execute("""UPDATE tank.paid_step_approvals SET delivery_thread_id=$3
+            WHERE tenant_id=$1 AND id=$2 AND delivery_thread_id IS NULL""", actor.tenant_id, approval["id"], thread_id)
+        card = {"card_id": key, "kind": "paid_run",
+                "summary": f"{approval['task_type']} · {approval['model']}" if approval["model"] else approval["step_id"],
+                "tool": "paid_steps.approve", "arguments": {"step_id": approval["step_id"]},
+                "status": status, "result": {"authorization_mode": approval["authorization_mode"], "reason": approval["reason"]}}
+        state["cards"][key] = card
+        continuation = approval["continuation"]
+        if isinstance(continuation,str):
+            continuation = json.loads(continuation)
+        if status == "cancelled" and continuation and continuation.get("kind") == "command.action":
+            original = state["cards"].get(continuation["card_id"])
+            if original and original.get("paid_approval_id") == key:
+                original.update(status="cancelled",retry_safe=False)
+                original.pop("paid_approval_id",None)
+                await command.event(conn,row,"card",command.public_card(original))
+        await command.event(conn, row, "card", command.public_card(card))
+        await command.step(conn, row, state, {"step_id": key, "label": approval["step_id"],
+                           "actor": "Tervory", "status": "planned" if status == "pending" else "done"})
 
 
 async def resolve_card(thread_id, card_id, body, actor):
@@ -452,6 +472,8 @@ async def resolve_card(thread_id, card_id, body, actor):
                  reason=body.reason or ("Confirmed by tenant administrator" if body.action == "confirm" else "Cancelled by tenant administrator"))
     if body.action == "confirm":
         kick(decision)
+    else:
+        await finish_denied_command(decision)
     await sync_cards(thread_id, actor)
     async with command.db().acquire() as conn:
         row = await command.owned(conn, thread_id, actor)
@@ -486,8 +508,8 @@ async def suspend_action(detail, thread_id, actor, card_id, action):
     approval_id = uuid.UUID(detail["approval_id"])
     async with command.editing(thread_id, actor) as (conn, row, state):
         stored = await conn.fetchrow("""UPDATE tank.paid_step_approvals
-            SET continuation=$4::jsonb,resume_status='waiting',thread_id=$5
-            WHERE tenant_id=$1 AND id=$2 AND run_id=$3 AND state='pending' RETURNING id""",
+            SET continuation=$4::jsonb,resume_status=CASE WHEN state='denied' THEN 'failed' ELSE 'waiting' END,thread_id=$5
+            WHERE tenant_id=$1 AND id=$2 AND run_id=$3 AND continuation IS NULL RETURNING *""",
             actor.tenant_id, approval_id, uuid.UUID(card_id),
             json.dumps({"kind":"command.action", "thread_id":str(thread_id), "user_id":actor.user_id,
                         "tenant_admin":actor.tenant_admin, "card_id":card_id, "action":action.model_dump()}), thread_id)
@@ -499,6 +521,10 @@ async def suspend_action(detail, thread_id, actor, card_id, action):
         await command.step(conn, row, state, {"step_id":card_id,"label":card["summary"],
                            "actor":"market_lab","status":"planned"})
     await sync_cards(thread_id, actor)
+    if stored["state"]=="approved":
+        kick(dict(stored))
+    elif stored["state"]=="denied":
+        await finish_denied_command(dict(stored))
     return command.public_card(card)
 
 
@@ -508,12 +534,49 @@ async def suspend_turn(pause, thread_id, actor, turn_id, messages, model, priori
                     "tenant_admin": actor.tenant_admin, "turn_id": turn_id, "messages": messages,
                     "model": model, "priority": priority}
     async with command.editing(thread_id, actor) as (conn, row, state):
-        await conn.execute("""UPDATE tank.paid_step_approvals SET continuation=$3::jsonb,resume_status='waiting',thread_id=$4
-            WHERE tenant_id=$1 AND id=$2 AND state='pending'""", actor.tenant_id, pause.approval_id,
-            json.dumps(continuation), thread_id)
-        state["active_turn"] = None
-        await command.step(conn, row, state, {**state["steps"][turn_id], "status": "planned"})
-    await sync_cards(thread_id, actor)
+        saved = await conn.fetchrow("""UPDATE tank.paid_step_approvals
+            SET continuation=$3::jsonb,resume_status=CASE WHEN state='denied' THEN 'failed' ELSE 'waiting' END,thread_id=$4
+            WHERE tenant_id=$1 AND id=$2 AND continuation IS NULL RETURNING *""", actor.tenant_id,pause.approval_id,
+            json.dumps(continuation),thread_id)
+        if saved is None:
+            saved=await conn.fetchrow("SELECT * FROM tank.paid_step_approvals WHERE tenant_id=$1 AND id=$2",actor.tenant_id,pause.approval_id)
+        denied=saved["state"]=="denied"
+        await conn.execute("UPDATE tank.tasks SET status=$3 WHERE tenant_id=$1 AND id=$2 AND status='running'",
+            actor.tenant_id,uuid.UUID(turn_id),'failed' if denied else 'queued')
+        if state["active_turn"]==turn_id:
+            state["active_turn"] = None
+        await command.step(conn,row,state,{**state["steps"][turn_id],"status":"failed" if denied else "planned",
+                           "paused":not denied,"phase_finished":True})
+        # Commit the pending card before ending the original stream phase.
+        await _sync_cards_locked(conn,row,state,thread_id,actor)
+    if saved["state"]=="approved":
+        kick(dict(saved))
+
+
+async def finish_denied_command(decision):
+    """Reconcile the private originating card after the decision transaction."""
+    value=decision.get("continuation")
+    data=json.loads(value) if isinstance(value,str) else value
+    if not data or data.get("kind") not in {"command.turn","command.action"}:
+        return
+    import command
+    actor=command.Actor(decision["tenant_id"],data["user_id"],False,tenant_admin=data["tenant_admin"])
+    try:
+        async with command.editing(uuid.UUID(data["thread_id"]),actor) as (conn,row,state):
+            key=data.get("turn_id",data.get("card_id"))
+            if data["kind"]=="command.action":
+                card=state["cards"].get(key)
+                if card:
+                    card.update(status="cancelled",retry_safe=False)
+                    card.pop("paid_approval_id",None)
+                    await command.event(conn,row,"card",command.public_card(card))
+            if key in state["steps"] and state["steps"][key].get("status")!="done":
+                await command.step(conn,row,state,{**state["steps"][key],"status":"failed","paused":False,"phase_finished":False})
+            if state["active_turn"]==key:
+                state["active_turn"]=None
+    except HTTPException as exc:
+        if exc.status_code!=404:
+            raise
 
 
 _background = set()
@@ -604,6 +667,16 @@ async def _resume(tenant_id, approval_id):
                 await conn.execute("UPDATE tank.paid_step_approvals SET resume_status='completed' WHERE tenant_id=$1 AND id=$2", tenant_id, approval_id)
             return
         actor = command.Actor(tenant_id, data["user_id"], False, tenant_admin=data["tenant_admin"])
+        async with command.editing(uuid.UUID(data["thread_id"]),actor) as (conn,thread,state):
+            if state["active_turn"] not in {None,data["turn_id"]}:
+                error=HTTPException(409,"Another turn is still running")
+                error._paid_unspent=True
+                raise error
+            state["active_turn"]=data["turn_id"]
+            await conn.execute("UPDATE tank.tasks SET status='running' WHERE tenant_id=$1 AND id=$2 AND status='queued'",
+                tenant_id,uuid.UUID(data["turn_id"]))
+            if data["turn_id"] in state["steps"]:
+                await command.step(conn,thread,state,{**state["steps"][data["turn_id"]],"status":"running","paused":False,"phase_finished":False})
         await command.finish_turn(uuid.UUID(data["thread_id"]), actor, data["turn_id"],
                                   data["messages"], data["model"], priority=data["priority"])
         async with db().acquire() as conn:
@@ -647,7 +720,8 @@ async def attach_receipt(ledger_id, authorization):
 async def bootstrap_access(conn, tenant_role: str):
     # Identifier comes from the already-open authenticated tenant connection,
     # quoted by PostgreSQL itself. Never grant to PUBLIC or discover extra roles.
-    sql = await conn.fetchval("""SELECT format('GRANT SELECT,INSERT ON tank.paid_steps,tank.paid_step_settings_log TO %1$I;
+    sql = await conn.fetchval("""SELECT format('GRANT SELECT,INSERT,UPDATE ON tank.paid_steps TO %1$I;
+        GRANT SELECT,INSERT ON tank.paid_step_settings_log TO %1$I;
         GRANT SELECT,INSERT,UPDATE ON tank.paid_step_settings,tank.paid_step_approvals TO %1$I;
         GRANT SELECT,INSERT,UPDATE,DELETE ON tank.paid_step_calls TO %1$I', $1::text)""", tenant_role)
     await conn.execute(sql)
@@ -674,9 +748,19 @@ async def save_background(pause, continuation):
     tenant = uuid.UUID(pause.detail['tenant_id'])
     with tenant_scope(tenant):
         async with db().acquire() as conn:
-            await conn.execute("""UPDATE tank.paid_step_approvals SET continuation=$3::jsonb,resume_status='waiting'
-                WHERE tenant_id=$1 AND id=$2 AND state='pending'""", tenant, pause.approval_id,
-                json.dumps(continuation, default=str))
+            row=await conn.fetchrow("""UPDATE tank.paid_step_approvals
+                SET continuation=$3::jsonb,resume_status=CASE WHEN state='denied' THEN 'failed' ELSE 'waiting' END
+                WHERE tenant_id=$1 AND id=$2 AND continuation IS NULL RETURNING *""",tenant,pause.approval_id,
+                json.dumps(continuation,default=str))
+            if row is None:
+                row=await conn.fetchrow("SELECT * FROM tank.paid_step_approvals WHERE tenant_id=$1 AND id=$2",tenant,pause.approval_id)
+            if row['state']=='denied' and continuation.get('kind')=='tank.task':
+                await conn.execute("""UPDATE tank.tasks SET status='failed',error=$3,finished_at=now()
+                    WHERE tenant_id=$1 AND id=$2 AND status<>'done'""",tenant,uuid.UUID(continuation['task_id']),row['reason'])
+    saved=dict(row)
+    if saved['state']=='approved' and continuation.get('kind')!='tank.task':
+        kick(saved)
+    return saved
 
 
 background_task = ContextVar("paid_background_task", default="model.shadow")
@@ -759,7 +843,7 @@ async def finish_model_receipt(approval, ledger_id, meter, *, successful):
     cost = meter.get('cost')
     async with connection(tenant) as conn:
         await conn.execute("""UPDATE tank.ledger SET model=$3,tokens_in=$4,tokens_out=$5,
-            cost_usd=coalesce($6,0),cost_status=CASE WHEN $6::numeric IS NULL THEN 'not_set' ELSE 'set' END,
+            cost_usd=coalesce($6::numeric,0),cost_status=CASE WHEN $6::numeric IS NULL THEN 'not_set' ELSE 'set' END,
             outcome=$7 WHERE tenant_id=$1 AND id=$2""", tenant, ledger_id, meter.get('model', 'unverified'),
             meter.get('tokens_in',0), meter.get('tokens_out',0), cost, 'delivered' if successful else 'unverified')
 

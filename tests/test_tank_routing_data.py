@@ -251,7 +251,11 @@ async def test_gateway_receipt_keeps_generation_and_batch_compatibility(routing,
     req = main.RouteRequest(tenant_id=TENANT, agent="base", task_type=TASK,
                            messages=[main.Message(role="user", content="placeholder question")])
     answer = await main.run_route(req)
-    assert bodies[0]["fallbacks"] == ["haiku"] and answer.cost_usd == 0.0000042
+    # Tank admits configured fallback seats individually; the gateway may not
+    # spend on an invisible fallback while fulfilling this request.
+    assert bodies[0]["disable_fallbacks"] is True and "fallbacks" not in bodies[0]
+    assert (await read(routing))["fallbacks"] == ["haiku"]
+    assert answer.cost_usd == 0.0000042
     ledger = await routing.fetchrow("SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2", answer.ledger_id, TENANT)
     assert float(ledger["cost_usd"]) == 0.0000042
     expected = execution_receipt.capture(ledger_id=str(answer.ledger_id), tenant_id=str(TENANT),

@@ -1253,6 +1253,12 @@ async def run_route(req: RouteRequest, task_id=None, caller=None, **kwargs):
     foreign = home_region_refusal(call_home(req.home_region, box_region()), box_region())
     if foreign:
         raise HTTPException(403, foreign)
+    client_text = "\n".join(message.content for message in req.messages)
+    pool_read = await zenas_pool_prompt(client_text, caller=caller, task_type=req.task_type, skill=req.skill)
+    early = model_call_refusal(client_text, None, box=box_region(), tenant_id=str(req.tenant_id),
+                               task_type=req.task_type, caller=caller, skill=req.skill, pool_read=pool_read)
+    if early:
+        raise HTTPException(403, early)
     if kwargs.get("model_override") is not None:
         if not override_allowed(req.task_type):
             raise HTTPException(403, "Model override is not enabled for this task type")
@@ -1265,10 +1271,15 @@ async def run_route(req: RouteRequest, task_id=None, caller=None, **kwargs):
         run = paid_steps.Run(req.tenant_id, req.paid_run_id or task_id or uuid.uuid4(),
                              paid_steps.fingerprint(req.model_dump(exclude={"paid_run_id"})))
         with paid_steps.run_scope(run):
-            return await run_route(req.model_copy(update={"paid_run_id": run.run_id}),
-                                   task_id=task_id, caller=caller, **kwargs)
+            return await _paid_route(req,task_id=task_id,caller=caller,**kwargs)
     if inherited.tenant_id != req.tenant_id:
         raise HTTPException(403, "Paid-step tenant does not match its run")
+    return await _paid_route(req,task_id=task_id,caller=caller,**kwargs)
+
+
+async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
+    import paid_steps
+    inherited=paid_steps.current.get()
     req = req.model_copy(update={"paid_run_id": inherited.run_id})
     original = kwargs.get("_paid_policy") or await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
     policy = original
@@ -1291,7 +1302,8 @@ async def run_route(req: RouteRequest, task_id=None, caller=None, **kwargs):
             attempted.add(policy["escalation_model"])
         # The gateway cannot spend on a different paid seat invisibly. Preserve
         # the configured order, but admit each fallback only when reached.
-        if kwargs.get("model_override") is not None or kwargs.get("_offpeak_dispatch") or value["status"] != 502:
+        if (kwargs.get("model_override") is not None or kwargs.get("_offpeak_dispatch")
+                or kwargs.get("_paid_limit") is not None or value["status"] != 502):
             raise HTTPException(value["status"], value["error"])
         names = original.get("fallbacks")
         if names is None:
@@ -1476,9 +1488,16 @@ async def _run_route(
         raise HTTPException(403, blocked)
     await _check_route_task(req, task_id)
     if _paid_limit is not None:
-        prices = await _batch_price(model)
-        if _call_upper(messages, max_tokens, prices) > _paid_limit:
-            raise HTTPException(409, "Task cost cap prevents another call")
+        try:
+            prices = await _batch_price(model)
+            upper = _call_upper(messages,max_tokens,prices) * (prices["discount"] if _defer_paid else 1)
+            if upper > _paid_limit:
+                raise HTTPException(409, "Task cost cap prevents another call")
+        except HTTPException as exc:
+            # Price/cap validation is before any dispatch; a corrected budget
+            # can retry without creating an uncertain paid-call claim.
+            exc._paid_unspent = True
+            raise
         generation = {**generation, "disable_fallbacks": True}
     paid_authorization = await __import__("paid_steps").model_admission(req.tenant_id, req.task_type, model, agent=req.agent)
     if priority == "offpeak" and not _offpeak_dispatch:
@@ -3273,9 +3292,11 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
                 task_id, res.content, res.ledger_id, req.tenant_id,
             )
     except __import__("paid_steps").ApprovalRequired as pause:
-        await __import__("paid_steps").save_background(pause,{"kind":"tank.task","task_id":str(task_id),"request":req.model_dump(mode="json")})
+        saved=await __import__("paid_steps").save_background(pause,{"kind":"tank.task","task_id":str(task_id),"request":req.model_dump(mode="json")})
         async with pool().acquire() as conn:
-            await conn.execute("UPDATE tank.tasks SET status='queued',error=NULL WHERE id=$1 AND tenant_id=$2",task_id,req.tenant_id)
+            await conn.execute("UPDATE tank.tasks SET status='queued',error=NULL WHERE id=$1 AND tenant_id=$2 AND status='running'",task_id,req.tenant_id)
+        if saved["state"]=="approved":
+            __import__("paid_steps").kick(saved)
     except Exception as exc:  # noqa: BLE001 — anything that stops a task is recorded on the task
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
         if isinstance(detail, dict):
