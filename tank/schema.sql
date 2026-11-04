@@ -3221,8 +3221,11 @@ BEGIN
  FOREACH mobile_table IN ARRAY ARRAY['mobile_codes','mobile_sessions','mobile_devices','mobile_drafts'] LOOP
   EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY', mobile_table);
   EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY', mobile_table);
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=to_regclass('tank.' || mobile_table) AND polname='tenant_access') THEN
+   EXECUTE format('CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)', mobile_table);
+  END IF;
   IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=to_regclass('tank.' || mobile_table) AND polname='tenant_boundary') THEN
-   EXECUTE format('CREATE POLICY tenant_boundary ON tank.%I FOR ALL TO PUBLIC USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)', mobile_table);
+   EXECUTE format('CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)', mobile_table);
   END IF;
  END LOOP;
 END $$;
