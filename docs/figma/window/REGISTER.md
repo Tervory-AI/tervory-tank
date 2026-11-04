@@ -36,6 +36,8 @@ Scope split, founder 4 Nov 06:30 PT: this register owns sign-in, empty, conversa
 | W05-1280 · Command running | 1280×800 | [557:1161](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-1161) | Proposed | [W05-1280.png](evidence/W05-1280.png) |
 | W06-1440 · Command finished | 1440×900 | [557:1260](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-1260) | Proposed | [W06-1440.png](evidence/W06-1440.png) |
 | W06-1280 · Command finished | 1280×800 | [557:1360](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-1360) | Proposed | [W06-1280.png](evidence/W06-1280.png) |
+| W07-1440 · /undo / confirm local restore | 1440×900 | [557:4683](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-4683) | Proposed | [W07-1440.png](evidence/W07-1440.png) |
+| W07-1280 · /undo / confirm local restore | 1280×800 | [557:4789](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-4789) | Proposed | [W07-1280.png](evidence/W07-1280.png) |
 
 ## Evidence and validation
 

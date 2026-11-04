@@ -114,5 +114,21 @@
     "height": 800,
     "state": "Command finished",
     "status": "Proposed"
+  },
+  {
+    "key": "W07-1440",
+    "id": "557:4683",
+    "width": 1440,
+    "height": 900,
+    "state": "/undo / confirm local restore",
+    "status": "Proposed"
+  },
+  {
+    "key": "W07-1280",
+    "id": "557:4789",
+    "width": 1280,
+    "height": 800,
+    "state": "/undo / confirm local restore",
+    "status": "Proposed"
   }
 ]
