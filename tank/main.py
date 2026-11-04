@@ -4804,5 +4804,8 @@ app.include_router(memory_router)
 # B3: process committed model changes through the existing skill-eval handler.
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
 
+# Window completion uses the existing code ladder and personal-token identity.
+app.include_router(__import__('window_complete').router)
+
 # Bind only accepted endpoint arguments after existing authentication dependencies.
 bind_tenant_endpoints(app)

@@ -29,15 +29,34 @@ bin="$TMPDIR/security-bin"
 if [ ! -x "$bin/gitleaks" ]; then
   RUNNER_TEMP="$TMPDIR" GITHUB_PATH=/dev/null bash .github/scripts/install-security-tools.sh || failed+=(install-security-tools)
 fi
+# Local-only changed-file scan (founder, 4 Nov). Keep CI's scanner, rules,
+# baseline and finding gates unchanged. NUL-delimited argv handles spaces and
+# literal glob characters in paths; include unstaged and newly created files.
+{
+  git diff --name-only -z "$base"
+  git ls-files --others --exclude-standard -z
+} | sort -zu > "$TMPDIR/semgrep-targets"
+mkdir -p "$TMPDIR/semgrep-empty" "$TMPDIR/semgrep-home"
 # Test-container rule (3 Nov): --rm, label tervory.test=1, name prefixed with this folder.
 cat > "$bin/semgrep" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
-exec docker run --rm --label tervory.test=1 --name "${folder}-semgrep-\$\$" \\
+mapfile -d '' -t changed_targets < "$TMPDIR/semgrep-targets"
+targets=()
+for target in "\${changed_targets[@]}"; do
+  [ ! -f "\$target" ] || targets+=("./\$target")
+done
+[ \${#targets[@]} -gt 0 ] || targets=("$TMPDIR/semgrep-empty")
+args=("\$@")
+# security_scan.py supplies a final dot. Replace only that target, not flags.
+if [ "\${args[-1]}" = . ]; then unset 'args[-1]'; fi
+container_name="${folder}-semgrep-\$\$"
+printf '%s\n' "\$container_name" > "$TMPDIR/semgrep-container"
+exec docker run --user "$(id -u):$(id -g)" --env HOME="$TMPDIR/semgrep-home" --rm --label tervory.test=1 --name "\$container_name" \\
   --volume "$root:$root" --volume "$TMPDIR:$TMPDIR" --workdir "\$PWD" \\
   --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env "GIT_CONFIG_VALUE_0=$root" \\
   --entrypoint semgrep \\
-  semgrep/semgrep:1.182.1@sha256:c8f333ab0ad103d2bcd3b55cbeabcfc556bfeaa7446ba18594a4320f3807ffc9 "\$@"
+  semgrep/semgrep:1.182.1@sha256:c8f333ab0ad103d2bcd3b55cbeabcfc556bfeaa7446ba18594a4320f3807ffc9 "\${args[@]}" --jobs 2 "\${targets[@]}"
 SH
 chmod +x "$bin/semgrep"
 export PATH="$bin:$PATH" GITHUB_WORKSPACE="$root" RUNNER_TEMP="$TMPDIR"
@@ -50,6 +69,14 @@ python3 .github/scripts/security_scan.py gitleaks --base "$base" --output "$out"
 if [ "${PRECHECK_SKIP_SEMGREP:-}" != 1 ]; then
   step "semgrep on changed files (as CI)"
   python3 .github/scripts/security_scan.py semgrep --base "$base" --output "$out" || failed+=(semgrep)
+  # subprocess timeout can kill the Docker client while its scanner keeps going.
+  # Remove only this checkout's scanner, including after an incomplete scan.
+  if [ -f "$TMPDIR/semgrep-container" ]; then
+    read -r scanner_container < "$TMPDIR/semgrep-container"
+    case "$scanner_container" in
+      "$folder"-semgrep-*) docker rm -f "$scanner_container" >/dev/null 2>&1 || true ;;
+    esac
+  fi
 fi
 
 step "osv dependency check (as CI)"
