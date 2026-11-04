@@ -92,3 +92,16 @@ def test_branding_failure_does_not_publish_a_completion_marker(resources):
     with pytest.raises(ValueError, match='native email text unavailable'):
         BRAND['configure_branding'](api, bootstrap, assets, 'https://auth.tervory.com')
     assert not (bootstrap / 'trigger-signin-branding.json').exists()
+
+
+def test_every_native_email_drops_the_provider_name(resources):
+    bootstrap, assets = resources
+    api = NativeSettings()
+    api.default = {**api.default, 'text': 'Your ZITADEL account {{.PreferredLoginName}} changed.',
+                   'preHeader': 'Zitadel notice'}
+    BRAND['configure_branding'](api, bootstrap, assets, 'https://auth.tervory.com')
+    kinds = {path.split('/')[-2] for path in api.messages}
+    assert {'init', 'passwordreset', 'passwordchange', 'verifyemail', 'inviteuser'} <= kinds
+    for message in api.messages.values():
+        assert 'zitadel' not in json.dumps(message).lower()
+        assert '{{.PreferredLoginName}}' in message['text']

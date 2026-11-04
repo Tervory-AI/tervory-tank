@@ -12,7 +12,15 @@ ASSETS = [('logo', 'tervory-logo.png', 'image/png'), ('logo/dark', 'tervory-logo
           ('icon', 'tervory-logo.png', 'image/png'), ('icon/dark', 'tervory-logo.png', 'image/png'),
           ('font', 'Inter-latin.woff2', 'font/woff2')]
 EMAILS = {'verifyemail': 'Verify your Trigger sign-in email',
-          'passwordreset': 'Reset your Trigger sign-in password', 'init': 'Set up Trigger sign-in'}
+          'passwordreset': 'Reset your Trigger sign-in password', 'init': 'Set up Trigger sign-in',
+          'passwordchange': 'Your Trigger sign-in password changed',
+          'verifyphone': 'Verify your Trigger sign-in phone',
+          'verifyemailotp': 'Your Trigger sign-in code', 'verifysmsotp': 'Your Trigger sign-in code',
+          'domainclaimed': 'Your Trigger sign-in username changed',
+          'passwordless_registration': 'Add a passkey to Trigger sign-in',
+          'inviteuser': 'You are invited to Trigger sign-in'}
+# Every native email is renamed: the upstream provider's name never reaches a recipient.
+PROVIDER_NAMES = ('ZITADEL', 'Zitadel', 'zitadel')
 FIELDS = ('title', 'preHeader', 'subject', 'greeting', 'text', 'buttonText', 'footerText')
 
 
@@ -64,7 +72,9 @@ def configure_branding(api, bootstrap: Path, assets: Path, issuer: str):
             raise ValueError('Trigger sign-in native email text unavailable')
         desired = {field: current.get(field, '') for field in FIELDS}
         desired.update(title=subject, subject=subject, footerText='Trigger sign-in')
-        desired['text'] = desired['text'].replace('Tervory', 'Trigger sign-in')
+        for field in ('text', 'greeting', 'preHeader', 'buttonText'):
+            for name in ('Tervory',) + PROVIDER_NAMES:
+                desired[field] = desired[field].replace(name, 'Trigger sign-in')
         if any(current.get(key, '') != value for key, value in desired.items()):
             api.request('PUT', path, json=desired)
     pending = marker.with_suffix('.pending')
