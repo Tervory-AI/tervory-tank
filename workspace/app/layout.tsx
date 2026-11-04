@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { isListedFounder } from "./review/founder";
@@ -6,6 +6,8 @@ import { Shell, type ShellAccess } from "./shell";
 import { inter, jost, mono } from "./fonts";
 import "./globals.css";
 import { InstallShell } from "./mobile-shell/install";
+
+export const viewport: Viewport = { themeColor: "#001840" };
 
 export const metadata: Metadata = {
   title: "Tervory",

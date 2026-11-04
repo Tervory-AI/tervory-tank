@@ -5,12 +5,12 @@ const vm=require('node:vm');
 const path=require('node:path');
 const root=path.resolve(__dirname,'../..');
 function worker(options={}) {
- const hooks={},stored=new Map(),fetched=[];
+ const hooks={},stored=new Map(),fetched=[],deleted=[];
  const cache={addAll:async urls=>{for(const u of urls) stored.set(u,'public');},match:async r=>stored.get(r.url),put:async(r,v)=>stored.set(r.url,v)};
  const box={URL,self:{location:{origin:'https://app.tervory.com'},clients:{claim:async()=>{}},addEventListener:(n,f)=>hooks[n]=f},
- caches:{open:async()=>cache,keys:async()=>[],delete:async()=>true},fetch:async r=>{fetched.push(r.url);return {ok:true,type:'basic',redirected:false,headers:{get:()=>options.private?'private, no-store':null},clone:()=>({public:true})};}};
+ caches:{open:async()=>cache,keys:async()=>options.keys||[],delete:async key=>{deleted.push(key);return true;}},fetch:async r=>{fetched.push(r.url);return {ok:options.ok!==false,type:options.type||'basic',redirected:!!options.redirected,headers:{get:()=>options.private?'private, no-store':null},clone:()=>({public:true})};}};
  vm.runInNewContext(fs.readFileSync(path.join(root,'workspace/public/sw.js'),'utf8'),box);
- return {hooks,stored,fetched};
+ return {hooks,stored,fetched,deleted};
 }
 test('manifest installs the existing app and exact logo pixels on navy',()=>{
  const m=JSON.parse(fs.readFileSync(path.join(root,'workspace/public/manifest.webmanifest')));
@@ -38,4 +38,16 @@ test('public assets cache, private response headers still refuse caching',async(
 test('install precaches only manifest and public icons',async()=>{
  const {hooks,stored}=worker();let result;hooks.install({waitUntil:v=>result=v});await result;
  assert.equal(stored.size,4);assert([...stored.keys()].every(p=>p.startsWith('/icons/')||p==='/manifest.webmanifest'));
+});
+test('redirected, opaque and failed responses never enter cache',async()=>{
+ for(const options of [{redirected:true},{type:'opaque'},{ok:false}]){
+  const {hooks,stored}=worker(options);let result;
+  hooks.fetch({request:{url:'https://app.tervory.com/_next/static/chunks/placeholder.js',method:'GET',mode:'cors'},respondWith:v=>result=v});
+  await result;assert.equal(stored.size,0);
+ }
+});
+test('activation removes previous shell versions and preserves unrelated caches',async()=>{
+ const {hooks,deleted}=worker({keys:['tervory-shell-v0','tervory-shell-v1','unrelated']});let result;
+ hooks.activate({waitUntil:v=>result=v});await result;
+ assert.deepEqual(deleted,['tervory-shell-v0']);
 });
