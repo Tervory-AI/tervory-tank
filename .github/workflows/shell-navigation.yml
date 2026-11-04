@@ -13,19 +13,6 @@ on:
       - 'workspace/package*.json'
       - 'workspace/app/fonts/**'
       - 'workspace/public/brand/**'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/shell-navigation.yml'
-      - 'tests/shell_navigation_browser.mjs'
-      - 'workspace/app/shell.tsx'
-      - 'workspace/app/squad-links.tsx'
-      - 'workspace/app/product-nav.ts'
-      - 'workspace/app/globals.css'
-      - 'workspace/lib/product-hosts.ts'
-      - 'workspace/package*.json'
-      - 'workspace/app/fonts/**'
-      - 'workspace/public/brand/**'
 
 permissions:
   contents: read

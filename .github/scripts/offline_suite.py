@@ -12,6 +12,7 @@ folders that have files of the same name:
   1. everything else, 2. tests/tiger_g5, 3. tests/zenas_regulation_alerts.
 tests/ci_security runs in the security job (it needs the pinned gitleaks) and
 tests/test_live_check.py in live-check.yml (it needs Playwright for Node).
+The files in SIDE_WORKFLOW run in rig-forge.yml or tenant-rls.yml, not here.
 
 Known failures on main are listed with reasons in tests/quarantine.txt.
 
@@ -40,6 +41,32 @@ ROOT = Path(__file__).resolve().parents[2]
 ALONE = ["tests/tiger_g5", "tests/zenas_regulation_alerts"]
 # Run by their own workflows: security job (pinned gitleaks), live-check.yml (Node Playwright).
 ELSEWHERE = ["tests/ci_security", "tests/test_live_check.py"]
+# Test files a side workflow already runs, by name, mapped to "workflow file: job". The main
+# suite leaves them out so they no longer run twice (3 Nov, founder). A file is listed only
+# when the side workflow runs on every pull request that could change it: the file and every
+# repository module it imports fall inside that workflow's pull_request paths filter. The one
+# exception, the autumbra_a2 probe, skips itself everywhere except its own job
+# (AUTUMBRA_A2_CI_PROBE), so the main suite never ran it. tests/test_ci_side_workflow_skips.py
+# checks that the named job really runs each file. Neither side workflow runs in the merge
+# queue and neither is a required check (see the PR that added this list).
+# rig-forge.yml: forge-image runs the first seven inside the forge image, then the containers
+# file against that image. test_rig_forge_pipeline.py and test_rig_forge_containers.py skip
+# themselves outside that job.
+# tenant-rls.yml: test_tenant_rls.py and the other 21 files its isolation job runs stay in the
+# main suite, so tenant isolation keeps blocking merges through ci-ok (founder, 3 Nov). Its paths
+# filter does not list them (or the tests/ helpers they import), so a PR changing only them
+# would test them nowhere.
+SIDE_WORKFLOW = {
+    "tests/test_rig_forge_geometry.py": "rig-forge.yml: forge-image",
+    "tests/test_rig_forge_pipeline.py": "rig-forge.yml: forge-image",
+    "tests/test_rig_forge_gpu.py": "rig-forge.yml: forge-image",
+    "tests/test_rig_forge_review.py": "rig-forge.yml: forge-image",
+    "tests/test_rig_forge_gpu_artifacts.py": "rig-forge.yml: forge-image",
+    "tests/test_rig_forge_relay.py": "rig-forge.yml: forge-image",
+    "tests/test_rig_forge_job_state.py": "rig-forge.yml: forge-image",
+    "tests/test_rig_forge_containers.py": "rig-forge.yml: forge-image",
+    "tests/autumbra_a2/test_compose_probe.py": "tenant-rls.yml: autumbra-isolation",
+}
 # Provider keys and tokens must never reach the suite, even if a runner has them set.
 # Wall-clock seconds per run. Hosted-runner times on main, 31 Oct 2026: main 651-834s,
 # tests/tiger_g5 11-15s, tests/zenas_regulation_alerts 6-7s. On 3 Nov 2026 main reached
@@ -156,13 +183,18 @@ def collected_files(ignores: list[str], env: dict[str, str]) -> dict[str, int]:
     return counts
 
 
+def main_ignores() -> list[str]:
+    """What the main run leaves out: the isolated groups, ELSEWHERE and SIDE_WORKFLOW."""
+    return [f"--ignore={p}" for p in [*ALONE, *ELSEWHERE, *SIDE_WORKFLOW]]
+
+
 def main(extra: list[str]) -> int:
     signal.signal(signal.SIGTERM, _interrupt)
     common = pytest_args(os.environ.get("SUITE_WORKERS", "auto"), os.environ.get("SUITE_TEST_TIMEOUT", "300"))
     # A slower machine (fewer workers) can stretch the budgets, e.g. SUITE_BUDGET_SCALE=3.
     scale = float(os.environ.get("SUITE_BUDGET_SCALE", "1"))
     index, count = shard_of()
-    ignores = [f"--ignore={p}" for p in ALONE + ELSEWHERE]
+    ignores = main_ignores()
     env, failed = clean_env(), []
     if count == 1:
         main_args = ignores

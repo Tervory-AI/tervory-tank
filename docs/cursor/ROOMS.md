@@ -255,3 +255,69 @@ After an authorized profile deployment, run `ops/seal-check.sh` on each host and
 require Zenas brain and sandbox sealed. The isolation checker takes three Zenas
 container names; Base/Tiger retain five. Hosted CI and both postdeploy host
 proofs remain separate from local offline verification.
+
+## Remaining squad standby brains (3 Nov 2026)
+
+Each room below is provisioned independently, using the pinned Rig Hermes build,
+`agents/_brain/standby.py` health-only entrypoint and Base's WASI sandbox. No model
+caller, escalation, paid route, approved skill or candidate-submission permission
+is added. Owning keys use Tank's existing policy, paid-work pause, model refusal,
+tenant accounting and receipts. A room value outside the fixed allowlist is
+refused before SQL. These new rooms remain in the existing US-only brain region
+boundary; no ZA deployment or forwarding is introduced.
+
+| Room | Flag (default false) | New optional limits |
+| --- | --- | --- |
+| Market Lab | `MARKET_LAB_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Radix | `RADIX_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Tisan | `TISAN_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Trigger | `TRIGGER_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Autumbra Watch (`ghost`) | `GHOST_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; existing Watch browser unchanged |
+
+All added services carry profile `brain`. A normal Compose deployment starts
+none of them. The flag is reserved for a future caller: enabling a profile or
+setting a flag does not itself add model work. Founder enablement and capacity
+approval remain required. Existing volumes and their mounts are unchanged from
+main `de113044`; each brain mounts only its new brain volume, each new browser
+only its new browser volume, and sandboxes/gateways have no persistent volume.
+Private sandbox and browser networks are per project, internal and disjoint.
+Brain/gateway corridor attachments are the owning room's existing Tank corridor,
+as in Tiger; no other room's corridor or keys are supplied. Public browsing uses
+the existing checked proxy. Vault/login access is not provisioned for new rooms. Radix retains its existing
+internal corridor and restricted egress; this gate grants no broader browser
+network route.
+
+Boston snapshot: **3 Nov 2026 16:35 PST (4 Nov 00:35 UTC)**, read-only
+`ops/box-memory.sh`, before this task's test containers:
+
+| Measurement | Bytes |
+| --- | ---: |
+| Total | 33,648,410,624 |
+| Used | 11,334,434,816 |
+| Available | 22,313,975,808 |
+| All container limits | 32,212,254,720 |
+| Running container limits | 32,212,254,720 |
+
+Planned additional limits for all five profiles together: **21 GiB
+(22,548,578,304 bytes) and 10.5 CPUs**. These are caps, not measured usage; the
+combined memory caps exceed this snapshot's available memory. Do not enable the
+squad together on the basis of this measurement. Keep every new profile off.
+
+65 containers, 62 running; 29 have no memory limit. See the complete per-container
+[snapshot](../../tests/room_brains/evidence/boston-memory.txt). Available memory is
+a snapshot, not an allocation; summed limits and unlimited containers require
+fresh host checks before enabling any profile. No larger box is requested.
+
+This is deployment configuration. Each room compose change redeploys that room;
+Tank changes also redeploy the main stack and its configured ZA counterpart.
+Raw Compose Deployment must be enabled in Coolify for the files carrying its
+marker. Preserve the existing Compose project identity when switching modes so
+unchanged room volumes retain their current identity. No volume migration or
+replacement is part of this work. Hermes also receives Trigger and Watch's owning
+keys and joins their existing corridors, so their optional memory URLs are reachable.
+Watch's brain receives no Coolify, Enforce, edge, SMTP or Undo settings. It mounts
+none of the existing room, browser or threat-queue volumes. Enforce's compose and
+air gap are unchanged; Enforce is excluded from the brain room map. After
+deployment, run `ops/seal-check.sh` and,
+if the optional profile is authorized, the isolation checker with the room's
+container names. Offline fixtures do not replace that host check.

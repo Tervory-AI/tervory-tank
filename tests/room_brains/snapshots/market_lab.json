@@ -1,0 +1,9 @@
+{
+  "main": "de113044",
+  "volumes": "  agent_market_lab_data:\n\n",
+  "mounts": {
+    "agent-market-lab": [
+      "agent_market_lab_data:/data"
+    ]
+  }
+}

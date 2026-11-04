@@ -164,9 +164,11 @@ async def test_room_rejects_extra_fields_without_echoing_them(tmp_path, monkeypa
 def test_compose_isolation_and_no_production_control_credentials():
     main = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     joined = {name for name, service in main["services"].items() if "tervory-gw-ghost" in service.get("networks", [])}
-    assert joined == {"tank", "postgres"}
+    assert joined == {"tank", "postgres", "hermes"}
     room = yaml.safe_load((ROOT / "agents/ghost/docker-compose.yml").read_text())
     for service in room["services"].values():
+        if service.get("profiles") == ["brain"]:
+            continue
         assert service["networks"] == ["gw"]
         assert service["cap_drop"] == ["ALL"]
         assert not any(key in service.get("environment", {}) for key in ("DATABASE_URL", "COOLIFY_TOKEN", "GITHUB_TOKEN", "LITELLM_MASTER_KEY", "TANK_API_KEY"))

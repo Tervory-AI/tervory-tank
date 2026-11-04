@@ -1,0 +1,11 @@
+{
+  "main": "de113044",
+  "volumes": "  agent_radix_data:\n    external: true\n    name: liv4x7vshraiwnnowjv0kgfd_agent-radix-data\n\n",
+  "mounts": {
+    "agent-radix": [
+      "agent_radix_data:/data"
+    ],
+    "egress-proxy": null,
+    "passive-egress": null
+  }
+}

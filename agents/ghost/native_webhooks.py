@@ -15,7 +15,7 @@ from .durable_state import locked_state
 from .webhooks import WebhookRejected
 
 
-def replay_once(identity: str, bucket: str, *, expires_at: float = 0) -> None:
+def replay_once(identity: str, bucket: str, *, expires_at: float = 0, allow_duplicate: bool = False) -> None:
     key = hashlib.sha256(identity.encode()).hexdigest()
     now = time.time()
     try:
@@ -23,7 +23,11 @@ def replay_once(identity: str, bucket: str, *, expires_at: float = 0) -> None:
         with locked_state(path) as state:
             for stale in [k for k, expiry in state.items() if expiry < now]:
                 del state[stale]
-            if key in state or len(state) >= 10000:
+            if key in state:
+                if allow_duplicate:
+                    return
+                raise ValueError
+            if len(state) >= 10000:
                 raise ValueError
             state[key] = max(now + 600, expires_at)
     except (OSError, ValueError, TypeError):
@@ -39,9 +43,9 @@ def verify_cloudflare_notification(body: bytes, header: str | None) -> None:
     replay_once('cloudflare:' + hashlib.sha256(body).hexdigest(), 'edge')
 
 
-async def verify_google_push(body: bytes, authorization: str | None, tank) -> None:
-    audience = os.environ.get('AUTUMBRA_GOOGLE_PUSH_AUDIENCE', '').strip()
-    account = os.environ.get('AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT', '').strip()
+async def verify_google_push(body: bytes, authorization: str | None, tank, *, config: dict | None = None, allow_duplicate: bool = False) -> None:
+    audience = (config['audience'] if config is not None else os.environ.get('AUTUMBRA_GOOGLE_PUSH_AUDIENCE', '')).strip()
+    account = (config['service_account'] if config is not None else os.environ.get('AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT', '')).strip()
     if not audience or not account or not authorization or not authorization.startswith('Bearer '):
         raise WebhookRejected('invalid webhook authentication')
     token = authorization[7:]
@@ -74,8 +78,10 @@ async def verify_google_push(body: bytes, authorization: str | None, tank) -> No
         if (not isinstance(message, str) or not 1 <= len(message) <= 200
                 or not isinstance(subscription, str) or not 1 <= len(subscription) <= 1000):
             raise ValueError
+        if config is not None and subscription != config['subscription']:
+            raise ValueError
         replay_once('google:' + audience + ':' + account + ':' + subscription + ':' + message,
-                    'mailbox', expires_at=float(claims['exp']))
+                    'mailbox', expires_at=float(claims['exp']), allow_duplicate=allow_duplicate)
     except Exception:
         # Provider bodies, token claims and transport errors never reach output.
         raise WebhookRejected('invalid webhook authentication') from None
