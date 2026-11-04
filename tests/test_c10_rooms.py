@@ -219,10 +219,10 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
             # R4 adds watch_tick for scheduled watch re-checks.
             assert handlers == {"ping", "scan", "watch_tick"}
         else:
-            # Tisan builder (#571) adds build, with the same 10-minute allowance.
-            assert handlers == {"ping", "scaffold", "figma", "build"}
-            # Founder, 14 Oct 2026: a site build is allowed 10 minutes.
-            assert module.app.state.job_timeouts == {"scaffold": 600, "build": 600}
+            # Wave 4 adds the orchestration job; existing heartbeat and handlers remain.
+            assert handlers == {"ping", "scaffold", "figma", "build", "pipeline"}
+            # The R5 scan and staging poll are bounded inside the pipeline allowance.
+            assert module.app.state.job_timeouts == {"scaffold": 1200, "build": 1200, "pipeline": 2400}
         heartbeat = {
             "tenant_id": "00000000-0000-0000-0000-000000000001",
             "cron": "*/5 * * * *",

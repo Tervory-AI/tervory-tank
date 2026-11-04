@@ -404,7 +404,7 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
     for card in state.get("cards", {}).values():
-        if (card.get("tool") == "tisan.build" and card.get("status") == "confirmed"
+        if (card.get("tool") in {"tisan.build", "tisan.request"} and card.get("status") == "confirmed"
                 and current_actor(actor).founder and isinstance(card.get("result"), dict)):
             from tisan_requests import build_result
             card["result"] = await build_result(actor.tenant_id, card["result"])
@@ -1060,6 +1060,7 @@ class ScaffoldPage(Body):
 
 
 class ScaffoldArgs(Body):
+    page_id: str | None = Field(default=None, pattern=r'^[a-z0-9-]{1,100}$')
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
     pages: list[str | ScaffoldPage] | None = Field(default=None, min_length=1, max_length=20)
@@ -1067,6 +1068,7 @@ class ScaffoldArgs(Body):
 
 
 class TisanBuildArgs(Body):
+    page_id: str | None = Field(default=None, pattern=r'^[a-z0-9-]{1,100}$')
     name: str = Field(min_length=1, max_length=80)
     slug: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     locale: str = Field(default="en", pattern=r"^[a-z]{2}(?:-[A-Z]{2})?$")
@@ -1077,10 +1079,18 @@ class TisanBuildArgs(Body):
     media: dict[str, str] = Field(default_factory=dict)
 
 
-# Reuse the build contract's field constraints without exposing plan/copy/media.
+class TisanAssemblyArgs(Body):
+    plan: dict[str, Any] | None = None
+    copy: dict[str, str] = Field(default_factory=dict)
+    media: dict[str, str] = Field(default_factory=dict)
+
+
+# Existing client fields remain unchanged; only a founder can submit assembly.
 TisanRequestArgs = create_model('TisanRequestArgs', __base__=Body,
     **{name: (TisanBuildArgs.model_fields[name].annotation, TisanBuildArgs.model_fields[name])
        for name in ('name', 'slug', 'locale', 'brand')},
+    page_id=(str | None, Field(default=None, pattern=r'^[a-z0-9-]{1,100}$')),
+    assembly=(TisanAssemblyArgs | None, None),
     request=(str, Field(min_length=1, max_length=16000)))
 
 
