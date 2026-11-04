@@ -137,9 +137,20 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
     # Celery starts one process per host CPU (8 on Boston) unless told; two is plenty for one CRM.
     command: ["celery", "-A", "crm", "worker", "--loglevel=info", "--concurrency=2"]
-    # Ping only this worker; another healthy worker must not mask its failure.
+    # Broker-only Celery client: do not boot Django just to ping this worker.
+    # Require this exact worker's pong; Redis or another worker cannot mask failure.
     healthcheck:
-      test: ["CMD-SHELL", 'celery -A crm inspect ping --destination "celery@$$HOSTNAME" --timeout 5 >/dev/null 2>&1']
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import os, socket
+          from celery import Celery
+          app = Celery("worker_health", broker=os.environ["CELERY_BROKER_URL"], fixups=[], set_as_current=False)
+          node = "celery@" + socket.gethostname()
+          replies = app.control.inspect(destination=[node], timeout=5).ping()
+          raise SystemExit(0 if isinstance(replies, dict) and replies.get(node) == {"ok": "pong"} else 1)
       interval: 30s
       timeout: 10s
       retries: 3

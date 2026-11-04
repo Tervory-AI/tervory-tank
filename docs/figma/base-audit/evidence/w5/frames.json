@@ -1,0 +1,72 @@
+[
+  {
+    "id": "518:6969",
+    "state": "Ready",
+    "width": 1440,
+    "height": 9786,
+    "screenshot": "client-ready-1440.png",
+    "sha256": "4e548e0251b61ed6ddbaba6796f83c083dd8f2d58ac42f1dfbf83f177d559a36"
+  },
+  {
+    "id": "518:7555",
+    "state": "Ready",
+    "width": 375,
+    "height": 13165,
+    "screenshot": "client-ready-375.png",
+    "sha256": "1fdd2e0febf34ac360891060782b8890f73f2b6962ea455775ac66e3fef7c7a0"
+  },
+  {
+    "id": "518:8159",
+    "state": "Empty",
+    "width": 1440,
+    "height": 9830,
+    "screenshot": "client-empty-1440.png",
+    "sha256": "70c7425f76ac551078279d86193eb6ed0797550d22f395521b5b6d846077fd41"
+  },
+  {
+    "id": "518:8746",
+    "state": "Empty",
+    "width": 375,
+    "height": 13209,
+    "screenshot": "client-empty-375.png",
+    "sha256": "cdd2a42130511667ec54d91c63df1dc932e4cbe2dec080aedf74c963835230aa"
+  },
+  {
+    "id": "573:3721",
+    "state": "Loading",
+    "width": 1440,
+    "height": 9874,
+    "name": "Client case-study template / Loading / 1440 / Proposed",
+    "screenshot": "client-loading-1440.png",
+    "sha256": "6a1b16b4d1568940d6a1a3d09500ae288a8ea825ecb769009adedd9437c590d0"
+  },
+  {
+    "id": "573:4209",
+    "state": "Error",
+    "width": 1440,
+    "height": 9946,
+    "name": "Client case-study template / Error / 1440 / Proposed",
+    "retry": "573:4538",
+    "screenshot": "client-error-1440.png",
+    "sha256": "ba1d36613e69082d4a9cc5323bde8c88278f498c43277021d83c192758888f90"
+  },
+  {
+    "id": "573:4700",
+    "state": "Loading",
+    "width": 375,
+    "height": 13273,
+    "name": "Client case-study template / Loading / 375 / Proposed",
+    "screenshot": "client-loading-375.png",
+    "sha256": "69b96a68958e44e28d301e280ee5c5dc10fc81ea9123a908e5c6cfe52467dea8"
+  },
+  {
+    "id": "573:5131",
+    "state": "Error",
+    "width": 375,
+    "height": 13365,
+    "name": "Client case-study template / Error / 375 / Proposed",
+    "retry": "573:5403",
+    "screenshot": "client-error-375.png",
+    "sha256": "95a15bc2af45406a25199091fa14e3b84a333955fa41a59b275ba690bee931ea"
+  }
+]

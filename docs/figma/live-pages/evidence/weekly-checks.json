@@ -1,0 +1,25 @@
+{
+  "frames": [
+    {
+      "id": "667:11",
+      "width": 1440,
+      "height": 900,
+      "copyExact": true,
+      "overflow": [],
+      "sha256": "0802f2cb02274704eb0568ebdc6cb9d0c9d5ea3d37a9db57dd52fb6e4c7adecd"
+    },
+    {
+      "id": "667:17",
+      "width": 375,
+      "height": 900,
+      "copyExact": true,
+      "overflow": [],
+      "sha256": "fda51a1e3d59835f79a9a4808bd0ddc328edf73eeffdf3cca111d3c77d52f29e"
+    }
+  ],
+  "source": "workspace/app/autumbra/receipts/weekly/[tenant]/page.tsx",
+  "sourceSha256": "25d467577b6d8b29d8ddb50d5ac111d4fbe2866a4c8f779da268861ceca78c48",
+  "newProductWords": [],
+  "liveReadsOrWrites": false,
+  "font": "Cousine is the metrics-compatible Figma counterpart of Linux Liberation Mono (system-ui)."
+}
