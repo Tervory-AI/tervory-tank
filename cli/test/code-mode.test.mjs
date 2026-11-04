@@ -106,7 +106,7 @@ test('new file diff requires a missing-file read; malformed/context-mismatched d
   await assert.rejects(applyDiff('old\n', patch.replace('b/file.txt', 'b/../outside.txt'), 'file.txt', false, f.root));
 });
 
-test('commands show in full, require y and cannot run non-interactively; cwd and output cap', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
+test('commands show in full, require y and cannot run non-interactively; cwd and output cap', { skip: process.platform === 'win32' && 'Sandbox confinement applies where the OS sandbox exists' }, async () => {
   const f = await folder();
   const command = 'printf done > marker'; const request = { name: 'run_command', arguments: { command } };
   let shown = '';
@@ -158,7 +158,7 @@ test('list caps at 2000 entries, including repositories with more than 64 KB of 
   assert.equal(result.files.length, 2000); assert(result.truncated);
 });
 
-test('approved command cannot read secret paths, outside symlinks or inherited host credentials', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
+test('approved command cannot read secret paths, outside symlinks or inherited host credentials', { skip: process.platform === 'win32' && 'Sandbox confinement applies where the OS sandbox exists' }, async () => {
   const f = await folder();
   await writeFile(join(f.root, '.env'), 'private-file-canary');
   await writeFile(join(work, 'host-private.txt'), 'outside-file-canary');
@@ -174,7 +174,7 @@ test('approved command cannot read secret paths, outside symlinks or inherited h
   await assert.rejects(f.edit('.env', patch, io()));
 });
 
-test('fake Tank can request a missing-file read, explicit edit and explicit test run without a new sign-in', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
+test('fake Tank can request a missing-file read, explicit edit and explicit test run without a new sign-in', { skip: process.platform === 'win32' && 'Sandbox confinement applies where the OS sandbox exists' }, async () => {
   const f = await folder();
   const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
   const requests = [
@@ -308,7 +308,7 @@ test('Git reads remain pinned after a nested repository appears', async () => {
   assert((await selected.files()).files.includes('original.txt'));
 });
 
-test('external Node runtime is read-only, named before approval and cannot expose HOME', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
+test('external Node runtime is read-only, named before approval and cannot expose HOME', { skip: process.platform === 'win32' && 'Sandbox confinement applies where the OS sandbox exists' }, async () => {
   const f = await folder();
   const runtime = await mkdtemp(join(work, 'runtime-'));
   await mkdir(join(runtime, 'bin'));
@@ -365,7 +365,7 @@ test('session history is bounded, redacted and transient; continuation rounds sh
 });
 
 
-test('external Node intermediate links do not expose their host directory', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
+test('external Node intermediate links do not expose their host directory', { skip: process.platform === 'win32' && 'Sandbox confinement applies where the OS sandbox exists' }, async () => {
   const f = await folder();
   const install = await mkdtemp(join(work, 'node-install-'));
   const middle = await mkdtemp(join(work, 'node-links-'));
@@ -381,7 +381,7 @@ test('external Node intermediate links do not expose their host directory', { sk
 });
 
 
-test('external runtime rejects directories, nonexecutables and their symlinks before approval', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
+test('external runtime rejects directories, nonexecutables and their symlinks before approval', { skip: process.platform === 'win32' && 'Sandbox confinement applies where the OS sandbox exists' }, async () => {
   const f = await folder(); const outside = await mkdtemp(join(work, 'other-projects-'));
   await mkdir(join(outside, 'client-a/.aws'), { recursive: true });
   await writeFile(join(outside, 'client-a/.npmrc'), 'unrelated-npm-canary');
@@ -404,7 +404,7 @@ test('external runtime rejects directories, nonexecutables and their symlinks be
   assert.equal(prompts, 0);
 });
 
-test('external runtimes refuse pip-user and uv launchers without exposing .local user data', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
+test('external runtimes refuse pip-user and uv launchers without exposing .local user data', { skip: process.platform === 'win32' && 'Sandbox confinement applies where the OS sandbox exists' }, async () => {
   const f = await folder(); const home = await mkdtemp(join(work, 'user-home-'));
   const local = join(home, '.local'); await mkdir(join(local, 'bin'), { recursive: true });
   await mkdir(join(local, 'share/python_keyring'), { recursive: true });
@@ -590,7 +590,7 @@ test('/undo is local and never sends its command or snapshot to Tank', async () 
   assert.equal(await readFile(join(f.root, 'file.txt'), 'utf8'), 'old\n');
 });
 
-test('sandbox confines outside writes, secret reads and network while echo succeeds', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
+test('sandbox confines outside writes, secret reads and network while echo succeeds', { skip: process.platform === 'win32' && 'Sandbox confinement applies where the OS sandbox exists' }, async () => {
   const f = await folder(); const outside = join(work, 'placeholder-outside-write');
   await writeFile(join(f.root, '.env.placeholder'), 'placeholder-private-canary');
   const server = createServer(socket => socket.end());
@@ -626,13 +626,14 @@ test('missing sandbox runs approved commands with restricted environment', async
   } finally { delete process.env.TERVORY_PLACEHOLDER_PRIVATE; }
 });
 
-test('Darwin refuses an invalid Seatbelt profile before running the command', { skip: process.platform !== 'darwin' }, async () => {
+test('Darwin falls back after approval when Seatbelt cannot be built', { skip: process.platform !== 'darwin' }, async () => {
   const f = await folder(); const read = fsPromises.readFile;
   try {
     fsPromises.readFile = async (path, ...args) => path instanceof URL && path.pathname.endsWith('/seatbelt-base.sbpl') ? '(version 1) (placeholder-invalid-operation)' : read(path, ...args);
     syncBuiltinESMExports();
-    await assert.rejects(f.command('printf wrong > placeholder-marker', io(), 5000));
-    await assert.rejects(readFile(join(f.root, 'placeholder-marker')));
+    const result = await f.tool({ name: 'run_command', arguments: { command: 'echo approved > placeholder-marker' } }, io());
+    assert.equal(result.code, 0);
+    assert.equal((await readFile(join(f.root, 'placeholder-marker'), 'utf8')).trim(), 'approved');
   } finally { fsPromises.readFile = read; syncBuiltinESMExports(); }
 });
 
@@ -721,7 +722,7 @@ test('parent swap during rename cannot write through the replacement symlink', a
   assert.equal(await readFile(join(outside, 'file.txt'), 'utf8'), 'placeholder outside\n');
 });
 
-test('sandbox denies home, secret directories, git config, outside reads and Unix sockets', { skip: process.platform === 'win32' && 'Windows commands are refused: no filesystem/network sandbox backend' }, async () => {
+test('sandbox denies home, secret directories, git config, outside reads and Unix sockets', { skip: process.platform === 'win32' && 'Sandbox confinement applies where the OS sandbox exists' }, async () => {
   const f = await folder(); const home = homedir();
   await mkdir(join(home, '.ssh'), { recursive: true });
   const directories = [home, join(home, '.ssh')];

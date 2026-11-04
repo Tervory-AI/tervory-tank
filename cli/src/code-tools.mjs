@@ -46,7 +46,7 @@ export async function processOutput(command, args, { cwd, gitDirectory, gitWorkT
     try {
       child = spawn(command, args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true,
         env: { PATH: process.env.PATH, ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}), LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_LITERAL_PATHSPECS: '1',
-          ...(temporaryDirectory ? { TMPDIR: temporaryDirectory } : {}),
+          ...(temporaryDirectory ? { TMPDIR: temporaryDirectory, ...(process.platform === 'win32' ? { TEMP: temporaryDirectory, TMP: temporaryDirectory } : {}) } : {}),
           ...(gitDirectory ? { GIT_DIR: gitDirectory, GIT_WORK_TREE: gitWorkTree } : {}) },
         stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
     } catch { return reject(refused()); }
@@ -421,14 +421,24 @@ export class CodeFolder {
     const quoted = "'" + candidate.replaceAll("'", "'\"'\"'") + "'";
     return { command: quoted + command.slice(match[0].length), mounts, runners };
   }
+  #backend;
   async commandBackend() {
+    return this.#backend ??= this.detectCommandBackend();
+  }
+  async detectCommandBackend() {
     if (process.platform === 'darwin') {
-      try { await access('/usr/bin/sandbox-exec', constants.X_OK); return 'seatbelt'; } catch { return 'host'; }
+      try {
+        const probe = await processOutput('/usr/bin/sandbox-exec', ['-p', await seatbeltProfile(this.root, []), '/usr/bin/true'], { cwd: this.root, timeoutMs: 2000 });
+        return probe.code === 0 && !probe.timed_out ? 'seatbelt' : 'host';
+      } catch { return 'host'; }
     }
     if (process.platform === 'linux') {
       for (const directory of (process.env.PATH ?? '').split(pathDelimiter)) {
         if (!isAbsolute(directory)) continue;
-        try { await access(resolve(directory, 'bwrap'), constants.X_OK); return 'bwrap'; } catch { /* next */ }
+        try {
+          const probe = await processOutput(resolve(directory, 'bwrap'), ['--unshare-all', '--ro-bind', '/', '/', '/bin/true'], { cwd: this.root, timeoutMs: 2000 });
+          if (probe.code === 0 && !probe.timed_out) return 'bwrap';
+        } catch { /* unavailable sandbox: approval still permits commands */ }
       }
     }
     return 'host';
