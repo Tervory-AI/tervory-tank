@@ -20,12 +20,12 @@ CONFIRMED = frozenset([])
 
 def adapters(command):
     return {
-        'skala.list': command.Adapter('GET', '/v1/skala', command.EmptyArgs, 'List skills', False, 'other', None),
-        'skala.evals': command.Adapter('POST', '/v1/skala/{skill_id}/{version}/evals', command.SkillVersionArgs, 'Run skill evaluations', True, 'paid_run', None),
-        'skala.approve': command.Adapter('POST', '/v1/skala/{skill_id}/{version}/approve', command.SkillVersionArgs, 'Approve a skill version', False, 'approve_skill', None),
-        'skala.retire': command.Adapter('POST', '/v1/skala/{skill_id}/{version}/retire', command.SkillVersionArgs, 'Retire a skill version', False, 'retire', None),
-        'ledger.receipts': command.Adapter('GET', '/v1/proof', command.ProofArgs, 'Read ledger receipts', False, 'other', None),
-        'ledger.savings': command.Adapter('GET', '/v1/proof', command.SavingsArgs, 'Read recorded costs and savings', False, 'other', None),
+        'skala.list': command.Adapter('GET', '/v1/skala', command.EmptyArgs, 'List skills'),
+        'skala.evals': command.Adapter('POST', '/v1/skala/{skill_id}/{version}/evals', command.SkillVersionArgs, 'Run skill evaluations', True, 'paid_run'),
+        'skala.approve': command.Adapter('POST', '/v1/skala/{skill_id}/{version}/approve', command.SkillVersionArgs, 'Approve a skill version', False, 'approve_skill'),
+        'skala.retire': command.Adapter('POST', '/v1/skala/{skill_id}/{version}/retire', command.SkillVersionArgs, 'Retire a skill version', False, 'retire'),
+        'ledger.receipts': command.Adapter('GET', '/v1/proof', command.ProofArgs, 'Read ledger receipts'),
+        'ledger.savings': command.Adapter('GET', '/v1/proof', command.SavingsArgs, 'Read recorded costs and savings'),
         'skala.teachers': command.Adapter('GET', '/v1/training/teachers', TeachersArgs, 'skala.teachers'),
     }
 

@@ -97,3 +97,23 @@ Final re-freeze, only when authorized
 .venv312/bin/python scripts/refreeze_platform_registry.py finish
 Neither step pushes. Finish refuses every snapshot drift except the teacher
 addition. Run focused regressions and push with an explicit lease after rewriting.
+
+Final current-main integration
+- Untouched main: 5bf17ad19dd0318d30becfff3df4564b433f3344.
+- First freeze commit: 926bb386c687d46bf9e658c5107e1aa7134f89c8.
+- prepare/replay/finish preserves every frozen main contract (catalogues, adapter
+  arguments/order, first dispatch arm, permission/planning schemas, route/lifecycle
+  order and SQL), with only skala.teachers, its route and teacher_model DDL added.
+- Current-main campaign, comparison, plugin, training, Market Lab and Zenas
+  declarations are retained; trigger CRM reads retain their ordinary read dispatch.
+- Current-main policy planner, held_swap_id/fallbacks query fields and ZA shutdown
+  cleanup are retained. Two RouteLLM hooks are the only run_route body changes,
+  proven against current main hash fdd6cbb821586b1ba97cd44a2e37290d8736cb931f063c2ca30ab38424ebcc51.
+- Narrow checks: 88 passed, 48 database-backed skips in 9.73s; one stale
+  mutation-test source anchor failed after main parenthesized Trigger dispatch.
+  Fixed only that anchor; it and Tiger watch regressions: 38 passed in 8.51s.
+- Exact CI Ruff command: All checks passed! No full local suite or retry loop.
+- finish links the canonical replay to the original reviewed head as a second
+  parent. A normal push preserves all remote history; no force-push is required.
+  Future prepare unwraps that link before replay and keeps a recovery backup.
+- Hosted final-head CI is the full-suite test of record.

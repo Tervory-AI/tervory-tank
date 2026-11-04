@@ -90,7 +90,7 @@ def test_dispatch_snapshot_detects_dropped_prefix(monkeypatch):
     assert before['market_lab.alerts.email'] == 1
     source = inspect.getsource(command.execute_card)
     start = source.index('            elif action.tool.startswith("market_lab.alerts."):')
-    end = source.index('            elif action.tool.startswith("trigger.")', start)
+    end = source.index('            elif ', start + len('            elif '))
     mutated = source[:start] + source[end:]
     monkeypatch.setattr(inspect, 'getsource', lambda function: mutated)
     after = _dispatch(command, tools)
