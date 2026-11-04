@@ -23,6 +23,7 @@ def set_founders(monkeypatch, subjects):
               'founders': [subject.strip() for subject in subjects.split(',') if subject.strip()]}
     monkeypatch.setattr(registry, '_records', {**registry._records, region: record})
     monkeypatch.setattr(registry, '_issuer', ContextVar('offline_verified_issuer', default=issuer))
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', subjects)
     async def refresh(**kwargs):
         return None
     monkeypatch.setattr(registry, 'refresh', refresh)

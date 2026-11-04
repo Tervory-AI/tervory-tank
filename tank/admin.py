@@ -1,7 +1,7 @@
 """Founder console. Platform-wide, and invisible to everyone else.
 
 Every route on this router returns 404 unless the caller sends the Workspace
-key and a Trigger sign-in user id listed in TERVORY_ADMIN_USER_IDS. The numbers are
+key and a verified Trigger sign-in subject in Tank's issuer-scoped founder table. The numbers are
 our own measurements: a route is proven only when its evals have passed,
 its shadow sample is large enough and in agreement, and clients are not
 rejecting it above the policy's ceiling.
