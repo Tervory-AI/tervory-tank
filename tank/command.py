@@ -44,12 +44,12 @@ TOOLS = {
     "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
-    "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings"],
+    "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.draft", "zenas.review", "zenas.playbook.add", "zenas.playbooks", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
-FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
@@ -495,6 +495,9 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     if planned is not None:
         return planned
     from main import Message, RouteRequest, box_region, run_route
+    planned = await policy_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from tisan_requests import code_plan as tisan_code_plan
     planned = await tisan_code_plan(actor, messages, task_id)
     if planned is not None:
@@ -506,6 +509,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     remembered = await remember_turn(actor, messages, task_id)
     if remembered is not None:
         return remembered
+    from radix_watch import code_plan as watch_plan
+    planned = await watch_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from radix_repo import code_plan as repo_plan
     planned = await repo_plan(actor, messages, task_id)
     if planned is not None:
@@ -1086,6 +1093,11 @@ class RadixDomainArgs(Body):
     domain: str = Field(min_length=1, max_length=253)
 
 
+class RadixWatchArgs(RadixDomainArgs):
+    interval: Literal["daily", "weekly"]
+    run_now: bool = True
+
+
 class RadixPassiveArgs(Body):
     url: str = Field(max_length=300)
     commit: str = Field(default="", max_length=200)
@@ -1277,6 +1289,116 @@ class BuildArgs(Body):
     brief_markdown: str = Field(min_length=1, max_length=30000)
 
 
+class PolicyArgs(Body):
+    task_type: str = Field(min_length=1, max_length=200)
+    default: bool = False
+
+
+class PolicyFallbackArgs(PolicyArgs):
+    fallbacks: list[str] | None = Field(max_length=7)
+
+
+async def policy_code_plan(actor: Actor, messages: list[dict], task_id: uuid.UUID | None):
+    """An explicit policy command needs no model to propose its existing card."""
+    last = messages[-1] if messages else {}
+    if last.get("role") != "user":
+        return None
+    match = re.fullmatch(r"\s*(tank\.policy(?:\.fallbacks)?)(?::|\s|$)\s*(.*)",
+                         last.get("content", ""), re.S)
+    if not match:
+        return None
+    actor = await authorized_actor(actor)
+    tool, source = match.groups()
+    require_tool(actor, tool)
+    try:
+        args = json.loads(source) if source.lstrip().startswith("{") else {"task_type": source.strip()}
+    except ValueError:
+        raise HTTPException(422, "The action arguments are invalid") from None
+    if tool == "tank.policy.fallbacks" and (not isinstance(args, dict) or "fallbacks" not in args):
+        raise HTTPException(422, "The action arguments are invalid")
+    action = validate_action(PlannedAction(tool=tool, arguments=args), actor)
+    from trigger_routes import code_receipt
+    from types import SimpleNamespace
+    receipt = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="tank")
+    return SimpleNamespace(content=dump({"text": "", "actions": [action.model_dump(mode="json")]}), ledger_id=receipt)
+
+
+async def policy_fallbacks_prepare(conn: Any, args: dict, actor: Actor) -> dict:
+    import main
+    from routing_data import validate_fallbacks
+    target = None if args.get("default") else actor.tenant_id
+    row = await conn.fetchrow(
+        """SELECT * FROM tank.policy WHERE task_type=$1 AND (tenant_id=$2 OR tenant_id IS NULL)
+        ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1""", args["task_type"], target)
+    if row is None:
+        raise HTTPException(404)
+    await validate_fallbacks(main, row["model"], args.get("fallbacks"))
+    held = unpack(row["held_policy"])
+    if held:
+        await validate_fallbacks(main, held["model"], args.get("fallbacks"))
+    return dict(row)
+
+
+@router.get("/tank/policy")
+async def tank_policy(task_type: str = Query(min_length=1, max_length=200), default: bool = False,
+                      actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "tank.policy")
+    target = None if default else actor.tenant_id
+    async with db().acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT task_type,tenant_id,model,fallbacks,held_policy,held_swap_id,held_at
+            FROM tank.policy WHERE task_type=$1 AND (tenant_id=$2 OR tenant_id IS NULL)
+            ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1""", task_type, target)
+        if row is None:
+            raise HTTPException(404)
+        result = {key: row[key] for key in ("task_type", "tenant_id", "model", "fallbacks")}
+        result["held"] = None
+        if row["held_swap_id"]:
+            jobs = await conn.fetchrow(
+                """SELECT count(*) AS total,count(completed_at) AS done
+                FROM tank.skill_revalidations WHERE tenant_id=$1 AND swap_id=$2
+                AND policy_tenant_id IS NOT DISTINCT FROM $3 AND task_type=$4""",
+                __import__("gold").PLATFORM_TENANT, row["held_swap_id"], row["tenant_id"], task_type)
+            held = unpack(row["held_policy"])
+            result["held"] = {"swap_id": str(row["held_swap_id"]), "model": held["model"],
+                              "held_at": row["held_at"], "done": jobs["done"], "total": jobs["total"]}
+    from trigger_routes import code_receipt
+    result["text"] = dump(result)
+    result["ledger_id"] = str(await code_receipt(actor.tenant_id, "tank.policy", agent="tank"))
+    return result
+
+
+@router.post("/tank/policy/fallbacks")
+async def tank_policy_fallbacks(body: PolicyFallbackArgs, actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "tank.policy.fallbacks")
+    target = None if body.default else actor.tenant_id
+    async with db().acquire() as conn:
+        async with conn.transaction():
+            # Serialize with swaps/releases and revalidate the current primary.
+            await conn.fetchrow(
+                """SELECT task_type FROM tank.policy WHERE task_type=$1
+                AND (tenant_id=$2 OR tenant_id IS NULL) ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1 FOR UPDATE""",
+                body.task_type, target)
+            row = await policy_fallbacks_prepare(conn, body.model_dump(), actor)
+            if row["tenant_id"] != target:
+                # Existing copy-on-write path preserves all policy columns.
+                await conn.execute(
+                    """INSERT INTO tank.policy SELECT (jsonb_populate_record(NULL::tank.policy,
+                    to_jsonb(p) || jsonb_build_object('tenant_id',$2::uuid,'fallbacks',$3::text[],
+                    'held_policy',NULL,'held_swap_id',NULL,'held_at',NULL))).*
+                    FROM tank.policy p WHERE task_type=$1 AND tenant_id IS NULL
+                    ON CONFLICT DO NOTHING""", body.task_type, target, body.fallbacks)
+            await conn.execute(
+                """UPDATE tank.policy SET fallbacks=$3,
+                held_policy=CASE WHEN held_policy IS NULL THEN NULL
+                    ELSE held_policy || jsonb_build_object('fallbacks',$3::text[]) END,updated_at=now()
+                WHERE task_type=$1 AND tenant_id IS NOT DISTINCT FROM $2""",
+                body.task_type, target, body.fallbacks)
+    from trigger_routes import code_receipt
+    return {"ok": True, "text": dump({"task_type": body.task_type, "tenant_id": target, "fallbacks": body.fallbacks}),
+            "ledger_id": str(await code_receipt(actor.tenant_id, "tank.policy.fallbacks", agent="tank"))}
+
+
 class MarketLabReadArgs(Body):
     limit: int = Field(default=20, ge=1, le=100)
     page: int = Field(default=0, ge=0, le=10000)
@@ -1303,6 +1425,8 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "tank.policy": Adapter("GET", "/v1/command/tank/policy", PolicyArgs, "tank.policy"),
+    "tank.policy.fallbacks": Adapter("POST", "/v1/command/tank/policy/fallbacks", PolicyFallbackArgs, "tank.policy.fallbacks"),
     "tisan.request": Adapter("POST", "/v1/command/tisan/request", TisanRequestArgs, "tisan.request"),
     "tisan.preview": Adapter("GET", "/v1/command/tisan/preview", TisanRequestIdArgs, "tisan.preview"),
     "tisan.feedback": Adapter("POST", "/v1/command/tisan/feedback", TisanFeedbackArgs, "tisan.feedback"),
@@ -1363,6 +1487,10 @@ ADAPTERS = {
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
     "rig.quote.confirm_payment": Adapter("POST", "/v1/access/rig/admin/confirm-store-payment", RigConfirmPaymentArgs, "rig.quote.confirm_payment"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
+    "radix.watch": Adapter("POST", "/v1/radix/passive/watch", RadixWatchArgs, "radix.watch"),
+    "radix.unwatch": Adapter("POST", "/v1/radix/passive/unwatch", RadixDomainArgs, "radix.unwatch"),
+    "radix.watches": Adapter("GET", "/v1/radix/passive/watches", EmptyArgs, "radix.watches"),
+    "radix.changes": Adapter("GET", "/v1/radix/passive/changes", RadixDomainArgs, "radix.changes"),
     "radix.domain.prove": Adapter("POST", "/v1/radix/passive/domains", RadixDomainArgs, "radix.domain.prove"),
     "radix.passive.scan": Adapter("POST", "/v1/radix/passive/scans", RadixPassiveArgs, "radix.passive.scan"),
     "radix.findings": Adapter("GET", "/v1/radix/passive/scans/{scan_id}/findings", RadixFindingsArgs, "radix.findings"),
@@ -1429,6 +1557,8 @@ def validate_action(action: PlannedAction, actor: Actor) -> PlannedAction:
         ):
             raise HTTPException(422, "invalid artifact") from None
         raise HTTPException(422, "The action arguments are invalid") from None
+    if action.tool == "tank.policy.fallbacks" and "fallbacks" not in args:
+        args["fallbacks"] = None  # An explicit reset must remain visible before Confirm.
     return PlannedAction(tool=action.tool, arguments=args)
 
 
@@ -1469,7 +1599,28 @@ def planning_message(actor: Actor, *, code_mode: bool = False) -> dict:
 
 
 def public_card(card: dict) -> dict:
-    return {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
+    public = {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
+    # Reuse the approved results/pending/failed presentation without adding any
+    # view fields or copy. Execution, confirmation and receipts keep the real tool.
+    if card.get("tool") == "radix.changes":
+        public["tool"] = "radix.findings"
+        result = card.get("result")
+        if isinstance(result, dict) and any(isinstance(result.get(key), list) for key in ("new", "fixed", "unchanged")):
+            # Reuse the approved Rule value for existing comparison/item data.
+            # Raw arrays and stored tool rule IDs remain unchanged.
+            rows = []
+            for state in ("new", "fixed", "unchanged"):
+                entries = result.get(state)
+                for finding in entries if isinstance(entries, list) else []:
+                    if not isinstance(finding, dict):
+                        continue
+                    rule = str(finding.get("rule") or "")
+                    item = finding.get("item")
+                    if isinstance(item, str) and item != finding.get("file"):
+                        rule += " · " + item
+                    rows.append({**finding, "rule": state + " · " + rule})
+            public["result"] = {**result, "findings": rows}
+    return public
 
 
 @router.post("/threads/{thread_id}/actions")
@@ -1482,6 +1633,9 @@ async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor =
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None, *, origin: Literal["code"] | None = None) -> dict:
+    if action.tool == "tank.policy.fallbacks":
+        require_tool(actor, action.tool)
+        await policy_fallbacks_prepare(conn, action.arguments, actor)
     if action.tool.startswith("plugins."):
         from plugins import prepare
         action = await prepare(action, actor, conn)
@@ -1497,8 +1651,12 @@ async def propose_action(conn: Any, row: dict, state: dict, action: PlannedActio
     card_id = str(uuid.uuid4())
     adapter = action_adapter(action, actor)
     label = adapter.label if adapter else "Start a worker build"
+    display_arguments = dict(action.arguments)
+    if action.tool in {"tank.policy", "tank.policy.fallbacks"}:
+        # Existing Brief/Response fields render actual data; no UI wording is added.
+        display_arguments["brief_markdown"] = dump(action.arguments)
     card = {"card_id": card_id, "kind": adapter.kind if adapter else "build", "summary": label,
-            "tool": action.tool, "arguments": action.arguments, "status": "pending",
+            "tool": action.tool, "arguments": display_arguments, "status": "pending",
             "payload": {"tool": action.tool, "arguments": action.arguments}}
     if origin is not None:
         card["origin"] = origin
@@ -1574,6 +1732,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     if action.tool == "ledger.savings":
         end = datetime.now(timezone.utc)
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
+    if action.tool.startswith("tank.policy"):
+        return adapter.method, path, args if adapter.method == "GET" else {}, None if adapter.method == "GET" else args
     if action.tool == "trigger.scorecard":
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
@@ -1604,7 +1764,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     method, path, params, body = adapter_request(action, actor)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
-    if action.tool in {"radix.domain.prove", "radix.passive.scan", "radix.findings"}:
+    if action.tool in {"radix.domain.prove", "radix.passive.scan", "radix.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"}:
         from main import box_region
         headers.update({"X-Tervory-Squad": "radix", "X-Tervory-Region": box_region()})
     headers["X-Tervory-Role"] = "org:admin" if actor.tenant_admin else ""
@@ -1617,6 +1777,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if len(response.content) > response_limit:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
+    if action.tool in {"radix.watch", "radix.unwatch", "radix.watches", "radix.changes"} and 200 <= response.status_code < 300:
+        from trigger_routes import code_receipt
+        result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="radix"))
     if action.tool == "zenas.draft" and 200 <= response.status_code < 300:
         from trigger_routes import code_receipt
         result = {**result, "status": result.get("state"), "summary": result.get("legal_notice")}

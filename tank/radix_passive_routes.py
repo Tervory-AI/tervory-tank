@@ -4,6 +4,7 @@ from __future__ import annotations
 import hmac
 import os
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +17,8 @@ class Body(BaseModel):
     target: str | None = Field(default=None, max_length=300)
     artifact: str | None = Field(default=None, max_length=80)
     domain: str | None = Field(default=None, max_length=253)
+    interval: Literal['daily', 'weekly'] | None = None
+    run_now: bool | None = None
 
 
 def build_router(tank):
@@ -39,6 +42,9 @@ def build_router(tank):
             raise HTTPException(401, 'authentication required')
         if request.headers.get('x-tervory-squad') != 'radix' or not request.headers.get('x-tervory-user'):
             raise HTTPException(403, 'Radix access required')
+        founders = {value.strip() for value in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if value.strip()}
+        if operation in {'watch','unwatch','watches','changes'} and request.headers['x-tervory-user'] in founders:
+            return
         async with tank.pool().acquire() as conn:
             if not await conn.fetchval('SELECT 1 FROM tank.tenant_squad WHERE tenant_id=$1 AND agent=$2', tenant, 'radix'):
                 raise HTTPException(403, 'Radix access required')
@@ -74,13 +80,24 @@ def build_router(tank):
 
     @router.post('/{operation}')
     async def call(operation: str, body: Body, request: Request):
-        if operation not in {'domains','scans','gate'}:
+        if operation not in {'domains','scans','gate','watch','unwatch'}:
             raise HTTPException(404)
         payload = body.model_dump(mode='json', exclude_none=True)
-        if (operation == 'domains' and set(payload) != {'tenant_id','domain'}
-                or operation != 'domains' and set(payload) != {'tenant_id','target','artifact'}):
+        required = ({'tenant_id','domain','interval'} if operation == 'watch' else
+                    {'tenant_id','domain'} if operation in {'domains','unwatch'} else
+                    {'tenant_id','target','artifact'})
+        if not required <= set(payload) or set(payload) - required - ({'run_now'} if operation == 'watch' else set()):
             raise HTTPException(422)
         return await forward(request, body.tenant_id, operation, body=payload)
+
+    @router.get('/watches')
+    async def watches(tenant_id: UUID, request: Request):
+        return await forward(request, tenant_id, 'watches', params={'tenant_id': str(tenant_id)}, method='GET')
+
+    @router.get('/changes')
+    async def changes(tenant_id: UUID, domain: str, request: Request):
+        return await forward(request, tenant_id, 'changes',
+                             params={'tenant_id': str(tenant_id), 'domain': domain}, method='GET')
 
     @router.get('/scans/{scan_id}/findings')
     async def findings(scan_id: UUID, tenant_id: UUID, request: Request):

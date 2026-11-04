@@ -1,0 +1,1082 @@
+{
+  "frames": 68,
+  "originalFrames": 44,
+  "minimumContrast": {
+    "button": 6.470044502810665,
+    "fieldWhite": 3.8297061278462925,
+    "fieldCanvas": 3.5396244368029
+  },
+  "buttons": 132,
+  "fields": 40,
+  "issues": {
+    "dark": [],
+    "overflow": [],
+    "radius14": [],
+    "spacing": [],
+    "red": [],
+    "oldCopy": [],
+    "buttons": [],
+    "fonts": [],
+    "missingNavigation": []
+  },
+  "frameInventory": [
+    {
+      "id": "231:10255",
+      "name": "Connect consent / Pending / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [],
+      "nodeCount": 41,
+      "typeCounts": {
+        "FRAME": 15,
+        "TEXT": 21,
+        "RECTANGLE": 1,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "231:10306",
+      "name": "Connect consent / Pending / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [],
+      "nodeCount": 40,
+      "typeCounts": {
+        "FRAME": 14,
+        "TEXT": 21,
+        "RECTANGLE": 1,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "231:10356",
+      "name": "Connect consent / Approved / Desktop / Approved 3 Nov",
+      "width": 1440,
+      "height": 900,
+      "navigation": [],
+      "nodeCount": 10,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 3,
+        "RECTANGLE": 1
+      }
+    },
+    {
+      "id": "231:10376",
+      "name": "Connect consent / Approved / Mobile / Approved 3 Nov",
+      "width": 375,
+      "height": 812,
+      "navigation": [],
+      "nodeCount": 10,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 3,
+        "RECTANGLE": 1
+      }
+    },
+    {
+      "id": "231:10396",
+      "name": "Connect consent / Denied / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [],
+      "nodeCount": 11,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 4,
+        "RECTANGLE": 1
+      }
+    },
+    {
+      "id": "231:10416",
+      "name": "Connect consent / Denied / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [],
+      "nodeCount": 11,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 4,
+        "RECTANGLE": 1
+      }
+    },
+    {
+      "id": "231:10436",
+      "name": "Connect consent / Invalid / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [],
+      "nodeCount": 11,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 4,
+        "RECTANGLE": 1
+      }
+    },
+    {
+      "id": "231:10456",
+      "name": "Connect consent / Invalid / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [],
+      "nodeCount": 11,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 4,
+        "RECTANGLE": 1
+      }
+    },
+    {
+      "id": "231:10476",
+      "name": "Connect consent / Expired / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [],
+      "nodeCount": 11,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 4,
+        "RECTANGLE": 1
+      }
+    },
+    {
+      "id": "231:10496",
+      "name": "Connect consent / Expired / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [],
+      "nodeCount": 11,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 4,
+        "RECTANGLE": 1
+      }
+    },
+    {
+      "id": "231:10516",
+      "name": "Connect consent / ZA founder refusal / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [],
+      "nodeCount": 13,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 5,
+        "RECTANGLE": 1,
+        "INSTANCE": 1
+      }
+    },
+    {
+      "id": "231:10539",
+      "name": "Connect consent / ZA founder refusal / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [],
+      "nodeCount": 13,
+      "typeCounts": {
+        "FRAME": 6,
+        "TEXT": 5,
+        "RECTANGLE": 1,
+        "INSTANCE": 1
+      }
+    },
+    {
+      "id": "231:11794",
+      "name": "CLI sign-ins and connected apps / Connected / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:43393"
+      ],
+      "nodeCount": 90,
+      "typeCounts": {
+        "FRAME": 24,
+        "TEXT": 42,
+        "INSTANCE": 22,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:11832",
+      "name": "CLI sign-ins and connected apps / Connected / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:43476"
+      ],
+      "nodeCount": 36,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 16,
+        "INSTANCE": 1,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:11870",
+      "name": "Rig Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:45832"
+      ],
+      "nodeCount": 86,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 42,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:11900",
+      "name": "Rig Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:45919"
+      ],
+      "nodeCount": 32,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 16,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:11930",
+      "name": "Rig Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:46007"
+      ],
+      "nodeCount": 84,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 40,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:11958",
+      "name": "Rig Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:46094"
+      ],
+      "nodeCount": 30,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 14,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:11986",
+      "name": "Rig Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:46183"
+      ],
+      "nodeCount": 84,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 40,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12014",
+      "name": "Rig Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:46270"
+      ],
+      "nodeCount": 30,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 14,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12042",
+      "name": "Rig Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:46359"
+      ],
+      "nodeCount": 85,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 41,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12070",
+      "name": "Rig Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:46447"
+      ],
+      "nodeCount": 31,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 15,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12098",
+      "name": "Rig Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:47228"
+      ],
+      "nodeCount": 85,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 41,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12124",
+      "name": "Rig Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:47318"
+      ],
+      "nodeCount": 31,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 15,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12150",
+      "name": "Rig Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:47406"
+      ],
+      "nodeCount": 93,
+      "typeCounts": {
+        "FRAME": 21,
+        "TEXT": 45,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12187",
+      "name": "Rig Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:47493"
+      ],
+      "nodeCount": 39,
+      "typeCounts": {
+        "FRAME": 14,
+        "TEXT": 19,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12224",
+      "name": "Tisan Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:47581"
+      ],
+      "nodeCount": 86,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 42,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12254",
+      "name": "Tisan Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:47668"
+      ],
+      "nodeCount": 32,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 16,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12284",
+      "name": "Tisan Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:47756"
+      ],
+      "nodeCount": 84,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 40,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12312",
+      "name": "Tisan Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:47843"
+      ],
+      "nodeCount": 30,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 14,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12340",
+      "name": "Tisan Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:47931"
+      ],
+      "nodeCount": 84,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 40,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12368",
+      "name": "Tisan Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:48018"
+      ],
+      "nodeCount": 30,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 14,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12396",
+      "name": "Tisan Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:48107"
+      ],
+      "nodeCount": 85,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 41,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12424",
+      "name": "Tisan Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:48195"
+      ],
+      "nodeCount": 31,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 15,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12452",
+      "name": "Tisan Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:48286"
+      ],
+      "nodeCount": 85,
+      "typeCounts": {
+        "FRAME": 17,
+        "TEXT": 41,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12478",
+      "name": "Tisan Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:48376"
+      ],
+      "nodeCount": 31,
+      "typeCounts": {
+        "FRAME": 10,
+        "TEXT": 15,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12504",
+      "name": "Tisan Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:48464"
+      ],
+      "nodeCount": 93,
+      "typeCounts": {
+        "FRAME": 21,
+        "TEXT": 45,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12541",
+      "name": "Tisan Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:48551"
+      ],
+      "nodeCount": 39,
+      "typeCounts": {
+        "FRAME": 14,
+        "TEXT": 19,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12578",
+      "name": "Founder MCP servers / Servers / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:48656"
+      ],
+      "nodeCount": 109,
+      "typeCounts": {
+        "FRAME": 30,
+        "TEXT": 47,
+        "INSTANCE": 27,
+        "RECTANGLE": 2,
+        "ELLIPSE": 3
+      }
+    },
+    {
+      "id": "231:12629",
+      "name": "Founder MCP servers / Servers / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:48743"
+      ],
+      "nodeCount": 55,
+      "typeCounts": {
+        "FRAME": 23,
+        "TEXT": 21,
+        "INSTANCE": 6,
+        "RECTANGLE": 2,
+        "ELLIPSE": 3
+      }
+    },
+    {
+      "id": "231:12680",
+      "name": "Founder MCP servers / Add server / Desktop / Approved 3 Nov",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:48828"
+      ],
+      "nodeCount": 85,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 39,
+        "INSTANCE": 26,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12712",
+      "name": "Founder MCP servers / Add server / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:48912"
+      ],
+      "nodeCount": 31,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 13,
+        "INSTANCE": 5,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12744",
+      "name": "Founder MCP servers / Remove server / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "465:48997"
+      ],
+      "nodeCount": 83,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 38,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "231:12774",
+      "name": "Founder MCP servers / Remove server / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "465:49081"
+      ],
+      "nodeCount": 29,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 12,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:26067",
+      "name": "Computers and connected apps / Revoke Computer / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:26071"
+      ],
+      "nodeCount": 83,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 38,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:26173",
+      "name": "Computers and connected apps / Revoke Computer / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:26177"
+      ],
+      "nodeCount": 29,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 12,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:26207",
+      "name": "Computers and connected apps / Revoke App / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:26211"
+      ],
+      "nodeCount": 83,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 38,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:26313",
+      "name": "Computers and connected apps / Revoke App / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:26317"
+      ],
+      "nodeCount": 29,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 12,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:26347",
+      "name": "Rig Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:26351"
+      ],
+      "nodeCount": 83,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 38,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:26455",
+      "name": "Rig Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:26459"
+      ],
+      "nodeCount": 29,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 12,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:26491",
+      "name": "Tisan Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:26495"
+      ],
+      "nodeCount": 83,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 38,
+        "INSTANCE": 25,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:26599",
+      "name": "Tisan Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:26603"
+      ],
+      "nodeCount": 29,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 12,
+        "INSTANCE": 4,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:27698",
+      "name": "Rig Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:27702"
+      ],
+      "nodeCount": 85,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 39,
+        "INSTANCE": 26,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:27804",
+      "name": "Rig Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:27808"
+      ],
+      "nodeCount": 77,
+      "typeCounts": {
+        "FRAME": 16,
+        "TEXT": 36,
+        "INSTANCE": 23,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:27919",
+      "name": "Rig Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:27923"
+      ],
+      "nodeCount": 31,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 13,
+        "INSTANCE": 5,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:27953",
+      "name": "Rig Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:27957"
+      ],
+      "nodeCount": 23,
+      "typeCounts": {
+        "FRAME": 9,
+        "TEXT": 10,
+        "INSTANCE": 2,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:27996",
+      "name": "Tisan Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:28000"
+      ],
+      "nodeCount": 85,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 39,
+        "INSTANCE": 26,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:28102",
+      "name": "Tisan Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:28106"
+      ],
+      "nodeCount": 77,
+      "typeCounts": {
+        "FRAME": 16,
+        "TEXT": 36,
+        "INSTANCE": 23,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:28217",
+      "name": "Tisan Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:28221"
+      ],
+      "nodeCount": 31,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 13,
+        "INSTANCE": 5,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:28251",
+      "name": "Tisan Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:28255"
+      ],
+      "nodeCount": 23,
+      "typeCounts": {
+        "FRAME": 9,
+        "TEXT": 10,
+        "INSTANCE": 2,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:30889",
+      "name": "Founder MCP servers / Add server / Bad address / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:30893"
+      ],
+      "nodeCount": 86,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 40,
+        "INSTANCE": 26,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:30996",
+      "name": "Founder MCP servers / Add server / Bad address / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:31000"
+      ],
+      "nodeCount": 32,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 14,
+        "INSTANCE": 5,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:31031",
+      "name": "Founder MCP servers / Add server / Duplicate / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:31035"
+      ],
+      "nodeCount": 86,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 40,
+        "INSTANCE": 26,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:31138",
+      "name": "Founder MCP servers / Add server / Duplicate / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:31142"
+      ],
+      "nodeCount": 32,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 14,
+        "INSTANCE": 5,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:31173",
+      "name": "Founder MCP servers / Add server / Unreachable / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:31177"
+      ],
+      "nodeCount": 86,
+      "typeCounts": {
+        "FRAME": 18,
+        "TEXT": 40,
+        "INSTANCE": 26,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:31280",
+      "name": "Founder MCP servers / Add server / Unreachable / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:31284"
+      ],
+      "nodeCount": 32,
+      "typeCounts": {
+        "FRAME": 11,
+        "TEXT": 14,
+        "INSTANCE": 5,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:31315",
+      "name": "Computers and connected apps / Empty / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "navigation": [
+        "468:31319"
+      ],
+      "nodeCount": 73,
+      "typeCounts": {
+        "FRAME": 16,
+        "TEXT": 33,
+        "INSTANCE": 22,
+        "RECTANGLE": 2
+      }
+    },
+    {
+      "id": "468:31427",
+      "name": "Computers and connected apps / Empty / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "navigation": [
+        "468:31431"
+      ],
+      "nodeCount": 19,
+      "typeCounts": {
+        "FRAME": 9,
+        "TEXT": 7,
+        "INSTANCE": 1,
+        "RECTANGLE": 2
+      }
+    }
+  ]
+}
