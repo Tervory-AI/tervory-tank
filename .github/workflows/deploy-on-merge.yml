@@ -43,6 +43,9 @@ jobs:
       ZA_OFFLINE: ${{ vars.ZA_OFFLINE || '' }}
       AFTER: ${{ github.sha }}
       DEPLOY_BUDGET_S: "16800"
+      # Existing Tank service credential, read-only call; missing/unreachable gate is reported and fails open.
+      RADIX_DEPLOY_TANK_KEY: ${{ secrets.TANK_API_KEY }}
+      RADIX_DEPLOY_TENANT_ID: ${{ vars.RADIX_DEPLOY_TENANT_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

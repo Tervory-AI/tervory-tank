@@ -241,6 +241,12 @@ services:
         GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
+      FOUNDER_REPORT_TO: ${FOUNDER_REPORT_TO:-}
+      FOUNDER_REPORT_SMTP_HOST: ${FOUNDER_REPORT_SMTP_HOST:-}
+      FOUNDER_REPORT_SMTP_PORT: ${FOUNDER_REPORT_SMTP_PORT:-}
+      FOUNDER_REPORT_SMTP_USER: ${FOUNDER_REPORT_SMTP_USER:-}
+      FOUNDER_REPORT_SMTP_PASSWORD: ${FOUNDER_REPORT_SMTP_PASSWORD:-}
+      FOUNDER_REPORT_SMTP_FROM: ${FOUNDER_REPORT_SMTP_FROM:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
       SMTP_USER: ${SMTP_USER:-}
@@ -422,6 +428,9 @@ services:
       # Founder-only: set a za tenant's home on the ZA Tank (tenant id + region code only).
       TANK_URL_ZA: ${TANK_URL_ZA:-}
       TANK_API_KEY_ZA: ${TANK_API_KEY_ZA:-}
+      # Opt-in tenant content connection; homes/feeds credentials remain separate.
+      TANK_CONTENT_API_KEY_ZA: ${TANK_CONTENT_API_KEY_ZA:-}
+      TANK_CONTENT_API_KEY_US: ${TANK_CONTENT_API_KEY_US:-}
       # Records ZA CLI sign-in approvals and lists/revokes ZA CLI sign-ins on the ZA Tank.
       TANK_DEVICE_APPROVAL_KEY_ZA: ${TANK_DEVICE_APPROVAL_KEY_ZA:-}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}

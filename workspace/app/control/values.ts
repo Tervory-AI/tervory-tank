@@ -44,6 +44,11 @@ export function activity(data: DashboardRead, now: number) {
     const day = work.find(day => day.day === row.day);
     if (!day) continue;
     day.value = wholeNumber(row.delivered);
+    // A partial ledger sum is not this month's spend. Refuse missing prices,
+    // rather than displaying an invented zero or changing the approved label.
+    if (row.unpriced != null && wholeNumber(row.unpriced) > 0) {
+      throw new Error("Control panel spend source has unpriced calls.");
+    }
     spend.find(day => day.day === row.day)!.value = finiteNumber(row.spent);
     const codeCount = wholeNumber(row.code);
     if (codeCount > day.value) throw new Error("Control panel code count exceeds delivered work.");

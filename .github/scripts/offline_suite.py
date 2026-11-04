@@ -168,6 +168,12 @@ def split_files(counts: dict[str, int], index: int, count: int) -> list[str]:
     return sorted(owned[index - 1])
 
 
+def alone_for(index: int, count: int) -> list[str]:
+    """The isolated groups shard `index` runs: group i on shard (i mod count) + 1, so each runs once
+    and, with two or more shards, never both on the same shard (tiger_g5 on 1, zenas_regulation_alerts on 2)."""
+    return [p for i, p in enumerate(ALONE) if i % count == index - 1]
+
+
 def collected_files(ignores: list[str], env: dict[str, str]) -> dict[str, int]:
     """Exactly the files the unsharded main run would collect, with their test counts."""
     out = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", *ignores],
@@ -203,10 +209,9 @@ def main(extra: list[str]) -> int:
         print(f"shard {index}/{count}: {len(main_args)} test files", flush=True)
         if not main_args:
             print("no files in this shard", flush=True)
-    # The two small isolated groups run once, on the first shard.
+    # Each small isolated group runs once, on its own shard (alone_for).
     runs = [("main", main_args)] if main_args else []
-    if index == 1:
-        runs += [(p, [p]) for p in ALONE]
+    runs += [(p, [p]) for p in alone_for(index, count)]
     started = time.monotonic()
     for name, args in runs:
         print(f"\n===== offline suite: {name} =====", flush=True)

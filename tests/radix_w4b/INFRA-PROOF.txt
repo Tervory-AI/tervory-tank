@@ -1,0 +1,25 @@
+Offline selection: tests/test_radix_infra.py tests/test_radix_active_consent.py tests/test_command_radix_active.py tests/radix_i2/test_active.py tests/test_radix_passive.py
+--disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+Disposable loopback Postgres 56483; fixture credentials/text placeholder.
+........................................................................ [ 97%]
+..                                                                       [100%]
+=============================== warnings summary ===============================
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+74 passed, 3 warnings in 8.10s
+
+Final real CLI proof after selecting dnsx status_code and omit-raw:
+{"checks": {"nmap": {"status": "complete"}, "dnsx": {"status": "complete"}, "active": {"status": "complete"}}, "tcp_dials": 100, "dns_queries": 6, "findings": 4, "all_targets_fake": true, "network": "none"}
+
+Image: codex-radix-w4:infra-proof (Python 3.12 + build-time Nmap/proxychains/dnsx), network none, memory 256m, capabilities dropped, no-new-privileges; final room source mounted read-only.

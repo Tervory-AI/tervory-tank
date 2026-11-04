@@ -64,12 +64,15 @@ async def google_signing_keys(kid: str = Query(default="", max_length=200)):
     return keys
 
 
-async def call_room(method: str, room: str, path: str, *, body=None, params=None, timeout=60):
+async def call_room(method: str, room: str, path: str, *, body=None, params=None, tenant=None, timeout=60):
     lifecycle = room == "ghost" and path.startswith("/ghost/autumbra/enforce/")
     key = os.environ.get("AUTUMBRA_LIFECYCLE_KEY" if lifecycle else f"TANK_KEY_{room.upper()}", "")
     http = runtime()._http
     if not key or http is None:
         raise HTTPException(503, "The room is unavailable.")
+    headers={"X-Tank-Key": key}
+    if tenant is not None:
+        headers["X-Tervory-Tenant"]=str(uuid.UUID(str(tenant)))
     try:
         base = "http://enforce-lifecycle:8000" if lifecycle else ROOMS[room]
         if lifecycle:
@@ -83,7 +86,7 @@ async def call_room(method: str, room: str, path: str, *, body=None, params=None
                                           headers=headers, follow_redirects=False, timeout=timeout)
         else:
             response = await http.request(method, base + path, json=body, params=params,
-                                          headers={"X-Tank-Key": key}, follow_redirects=False, timeout=timeout)
+                                          headers=headers, follow_redirects=False, timeout=timeout)
     except httpx.HTTPError:
         raise HTTPException(503, "The room is unavailable.") from None
     if len(response.content) > 2_000_000 or response.status_code >= 500:

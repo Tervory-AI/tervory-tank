@@ -1,8 +1,8 @@
 import type { DashboardRead } from "@/lib/tank";
 import type { Paying, Signups } from "./sources";
-const greenDot = "data:image/svg+xml,%3Csvg%20preserveAspectRatio%3D%22none%22%20overflow%3D%22visible%22%20style%3D%22display%3A%20block%3B%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2010%2010%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Ccircle%20id%3D%22Status%20dot%22%20cx%3D%225%22%20cy%3D%225%22%20r%3D%225%22%20fill%3D%22%231E7A46%22%2F%3E%0A%3C%2Fsvg%3E%0A";
-const amberDot = "data:image/svg+xml,%3Csvg%20preserveAspectRatio%3D%22none%22%20overflow%3D%22visible%22%20style%3D%22display%3A%20block%3B%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2010%2010%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Ccircle%20id%3D%22Status%20dot%22%20cx%3D%225%22%20cy%3D%225%22%20r%3D%225%22%20fill%3D%22%23B26B00%22%2F%3E%0A%3C%2Fsvg%3E%0A";
-const greyDot = "data:image/svg+xml,%3Csvg%20preserveAspectRatio%3D%22none%22%20overflow%3D%22visible%22%20style%3D%22display%3A%20block%3B%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2010%2010%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Ccircle%20id%3D%22Status%20dot%22%20cx%3D%225%22%20cy%3D%225%22%20r%3D%225%22%20fill%3D%22%238C94A6%22%2F%3E%0A%3C%2Fsvg%3E%0A";
+const greenDot = "/dashboards/control/status-dot-green.svg";
+const amberDot = "/dashboards/control/status-dot-amber.svg";
+const greyDot = "/dashboards/control/status-dot-grey.svg";
 import { ControlActions, NeedsYou, WorkersActions } from "./widgets";
 import { checkingIn, type WorkersRead } from "./workers";
 import { count, money, passedSkills, signupAge, sourceLink, sparkPoints, wholeNumber, type activity, type Candidate, type DailyValue } from "./values";
@@ -48,7 +48,6 @@ export function WorkersTile({ workers, now }: { workers: WorkersRead | null | un
 
 export function FounderDashboard({ view }: { view: FounderView }) {
   const { data, signups, paying, activity, now } = view;
-  const unpriced = data.daily.reduce((sum, row) => sum + (row.unpriced || 0), 0);
   return <div className="control-panel">
     <header className="control-top">
       <img src="/brand/tervory-logo.png" alt="Tervory AI" width="180" height="33" />
@@ -57,9 +56,9 @@ export function FounderDashboard({ view }: { view: FounderView }) {
     </header>
     <div className="control-metrics">
       <Metric label="Sign-ups" value={count(signups.total)} note={<>+<span className="control-number">{signups.thisWeek}</span> this week</>} days={signups.days} href={sourceLink("signups")} />
-      <Metric label="Paying clients" value={String(paying.total)} note={<>+<span className="control-number">{paying.thisWeek}</span> this week</>} days={paying.days} href={sourceLink("paying")} />
+      <Metric label="Paying clients" value={count(paying.total)} note={<>+<span className="control-number">{paying.thisWeek}</span> this week</>} days={paying.days} href={sourceLink("paying")} />
       <Metric label="Work done today" value={count(activity.delivered)} note={<><span className="control-number">{activity.codePercent}</span>% by code, no model</>} days={activity.work} href={sourceLink("activity", { day: new Date(now).toISOString().slice(0, 10) })} />
-      <Metric label="Recorded spend this month" value={unpriced && activity.spent === 0 ? "price not set" : money(activity.spent)} note={unpriced ? `${unpriced} calls excluded: price not set` : undefined} days={unpriced ? [] : activity.spend} href={sourceLink("activity")} />
+      <Metric label="Spent this month" value={money(activity.spent)} days={activity.spend} href={sourceLink("activity")} />
     </div>
     <NeedsYou skills={passedSkills(data.skills!).length} models={view.models} checks={view.checks} />
     <div className="control-bottom">
@@ -73,7 +72,7 @@ export function FounderDashboard({ view }: { view: FounderView }) {
           return <div className="control-squad-row" key={agent}>
             <img src={dot} alt="" width="10" height="10" />
             <p className="control-squad-name">{name}</p>
-            <a className="control-squad-count" href={sourceLink("squad", { agent })}>{running ? <><span className="control-number">{running}</span> running</> : queued ? <><span className="control-number">{queued}</span> queued</> : "—"}</a>
+            <a className="control-squad-count" href={sourceLink("squad", { agent })}>{running ? <><span className="control-number">{running}</span> running</> : queued ? <><span className="control-number">{queued}</span> queued</> : <><span className="control-number">{running}</span> running</>}</a>
           </div>;
         })}
       </section>
@@ -95,6 +94,5 @@ export function FounderDashboard({ view }: { view: FounderView }) {
         <div className="control-quick"><a className="control-button primary" href="/chats">Open the window</a><a className="control-button" href="/tank/proof">Proof report</a></div>
       </section>
     </div>
-    <WorkersTile workers={view.workers} now={now} />
   </div>;
 }
