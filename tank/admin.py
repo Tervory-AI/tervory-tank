@@ -87,7 +87,7 @@ def founder_allowed(tank_key: str, user_id: str) -> bool:
             return False
     except Exception:
         return False
-    allowed = {part.strip() for part in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if part.strip()}
+    allowed = __import__("trigger_signin_config").founders()
     return user_id in allowed
 
 

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { isFounder, saveAutoPromote, savePrice as putPrice } from "@/lib/admin";
 
 export type SaveResult = { ok: true } | { ok: false; error: string };

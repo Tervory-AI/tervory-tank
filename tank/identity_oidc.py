@@ -1,9 +1,7 @@
-"""Optional ZA-only Zitadel OIDC client. No provider credentials are persisted/logged."""
+"""Trigger sign-in OIDC verification shared by both regional device flows."""
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 import re
 import time
 import uuid
@@ -11,13 +9,15 @@ from urllib.parse import urlsplit
 
 import httpx
 import jwt
+import trigger_signin_config as registry
 
-ISSUER = 'https://auth-za.tervory.com'
+ISSUERS = {'us-east': 'https://auth.tervory.com', 'za': 'https://auth-za.tervory.com'}
+ISSUER = ISSUERS['za']
 ORG_CLAIM = 'urn:zitadel:iam:user:resourceowner:id'
 # Zitadel defines this reserved claim as roles for the requesting application's
 # own project. Never combine it with project-specific claims from other projects.
 ROLES_CLAIM = 'urn:zitadel:iam:org:project:roles'
-SCOPE = 'openid urn:zitadel:iam:user:resourceowner urn:zitadel:iam:org:project:role:org_admin'
+SCOPE = 'openid urn:zitadel:iam:user:resourceowner urn:zitadel:iam:org:project:role:org_admin urn:zitadel:iam:org:project:role:member'
 _cache: dict = {}
 _lock = asyncio.Lock()
 
@@ -28,24 +28,27 @@ class IdentityError(ValueError):
 
 def configured() -> bool:
     from main import box_region
-    return box_region() == 'za' and bool(os.environ.get('TRIGGER_SIGNIN_ISSUER', '').strip())
+    return box_region() in registry._records
 
 
-def settings() -> tuple[str, str]:
-    issuer = os.environ.get('TRIGGER_SIGNIN_ISSUER', '').strip()
-    client = os.environ.get('TRIGGER_SIGNIN_CLIENT_ID', '').strip()
-    if issuer != ISSUER or not re.fullmatch(r'[A-Za-z0-9@._-]{1,200}', client):
-        raise IdentityError('Identity configuration refused')
+def settings(*, workspace: bool = False) -> tuple[str, str]:
+    from main import box_region
+    record = registry.config('us-east' if workspace else box_region())
+    issuer = record['issuer']
+    client = record['workspace_client_id' if workspace else 'client_id']
+    expected = ISSUERS['us-east'] if workspace else ISSUERS.get(box_region())
+    if issuer != expected or not re.fullmatch(r'[A-Za-z0-9@._-]{1,200}', client):
+        raise IdentityError('Trigger sign-in configuration refused')
     return issuer, client
 
 
-def endpoint(value: str) -> str:
+def endpoint(value: str, *, workspace: bool = False) -> str:
     if not isinstance(value, str):
-        raise IdentityError('Identity endpoint refused')
+        raise IdentityError('Trigger sign-in endpoint refused')
     parsed = urlsplit(value)
-    if (parsed.scheme != 'https' or parsed.netloc != 'auth-za.tervory.com'
+    if (parsed.scheme != 'https' or parsed.netloc != urlsplit(settings(workspace=workspace)[0]).netloc
             or parsed.username or parsed.password or parsed.fragment):
-        raise IdentityError('Identity endpoint refused')
+        raise IdentityError('Trigger sign-in endpoint refused')
     return value
 
 
@@ -53,101 +56,107 @@ def http_client():
     return httpx.AsyncClient(timeout=10, trust_env=False, follow_redirects=False)
 
 
-async def fetch(method: str, url: str, **kwargs) -> dict:
+async def fetch(method: str, url: str, *, workspace: bool = False, **kwargs) -> dict:
     try:
         async with http_client() as client:
-            response = await client.request(method, endpoint(url), **kwargs)
+            response = await client.request(method, endpoint(url, workspace=workspace), **kwargs)
         if len(response.content) > 262144:
-            raise IdentityError('Identity response refused')
+            raise IdentityError('Trigger sign-in response refused')
         body = response.json()
         if not isinstance(body, dict) or response.is_redirect:
-            raise IdentityError('Identity response refused')
+            raise IdentityError('Trigger sign-in response refused')
         if not response.is_success and not (response.status_code == 400 and isinstance(body.get('error'), str)):
-            raise IdentityError('Identity request refused')
+            raise IdentityError('Trigger sign-in request refused')
         return body
     except (httpx.HTTPError, ValueError, TypeError):
-        raise IdentityError('Identity request refused') from None
+        raise IdentityError('Trigger sign-in request refused') from None
 
 
-async def discovery() -> dict:
-    issuer, _ = settings()
+async def discovery(*, workspace: bool = False) -> dict:
+    issuer, _ = settings(workspace=workspace)
     async with _lock:
-        if _cache.get('issuer') == issuer and _cache.get('expires', 0) > time.monotonic():
-            return dict(_cache['discovery'])
-    data = await fetch('GET', issuer + '/.well-known/openid-configuration')
+        cache = _cache.setdefault(issuer, {})
+        if cache.get('issuer') == issuer and cache.get('expires', 0) > time.monotonic():
+            return dict(cache['discovery'])
+    data = await fetch('GET', issuer + '/.well-known/openid-configuration', workspace=workspace)
     if data.get('issuer') != issuer:
-        raise IdentityError('Identity discovery refused')
+        raise IdentityError('Trigger sign-in discovery refused')
     for name in ('device_authorization_endpoint', 'token_endpoint', 'jwks_uri'):
-        endpoint(data.get(name))
+        endpoint(data.get(name), workspace=workspace)
     async with _lock:
-        if _cache.get('issuer') != issuer or _cache.get('expires', 0) <= time.monotonic():
-            _cache.clear()
-            _cache.update(issuer=issuer, discovery=data, expires=time.monotonic() + 300)
-        return dict(_cache['discovery'])
+        if cache.get('issuer') != issuer or cache.get('expires', 0) <= time.monotonic():
+            cache.clear()
+            cache.update(issuer=issuer, discovery=data, expires=time.monotonic() + 300)
+        return dict(cache['discovery'])
 
 
-async def verify(token: str) -> dict:
-    issuer, client = settings()
-    data = await discovery()
+async def verify(token: str, *, workspace: bool = False) -> dict:
+    issuer, client = settings(workspace=workspace)
+    data = await discovery(workspace=workspace)
+    cache = _cache[issuer]
     try:
         if not isinstance(token, str) or len(token) > 16384:
-            raise IdentityError('Identity token refused')
+            raise IdentityError('Trigger sign-in token refused')
         header = jwt.get_unverified_header(token)
         kid = header.get('kid')
         if header.get('alg') != 'RS256' or not isinstance(kid, str) or not kid or len(kid) > 200:
-            raise IdentityError('Identity token refused')
+            raise IdentityError('Trigger sign-in token refused')
         async with _lock:
-            matches = [key for key in _cache.get('keys', []) if key.get('kid') == kid]
-            refresh = not matches and time.monotonic() >= _cache.get('keys_refresh_after', 0)
+            matches = [key for key in cache.get('keys', []) if key.get('kid') == kid]
+            refresh = not matches and time.monotonic() >= cache.get('keys_refresh_after', 0)
             if refresh:
                 # Reserve before releasing the lock; failed fetches are bounded too.
-                _cache['keys_refresh_after'] = time.monotonic() + 60
+                cache['keys_refresh_after'] = time.monotonic() + 60
         if refresh:
-            jwks = await fetch('GET', data['jwks_uri'])
+            jwks = await fetch('GET', data['jwks_uri'], workspace=workspace)
             keys = jwks.get('keys')
             if not isinstance(keys, list) or len(keys) > 100 or not all(isinstance(k, dict) for k in keys):
-                raise IdentityError('Identity keys refused')
+                raise IdentityError('Trigger sign-in keys refused')
             async with _lock:
-                _cache['keys'] = keys
+                cache['keys'] = keys
             matches = [key for key in keys if key.get('kid') == kid]
         if len(matches) != 1:
-            raise IdentityError('Identity key refused')
+            raise IdentityError('Trigger sign-in key refused')
         key = matches[0]
         if key.get('kty') != 'RSA' or key.get('use', 'sig') != 'sig' or key.get('alg', 'RS256') != 'RS256':
-            raise IdentityError('Identity key refused')
+            raise IdentityError('Trigger sign-in key refused')
         public = jwt.PyJWK.from_dict(key, algorithm='RS256').key
         claims = jwt.decode(token, public, algorithms=['RS256'], audience=client, issuer=issuer,
                             options={'require': ['iss', 'aud', 'sub', 'exp', 'iat']})
         aud = claims['aud']
         if isinstance(aud, list) and len(aud) > 1 and claims.get('azp') != client:
-            raise IdentityError('Identity audience refused')
+            raise IdentityError('Trigger sign-in audience refused')
         if claims.get('azp', client) != client:
-            raise IdentityError('Identity audience refused')
+            raise IdentityError('Trigger sign-in audience refused')
         return claims
     except (jwt.PyJWTError, ValueError, TypeError, KeyError):
-        raise IdentityError('Identity token refused') from None
+        raise IdentityError('Trigger sign-in token refused') from None
 
 
-def principal(claims: dict) -> tuple[uuid.UUID, str, bool]:
+def principal(claims: dict, *, org_id: str | None = None, workspace: bool = False) -> tuple[uuid.UUID, str, bool]:
     try:
-        sub, org = claims['sub'], claims[ORG_CLAIM]
+        sub, org = claims['sub'], org_id if org_id is not None else claims[ORG_CLAIM]
         if not isinstance(sub, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', sub):
             raise ValueError
         if not isinstance(org, str) or not re.fullmatch(r'[0-9]{1,30}', org):
             raise ValueError
-        bindings = json.loads(os.environ.get('TRIGGER_SIGNIN_ORG_TENANTS', '{}'))
+        from main import box_region
+        bindings = registry.config('us-east' if workspace else box_region())['organisations']
         if not isinstance(bindings, dict) or org not in bindings:
             raise ValueError
         tenant = uuid.UUID(bindings[org])
         roles = claims.get(ROLES_CLAIM, {})
+        if not isinstance(roles, dict) or not any(isinstance(grants, dict) and org in grants for grants in roles.values()):
+            raise ValueError
         admins = roles.get('org_admin', {}) if isinstance(roles, dict) else {}
         tenant_admin = isinstance(admins, dict) and org in admins
-        return tenant, 'zitadel:' + sub, tenant_admin
+        return tenant, sub, tenant_admin
     except (ValueError, TypeError, KeyError):
-        raise IdentityError('Identity organisation refused') from None
+        raise IdentityError('Trigger sign-in organisation refused') from None
 
 
 async def start() -> dict:
+    await registry.refresh()
     _, client = settings()
     data = await discovery()
     response = await fetch('POST', data['device_authorization_endpoint'],
@@ -158,7 +167,7 @@ async def start() -> dict:
     if (not isinstance(response.get('device_code'), str) or not 1 <= len(response['device_code']) <= 128
             or not re.fullmatch(r'[A-Z0-9-]{4,40}', str(response.get('user_code', '')))
             or not isinstance(response.get('expires_in'), int) or not 1 <= response['expires_in'] <= 600):
-        raise IdentityError('Identity device response refused')
+        raise IdentityError('Trigger sign-in device response refused')
     return response
 
 

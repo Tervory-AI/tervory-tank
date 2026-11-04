@@ -1,4 +1,5 @@
 """PR600 regressions: all upstreams are fakes; database is disposable."""
+from trigger_signin_fakes import set_founders
 import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -250,7 +251,7 @@ async def test_queue_states_lease_and_removal_win(database, monkeypatch):
 async def test_bot_confirm_card_uses_main_adapter_and_bot_prepare(database, monkeypatch):
     import command
     actor = command.Actor(A, 'review-admin', True)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', actor.user_id)
+    set_founders(monkeypatch, actor.user_id)
     action = command.PlannedAction(tool='trigger.bot.source.add', arguments={
         'kind': 'website', 'title': 'Store', 'url': 'https://store.invalid/'})
     row = {'tenant_id': A, 'user_id': actor.user_id, 'thread_id': uuid4()}

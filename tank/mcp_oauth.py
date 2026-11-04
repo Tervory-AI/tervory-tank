@@ -269,8 +269,8 @@ async def decide(body: Decision, actor: command.Actor = Depends(pat.workspace_ac
         code = f'tvo1.us-east.{actor.tenant_id.hex}.{secrets.token_urlsafe(32)}'
         with tenant_scope(actor.tenant_id):
             async with command.db().acquire() as conn:
-                await conn.execute("""INSERT INTO tank.oauth_codes(code_hash,tenant_id,user_id,region,client_id,client_name,redirect_uri,challenge,resource,expires_at)
-                    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+$10::interval)""", pat.digest(code), actor.tenant_id,
+                await conn.execute("""INSERT INTO tank.oauth_codes(code_hash,tenant_id,user_id,region,client_id,client_name,redirect_uri,challenge,resource,expires_at,trigger_signin)
+                    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+$10::interval,true)""", pat.digest(code), actor.tenant_id,
                     actor.user_id, 'us-east', client.client_id, client.name, body.redirect_uri, body.code_challenge,
                     body.resource, timedelta(minutes=10))
         query['code'] = code
@@ -311,7 +311,7 @@ async def token(request: Request):
             async with conn.transaction():
                 row = await conn.fetchrow("""SELECT *,expires_at>now() AS unexpired FROM tank.oauth_codes
                     WHERE tenant_id=$1 AND code_hash=$2 FOR UPDATE""", tenant, pat.digest(code))
-                if (row is None or row['client_id'] != client_id or row['redirect_uri'] != value.get('redirect_uri')
+                if (row is None or not row['trigger_signin'] or row['client_id'] != client_id or row['redirect_uri'] != value.get('redirect_uri')
                         or row['resource'] != RESOURCE or row['region'] != 'us-east'
                         or not hmac.compare_digest(row['challenge'], challenge)):
                     return oauth_error('invalid_grant')
@@ -322,8 +322,8 @@ async def token(request: Request):
                     return oauth_error('invalid_grant')
                 if not row['unexpired']:
                     return oauth_error('invalid_grant')
-                ident = await conn.fetchval("""INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,device_name,token_hash,expires_at,refresh_hash,refresh_expires_at,audience,client_id)
-                    VALUES($1,$2,'us-east',$3,$3,$4,$5,$6,$7,'mcp',$8) RETURNING token_id""",
+                ident = await conn.fetchval("""INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,device_name,token_hash,expires_at,refresh_hash,refresh_expires_at,audience,client_id,trigger_signin,trigger_signin_issuer)
+                    VALUES($1,$2,'us-east',$3,$3,$4,$5,$6,$7,'mcp',$8,true,'https://auth.tervory.com') RETURNING token_id""",
                     tenant, row['user_id'], row['client_name'], pat.digest(access_token), expiries[0],
                     pat.digest(refresh_token), expiries[1], client_id)
                 await conn.execute("""UPDATE tank.oauth_codes SET consumed_at=now(),token_id=$3

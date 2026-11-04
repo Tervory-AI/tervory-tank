@@ -1,5 +1,5 @@
 // Same allow-list as isFounder in workspace/lib/admin.ts.
-// TERVORY_ADMIN_USER_IDS is a comma-separated list of Clerk user ids.
+// TERVORY_ADMIN_USER_IDS is a comma-separated list of SigninDirectory user ids.
 
 export type FounderDenial = { error: "Not found"; status: 404 };
 

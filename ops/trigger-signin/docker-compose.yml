@@ -159,13 +159,16 @@ services:
     environment:
       TRIGGER_SIGNIN_ISSUER: https://${TRIGGER_SIGNIN_HOST:?regional auth host}
       TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION: ${TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION:?founder sets bootstrap key expiry}
+      TRIGGER_SIGNIN_SETUP_TOKEN: ${TRIGGER_SIGNIN_SETUP_TOKEN:?founder sets regional setup token}
+      TRIGGER_SIGNIN_SETUP_TOKEN_ZA: ${TRIGGER_SIGNIN_SETUP_TOKEN_ZA:-}
+      TRIGGER_SIGNIN_MACHINE_TOKEN: ${TRIGGER_SIGNIN_MACHINE_TOKEN:-}
     build:
       context: ../..
       dockerfile: ops/trigger-signin/Dockerfile.setup
       target: configure
     restart: "no"
     volumes: [identity_bootstrap:/bootstrap]
-    networks: [database]
+    networks: [database, signin, backup_outbound]
     depends_on:
       trigger-signin-api:
         condition: service_healthy
@@ -195,6 +198,9 @@ volumes:
   identity_bootstrap:
     name: ${TRIGGER_SIGNIN_VOLUME_PREFIX:?preserve existing ZA volume prefix}-bootstrap
 networks:
+  signin:
+    external: true
+    name: tervory-gw-trigger-signin
   backup_outbound: {}
   database:
     internal: true

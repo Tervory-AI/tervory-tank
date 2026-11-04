@@ -1,4 +1,5 @@
 """CLI-1 offline authentication tests: synthetic tokens, no live credentials."""
+from trigger_signin_fakes import set_founders
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -36,7 +37,7 @@ def runtime(monkeypatch):
         yield conn
     monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=acquire))
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east', TANK_API_KEY='dummy-workspace'))
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     return conn
 
 

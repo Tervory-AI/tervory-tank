@@ -1,4 +1,5 @@
 """Part A: exercise Tank's real handlers and SQL with two isolated tenants."""
+from trigger_signin_fakes import set_founders
 import json
 import os
 import uuid
@@ -29,7 +30,7 @@ async def boundary(monkeypatch, tmp_path):
         monkeypatch.setenv("DATABASE_URL", url)
         monkeypatch.setenv("LITELLM_MASTER_KEY", uuid.uuid4().hex)
         monkeypatch.setenv("TANK_API_KEY", key)
-        monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-fixture")
+        set_founders(monkeypatch, "founder-fixture")
         monkeypatch.setenv("TANK_REGION", "us-east")
         import main as tank
         import skala

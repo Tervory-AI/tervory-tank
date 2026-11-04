@@ -74,7 +74,7 @@ export const SHELL_ROUTES: readonly string[] = [
   "/review",
 ];
 
-/** Clerk auth and Figma squad product roots that already render their own left panel. */
+/** SigninDirectory auth and Figma squad product roots that already render their own left panel. */
 const OWN_SHELL = [
   "/", // Frame 12:2 client dashboard owns its five-item navigation.
   "/trigger",

@@ -1,4 +1,5 @@
 """Shared override, tenant isolation, durable budget and founder promotion tests."""
+from trigger_signin_fakes import set_founders
 import json
 import secrets
 from types import SimpleNamespace
@@ -103,7 +104,7 @@ async def test_registered_route_forwards_complexity_and_preserves_auth(monkeypat
 async def test_founder_routes_are_not_available_to_reviewers(monkeypatch):
     key=secrets.token_urlsafe(32)
     monkeypatch.setenv('TANK_API_KEY',key)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','founder')
+    set_founders(monkeypatch, 'founder')
     app=FastAPI();app.include_router(moa.router)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
         for headers in ({},{'x-tank-key':key,'x-tervory-admin':'reviewer'}):

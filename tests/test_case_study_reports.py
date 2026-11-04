@@ -1,5 +1,6 @@
 """Offline case-study proof against real PostgreSQL and the actual Tank routes."""
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import json
 import os
@@ -50,7 +51,7 @@ async def api(monkeypatch):
         monkeypatch.setattr(main, "TANK_API_KEY", "local-fixture")
         monkeypatch.setattr(main, "box_region", lambda: "us-east")
         monkeypatch.setenv("TANK_API_KEY", "local-fixture")
-        monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "fixture-founder")
+        set_founders(monkeypatch, "fixture-founder")
         # All product reads for these reports are local; never contact a model.
         async def no_network(*args, **kwargs):
             raise AssertionError("Case-study reports must not call an external service")

@@ -99,6 +99,8 @@ _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_
 
 app = FastAPI(title="Tervory Tank", version="0.2.0")
 app.add_middleware(TenantContextMiddleware)
+from trigger_signin_guard import TriggerSigninMiddleware
+app.add_middleware(TriggerSigninMiddleware)
 _pool: Any = None
 _admin_pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
@@ -4273,6 +4275,7 @@ app.include_router(__import__("proof").router)
 app.include_router(routellm_shadow.router)
 app.include_router(__import__("proof").client_router)
 app.include_router(__import__("case_studies").router)
+app.include_router(__import__("trigger_signin_config").router)
 app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
@@ -4392,7 +4395,7 @@ async def tisan_publish_git(request: Request) -> dict:
     import hmac
     expected = os.environ.get('TANK_KEY_TISAN', '')
     key, actor = request.headers.get('x-tank-key', ''), request.headers.get('x-tervory-admin', '')
-    founders = {p.strip() for p in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if p.strip()}
+    founders = __import__("trigger_signin_config").founders()
     if not expected or not key or not hmac.compare_digest(key.encode(), expected.encode()) or actor not in founders:
         raise HTTPException(404, 'not found')
     raw = bytearray()

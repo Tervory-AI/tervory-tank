@@ -1,4 +1,4 @@
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth, signinDirectory } from "@/lib/trigger-signin";
 import { isFounder } from "@/lib/admin";
 import { goldSummary, readDashboardCandidates, readFounderDashboard } from "@/lib/tank";
 import { payingSource, signupSource } from "../sources";
@@ -17,9 +17,9 @@ export async function GET(request: Request) {
     if (kind === "signups") {
       const user = query.get("user");
       if (user) {
-        const record = await (await clerkClient()).users.getUser(user);
-        evidence = { source: "Clerk", id: record.id, createdAt: record.createdAt };
-      } else evidence = { source: "Clerk", ...await signupSource() };
+        const record = await (await signinDirectory()).users.getUser(user);
+        evidence = { source: "SigninDirectory", id: record.id, createdAt: record.createdAt };
+      } else evidence = { source: "SigninDirectory", ...await signupSource() };
     } else if (kind === "paying") {
       evidence = { source: "Stripe live active subscriptions with positive paid invoices", ...await payingSource() };
     } else if (kind === "models") {

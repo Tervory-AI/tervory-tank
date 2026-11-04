@@ -1,6 +1,6 @@
 "use client";
 
-import { OrganizationSwitcher, UserButton, useAuth } from "@clerk/nextjs";
+import { OrganisationSwitcher, SignoutButton, useSignin } from "./trigger-signin-provider";
 import Link from "next/link";
 import { usePathname, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -33,7 +33,7 @@ export function Shell({
   const [routeRoot] = useSelectedLayoutSegments();
   // Product hosts rewrite / to a room without changing the browser pathname.
   const pathname = browserPathname === "/" && routeRoot ? `/${routeRoot}` : browserPathname;
-  const { isLoaded, userId } = useAuth();
+  const { isLoaded, userId } = useSignin();
   const [founder, setFounder] = useState(initialFounder);
   const [reviewer, setReviewer] = useState(initialReviewer);
   const [menu, setMenu] = useState(false);
@@ -172,8 +172,8 @@ function ShellBar({
 }) {
   const section = pageSection(pathname, founder, reviewer);
   const current = (href: string) => linkIsCurrent(href, pathname, search, hash);
-  // Clerk 7 (Core 3) removed <SignedIn>; check the session with useAuth instead.
-  const { isSignedIn } = useAuth();
+  // SigninDirectory 7 (Core 3) removed <SignedIn>; check the session with useAuth instead.
+  const { isSignedIn } = useSignin();
 
   return (
     <aside id="app-sidebar" className={menu ? "shell-side open" : "shell-side"} aria-label="Sidebar">
@@ -183,8 +183,8 @@ function ShellBar({
       </div>
       {isSignedIn ? (
         <div className="shell-account">
-          <OrganizationSwitcher hidePersonal afterSelectOrganizationUrl="/" />
-          <UserButton />
+          <OrganisationSwitcher />
+          <SignoutButton />
         </div>
       ) : null}
       <nav className="shell-nav" aria-label="Workspace">

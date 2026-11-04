@@ -4,6 +4,10 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 ## A. Coolify settings, Boston (the main app unless noted)
 
+**Trigger sign-in, Boston resource (names only):** TRIGGER_SIGNIN_MASTERKEY, TRIGGER_SIGNIN_SESSION_COOKIE_SECRET, TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD, TRIGGER_SIGNIN_DB_PASSWORD, TRIGGER_SIGNIN_ADMIN_EMAIL, TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD, TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION, TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION, TRIGGER_SIGNIN_MACHINE_TOKEN, TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_SETUP_TOKEN_ZA
+
+**Trigger sign-in, Boston Tank/Workspace (names only):** TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_WORKSPACE_SECRET, TRIGGER_SIGNIN_DIRECTORY_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY_ZA
+
 **Shared email** (the morning report and default alerts): SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 
 **Market Lab** (free keys): FRED_API_KEY, EIA_API_KEY, CENSUS_API_KEY, LEGISCAN_API_KEY, NOAA_TOKEN, USPTO_API_KEY
@@ -36,17 +40,19 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 ## B. Coolify settings, ZA box
 
+**Trigger sign-in, ZA resource (names only):** TRIGGER_SIGNIN_MASTERKEY, TRIGGER_SIGNIN_SESSION_COOKIE_SECRET, TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD, TRIGGER_SIGNIN_DB_PASSWORD, TRIGGER_SIGNIN_ADMIN_EMAIL, TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD, TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION, TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION, TRIGGER_SIGNIN_MACHINE_TOKEN, TRIGGER_SIGNIN_SETUP_TOKEN
+
+**Trigger sign-in, ZA Tank (names only):** TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY
+
+The initial native founder account must change its temporary password at first Trigger sign-in; it can then enrol a passkey. The setup job reads the created account’s native subject, not its email, and binds/grants that subject through the Tervory project. Machine/directory tokens are secret values entered only in Coolify; no subject or app ID is copied by hand.
+
 - LAWS_AFRICA_API_TOKEN (if not already set)
 - Zenas training: HF_TOKEN, HF_ORG; HF_TRAIN_MAX_USD is optional (default 50); ZENAS_OWN_MODEL_KEY (#639, once that fix lands)
 - ZENAS_BRAIN_ENABLED (leave off), SANDBOX_KEY_ZENAS
 
 ## C. Domains and accounts (once, in Coolify or the provider)
 
-**Trigger sign-in, each region (names only):** TRIGGER_SIGNIN_REGION, TRIGGER_SIGNIN_HOST, TRIGGER_SIGNIN_VOLUME_PREFIX, TRIGGER_SIGNIN_ISSUER, TRIGGER_SIGNIN_CLIENT_ID, TRIGGER_SIGNIN_ORG_TENANTS, TRIGGER_SIGNIN_ADMIN_EMAIL, TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD, TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION
-
-**Trigger sign-in resource only (names only):** TRIGGER_SIGNIN_MASTERKEY, TRIGGER_SIGNIN_SESSION_COOKIE_SECRET, TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD, TRIGGER_SIGNIN_DB_PASSWORD, TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION, TRIGGER_SIGNIN_PROXY_NETWORK
-
-The first founder administrator uses TRIGGER_SIGNIN_ADMIN_EMAIL and TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD; the server requires changing that temporary password at first sign-in, then a passkey can be enrolled. Organisation bindings must identify existing Tank tenants. Email never links an account to a tenant or grants access.
+Public project/client IDs, native founder subjects and organisation links are produced by the Trigger sign-in setup job. They are not founder-entered settings. The generated setting names are TRIGGER_SIGNIN_ISSUER and TRIGGER_SIGNIN_CLIENT_ID. Tank stores the organisation-to-existing-tenant links; no JSON mapping is entered in Coolify.
 
 1. Coolify: attach **trigger.tervory.com** and **rig.tervory.com** to the app.tervory.com application, after those two PRs merge. agent-rig keeps rig.tervory.com as well.
 2. Database: the restricted database role that turns RLS on (#573).

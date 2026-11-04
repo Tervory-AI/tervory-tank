@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
-import { auth } from "@clerk/nextjs/server";
+import { TriggerSigninProvider } from "./trigger-signin-provider";
+import { auth } from "@/lib/trigger-signin";
 import { isListedFounder } from "./review/founder";
 import { Shell, type ShellAccess } from "./shell";
 import { inter, jost, mono } from "./fonts";
@@ -26,12 +26,12 @@ async function readAccess(): Promise<ShellAccess> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const access = await accessForRequest();
   return (
-    // Clerk 7 (Core 3): ClerkProvider sits inside <body>, not around <html>.
+    // SigninDirectory 7 (Core 3): ClerkProvider sits inside <body>, not around <html>.
     <html lang="en" className={`${jost.variable} ${inter.variable} ${mono.variable}`}>
       <body>
-        <ClerkProvider>
+        <TriggerSigninProvider>
           <Shell founder={access.founder} reviewer={access.reviewer} readAccess={readAccess}>{children}</Shell>
-        </ClerkProvider>
+        </TriggerSigninProvider>
       </body>
     </html>
   );

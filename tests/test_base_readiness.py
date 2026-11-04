@@ -1,4 +1,5 @@
 """DC campaign -> recorded worker evidence -> human audit -> report, offline only."""
+from trigger_signin_fakes import set_founders
 import csv
 from datetime import datetime
 import io
@@ -174,7 +175,7 @@ async def test_dc_campaign_through_confirmed_cards_collection_audit_and_download
 def test_campaign_download_and_confirmed_start_adapter(monkeypatch):
     import subprocess
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east'))
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'fixture-founder')
+    set_founders(monkeypatch, 'fixture-founder')
     actor = command.Actor(TENANT, 'fixture-founder', True, frozenset({'base'}))
     action = command.validate_action(command.PlannedAction(tool='base.campaign.start', arguments={'name': 'Placeholder DC', 'states': ['DC']}), actor)
     method, path, params, body = command.adapter_request(action, actor)

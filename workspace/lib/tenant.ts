@@ -1,84 +1,37 @@
-// Who is asking, and which tenant are they acting in.
-//
-// Tenant model (Build Pack v2, "Regions and tenancy"): one Clerk organization = one
-// Tervory tenant. The organization id is the tenant_id stamped on every ledger row
-// and every record. A user with no organization gets a personal one created on
-// first use, so solo entrepreneurs never see a setup screen.
-//
-// Clerk org ids look like "org_2abc…"; Tank's ledger stores tenant_id as a UUID, so
-// we derive a stable UUID (v5) from the org id. Same org, same UUID, every time.
-
-import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
+import "server-only";
+import { auth } from "./trigger-signin";
+import { tenantBindings } from "./trigger-signin-principal";
 import { createHash } from "node:crypto";
 import { ensureCaseStudyReports } from "./tank";
 
 export type Tenant = { tenantId: string; orgId: string; orgName: string; userId: string };
 
-async function registered(tenant: Tenant): Promise<Tenant> {
-  // Transient report bookkeeping outages do not invalidate Clerk identity.
+export function uuidFrom(input: string): string {
+  const namespace = Buffer.from("7f3b1c2e9a4d4c1e8f2a5b6d7e8f9a0b", "hex");
+  const digest = createHash("sha1").update(namespace).update(input).digest();
+  digest[6] = (digest[6] & 0x0f) | 0x50;
+  digest[8] = (digest[8] & 0x3f) | 0x80;
+  const hex = digest.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function tenantIdFor(orgId: string): string {
+  const tenantId = tenantBindings()[orgId];
+  if (!tenantId) throw new Error("Trigger sign-in organisation is not linked to a workspace");
+  return tenantId;
+}
+
+export async function activeTenant(): Promise<Tenant | null> {
+  const identity = await auth();
+  if (!identity.userId || !identity.orgId || !identity.tenantId) return null;
+  const names = JSON.parse(process.env.TRIGGER_SIGNIN_ORG_NAMES ?? "{}") as Record<string, string>;
+  const tenant = { tenantId: identity.tenantId, orgId: identity.orgId, orgName: names[identity.orgId] ?? "Your organisation", userId: identity.userId };
   await ensureCaseStudyReports(tenant);
   return tenant;
 }
 
-const NAMESPACE = "7f3b1c2e-9a4d-4c1e-8f2a-5b6d7e8f9a0b"; // fixed; never change or tenant ids shift
-
-/** Deterministic UUID v5 from an arbitrary string. */
-export function uuidFrom(input: string): string {
-  const ns = Buffer.from(NAMESPACE.replace(/-/g, ""), "hex");
-  const h = createHash("sha1").update(ns).update(input).digest();
-  h[6] = (h[6] & 0x0f) | 0x50; // version 5
-  h[8] = (h[8] & 0x3f) | 0x80; // variant
-  const hex = h.subarray(0, 16).toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-/** Production Clerk gave every organization a new id. TERVORY_TENANT_ALIASES maps a new org id
- *  to the org id its data was filed under, so existing records keep their tenant:
- *  "org_new1=org_old1,org_new2=org_old2". Org ids are not secrets. Unlisted orgs map to themselves. */
-function aliases(): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const pair of (process.env["TERVORY_TENANT_ALIASES"] ?? "").split(",")) {
-    const [from, to] = pair.split("=").map((part) => part.trim());
-    if (from && to && from.startsWith("org_") && to.startsWith("org_")) map.set(from, to);
-  }
-  return map;
-}
-
-/** The tenant id for a Clerk organization, after any alias. */
-export function tenantIdFor(orgId: string): string {
-  return uuidFrom(aliases().get(orgId) ?? orgId);
-}
-
-/** The current user's tenant. Creates a personal organization if they have none. */
 export async function currentTenant(): Promise<Tenant> {
-  const { userId, orgId } = await auth();
-  if (!userId) throw new Error("not signed in");
-
-  const client = await clerkClient();
-
-  if (orgId) {
-    // The session carries the org id and slug; the display name needs one lookup.
-    const org = await client.organizations.getOrganization({ organizationId: orgId });
-    return registered({ tenantId: tenantIdFor(orgId), orgId, orgName: org.name, userId });
-  }
-
-  // No active organization: use the first one they belong to, or create a personal one.
-  const memberships = await client.users.getOrganizationMembershipList({ userId, limit: 1 });
-  let org = memberships.data[0]?.organization;
-  if (!org) {
-    const user = await currentUser();
-    const label = user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || "My";
-    org = await client.organizations.createOrganization({ name: `${label} workspace`, createdBy: userId });
-  }
-  return registered({ tenantId: tenantIdFor(org.id), orgId: org.id, orgName: org.name, userId });
-}
-
-/** The active Clerk organization, or null when the user has not chosen one.
- *  Does not create an organization. Onboarding uses this so a new client can create or join. */
-export async function activeTenant(): Promise<Tenant | null> {
-  const { userId, orgId } = await auth();
-  if (!userId || !orgId) return null;
-  const client = await clerkClient();
-  const org = await client.organizations.getOrganization({ organizationId: orgId });
-  return registered({ tenantId: tenantIdFor(orgId), orgId, orgName: org.name, userId });
+  const tenant = await activeTenant();
+  if (!tenant) throw new Error("Trigger sign-in required");
+  return tenant;
 }

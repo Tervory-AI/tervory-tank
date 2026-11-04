@@ -111,8 +111,8 @@ async def test_persisted_pat_cannot_escalate_headers_or_cross_user_and_revokes(a
     # Deliberately non-random test credential. Never accepted by a live service.
     token = f'tv1.us-east.{TENANT.hex}.' + 'x' * 43
     async with pool.acquire() as conn:
-        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
-                           "VALUES($1,'offline-client','us-east','offline-only',$2)", TENANT, pat.digest(token))
+        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin) "
+                           "VALUES($1,'offline-client','us-east','offline-only',$2,true)", TENANT, pat.digest(token))
     headers = {'authorization': 'Bearer ' + token, 'x-tervory-user': 'founder',
                'x-tervory-tenant': str(OTHER), 'x-tervory-role': 'org:admin'}
     created = await client.post('/v1/command/threads', json={}, headers=headers)
@@ -145,8 +145,8 @@ async def test_cli_public_adapter_reaches_real_tank_with_cancel_barrier(streamin
     async with b.pool.acquire() as conn:
         for user, suffix in [('founder', 'f'), ('offline-client', 'c')]:
             token = f'tv1.us-east.{TENANT.hex}.' + suffix * 43
-            await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
-                               "VALUES($1,$2,'us-east','offline-edge',$3)", TENANT, user, pat.digest(token))
+            await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin) "
+                               "VALUES($1,$2,'us-east','offline-edge',$3,true)", TENANT, user, pat.digest(token))
     # The subprocess waits on loopback HTTP; keep the async server loop running.
     decoded = await asyncio.to_thread(subprocess.run,
         ['node', str(Path(__file__).with_name('public_edge.cjs'))],
@@ -239,8 +239,8 @@ async def test_existing_founder_token_cli_answer_is_visible_in_chats_with_same_r
     b = streaming
     token = f'tv1.us-east.{TENANT.hex}.' + 'f' * 43
     async with b.pool.acquire() as conn:
-        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
-                           "VALUES($1,'founder','us-east','offline-existing-token',$2)", TENANT, pat.digest(token))
+        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin) "
+                           "VALUES($1,'founder','us-east','offline-existing-token',$2,true)", TENANT, pat.digest(token))
     script = r"""
 const assert = require('node:assert/strict');
 const {pathToFileURL} = require('node:url');

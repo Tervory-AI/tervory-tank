@@ -2,6 +2,7 @@
 
 The actual SDK consumes chunked SSE. No model, GitHub or other remote API calls.
 """
+from trigger_signin_fakes import set_founders
 import asyncio
 import json
 import socket
@@ -97,7 +98,7 @@ async def streaming(monkeypatch, command_pool):
     monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/unused")
     monkeypatch.setenv("TANK_API_KEY", "dummy-workspace-key")
     monkeypatch.setenv("LITELLM_MASTER_KEY", "dummy-gateway-key")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder")
+    set_founders(monkeypatch, "founder")
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.delenv("TANK_PROVIDER_ALLOW", raising=False)
     import main as tank

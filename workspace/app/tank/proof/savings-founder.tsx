@@ -1,4 +1,4 @@
-import { clerkClient } from "@clerk/nextjs/server";
+import { signinDirectory } from "@/lib/trigger-signin";
 import { tenantIdFor, uuidFrom } from "@/lib/tenant";
 import { resolveTenantNames } from "./tenant-names";
 import { proofResponse } from "./server";
@@ -30,7 +30,7 @@ function ClientSet({ data, title }: { data: FounderSavings; title: string }) {
 }
 export async function FounderSavingsPanel({ tenant }: { tenant?: string }) {
   const all: FounderSavings = await (await proofResponse({},undefined,"/savings")).json();
-  const names = await resolveTenantNames(all.tenants, async params => (await clerkClient()).organizations.getOrganizationList(params), tenantIdFor, uuidFrom);
+  const names = await resolveTenantNames(all.tenants, async params => (await signinDirectory()).organizations.getOrganizationList(params), tenantIdFor, uuidFrom);
   const selected = tenant ?? "all";
   const one: FounderSavings | null = selected!=="all" ? await (await proofResponse({tenant_id:selected,end:all.as_of},undefined,"/savings")).json() : null;
   return <article className="savings-founder"><a href="/tank">← Tank</a><p>Founder · {all.region}</p><h1>Client savings</h1><p>Choose Everything, All clients, a named client, or Tervory. Graphs count defensible comparisons; all excluded rows and recorded costs remain available below.</p>

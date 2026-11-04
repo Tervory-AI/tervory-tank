@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { OrganizationSwitcher } from "@clerk/nextjs";
+import { OrganisationSwitcher } from "../trigger-signin-provider";
 import { NAV } from "./copy";
 
 export default function TriggerShell({
@@ -95,21 +95,7 @@ export default function TriggerShell({
           </div>
           <div className="trigger-business">
             <span>Business</span>
-            <OrganizationSwitcher
-              hidePersonal
-              afterSelectOrganizationUrl="/trigger"
-              appearance={{
-                elements: {
-                  organizationSwitcherTrigger: {
-                    padding: 0,
-                    width: 28,
-                    minWidth: 28,
-                  },
-                  organizationPreviewTextContainer: { display: "none" },
-                  organizationPreviewAvatarBox: { display: "none" },
-                },
-              }}
-            />
+            <OrganisationSwitcher />
           </div>
           <span className="trigger-product">Trigger</span>
         </div>

@@ -63,8 +63,8 @@ function deviceHarness({ region = 'us-east', outcomes = ['authorization_pending'
     assert.equal(init.redirect, 'manual'); assert.equal(init.method, 'POST');
     assert.equal(init.headers.Authorization, undefined);
     if (call.path.endsWith('/device/code')) {
-      return Response.json({ device_code: `tvd1.${region}.${'d'.repeat(43)}`, user_code: 'BCDF-GHJK', interval: 5, expires_in: 600,
-        ...(region === 'za' ? { identity_provider: 'zitadel', verification_uri: 'https://auth-za.tervory.com/device', verification_uri_complete: 'https://auth-za.tervory.com/device?code=BCDF-GHJK' } : { verification_uri_complete: 'https://evil.example/phish' }) });
+      return Response.json({ device_code: `tzd1.offline-${region}`, user_code: 'BCDF-GHJK', interval: 5, expires_in: 600,
+        identity_provider: 'trigger-signin', verification_uri: `https://${region === 'za' ? 'auth-za' : 'auth'}.tervory.com/device`, verification_uri_complete: `https://${region === 'za' ? 'auth-za' : 'auth'}.tervory.com/device?code=BCDF-GHJK` });
     }
     if (call.path.endsWith('/device/token')) {
       const next = outcomes.shift();
@@ -87,9 +87,9 @@ test('login is a browser device approval: no paste prompt, polls, stores a refre
   await run(['login'], h);
   assert.deepEqual(h.calls.map(call => call.path), ['/v1/command/device/code', ...Array(3).fill('/v1/command/device/token')]);
   assert(h.calls.every(call => call.origin === 'https://app.tervory.com'));
-  assert.deepEqual(h.calls[0].body, { device_name: 'zenas-laptop[31m' });
+  assert.deepEqual(h.calls[0].body, { device_name: 'zenas-laptop[31m', approval: 'trigger-signin' });
   // The browser opens the Workspace page built by the CLI, never a server-chosen URL.
-  assert.deepEqual(h.opened, ['https://app.tervory.com/cli/device?code=BCDF-GHJK&region=us-east']);
+  assert.deepEqual(h.opened, ['https://auth.tervory.com/device?code=BCDF-GHJK']);
   assert.deepEqual(h.slept, [5000, 5000, 10000]);
   const saved = JSON.parse(h.saved());
   assert.equal(saved.region, 'us-east'); assert.match(saved.access_token, /^tv1\.us-east\./); assert.match(saved.refresh_token, /^tvr1\.us-east\./);
@@ -98,12 +98,12 @@ test('login is a browser device approval: no paste prompt, polls, stores a refre
   assert(!h.output().includes('must not print'));
 });
 
-test('ZA login goes straight to the ZA Tank and opens ZA Zitadel', async () => {
+test('ZA login goes straight to the ZA Tank and opens ZA Trigger sign-in', async () => {
   const h = deviceHarness({ region: 'za', outcomes: ['grant'] });
   await run(['login', '--region', 'za'], h);
   assert(h.calls.every(call => call.origin === 'https://za.tervory.com'));
   assert.deepEqual(h.opened, ['https://auth-za.tervory.com/device?code=BCDF-GHJK']);
-  assert.equal(h.calls[0].body.approval, 'zitadel');
+  assert.equal(h.calls[0].body.approval, 'trigger-signin');
   assert.equal(JSON.parse(h.saved()).region, 'za');
   await assert.rejects(run(['login', '--region', 'eu'], h), /only --region/);
   await assert.rejects(run(['models', '--region', 'za'], h), /Invalid command option/);

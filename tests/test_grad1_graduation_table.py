@@ -1,3 +1,4 @@
+from trigger_signin_fakes import set_founders
 import pytest
 import graduate
 from test_train1 import database as _database
@@ -161,7 +162,7 @@ async def test_promotion_endpoint_requires_verified_founder(monkeypatch):
     import main
 
     monkeypatch.setattr(main, 'TANK_API_KEY', key)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'fixture-founder')
+    set_founders(monkeypatch, 'fixture-founder')
     monkeypatch.setattr(main, '_pool', None)
     called = []
 

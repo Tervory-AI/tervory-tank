@@ -1,3 +1,4 @@
+import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
 import { regionTank, type Region } from "@/app/api/zenas/tank";
 
 // The only way the Workspace talks to a model: through Tank.
@@ -101,7 +102,7 @@ const DEVICE_ERRORS = new Set(["authorization_pending", "slow_down", "access_den
 /**
  * CLI device sign-in corridor (unauthenticated: create a code, poll, refresh,
  * revoke). This Workspace fronts only its own us-east box; ZA CLIs call the ZA
- * Tank directly. Approval is never reachable here: it needs a Clerk session.
+ * Tank directly. Approval is never reachable here: it needs a SigninDirectory session.
  */
 async function personalDeviceRequest(request: Request, path: string[], timeoutMs = DEVICE_PROXY_TIMEOUT_MS): Promise<Response> {
   const headers = { "Cache-Control": "no-store" };
@@ -140,7 +141,7 @@ async function personalDeviceRequest(request: Request, path: string[], timeoutMs
   } catch { return refused(502); }
 }
 
-/** CLI-only public corridor. No Clerk cookies or service-key identity assertions. */
+/** CLI-only public corridor. No SigninDirectory cookies or service-key identity assertions. */
 export async function personalCommandRequest(request: Request, path: string[],
                                              limits: { headersMs: number; idleMs: number; deviceMs: number; bodyMs?: number } = { headersMs: PROXY_HEADERS_TIMEOUT_MS, idleMs: PROXY_IDLE_MS, deviceMs: DEVICE_PROXY_TIMEOUT_MS, bodyMs: COMMAND_BODY_TIMEOUT_MS }): Promise<Response> {
   const headers = { "Cache-Control": "no-store" };
@@ -236,7 +237,7 @@ export function rigPriceHistory(identity: { tenantId: string; userId: string }, 
   } });
 }
 
-/** API-only reports. Identity is supplied by Clerk on the server, never the browser. */
+/** API-only reports. Identity is supplied by SigninDirectory on the server, never the browser. */
 export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams(), signal?: AbortSignal): Promise<Response> {
   const allowed = ["", "ensure", "clients", "base", "tiger", "market_lab", "rig", "zenas", "trigger", "tisan", "radix", "autumbra"];
   if (!allowed.includes(path)) throw new Error("Unknown request.");
@@ -253,7 +254,7 @@ export async function caseStudyRequest(identity: { tenantId: string; userId: str
   });
 }
 
-// Optional bookkeeping, never an authorization or squad grant. Durable Clerk
+// Optional bookkeeping, never an authorization or squad grant. Durable SigninDirectory
 // identity + Tank grants/ledger are the retry source on later requests, including
 // after process restarts. This bounded per-process guard only limits load.
 const reportRegistrations = new Map<string, { failures: number; next: number; pending?: Promise<void> }>();
@@ -1380,7 +1381,7 @@ export async function mootPublishedMatches(matchId?: string, signal?: AbortSigna
   return response.json();
 }
 
-// Market Lab: the server derives tenantId from Clerk before calling this corridor.
+// Market Lab: the server derives tenantId from SigninDirectory before calling this corridor.
 export type MarketFeed = {
   id: string; name: string; kind: "copy" | "linked"; rows: number;
   url?: string; cadence?: "daily" | "weekly" | "monthly" | "annual";

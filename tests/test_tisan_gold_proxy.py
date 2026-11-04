@@ -1,4 +1,5 @@
 """A room key or a customer id must never reach the founder approval proxy."""
+from trigger_signin_fakes import set_founders
 import secrets
 
 from fastapi.testclient import TestClient
@@ -16,7 +17,7 @@ def test_proxy_checks_founder_before_contacting_room(monkeypatch):
     monkeypatch.setattr(main, "TANK_API_KEY", workspace_key)
     monkeypatch.setenv("TANK_API_KEY", workspace_key)
     monkeypatch.setenv("TANK_KEY_TISAN", room_key)
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-user")
+    set_founders(monkeypatch, "founder-user")
     calls = []
 
     class HTTP:

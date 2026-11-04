@@ -1,35 +1,13 @@
-"""CLI sign-in by device approval (RFC 8628 shape) on the existing Workspace login.
-
-`tervory login` asks this box for a device code, the signed-in Workspace user
-approves it on one page, and the CLI polls for an org-scoped credential. No
-token is ever pasted, printed or stored in plaintext here:
-
-* device codes, access and refresh tokens are stored only as SHA-256 hashes;
-* the credential is a row in tank.personal_tokens (the CLI-1 table), scoped to
-  the approving user's org (tenant) on this box, with expiry, rotating refresh,
-  last_used_at and revoke;
-* approval and denial use the Workspace service key plus the Clerk-derived user
-  and tenant headers (command.identity), never a CLI bearer. On a ZA box the
-  dedicated TANK_DEVICE_APPROVAL_KEY (held by the Boston Workspace as
-  TANK_DEVICE_APPROVAL_KEY_ZA) is also accepted for these two routes only
-  (personal_tokens.device_approval_actor), with the same user/tenant checks.
-  The ZA homes key is not.
-
-Unauthenticated callers can only create a pending code, poll with the secret
-device code, refresh with the secret refresh token, or revoke a credential they
-hold. Approval requires a signed-in Workspace session.
-"""
+"""Trigger sign-in device grants and existing hash-only credential rotation."""
 from __future__ import annotations
 
-import os
 import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
-from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -55,8 +33,7 @@ NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 class NewCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     device_name: str = Field(min_length=1, max_length=100)
-    # Zitadel is opt-in; old clients retain the existing Boston approval path.
-    approval: Literal["workspace", "zitadel"] | None = None
+    approval: Literal["trigger-signin"] | None = None
 
 
 class Poll(BaseModel):
@@ -69,11 +46,6 @@ class Refresh(BaseModel):
     refresh_token: str = Field(min_length=1, max_length=200)
 
 
-class Decision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    action: Literal["approve", "deny"]
-
-
 def now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -84,11 +56,6 @@ def region() -> str:
     if value not in {"us-east", "za"}:
         raise HTTPException(503, "CLI sign-in is unavailable on this box")
     return value
-
-
-def workspace_url() -> str:
-    # The one Workspace with the Clerk login; ZA has a Tank-only public host.
-    return (os.environ.get("TERVORY_WORKSPACE_URL") or "https://app.tervory.com").rstrip("/")
 
 
 def clean_name(value: str) -> str:
@@ -129,89 +96,24 @@ def platform():
 
 @router.post("/code")
 async def create_code(body: NewCode) -> JSONResponse:
-    box = region()
+    region()
     import identity_oidc
-    if identity_oidc.configured() and body.approval == "zitadel":
-        from identity_device import create
-        return await create(clean_name(body.device_name))
-    device_code = f"tvd1.{box}.{secrets.token_urlsafe(32)}"
-    name = clean_name(body.device_name)
-    with platform():
-        async with command.db().acquire() as conn:
-            await conn.execute("DELETE FROM tank.device_authorizations WHERE expires_at < now() - interval '1 day'")
-            pending = await conn.fetchval(
-                "SELECT count(*) FROM tank.device_authorizations WHERE status='pending' AND expires_at > now()")
-            if pending >= MAX_PENDING:
-                return error("slow_down", 429)
-            for _ in range(5):
-                code = user_code()
-                row = await conn.fetchrow(
-                    "INSERT INTO tank.device_authorizations(device_hash,user_code,region,device_name,expires_at) "
-                    "VALUES($1,$2,$3,$4,now()+$5::interval) ON CONFLICT DO NOTHING RETURNING expires_at",
-                    pat.digest(device_code), code, box, name, CODE_TTL)
-                if row is not None:
-                    break
-            else:
-                raise HTTPException(503, "Could not allocate a sign-in code")
-    query = urlencode({"code": code, "region": box})
-    return JSONResponse({
-        "device_code": device_code, "user_code": code,
-        "verification_uri": f"{workspace_url()}/cli/device",
-        "verification_uri_complete": f"{workspace_url()}/cli/device?{query}",
-        "expires_in": int(CODE_TTL.total_seconds()), "interval": POLL_INTERVAL_S, "region": box,
-    }, headers=NO_STORE)
+    await identity_oidc.registry.refresh()
+    if not identity_oidc.configured():
+        return error("temporarily_unavailable", 503)
+    from identity_device import create
+    return await create(clean_name(body.device_name))
 
 
 @router.post("/token")
 async def poll(body: Poll) -> JSONResponse:
-    box = region()
+    region()
     import identity_oidc
-    if body.device_code.startswith('tzd1.') and identity_oidc.configured():
-        from identity_device import poll as identity_poll
-        return await identity_poll(body.device_code)
-    match = DEVICE_CODE.fullmatch(body.device_code)
-    if match is None or match.group(1) != box:
+    await identity_oidc.registry.refresh()
+    if not identity_oidc.configured() or not body.device_code.startswith('tzd1.'):
         return error("invalid_grant")
-    with platform():
-        async with command.db().acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT device_hash,status,tenant_id,user_id,device_name,expires_at,last_polled_at "
-                "FROM tank.device_authorizations WHERE device_hash=$1 AND region=$2 FOR UPDATE",
-                pat.digest(body.device_code), box)
-            if row is None:
-                return error("invalid_grant")
-            if row["expires_at"] <= now():
-                return error("expired_token")
-            if row["status"] == "denied":
-                return error("access_denied")
-            if row["status"] == "consumed":
-                return error("invalid_grant")
-            if row["status"] == "pending":
-                fast = row["last_polled_at"] is not None and now() - row["last_polled_at"] < timedelta(seconds=POLL_INTERVAL_S - 1)
-                await conn.execute("UPDATE tank.device_authorizations SET last_polled_at=now() WHERE device_hash=$1",
-                                   row["device_hash"])
-                return error("slow_down" if fast else "authorization_pending")
-            # Approved: single use. Consume before minting so a replay cannot mint twice.
-            consumed = await conn.fetchval(
-                "UPDATE tank.device_authorizations SET status='consumed',decided_at=coalesce(decided_at,now()) "
-                "WHERE device_hash=$1 AND status='approved' RETURNING device_hash", row["device_hash"])
-            if consumed is None:
-                return error("invalid_grant")
-    tenant, user = row["tenant_id"], row["user_id"]
-    access, refresh = credential_pair(box, tenant)
-    issued = now()
-    with tenant_scope(tenant):
-        async with command.db().acquire() as conn:
-            token_id = await conn.fetchval(
-                "INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,device_name,"
-                "expires_at,refresh_hash,refresh_expires_at) VALUES($1,$2,$3,$4,$5,$4,$6,$7,$8) RETURNING token_id",
-                tenant, user, box, row["device_name"], pat.digest(access), issued + ACCESS_TTL,
-                pat.digest(refresh), issued + REFRESH_TTL)
-    with platform():
-        async with command.db().acquire() as conn:
-            await conn.execute("UPDATE tank.device_authorizations SET token_id=$2 WHERE device_hash=$1",
-                               row["device_hash"], token_id)
-    return JSONResponse(grant(access, refresh, token_id, box, issued), headers=NO_STORE)
+    from identity_device import poll as identity_poll
+    return await identity_poll(body.device_code)
 
 
 @router.post("/refresh")
@@ -235,7 +137,7 @@ async def rotate_refresh(presented: str, *, audience: str, client_id: str | None
             token_id = await conn.fetchval(
                 """UPDATE tank.personal_tokens SET token_hash=$4,expires_at=$5,refresh_hash=$6,refresh_expires_at=$7
                 WHERE tenant_id=$1 AND region=$2 AND refresh_hash=$3 AND revoked_at IS NULL
-                AND audience=$8 AND client_id IS NOT DISTINCT FROM $9
+                AND audience=$8 AND client_id IS NOT DISTINCT FROM $9 AND trigger_signin
                 AND refresh_expires_at > now() RETURNING token_id""",
                 tenant, box, pat.digest(presented), pat.digest(access), expiries[0],
                 pat.digest(rotated), expiries[1], audience, client_id)
@@ -276,41 +178,3 @@ async def revoke(request: Request) -> JSONResponse:
                 tenant, box, pat.digest(token), column)
     # RFC 7009: the same answer whether or not the token existed.
     return JSONResponse({"revoked": True}, headers=NO_STORE)
-
-
-async def pending(conn: Any, code: str, box: str) -> Any:
-    if not USER_CODE.fullmatch(code):
-        raise HTTPException(404, "Sign-in code not found")
-    row = await conn.fetchrow(
-        "SELECT device_hash,user_code,region,device_name,status,created_at,expires_at FROM tank.device_authorizations "
-        "WHERE user_code=$1 AND region=$2 AND provider='workspace' FOR UPDATE", code, box)
-    if row is None or row["status"] != "pending" or row["expires_at"] <= now():
-        raise HTTPException(404, "Sign-in code not found or expired")
-    return row
-
-
-@router.get("/approval/{code}")
-async def approval(code: str, actor: command.Actor = Depends(pat.device_approval_actor)) -> JSONResponse:
-    box = region()
-    with platform():
-        async with command.db().acquire() as conn:
-            row = await pending(conn, code, box)
-    return JSONResponse({"user_code": row["user_code"], "device_name": row["device_name"], "region": row["region"],
-                         "created_at": row["created_at"].isoformat(), "expires_at": row["expires_at"].isoformat(),
-                         "status": row["status"]}, headers=NO_STORE)
-
-
-@router.post("/approval/{code}")
-async def decide(code: str, body: Decision, actor: command.Actor = Depends(pat.device_approval_actor)) -> JSONResponse:
-    box = region()
-    with platform():
-        async with command.db().acquire() as conn:
-            row = await pending(conn, code, box)
-            status = "approved" if body.action == "approve" else "denied"
-            await conn.execute(
-                "UPDATE tank.device_authorizations SET status=$2,tenant_id=$3,user_id=$4,decided_at=now() "
-                "WHERE device_hash=$1 AND status='pending'",
-                row["device_hash"], status, actor.tenant_id if status == "approved" else None,
-                actor.user_id if status == "approved" else None)
-    return JSONResponse({"user_code": row["user_code"], "device_name": row["device_name"], "status": status},
-                        headers=NO_STORE)

@@ -40,20 +40,19 @@ async def workspace_actor(request: Request) -> command.Actor:
 # Approving a ZA CLI sign-in happens on the Boston Workspace's Clerk page, but the
 # Boston Workspace never holds the ZA TANK_API_KEY, and its ZA homes key
 # (TANK_HOMES_KEY, Boston's TANK_API_KEY_ZA) stays limited to the Zenas homes and
-# feeds routes. So the ZA Tank accepts one dedicated key, TANK_DEVICE_APPROVAL_KEY
-# (Boston holds it as TANK_DEVICE_APPROVAL_KEY_ZA), for exactly the two
+# feeds routes. So the ZA Tank accepts one dedicated key, TRIGGER_SIGNIN_SESSIONS_KEY
+# (Boston holds it as TRIGGER_SIGNIN_SESSIONS_KEY_ZA), for exactly the two
 # device-approval routes below (GET shows a pending code, POST approves or denies
 # it), on a ZA box only. The signed-in user and tenant headers are still required
 # and checked exactly as for the Workspace key. The key is refused everywhere else,
 # and refused outright if it is unset or equal to the Workspace or homes key (a
 # misconfiguration that would blur the scopes).
-DEVICE_APPROVAL_PATH = re.compile(r"/v1/command/device/approval/[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}\Z")
 
 
-def device_approval_key() -> str:
+def sessions_key() -> str:
     """The ZA Tank's dedicated device-approval key, or '' when unset or not distinct."""
     from main import TANK_API_KEY
-    key = os.environ.get("TANK_DEVICE_APPROVAL_KEY", "").strip()
+    key = os.environ.get("TRIGGER_SIGNIN_SESSIONS_KEY", "").strip()
     others = {TANK_API_KEY.strip(), os.environ.get("TANK_HOMES_KEY", "").strip()} - {""}
     return "" if not key or key in others else key
 
@@ -65,17 +64,9 @@ SIGN_IN_PATHS = {"GET": re.compile(r"/v1/personal-tokens\Z"),
                  "DELETE": re.compile(r"/v1/personal-tokens/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")}
 
 
-def device_approval_key_may_approve(request: Request) -> bool:
+def sessions_key_may_manage(request: Request) -> bool:
     from main import box_region
-    key = device_approval_key()
-    return (bool(key) and box_region() == "za" and request.method in {"GET", "POST"}
-            and DEVICE_APPROVAL_PATH.fullmatch(request.url.path) is not None
-            and command.key_matches(request.headers.get("x-tank-key", ""), key))
-
-
-def device_approval_key_may_manage(request: Request) -> bool:
-    from main import box_region
-    key = device_approval_key()
+    key = sessions_key()
     pattern = SIGN_IN_PATHS.get(request.method)
     return (bool(key) and box_region() == "za" and pattern is not None
             and pattern.fullmatch(request.url.path) is not None
@@ -84,28 +75,17 @@ def device_approval_key_may_manage(request: Request) -> bool:
 
 async def sign_in_actor(request: Request) -> command.Actor:
     """Workspace key, or (ZA box, list and revoke only) the dedicated key; never a CLI token."""
-    if device_approval_key_may_manage(request):
+    if sessions_key_may_manage(request):
         return await non_founder(request)
     return await command.identity(request)
 
 
 async def non_founder(request: Request) -> command.Actor:
     actor = await command.signed_in_actor(request)
-    admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
+    admins = __import__("trigger_signin_config").founders()
     if actor.founder or actor.user_id in admins:
         raise HTTPException(403, "Not available for this account here")
     return actor
-
-
-async def device_approval_actor(request: Request) -> command.Actor:
-    """Workspace key, or (ZA box, approval routes only) the dedicated device-approval key; user and tenant always required."""
-    if device_approval_key_may_approve(request):
-        actor = await non_founder(request)
-        # Review of #506, should-fix 1: this key lives on the Boston Workspace and the
-        # user header is its assertion. non_founder() refuses founders (checked on the
-        # raw admin list) so it can never approve, and so mint, a founder CLI credential.
-        return actor
-    return await command.identity(request)
 
 
 # A CLI credential authenticates the CLI corridor and nothing else. register() puts
@@ -156,9 +136,9 @@ async def bearer_identity(request: Request, *, audience: str) -> tuple[command.A
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT token_id,user_id,client_id,name,identity_tenant_admin,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens
+                """SELECT token_id,user_id,client_id,name,identity_tenant_admin,trigger_signin_issuer,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens
                 WHERE tenant_id=$1 AND region=$2 AND token_hash=$3 AND revoked_at IS NULL
-                AND audience=$4 AND (expires_at IS NULL OR expires_at > now())""",
+                AND audience=$4 AND trigger_signin AND (expires_at IS NULL OR expires_at > now())""",
                 tenant, region, digest(token), audience,
             )
             if row is not None and row.get("stale") is not False:
@@ -167,10 +147,14 @@ async def bearer_identity(request: Request, *, audience: str) -> tuple[command.A
                                    tenant, row["token_id"])
         if row is None:
             raise HTTPException(401, "Personal token refused")
+        import trigger_signin_config as registry
+        if row['trigger_signin_issuer'] not in registry.ISSUERS.values():
+            raise HTTPException(401, "Personal token refused")
+        await registry.refresh()
+        registry._issuer.set(row['trigger_signin_issuer'])
         # Headers for user, tenant, role and squad are never used on this path.
         # Existing Tank authorization re-reads founder membership and squad grants.
-        tenant_admin = (region == "za" and row["user_id"].startswith("zitadel:")
-                        and row.get("identity_tenant_admin") is True)
+        tenant_admin = row.get("identity_tenant_admin") is True
         return await command.authorized_actor(command.Actor(tenant, row["user_id"], False, tenant_admin=tenant_admin)), row
 
 
@@ -185,9 +169,9 @@ async def create_token(body: NewToken, response: Response,
     with tenant_scope(actor.tenant_id):
         async with command.db().acquire() as conn:
             row = await conn.fetchrow(
-                "INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
-                "VALUES($1,$2,$3,$4,$5) RETURNING token_id,name,region,created_at",
-                actor.tenant_id, actor.user_id, region, body.name, digest(token),
+                "INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin,identity_tenant_admin,trigger_signin_issuer) "
+                "VALUES($1,$2,$3,$4,$5,true,$6,$7) RETURNING token_id,name,region,created_at",
+                actor.tenant_id, actor.user_id, region, body.name, digest(token), actor.tenant_admin, __import__('trigger_signin_config')._issuer.get(),
             )
     response.headers["Cache-Control"] = "no-store"
     return {**dict(row), "token": token}

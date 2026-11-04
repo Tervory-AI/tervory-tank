@@ -1,6 +1,7 @@
 """WORKERS-2: heartbeat, the workers pause, the /control tile data, and the auto-updater."""
 
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import asyncio
 import logging
@@ -109,7 +110,7 @@ def conn(monkeypatch):
 @pytest.fixture
 def client(monkeypatch, conn):
     monkeypatch.setenv("TANK_API_KEY", "offline-workspace-key")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-one")
+    set_founders(monkeypatch, "founder-one")
     monkeypatch.setenv("TANK_KEY_WORKERS", WORKER_KEY)
     app = FastAPI()
     app.include_router(controls.router)

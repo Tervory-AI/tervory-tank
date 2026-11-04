@@ -1,4 +1,5 @@
 """Command contract tests; Postgres integration also runs in the existing CI service."""
+from trigger_signin_fakes import set_founders
 import json
 import os
 import sys
@@ -29,7 +30,7 @@ def request(**headers):
 def runtime(monkeypatch):
     runtime = SimpleNamespace(TANK_API_KEY='dummy-workspace-key', box_region=lambda: 'us-east')
     monkeypatch.setitem(sys.modules, 'main', runtime)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     monkeypatch.setenv('TANK_KEY_WORKERS', 'dummy-worker-key')
     return runtime
 
@@ -326,7 +327,7 @@ async def test_revoked_founder_cannot_send_implicit_worker_followup(api, monkeyp
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
     card = (await client.post('/v1/command/build', json={'thread_id': thread, 'brief_markdown': 'Build'})).json()
     await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'confirm'})
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
+    set_founders(monkeypatch, '')
     monkeypatch.setattr(command, 'route_turn', AsyncMock(side_effect=HTTPException(503, 'paused')))
     await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Change the build'})
     async with pool.acquire() as conn:
@@ -422,10 +423,10 @@ async def test_plan_only_proposes_then_native_tank_route_runs_once(api, runtime,
     card = data['cards'][0]
     assert card['kind'] == 'approve_skill' and card['status'] == 'pending'
     route = f"/v1/command/cards/{card['card_id']}"
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
+    set_founders(monkeypatch, '')
     assert (await client.post(route, json={'action': 'confirm'})).status_code == 403
     assert calls == []
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     replies = await asyncio.gather(client.post(route, json={'action': 'confirm'}), client.post(route, json={'action': 'confirm'}))
     assert all(r.status_code == 200 for r in replies)
     assert calls == [('base.find_site', '1.0.0', {'by': 'founder'})]
@@ -1068,10 +1069,10 @@ async def test_customer_receipts_carry_no_model_names_but_keep_the_auto_dollar_f
         thread = (await client.post('/v1/command/threads', json={}, headers=headers)).json()['thread_id']
         # Customers can no longer pin (403), but threads pinned before that change keep
         # the names in durable state: make this one by pinning while briefly an admin.
-        monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', f'founder,{user}')
+        set_founders(monkeypatch, f'founder,{user}')
         reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello', 'model': 'fixture-pin'}, headers=headers)
         assert reply.status_code == 200, reply.text
-        monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+        set_founders(monkeypatch, 'founder')
         snapshot = await client.get(f'/v1/command/threads/{thread}', headers=headers)
         events = await client.get(f'/v1/command/threads/{thread}/events', headers=headers)
         receipts = await client.get(f"/v1/command/tasks/{snapshot.json()['steps'][0]['step_id']}/receipts", headers=headers)
@@ -1298,7 +1299,7 @@ async def test_code_first_proposal_rechecks_roles_and_cancel_has_no_side_effect(
     action = {'tool': 'worker.build', 'arguments': {'brief_markdown': 'Offline test brief'}}
     card = (await client.post(path, json=action)).json()
     assert (await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'cancel'})).json()['status'] == 'cancelled'
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
+    set_founders(monkeypatch, '')
     assert (await client.post(path, json=action)).status_code == 403
     dispatch.assert_not_awaited()
 

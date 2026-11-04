@@ -1,4 +1,5 @@
 """Actual Tank/room HTTP authentication, action boundaries and secret-safe errors."""
+from trigger_signin_fakes import set_founders
 import asyncio
 import base64
 import os
@@ -44,7 +45,7 @@ def gateway(monkeypatch):
     monkeypatch.setenv("TANK_KEY_GHOST", "ghost-test")
     monkeypatch.setenv("TANK_KEY_RADIX", "radix-test")
     monkeypatch.setenv("TANK_KEY_BASE", "base-test")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-test")
+    set_founders(monkeypatch, "founder-test")
     monkeypatch.setenv("TANK_REGION", "us-east")
     # Starlette State.__delattr__ raises KeyError if a test already removed it.
     monkeypatch.setitem(tank.app.state._state, "ghost_recovery_backend", None)

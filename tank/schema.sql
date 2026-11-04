@@ -2344,7 +2344,9 @@ DO UPDATE SET cache_scope='none' WHERE tank.policy.cache_scope IS DISTINCT FROM 
 -- snapshot is set only by verified OIDC issuance; refresh/revoke preserve the row.
 ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS identity_tenant_admin boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'workspace'
-    CHECK (provider IN ('workspace', 'zitadel'));
+    CHECK (provider IN ('workspace', 'trigger-signin'));
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
 
 -- B4 saved Base lists: immutable tenant-owned record/evidence snapshots.
 CREATE TABLE IF NOT EXISTS tank.base_saved_lists (
@@ -3149,3 +3151,25 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+ALTER TABLE tank.oauth_codes ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin_issuer text;
+
+CREATE TABLE IF NOT EXISTS tank.trigger_signin_config (
+    region text PRIMARY KEY CHECK (region IN ('us-east','za')),
+    issuer text NOT NULL UNIQUE,
+    client_id text NOT NULL,
+    workspace_client_id text NOT NULL,
+    project_id text NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_signin_organisations (
+    region text NOT NULL REFERENCES tank.trigger_signin_config(region),
+    org_id text NOT NULL,
+    tenant_id uuid NOT NULL REFERENCES tank.case_study_clients(tenant_id),
+    PRIMARY KEY (region,org_id),
+    UNIQUE (region,tenant_id)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_signin_founders (
+    region text PRIMARY KEY REFERENCES tank.trigger_signin_config(region),
+    subject text NOT NULL
+);

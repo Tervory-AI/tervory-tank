@@ -1,4 +1,5 @@
 """Offline GitHub transport plus Command's real auth/dispatch/persistence paths."""
+from trigger_signin_fakes import set_founders
 import base64
 import json
 import os
@@ -319,10 +320,10 @@ async def test_confirmed_read_saved_replayed_and_isolated(api, runtime, github, 
     monkeypatch.setenv("TANK_GITHUB_READ_TOKEN", "")
     assert (await client.post(url, json={"action": "confirm"})).status_code == 403
     monkeypatch.setenv("TANK_GITHUB_READ_TOKEN", MARKER)
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "")
+    set_founders(monkeypatch, "")
     assert (await client.post(url, json={"action": "confirm"})).status_code == 403
     assert github.requests == []
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder")
+    set_founders(monkeypatch, "founder")
     assert (await client.post(url, json={"action": "confirm"})).json()["status"] == "confirmed"
     count = len(github.requests)
     assert count == 3

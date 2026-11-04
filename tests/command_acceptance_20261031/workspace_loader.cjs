@@ -25,6 +25,8 @@ exports.workspace = function workspace({ env, fetch, mocks = {} }) {
     cache.set(file, module);
     const local = spec => {
       if (Object.hasOwn(mocks, spec)) return mocks[spec];
+      if (spec === 'server-only') return {};
+      if (spec === '@/lib/trigger-signin-fetch') return {signinFetch: fetch};
       if (spec.startsWith('node:')) return require(spec);
       if (spec.startsWith('@/')) return load(resolveFile(path.join(root, 'workspace', spec.slice(2))));
       if (spec.startsWith('.')) return load(resolveFile(path.join(path.dirname(file), spec)));

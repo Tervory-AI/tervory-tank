@@ -14,7 +14,7 @@ SETUP = runpy.run_path(str(ROOT / 'ops/trigger-signin/setup.py'))
 
 @pytest.mark.parametrize('omit_defaults', [False, True])
 def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_defaults):
-    state = {'project': None, 'roles': [], 'app': None,
+    state = {'project': None, 'roles': [], 'apps': {},
              'login': {'allowRegister': True, 'passwordCheckLifetime': '86400s', 'allowDomainDiscovery': True}, 'lockout': {}, 'writes': []}
     def api(request):
         path, method = request.url.path, request.method
@@ -33,20 +33,22 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_d
         elif path.endswith('/roles/_search'):
             result = {'result': state['roles']}
         elif path.endswith('/roles'):
-            assert body == {'roleKey': 'org_admin', 'displayName': 'org_admin'}
+            assert body['roleKey'] in {'org_admin', 'member', 'reviewer'}
+            assert body['displayName'] == body['roleKey']
             state['roles'].append({'key': body['roleKey']})
             result = {}
         elif path.endswith('/apps/_search'):
-            app = state['app']
+            app = state['apps'].get(body['queries'][0]['nameQuery']['name'])
             if app and omit_defaults:
                 app = {'oidcConfig': {k: v for k, v in app['oidcConfig'].items() if k != 'version'}}
             result = {'result': [app] if app else []}
         elif path.endswith('/apps/oidc'):
-            assert body == SETUP['APP']
+            assert body == (SETUP['APP'] if body['name'] == 'Tervory CLI' else SETUP['WORKSPACE_APP'])
             assert body['authMethodType'] == 'OIDC_AUTH_METHOD_TYPE_NONE'
-            assert set(body['grantTypes']) == {'OIDC_GRANT_TYPE_AUTHORIZATION_CODE', 'OIDC_GRANT_TYPE_DEVICE_CODE'}
-            state['app'] = {'oidcConfig': {**{k: v for k, v in body.items() if k != 'name'}, 'clientId': '30001@tervory'}}
-            result = {'clientId': '30001@tervory'}
+            assert 'OIDC_GRANT_TYPE_AUTHORIZATION_CODE' in body['grantTypes']
+            client_id = '30001@tervory' if body['name'] == 'Tervory CLI' else '30002@tervory'
+            state['apps'][body['name']] = {'oidcConfig': {**{key: value for key, value in body.items() if key != 'name'}, 'clientId': client_id}}
+            result = {'clientId': client_id}
         elif '/policies/login/second_factors' in path or '/policies/login/multi_factors' in path:
             field = 'secondFactors' if path.endswith('second_factors') else 'multiFactors'
             state['login'].setdefault(field, []).append(body['type'])
@@ -65,10 +67,10 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_d
     with httpx.Client(base_url='http://offline', transport=httpx.MockTransport(api)) as client:
         configure = SETUP['Configure'](client)
         first = configure.run()
-        assert first == {'client_id': '30001@tervory', 'project_id': '20001', 'owner_org_id': '10001'}
+        assert first == {'client_id': '30001@tervory', 'workspace_client_id': '30002@tervory', 'project_id': '20001', 'owner_org_id': '10001'}
         before = list(state['writes'])
         assert configure.run() == first and state['writes'] == before
-        assert state['login']['allowRegister'] is False
+        assert state['login']['allowRegister'] is True
         assert state['login']['passwordCheckLifetime'] == '86400s'
         assert state['login']['allowDomainDiscovery'] is True
         assert state['login']['passwordlessType'] == 'PASSWORDLESS_TYPE_ALLOWED'
@@ -116,24 +118,26 @@ def test_stack_is_isolated_pinned_and_uses_only_existing_proxy():
     assert services['identity-backup']['environment']['TANK_REGION'] == '${TRIGGER_SIGNIN_REGION:?regional Tank region}'
     assert 'DATABASE_URL' not in services['identity-backup']['environment']
     za = yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())
-    assert za['services']['tank']['environment']['TRIGGER_SIGNIN_ISSUER'] == '${TRIGGER_SIGNIN_ISSUER:-}'
+    assert 'TRIGGER_SIGNIN_ISSUER' not in za['services']['tank']['environment']
+    assert 'TRIGGER_SIGNIN_SETUP_TOKEN' in za['services']['tank']['environment']
 
 
 def test_expired_bootstrap_skips_only_successfully_completed_setup(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', 'https://auth.tervory.com')
     monkeypatch.setenv('TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION', '2000-01-01T00:00:00Z')
     def no_network(*args, **kwargs):
         pytest.fail('Expired completed bootstrap must not authenticate or call an API')
     monkeypatch.setattr(httpx, 'Client', no_network)
     with pytest.raises(SETUP['SetupError'], match='without completed setup'):
         SETUP['main'](tmp_path)
-    result = {'client_id': '30001@tervory', 'project_id': '20001', 'owner_org_id': '10001'}
+    result = {'client_id': '30001@tervory', 'workspace_client_id': '30002@tervory', 'project_id': '20001', 'owner_org_id': '10001'}
     marker = tmp_path / 'tervory.json'
     marker.write_text(json.dumps(result))
     # No machine-key file exists: even reading/signing it would fail this test.
-    assert SETUP['main'](tmp_path) is None
+    with pytest.raises(SETUP['SetupError'], match='credential needs renewal'):
+        SETUP['main'](tmp_path)
     output = capsys.readouterr()
-    assert output.out == result['client_id'] + '\n'
-    assert output.err == 'Identity setup already completed; bootstrap key expired; no changes attempted\n'
+    assert output.out == output.err == ''
     assert json.loads(marker.read_text()) == result
     marker.write_text(json.dumps({'client_id': result['client_id']}))
     with pytest.raises(SETUP['SetupError'], match='record refused'):

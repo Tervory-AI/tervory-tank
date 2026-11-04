@@ -1,5 +1,6 @@
 """Founder trial forwarding, platform selection, and independent truth wiring."""
 
+from trigger_signin_fakes import set_founders
 import json
 import sys
 import types
@@ -28,7 +29,7 @@ class Pool:
 @pytest.mark.asyncio
 async def test_founder_proxy_replaces_credentials_and_ignores_input(monkeypatch):
     monkeypatch.setenv("TANK_API_KEY", "workspace-placeholder")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-placeholder")
+    set_founders(monkeypatch, "founder-placeholder")
     monkeypatch.setenv("TANK_KEY_BASE", "base-placeholder")
     forwarded = []
 

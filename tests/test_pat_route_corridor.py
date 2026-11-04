@@ -6,6 +6,7 @@ sends a well-formed CLI token: outside the corridor no token lookup may happen a
 route may answer differently from an anonymous request except with a refusal. Synthetic token, fake database, no network.
 """
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import os
 import re
@@ -84,7 +85,7 @@ def lookups(monkeypatch):
 
     monkeypatch.setattr(command, "db", lambda: SimpleNamespace(acquire=acquire))
     monkeypatch.setattr(main, "box_region", lambda: "za")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder")
+    set_founders(monkeypatch, "founder")
     return seen
 
 

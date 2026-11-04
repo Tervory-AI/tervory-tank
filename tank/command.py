@@ -110,7 +110,7 @@ async def signed_in_actor(request: Request) -> Actor:
     home = request.headers.get("x-tervory-home-region", box_region())
     if home != box_region():
         raise HTTPException(403, "This conversation must stay on its home box")
-    admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
+    admins = __import__("trigger_signin_config").founders()
     return await authorized_actor(Actor(tenant_id, user, user in admins, tenant_admin=request.headers.get("x-tervory-role") == "org:admin"))
 
 
@@ -1799,7 +1799,7 @@ async def propose_action(conn: Any, row: dict, state: dict, action: PlannedActio
 
 
 def current_actor(actor: Actor) -> Actor:
-    admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
+    admins = __import__("trigger_signin_config").founders()
     return replace(actor, founder=actor.user_id in admins)
 
 
@@ -1907,6 +1907,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
         confirmation(actor, action.tool, action.arguments)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
+    headers.update(__import__("trigger_signin_config").proof.get())
     if action.tool in {"radix.infra.scan", "radix.active.consent", "radix.active.consent.withdraw", "radix.active.scan", "radix.domain.prove", "radix.passive.scan", "radix.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"}:
         from main import box_region
         headers.update({"X-Tervory-Squad": "radix", "X-Tervory-Region": box_region()})
