@@ -100,3 +100,48 @@ async def test_webm_keeps_its_browser_media_type(tmp_path):
     result = await engine.ingest(TENANT, video.read_bytes(), [], {})
     assert result['media_type'] == 'video/webm'
     assert result['duration'] == 10
+
+
+@pytest.mark.parametrize('status', [200, 302])
+def test_link_pins_tcp_preserves_tls_hostname_and_refuses_redirects(monkeypatch, status):
+    import ssl
+    import httpcore
+    from agents.video_shop import video_media
+    connections, tls, writes = [], [], []
+
+    class Stream:
+        def __init__(self):
+            self.parts = [f'HTTP/1.1 {status} Test\r\nContent-Length: 5\r\nConnection: close\r\n\r\nvideo'.encode()]
+
+        def read(self, max_bytes, timeout=None):
+            return self.parts.pop(0) if self.parts else b''
+
+        def write(self, buffer, timeout=None):
+            writes.append(buffer)
+
+        def start_tls(self, ssl_context, server_hostname=None, timeout=None):
+            assert ssl_context.verify_mode == ssl.CERT_REQUIRED and ssl_context.check_hostname
+            tls.append(server_hostname)
+            return self
+
+        def get_extra_info(self, info):
+            return None
+
+        def close(self):
+            pass
+
+    def connect(self, host, port, timeout=None, local_address=None, socket_options=None):
+        connections.append((host, port))
+        return Stream()
+
+    monkeypatch.setattr(video_media.socket, 'getaddrinfo', lambda *a, **k:
+                        [(2, 1, 6, '', ('93.184.216.34', 443))])
+    monkeypatch.setattr(httpcore.SyncBackend, 'connect_tcp', connect)
+    if status == 200:
+        assert video_media.download('https://store.example/video.mp4') == b'video'
+    else:
+        with pytest.raises(ValueError, match='url_response'):
+            video_media.download('https://store.example/video.mp4')
+    assert connections == [('93.184.216.34', 443)]
+    assert tls == ['store.example']
+    assert b'Host: store.example\r\n' in b''.join(writes)

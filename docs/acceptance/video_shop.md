@@ -40,6 +40,26 @@ Requires an installed Playwright package and Chromium. `PLAYWRIGHT_MODULE` and
 plays the sample MP4, seeks into and out of the product moment, opens detail,
 adds once, checks pause/list/jump and disabled store-cart behavior, checks product text is rendered safely, and destroys the embed.
 
+## Hosted CI evidence
+
+The first final-head full run, [41867395324](https://github.com/Tervory-AI/tervory-tank/actions/runs/41867395324),
+passed lint, Workspace, savings-page, command acceptance and seven Python shards.
+It exposed missing FFmpeg/ffprobe in the hosted Python runners; the workflow now
+provisions those tools rather than skipping the video tests. Local validation of
+that repair and the transport checks passed 100 tests. Download transport tests
+assert pinned TCP addresses, original-host TLS certificate verification, original
+HTTP Host and refusal of redirects. No scanner suppression was added.
+
+That manual dispatch intentionally runs a full repository security audit, unlike
+the PR's baseline comparison. It also reported existing history/fixture Gitleaks
+findings, existing dependency advisories and unrelated Semgrep findings. The
+branch changes no dependency pins. The original transport's HTTPSConnection audit
+notice was removed by using the existing httpcore dependency's verified TLS
+transport with a pinned network backend. Security policy and allowlists remain
+unchanged. Normal PR security validation remains required when Claude opens the
+single PR. An unchanged Rig landing screenshot equality test also failed once in
+that full run (`landing-tervory-375`); no Rig landing files are changed here.
+
 ## Runtime composition and limits
 
 `agents/video_shop/Dockerfile`, built with `agents/` as context, provides FFmpeg

@@ -158,7 +158,7 @@ class Engine:
                             'ffmpeg', '-v', 'error', '-protocol_whitelist', 'file,pipe',
                             '-format_whitelist', 'png_pipe,jpeg_pipe,ppm_pipe',
                             '-i', str(reference), '-vf', 'scale=32:32', '-frames:v', '1',
-                            '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1', timeout=15)
+                            '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1')
                         if len(fingerprints[sku]) != 3072:
                             raise ValueError('reference_invalid')
                     except (ValueError, TimeoutError):
