@@ -26,6 +26,8 @@ Required: Name, Email, Reply method, at least one item, Type, Description, Quant
 | --- | --- | --- | --- |
 | ready | 1440 | [513:40528](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=513-40528) | [ready-1440.png](screenshots/ready-1440.png) |
 | ready | 375 | [513:40686](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=513-40686) | [ready-375.png](screenshots/ready-375.png) |
+| empty | 1440 | [514:5990](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-5990) | [empty-1440.png](screenshots/empty-1440.png) |
+| empty | 375 | [514:6148](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-6148) | [empty-375.png](screenshots/empty-375.png) |
 
 ## Verification
 
