@@ -31,7 +31,7 @@ export function secretPath(path) {
 
 // The process output is collected, not streamed: redaction must see complete lines
 // even when a secret arrives split across stdout/stderr chunks.
-export async function processOutput(command, args, { cwd, gitDirectory, gitWorkTree, timeoutMs = LIMITS.commandMs, signal, input, outputBytes = LIMITS.outputBytes, delimiter = '\n', temporaryDirectory } = {}) {
+export async function processOutput(command, args, { cwd, gitDirectory, gitWorkTree, timeoutMs = LIMITS.commandMs, signal, input, outputBytes = LIMITS.outputBytes, delimiter = '\n', temporaryDirectory, windowsVerbatimArguments = false } = {}) {
   return new Promise((resolveResult, reject) => {
     let child; let timer; let killed = false; let size = 0; let total = 0; const chunks = [];
     const stop = () => {
@@ -44,7 +44,7 @@ export async function processOutput(command, args, { cwd, gitDirectory, gitWorkT
     };
     if (signal?.aborted) return reject(refused());
     try {
-      child = spawn(command, args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true,
+      child = spawn(command, args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true, windowsVerbatimArguments,
         env: { PATH: process.env.PATH, ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}), LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_LITERAL_PATHSPECS: '1',
           ...(temporaryDirectory ? { TMPDIR: temporaryDirectory, ...(process.platform === 'win32' ? { TEMP: temporaryDirectory, TMP: temporaryDirectory } : {}) } : {}),
           ...(gitDirectory ? { GIT_DIR: gitDirectory, GIT_WORK_TREE: gitWorkTree } : {}) },
@@ -451,8 +451,11 @@ export class CodeFolder {
       try {
         const windows = process.platform === 'win32';
         const shell = windows ? resolve(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe') : '/bin/sh';
-        return await processOutput(shell, windows ? ['/d', '/s', '/c', command] : ['-c', command],
-          { cwd: this.root, timeoutMs, signal: io.signal, temporaryDirectory: temp });
+        // cmd.exe does not understand the \" escaping Node applies to arguments. Pass the
+        // command verbatim inside one pair of quotes, as Node's own shell: true does (/s
+        // strips exactly that outer pair).
+        return await processOutput(shell, windows ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command],
+          { cwd: this.root, timeoutMs, signal: io.signal, temporaryDirectory: temp, windowsVerbatimArguments: windows });
       } finally { await rm(temp, { recursive: true, force: true }); }
     }
     if (backend === 'seatbelt') {
