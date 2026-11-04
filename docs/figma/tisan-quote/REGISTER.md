@@ -1,6 +1,6 @@
 # J4 · Tisan client quote request
 
-Status: **Proposed** for every frame and all wording changes. Founder approval is pending. Design only; no client submission, email, payment, production data, or deployment occurred.
+Status: **Approved 3 Nov 2026, 17:45 PT** (Claude, under the founder's 3 Nov 13:28 delegation) for the eight frames and their wording at this commit, with one change still required before build: the quote-request page is public, so it must not show the Workspace menu. Remove the side menu and the mobile menu bar from all its frames. Design only; no client submission, email, payment, production data, or deployment occurred.
 
 File: [Tervory design](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS). Dedicated page: `513:40527` (J4 · Tisan client quote · Proposed).
 
