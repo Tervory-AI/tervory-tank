@@ -1,10 +1,10 @@
 # Workspace design register
 
-**Status: Approved 3 Nov 2026, 17:40 PT** (Claude, under the founder's 3 Nov 13:28 delegation to approve the basics): the 16 Results and Task board frames and their wording, at this commit. Feedback and Paid steps settings are not drawn yet and are not approved.
+**Status: Approved 3 Nov 2026, 17:40 PT** (Claude, under the founder's 3 Nov 13:28 delegation to approve the basics): the 16 Results and Task board frames and their wording, at this commit. Feedback and Paid steps settings were drawn in `bd800c2d`; they remain Proposed, not approved. See the Wave 5 frame table below.
 
 Branch: `codex/figma-workspace`, created from `origin/main` at `8857cd3e`. File: [Workspace proposals](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-3092).
 
-Scope: C4 results; C3 task board; C6 result feedback; founder paid-step settings. Completed: Results and Task board, each with desktop 1440×900 and mobile 375×900 default, empty, loading and error views. Feedback and Paid steps settings have not been created. Long content scrolls vertically; screenshots show the initial viewport.
+Scope: C4 results; C3 task board; C6 result feedback; founder paid-step settings. Completed: Results and Task board, each with desktop 1440×900 and mobile 375×900 default, empty, loading and error views. Feedback and Paid steps settings are drawn with the states and evidence listed in the Wave 5 continuation below. Long content scrolls vertically; screenshots show the initial viewport.
 
 ## Rules and reuse
 
@@ -128,22 +128,11 @@ All created nodes, instance descendants and subsequently changed IDs are listed 
 
 ## Review limitations
 
-All frames remain Proposed. Prototype fixtures are review data. Founder-only settings need existing server-side founder authorization when implemented. Ask/Auto is a new founder-requested design proposal; it does not override today’s automatic runtime ladder. Each paid step returned by each task ladder gets its own control; the illustrated categories are not an asserted live provider inventory.
+Results and Task board retain their recorded approval. Feedback and Paid steps remain Proposed. Prototype fixtures are review data. Founder-only settings need existing server-side founder authorization when implemented. Ask/Auto is a new founder-requested design proposal; it does not override today’s automatic runtime ladder. Each paid step returned by each task ladder gets its own control; the illustrated categories are not an asserted live provider inventory.
 
-## Historical quota stop — superseded by the wave 5 continuation below
+## Quota stop resolved
 
-Figma rejected the first Feedback creation call: “You’ve reached the Figma MCP tool call limit for your Full seat on the Professional plan.” No Feedback or Paid steps settings frames, IDs or screenshots were created. All 16 registered screen frames belong to Results and Task board only.
-
-Pending before this task is complete:
-
-- Create C6 Feedback desktop/mobile and empty/loading/error states; preserve the originating result’s identity and download URL. Add optional-note entry and a submission acknowledgement.
-- Create founder-only Paid steps settings with Ask/Auto on every configured paid ladder step, a global pause/resume state, and desktop/mobile empty/loading/error views. The three authoring-script categories are Proposed examples, not a verified paid-step inventory.
-- Connect Workspace tabs, result Open / Add a note, feedback selection, task Open and the mobile header to the shared drawer. The present visible controls are design proposals; only Download, loading-delay and Try again actions are authored. No selected feedback, persistence, filter behaviour or drawer navigation is claimed.
-- Inspect the remaining screenshots and verify all intended interactions after the allowance is restored. Save screenshots and IDs for every new frame, and push each completed screen group.
-
-[Authoring script](authoring/build-screen.js) preserves construction helpers, component IDs are in the [session ledger](evidence/session-ledger.json). Invoke with explicit `SCREEN` and `GROUP` constants only after checking existing frame names to prevent duplicates. Remaining proposed calls: `SCREEN='Feedback', GROUP=2`; `SCREEN='Paid steps', GROUP=3`. These scripts have not been executed or visually validated for the remaining screens. Before using them, replace the single Base feedback example with per-result context and implement the pending interactions above.
-
-Per-screen pushes: Results `f1e463c2`; Task board `0458cc63`. These commits contain Proposed design evidence only. The task remains incomplete due to the reported Figma limit.
+The earlier quota stop is superseded by `bd800c2d`, which created the Feedback and Paid steps frames and their desktop/mobile state evidence listed below. Results `f1e463c2` and Task board `0458cc63` retain their approval above; Feedback and Paid steps remain Proposed.
 
 ## Wave 5 continuation — Proposed, 4 Nov 2026
 
