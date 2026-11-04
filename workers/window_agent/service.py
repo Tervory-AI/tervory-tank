@@ -33,7 +33,8 @@ def argv_for(settings, name, runtime, directory, job):
     for i, arg in enumerate(argv):
         if arg in ('/work:rw,nosuid,nodev,size=3g', '/home/worker:rw,nosuid,nodev,size=256m'):
             argv[i] = arg + ',mode=1777'
-    argv[-1:] = ['--user', '1001:1001', IMAGE]
+    # The PID namespace stays private. Allow Bubblewrap to mount its nested proc.
+    argv[-1:] = ['--security-opt', 'unmask=/proc/*', '--user', '1001:1001', IMAGE]
     # No Tank service credential is staged in this container; only its job lease.
     index = argv.index('TANK_KEY_FILE=/run/secrets/tank_key')
     del argv[index - 1:index + 1]
