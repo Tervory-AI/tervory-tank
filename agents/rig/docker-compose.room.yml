@@ -37,7 +37,11 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
     volumes: [data:/data]
-    networks: [private, gw]
+    networks:
+      private: {}
+      gw:
+        aliases:
+          - ${RIG_ROOM_NAME:?}
     depends_on:
       database:
         condition: service_healthy

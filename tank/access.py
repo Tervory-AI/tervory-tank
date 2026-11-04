@@ -807,7 +807,7 @@ async def rig_request(actor: Actor, operation: str, data: dict[str, Any] | None 
     try:
         async with httpx.AsyncClient(timeout=90, trust_env=False) as client:
             from rig_rooms import endpoint
-            base = await endpoint(db(), actor)
+            base = await endpoint(db(), actor) if os.environ.get("RIG_LIFECYCLE_KEY") else "http://agent-rig:8003"
             response = await client.post(base + "/internal/retailer/" + operation,
                 headers={"x-rig-retailer-key": key}, json={"tenant_id": str(actor.tenant_id), "founder": actor.founder, "data": data or {}})
     except httpx.HTTPError:
@@ -1052,7 +1052,11 @@ def require_tiger(request: Request) -> None:
 @router.get("/rig/tiger/tenants")
 async def rig_tiger_tenants(request: Request):
     require_tiger(request)
-    return await rig_request(Actor(PLATFORM, "tiger-price-watch", False), "watch-tenants")
+    result = await rig_request(Actor(PLATFORM, "tiger-price-watch", False), "watch-tenants")
+    if os.environ.get("RIG_LIFECYCLE_KEY"):
+        from rig_rooms import catalogue_tenants
+        result["tenants"] = await catalogue_tenants(db(), result.get("tenants", []))
+    return result
 
 
 @router.get("/rig/tiger/products")

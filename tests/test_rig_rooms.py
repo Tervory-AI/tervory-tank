@@ -51,7 +51,7 @@ class FakeCoolify:
             return httpx.Response(201, content=b'ack')
         assert request.method == 'DELETE'
         assert dict(request.url.params) == {'delete_configurations': 'true', 'delete_volumes': 'false',
-                                           'delete_connected_networks': 'true', 'docker_cleanup': 'false'}
+                                           'delete_connected_networks': 'false', 'docker_cleanup': 'false'}
         self.apps = [row for row in self.apps if row['uuid'] != path.split('/')[-1]]
         return httpx.Response(200, content=b'ack')
 

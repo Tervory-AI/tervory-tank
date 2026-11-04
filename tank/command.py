@@ -123,7 +123,7 @@ def allowed_tools(actor: Actor) -> list[str]:
     squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
-    voice_tools = TOOLS["trigger"] + ["rig.quote.confirm_payment", "rig.store.onboard", "rig.rooms.list", "rig.store.destroy"] if actor.tenant_admin and not actor.founder else []
+    voice_tools = TOOLS["trigger"] + ["rig.quote.confirm_payment"] if actor.tenant_admin and not actor.founder else []
     client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]

@@ -6,7 +6,10 @@ paths remain off. Existing embeds keep their original API paths. Newly issued
 room snippets use `https://rig.tervory.com/v1/rig/rooms/{store-uuid}` as api-base;
 the unchanged widget appends its normal `/v1/rig/...` URLs. The shared Rig host
 forwards this explicit corridor to that fixed UUID's room. It never substitutes
-another store or falls back when a room is unavailable. No retailer-control path
+another store or falls back when a room is unavailable. The gateway forwards
+the resolved client address, discarding shopper-supplied forwarding headers.
+Set RIG_TRUSTED_PROXY_CIDRS on each store room to trust the shared gateway’s
+actual corridor address range; shared Rig continues to trust its own proxy range. No retailer-control path
 is exposed through that corridor. Room webhooks must use that same api-base plus
 `/v1/rig/commerce/webhooks/{store-uuid}`; their raw bodies/signatures survive.
 
@@ -42,10 +45,14 @@ or lifecycle key. No ingress, Docker socket or privileged container is added.
    to work until an explicitly planned data migration.
 5. `rig.store.destroy` requires another Confirm card. The room first freezes
    writes, snapshots all its tenant tables into its private bucket prefix under
-   `backups/room-retained.json`, then acknowledges retention. If archival fails,
+   `backups/room-retained.json`, then acknowledges retention. This manifest
+   names immutable, hashed JSON parts of at most 16 MiB, so the snapshot is not
+   limited to one bucket object. An incomplete part upload never publishes a
+   new manifest or permits deletion. If archival fails,
    no Coolify DELETE is issued. The room remains frozen for recovery; do not
    repeat provisioning or manually delete its retained volumes.
-6. DELETE has `delete_volumes=false` and `docker_cleanup=false`. Both database
+6. DELETE has `delete_volumes=false`, `delete_connected_networks=false` and
+   `docker_cleanup=false`; it cannot remove the shared Rig corridor. Both database
    and data volumes, the bucket snapshot and existing bucket objects remain.
    The registry remains as a tombstone, so destroyed stores cannot fall back to
    the shared catalogue. Another store's application and data are untouched.

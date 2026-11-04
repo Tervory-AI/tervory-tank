@@ -39,6 +39,17 @@ async def public_endpoint(pool, tenant):
     return host(tenant) + ':8000'
 
 
+async def catalogue_tenants(pool, legacy):
+    # Existing Tiger-only platform discovery exposes identifiers, never store data.
+    from tenant_db import tenant_scope
+    with tenant_scope(UUID('00000000-0000-0000-0000-000000000001'), administrative=True):
+        async with pool.acquire() as conn:
+            rows = await conn.fetch('SELECT tenant_id,state FROM tank.rig_rooms')
+    registered = {str(row['tenant_id']) for row in rows}
+    active = {str(row['tenant_id']) for row in rows if row['state'] == 'created'}
+    return sorted((set(legacy) - registered) | active)
+
+
 def register(parent, identity, db):
     router = APIRouter(prefix='/rig/rooms')
 
@@ -58,6 +69,9 @@ def register(parent, identity, db):
             confirmation(actor, tool, {})
         if not os.environ.get('RIG_LIFECYCLE_KEY'):
             raise HTTPException(503, 'Rig lifecycle is not configured.')
+        from main import box_region
+        if box_region() != 'us-east':
+            raise HTTPException(403, 'Rig store rooms must stay on their configured home box.')
         pool = db()
         if action == 'onboard':
             async with pool.acquire() as conn:

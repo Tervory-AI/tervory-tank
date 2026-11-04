@@ -40,6 +40,7 @@ def receipt_for(plan, *, outcome='planned'):
 
 class CoolifyRigBackend(CoolifyEnforceBackend):
     prefix = 'rig-room'
+    delete_connected_networks = 'false'  # Never remove the shared Rig corridor.
     compose_location = COMPOSE
     description_prefix = 'rig-room:'
     compose_path = (Path(__file__).parents[1] / 'rig/docker-compose.room.yml'

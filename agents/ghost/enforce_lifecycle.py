@@ -286,6 +286,7 @@ class CoolifyEnforceBackend:
     compose_location = "/agents/ghost/docker-compose.enforce.yml"
     description_prefix = "autumbra-enforce:"
     compose_path = None
+    delete_connected_networks = "true"
     settings_names = COOLIFY_SETTINGS
     plan_create = staticmethod(plan_create)
     plan_destroy = staticmethod(plan_destroy)
@@ -406,7 +407,7 @@ class CoolifyEnforceBackend:
             await self.coolify.call("DELETE", "/applications/" + matches[0]["uuid"],
                 mutation=True, discard_response=True,
                 params={"delete_configurations": "true", "delete_volumes": "false",
-                        "delete_connected_networks": "true", "docker_cleanup": "false"})
+                        "delete_connected_networks": self.delete_connected_networks, "docker_cleanup": "false"})
             receipt["outcome"] = "destroyed"
         except CoolifyUnknown:
             receipt["outcome"] = "unknown"
