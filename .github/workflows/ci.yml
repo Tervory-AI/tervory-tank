@@ -258,6 +258,11 @@ jobs:
       - name: Install workspace packages for offline billing and Node tests
         working-directory: workspace
         run: npm ci --no-audit --no-fund
+      - name: Prepare pinned Tisan acceptance browser dependencies
+        working-directory: agents/tisan/templates/next-site
+        run: |
+          npm ci --no-audit --no-fund
+          npx --no-install playwright install chromium
       - name: Prepare CLI acceptance fixtures
         run: |
           npm ci --prefix cli --ignore-scripts --no-audit --no-fund
