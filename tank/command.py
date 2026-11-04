@@ -105,7 +105,7 @@ async def assert_tenant_home(tenant: uuid.UUID, conn=None):
     return check_local(region, box_region())
 
 
-async def signed_in_actor(request: Request) -> Actor:
+async def signed_in_actor(request: Request, *, require_home: bool = True) -> Actor:
     """The Clerk-derived user and tenant headers. Call only after the service key is checked."""
     from main import box_region
     user = request.headers.get("x-tervory-user", "").strip()
@@ -119,7 +119,8 @@ async def signed_in_actor(request: Request) -> Actor:
     home = request.headers.get("x-tervory-home-region", box_region())
     if home != box_region():
         raise HTTPException(403, "This conversation must stay on its home box")
-    await assert_tenant_home(tenant_id)
+    if require_home:
+        await assert_tenant_home(tenant_id)
     admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
     return await authorized_actor(Actor(tenant_id, user, user in admins, tenant_admin=request.headers.get("x-tervory-role") == "org:admin"))
 

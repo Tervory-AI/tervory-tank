@@ -84,13 +84,18 @@ def device_approval_key_may_manage(request: Request) -> bool:
 
 async def sign_in_actor(request: Request) -> command.Actor:
     """Workspace key, or (ZA box, list and revoke only) the dedicated key; never a CLI token."""
+    # Management is limited to the signed-in user's own old tokens on this box.
+    # A foreign home must not prevent revocation; minting/approval still require it.
     if device_approval_key_may_manage(request):
-        return await non_founder(request)
-    return await command.identity(request)
+        return await non_founder(request, require_home=False)
+    from main import TANK_API_KEY
+    if not command.key_matches(request.headers.get("x-tank-key", ""), TANK_API_KEY):
+        raise HTTPException(401, "Workspace authentication required")
+    return await command.signed_in_actor(request, require_home=False)
 
 
-async def non_founder(request: Request) -> command.Actor:
-    actor = await command.signed_in_actor(request)
+async def non_founder(request: Request, *, require_home: bool = True) -> command.Actor:
+    actor = await command.signed_in_actor(request, require_home=require_home)
     admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
     if actor.founder or actor.user_id in admins:
         raise HTTPException(403, "Not available for this account here")

@@ -401,3 +401,25 @@ def test_deploy_passes_the_device_approval_keys_to_the_services_that_read_them()
     assert boston['environment']['TANK_DEVICE_APPROVAL_KEY_ZA'] == '${TANK_DEVICE_APPROVAL_KEY_ZA:-}'
     # Review should-fix 4: the Workspace image builds the CLI release from cli/.
     assert boston['build']['additional_contexts'] == {'cli': './cli'}
+
+
+@pytest.mark.asyncio
+async def test_foreign_home_can_revoke_old_signins_without_minting_or_using_them(device, monkeypatch):
+    client, pool, rt = device
+    monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
+    # This tenant's recorded home stays US; the ZA token predates home authority.
+    token = f'tv1.za.{TENANT.hex}.' + 'x' * 43
+    token_id = await pool.fetchval("""INSERT INTO tank.personal_tokens
+        (tenant_id,user_id,region,name,token_hash) VALUES($1,'client','za','old sign-in',$2) RETURNING token_id""", TENANT, pat.digest(token))
+    for headers in (WORKSPACE, APPROVER_WORKSPACE):
+        listed = await client.get('/v1/personal-tokens', headers=headers)
+        assert listed.status_code == 200, listed.text
+        assert [row['token_id'] for row in listed.json()] == [str(token_id)]
+    assert (await client.get('/v1/personal-tokens', headers={**WORKSPACE, 'x-tervory-tenant':str(OTHER)})).json() == []
+    assert (await client.get('/v1/command/tools', headers={'authorization':'Bearer '+token})).status_code == 403
+    assert (await client.post('/v1/personal-tokens', headers=WORKSPACE, json={'name':'new'})).status_code == 403
+    grant = await start(client)
+    assert (await approve(client, grant['user_code'], headers=APPROVER_WORKSPACE)).status_code == 403
+    assert (await client.delete('/v1/personal-tokens/'+str(token_id), headers=APPROVER_WORKSPACE)).status_code == 204
+    assert await pool.fetchval('SELECT revoked_at IS NOT NULL FROM tank.personal_tokens WHERE tenant_id=$1 AND token_id=$2', TENANT, token_id)
