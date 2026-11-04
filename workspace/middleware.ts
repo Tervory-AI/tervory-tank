@@ -1,6 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { mootCanonicalRedirectUrl, productHostRewritePath, publicReturnUrl } from "@/lib/product-hosts";
+import { mobileRequest } from "@/lib/tank";
 
 // Public: Clerk pages, health, Stripe webhook, Autumbra product/owner pages, Moot watch.
 // Autumbra receipts + undo stay reachable signed-out ONLY so email tokens work;
@@ -31,6 +32,10 @@ const isPublic = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/health",
+  "/mobile(.*)",
+  "/api/mobile(.*)",
+  "/.well-known/apple-app-site-association",
+  "/.well-known/assetlinks.json",
   "/api/billing/webhook",
   "/autumbra(.*)",
   "/api/autumbra/undo",
@@ -57,9 +62,15 @@ export default clerkMiddleware(async (auth, req) => {
   if (!publicOk) {
     const { userId, redirectToSignIn } = await auth();
     if (!userId) {
+      const mobileToken = req.cookies.get("__Host-tervory-mobile")?.value;
+      let mobileSignedIn = false;
+      if (mobileToken && /^[a-f0-9-]{36}_[A-Za-z0-9_-]{43}$/.test(mobileToken)) {
+        try { mobileSignedIn = (await mobileRequest("session/resolve", { token: mobileToken })).ok; }
+        catch { return new NextResponse("Your workspace is unavailable. Please try again.", { status: 503 }); }
+      }
       // Back to the public address they asked for (base.tervory.com/), never the internal
       // bind or the rewritten path (https://0.0.0.0:3000/base, seen 28 Oct).
-      return redirectToSignIn({ returnBackUrl: publicReturnUrl(host, req.nextUrl.pathname, req.nextUrl.search) });
+      if (!mobileSignedIn) return redirectToSignIn({ returnBackUrl: publicReturnUrl(host, req.nextUrl.pathname, req.nextUrl.search) });
     }
   }
 

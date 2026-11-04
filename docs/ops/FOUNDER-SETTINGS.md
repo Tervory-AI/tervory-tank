@@ -55,3 +55,23 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 2. Chat bot: the privacy notice and how long conversations are kept (decision 35; 12 months suggested).
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
+# Mobile push (general notification channel)
+
+Association setting names: `MOBILE_APPLE_TEAM_ID`, `MOBILE_ANDROID_CERT_SHA256`
+(comma-separated certificate fingerprints). Public association documents return
+empty allowlists until real signing identities are configured; no placeholders.
+
+Setting names only: `MOBILE_APNS_KEY`, `MOBILE_APNS_KEY_ID`,
+`MOBILE_APNS_TEAM_ID`, `MOBILE_APNS_ENVIRONMENT` (`sandbox` or `production`),
+`MOBILE_FCM_SERVICE_ACCOUNT_JSON`. Configure in Tank's server environment;
+never ship credentials in the apps. Uses the existing `TANK_VAULT_KEY` to encrypt
+phone tokens. No provider accounts or paid signing are created by this change.
+
+Any product may call `POST /v1/mobile/notify` with its existing Tank room key
+and `{tenant_id, user_id?, title, body, link}`. Omitting `user_id` addresses the
+tenant's registered phones. Workspace links only; no product-specific subscriptions.
+Delivery returns `sent`, `dead`, `failed`, `unavailable` counts; provider acceptance
+is not a read receipt. Callers decide retries (repeating a successful call sends again).
+APNs/FCM dead-token responses remove registrations; temporary/provider-auth failures
+do not. Expired/revoked mobile sessions do not receive pushes. Sign-out revokes the
+mobile session and deletes its registrations via `DELETE /api/mobile/session`.

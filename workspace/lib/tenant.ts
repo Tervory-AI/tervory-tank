@@ -11,6 +11,7 @@
 import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
 import { createHash } from "node:crypto";
 import { ensureCaseStudyReports } from "./tank";
+import { mobileIdentity } from "./mobile";
 
 export type Tenant = { tenantId: string; orgId: string; orgName: string; userId: string };
 
@@ -51,6 +52,8 @@ export function tenantIdFor(orgId: string): string {
 
 /** The current user's tenant. Creates a personal organization if they have none. */
 export async function currentTenant(): Promise<Tenant> {
+  const mobile = await mobileIdentity();
+  if (mobile) return registered(mobile);
   const { userId, orgId } = await auth();
   if (!userId) throw new Error("not signed in");
 
@@ -76,6 +79,8 @@ export async function currentTenant(): Promise<Tenant> {
 /** The active Clerk organization, or null when the user has not chosen one.
  *  Does not create an organization. Onboarding uses this so a new client can create or join. */
 export async function activeTenant(): Promise<Tenant | null> {
+  const mobile = await mobileIdentity();
+  if (mobile) return registered(mobile);
   const { userId, orgId } = await auth();
   if (!userId || !orgId) return null;
   const client = await clerkClient();

@@ -115,6 +115,21 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       // Consume before creating work so Strict Mode or reload cannot resend it.
       window.history.replaceState(null, "", "/chats");
       void newThread(ask);
+    } else if (params.get("draft")) {
+      const draft = params.get("draft")!;
+      let cancelled = false;
+      void (async () => {
+        try {
+          const response = await fetch(`/api/mobile/shares/${encodeURIComponent(draft)}`, { cache: "no-store" });
+          if (!response.ok) throw new Error("The shared item could not be opened.");
+          const saved = await response.json() as { thread_id: string; text: string; attachments: Attachment[] };
+          if (cancelled) return;
+          await choose(saved.thread_id);
+          if (cancelled) return;
+          setText(saved.text); setAttachments(saved.attachments);
+        } catch { if (!cancelled) setError("The shared item could not be opened. Please share it again."); }
+      })();
+      return () => { cancelled = true; generation.current++; streamAbort.current?.abort(); };
     } else { const id = params.get("thread"); if (id) void choose(id); }
     return () => { generation.current++; streamAbort.current?.abort(); };
     // A saved URL is loaded once; subsequent changes use choose to reject stale reads.

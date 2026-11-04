@@ -665,7 +665,7 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     batch_route = path == "/v1/route/batch" or (request.method == "GET" and path.startswith("/v1/route/batch/"))
     # Its own queued background calls only; route_job checks the caller.
     job_route = request.method == "GET" and path.startswith("/v1/route/jobs/") and path.count("/") == 4
-    event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle"}
+    event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle", "/v1/mobile/notify"}
     if path not in {"/health", "/v1/route"} and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched

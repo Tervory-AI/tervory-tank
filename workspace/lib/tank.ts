@@ -6,6 +6,19 @@ import { regionTank, type Region } from "@/app/api/zenas/tank";
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+export async function mobileRequest(path: string, body?: unknown, identity?: { tenantId: string; userId: string; tenantAdmin?: boolean }, session?: string): Promise<Response> {
+  const headers = new Headers({ "x-tank-key": TANK_API_KEY, "Content-Type": "application/json" });
+  if (identity) {
+    headers.set("x-tervory-tenant", identity.tenantId);
+    headers.set("x-tervory-user", identity.userId);
+    headers.set("x-tervory-role", identity.tenantAdmin ? "org:admin" : "");
+  }
+  if (session) headers.set("x-mobile-session", session);
+  return boundedFetch(`${TANK_URL}/v1/mobile/${path}`, { method: body === undefined ? "GET" : "POST", headers,
+    body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store" }, 30_000, async response =>
+    new Response(await response.arrayBuffer(), { status: response.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } }));
+}
+
 // Bounded server-side fetches for the CLI corridors (review of #506, B1). Kept in this
 // import-free module because several test harnesses load lib/tank.ts on its own.
 //

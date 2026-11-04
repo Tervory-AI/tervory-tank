@@ -33,6 +33,8 @@ ROUTES = (
     ('early', 'base_audit_commands', 'build_router', (), True),
     ('early', 'rig_brain_routes', 'build_router', ('tank',), True),
     ('early', 'moa', 'router', None, True),
+    ('early', 'mobile', 'router', None, True),
+    ('early', 'mobile_push', 'router', None, True),
     ('late', 'ghost_routes', 'router', None, True),
     ('late', 'research', 'register', ('app', 'globals'), False),
     ('late', 'command', 'router', None, True),
