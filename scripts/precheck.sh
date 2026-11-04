@@ -29,7 +29,6 @@ bin="$TMPDIR/security-bin"
 if [ ! -x "$bin/gitleaks" ]; then
   RUNNER_TEMP="$TMPDIR" GITHUB_PATH=/dev/null bash .github/scripts/install-security-tools.sh || failed+=(install-security-tools)
 fi
-# Bound local scan threads on shared hosts; rules, targets and gates stay identical.
 # Test-container rule (3 Nov): --rm, label tervory.test=1, name prefixed with this folder.
 cat > "$bin/semgrep" <<SH
 #!/usr/bin/env bash
@@ -38,7 +37,7 @@ exec docker run --rm --label tervory.test=1 --name "${folder}-semgrep-\$\$" \\
   --volume "$root:$root" --volume "$TMPDIR:$TMPDIR" --workdir "\$PWD" \\
   --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env "GIT_CONFIG_VALUE_0=$root" \\
   --entrypoint semgrep \\
-  semgrep/semgrep:1.182.1@sha256:c8f333ab0ad103d2bcd3b55cbeabcfc556bfeaa7446ba18594a4320f3807ffc9 "\$@" --jobs 2
+  semgrep/semgrep:1.182.1@sha256:c8f333ab0ad103d2bcd3b55cbeabcfc556bfeaa7446ba18594a4320f3807ffc9 "\$@"
 SH
 chmod +x "$bin/semgrep"
 export PATH="$bin:$PATH" GITHUB_WORKSPACE="$root" RUNNER_TEMP="$TMPDIR"
@@ -50,8 +49,7 @@ python3 .github/scripts/security_scan.py gitleaks --base "$base" --output "$out"
 
 if [ "${PRECHECK_SKIP_SEMGREP:-}" != 1 ]; then
   step "semgrep on changed files (as CI)"
-  # A contended local host can starve a complete scan; CI keeps its 900s default.
-  python3 .github/scripts/security_scan.py semgrep --base "$base" --output "$out" --tool-timeout 3600 || failed+=(semgrep)
+  python3 .github/scripts/security_scan.py semgrep --base "$base" --output "$out" || failed+=(semgrep)
 fi
 
 step "osv dependency check (as CI)"

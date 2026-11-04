@@ -175,24 +175,6 @@ class SecurityPolicyTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 scan.run(["osv-scanner"], (0, 1))
 
-    def test_long_local_budget_does_not_turn_timeout_into_a_clean_scan(self):
-        for seconds in (900, 3600):
-            with patch.object(scan, "TOOL_TIMEOUT_SECONDS", seconds), patch.object(
-                scan.subprocess, "run", side_effect=subprocess.TimeoutExpired("placeholder-scanner", seconds)
-            ) as execute:
-                with self.assertRaises(subprocess.TimeoutExpired):
-                    scan.run(["placeholder-scanner"])
-                self.assertEqual(execute.call_args.kwargs["timeout"], seconds)
-
-    def test_out_of_bounds_tool_budgets_are_rejected_before_scanning(self):
-        for value in ("0", "899", "3601", "placeholder"):
-            with patch.object(sys, "argv", ["scan", "semgrep", "--output", str(self.root), "--tool-timeout", value]), \
-                    patch.object(scan.subprocess, "run") as execute, patch("sys.stderr", io.StringIO()):
-                with self.assertRaises(SystemExit) as exit_status:
-                    scan.main()
-                self.assertEqual(exit_status.exception.code, 2)
-                execute.assert_not_called()
-
     def test_missing_locks_fail_closed(self):
         with patch.object(scan, "lockfiles", return_value=[]):
             with self.assertRaises(ValueError):

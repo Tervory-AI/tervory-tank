@@ -11,9 +11,6 @@ import subprocess
 import tempfile
 
 
-TOOL_TIMEOUT_SECONDS = 900
-
-
 def git(*args: str) -> str:
     return subprocess.check_output(["git", *args], text=True).strip()
 
@@ -71,7 +68,7 @@ def event_comparison_base(event_name: str, event: dict) -> str | None:
 def run(args: list[str], allowed: tuple[int, ...] = (0,)) -> int:
     # Scanner diagnostics can contain source text. Only sanitized JSON is retained.
     result = subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                            timeout=TOOL_TIMEOUT_SECONDS, check=False)
+                            timeout=900, check=False)
     if result.returncode not in allowed:
         raise RuntimeError(f"{args[0]} failed (exit {result.returncode}); scan is incomplete")
     return result.returncode
@@ -332,17 +329,13 @@ def osv(base: str | None, temp: Path, output: Path) -> bool:
 
 
 def main() -> int:
-    global TOOL_TIMEOUT_SECONDS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tool", choices=("gitleaks", "semgrep", "osv"))
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--base", help="Explicit comparison commit; omit for whole audit")
     selection.add_argument("--event-context", action="store_true", help="Verify and select the GitHub event's comparison base")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--tool-timeout", type=int, choices=(900, 1800, 3600), default=900,
-                        help="Tool wall-time budget; local shared hosts may need longer than CI")
     args = parser.parse_args()
-    TOOL_TIMEOUT_SECONDS = args.tool_timeout
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=True)
     status = {"tool": args.tool, "head": git("rev-parse", "HEAD"), "base": None}

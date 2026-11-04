@@ -13,8 +13,10 @@ import subprocess
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+import command
+import httpx
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -135,14 +137,14 @@ def test_r10_responsive_writing_and_voice_cards():
 @pytest.mark.asyncio
 async def test_r11_client_leads(crm_setup, monkeypatch):
     await crm.test_admin_read_uses_only_actor_binding_and_receipts(crm_setup, monkeypatch, 'leads')
-    crm_setup.dependency_overrides[crm.command.identity] = lambda: crm.FOUNDER
+    crm_setup.dependency_overrides[command.identity] = lambda: crm.FOUNDER
     await crm.test_pinned_lead_pagination_and_detail(crm_setup, monkeypatch)
 
 
 @pytest.mark.asyncio
 async def test_r12_client_contacts(crm_setup, monkeypatch):
     await crm.test_admin_read_uses_only_actor_binding_and_receipts(crm_setup, monkeypatch, 'contacts')
-    crm_setup.dependency_overrides[crm.command.identity] = lambda: crm.FOUNDER
+    crm_setup.dependency_overrides[command.identity] = lambda: crm.FOUNDER
     await crm.test_read_projection_and_explicit_auth(crm_setup, monkeypatch)
 
 
@@ -154,7 +156,7 @@ async def test_r13_client_estimates(crm_setup, monkeypatch):
 @pytest.mark.asyncio
 async def test_r14_client_invoices(crm_setup, monkeypatch):
     await crm.test_admin_read_uses_only_actor_binding_and_receipts(crm_setup, monkeypatch, 'invoices')
-    crm_setup.dependency_overrides[crm.command.identity] = lambda: crm.FOUNDER
+    crm_setup.dependency_overrides[command.identity] = lambda: crm.FOUNDER
     await crm.test_invoice_read_uses_native_records_and_excludes_public_tokens(crm_setup, monkeypatch)
 
 
@@ -277,9 +279,32 @@ async def test_r34_source_removal_and_tenant_isolation(database):
     await sources.test_hybrid_index_rechecks_tenant_staleness_and_source_removal(database)
 
 
+async def confirmed_bot_card(w4, tool, arguments):
+    actor = command.Actor(console.A, 'placeholder-founder', True)
+    thread = await command.create_thread(command.NewThread(title='placeholder acceptance'), actor)
+    async with command.editing(UUID(thread['thread_id']), actor) as (conn, row, state):
+        action = command.validate_action(command.PlannedAction(tool=tool, arguments=arguments), actor)
+        card = await command.propose_action(conn, row, state, action, actor)
+    response = await w4.client.post('/v1/command/cards/'+card['card_id'],
+        json={'action': 'confirm'}, headers=w4.private)
+    assert response.status_code == 200, response.text
+    assert response.json()['status'] == 'confirmed', response.text
+    return card, response.json()
+
+
 @pytest.mark.asyncio
-async def test_r35_approved_faq_code_receipt():
-    await engine.test_approved_faq_has_zero_model_calls_and_code_receipt()
+async def test_r35_approved_faq_code_receipt(w4):
+    w4.bot.sources._index = sources.Index()
+    question, answer = 'placeholder delivery question', 'placeholder approved delivery answer'
+    _, result = await confirmed_bot_card(w4, 'trigger.bot.faq.add', {'question': question, 'answer': answer})
+    assert result['result']['status'] == 'approved'
+    assert await w4.pool.fetchval('SELECT count(*) FROM tank.trigger_bot_sources WHERE tenant_id=$1', console.A) == 1
+    response = await w4.client.post('/v1/bot/widget/message', json={'text': question}, headers=w4.public)
+    assert response.status_code == 200, response.text
+    assert response.json()['answer'] == answer and response.json()['sources']
+    receipt = await w4.pool.fetchrow("SELECT model,cost_usd FROM tank.ledger WHERE tenant_id=$1 AND task_type='trigger.bot.answer'", console.A)
+    assert receipt['model'] == 'code' and receipt['cost_usd'] == 0
+    w4.runtime.run_route.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -318,7 +343,21 @@ async def test_r41_quote_capture(w4):
 
 @pytest.mark.asyncio
 async def test_r42_human_inbox_reply(w4):
-    await console.test_human_reply_poll_requires_exact_conversation_and_visitor(w4)
+    conversation, visitor = uuid4(), uuid4()
+    await w4.pool.execute('INSERT INTO tank.trigger_bot_conversations(tenant_id,id,visitor_id) VALUES($1,$2,$3)', console.A, conversation, visitor)
+    await confirmed_bot_card(w4, 'trigger.bot.handover', {'conversation_id': str(conversation), 'text': 'placeholder hand-over'})
+    w4.bot.notify.assert_awaited_once()
+    card, _ = await confirmed_bot_card(w4, 'trigger.bot.reply', {'conversation_id': str(conversation),
+        'text': 'placeholder human reply', 'person': 'placeholder person'})
+    replay = await w4.client.post('/v1/command/cards/'+card['card_id'], json={'action': 'confirm'}, headers=w4.private)
+    assert replay.status_code == 200 and replay.json()['status'] == 'confirmed'
+    assert await w4.pool.fetchval('SELECT count(*) FROM tank.trigger_bot_messages WHERE tenant_id=$1 AND conversation_id=$2', console.A, conversation) == 1
+    body = {'conversation_id': str(conversation), 'visitor_id': str(visitor)}
+    response = await w4.client.post('/v1/bot/widget/poll', json=body, headers=w4.public)
+    assert response.status_code == 200 and response.json()['messages'][0]['answer'] == 'placeholder human reply'
+    denied = await w4.client.post('/v1/bot/widget/poll', json={**body, 'visitor_id': str(uuid4())}, headers=w4.public)
+    assert denied.status_code == 404
+    w4.runtime.run_route.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -415,11 +454,12 @@ async def test_r56_draft_activation_once(w4, monkeypatch):
     from trigger_bot_contract import ConfirmDraft
     from trigger_bot_api import digest
     import trigger_crm
+    original_binding, original_lead = trigger_crm.binding, trigger_crm.confirmed_bot_lead
     monkeypatch.setattr(trigger_crm, 'binding', lambda actor: None)
     crm_write = AsyncMock(return_value={'id': str(uuid4())})
     monkeypatch.setattr(trigger_crm, 'confirmed_bot_lead', crm_write)
     w4.bot.has_rig = AsyncMock(return_value=True)
-    w4.runtime._rig_call = AsyncMock(return_value=__import__('httpx').Response(200, json={'id': 'placeholder-quote'}))
+    w4.runtime._rig_call = AsyncMock(return_value=httpx.Response(200, json={'id': 'placeholder-quote'}))
     for kind in ('lead', 'quote'):
         draft = uuid4()
         data = {'contact': {'name': 'placeholder person', 'email': 'placeholder@example.invalid'}, 'notice_version': 'placeholder-v1'}
@@ -439,6 +479,40 @@ async def test_r56_draft_activation_once(w4, monkeypatch):
             await confirm_draft(w4.bot, SimpleNamespace(tenant_id=console.A), kind+'.confirm', args, uuid4())
     crm_write.assert_awaited_once()
     w4.runtime._rig_call.assert_awaited_once()
+    # Finish through the actual Confirm/API/CRM transport, not a fake CRM adapter.
+    monkeypatch.setattr(trigger_crm, 'binding', original_binding)
+    monkeypatch.setattr(trigger_crm, 'confirmed_bot_lead', original_lead)
+    monkeypatch.setenv('TRIGGER_CRM_URL', 'http://trigger-crm-backend:8000')
+    monkeypatch.setenv('TRIGGER_CRM_PAT_CONNECTOR', 'placeholder-crm-token')
+    monkeypatch.setenv('TRIGGER_CRM_TENANT_BINDINGS', json.dumps({str(console.A): {
+        'organization_id': crm.ORG, 'token_env': 'TRIGGER_CRM_PAT_CONNECTOR'}}))
+    calls = []
+    def upstream(request):
+        assert request.headers['X-Tervory-CRM-Organization'] == crm.ORG
+        assert request.headers['Authorization'] == 'Bearer placeholder-crm-token'
+        calls.append(request.method)
+        if request.method == 'POST':
+            assert json.loads(request.content)['first_name'] == 'placeholder first'
+        return httpx.Response(200, json={'id': str(crm.RECORD)})
+    crm.fake_transport(monkeypatch, upstream)
+    conversation = uuid4()
+    await w4.pool.execute('INSERT INTO tank.trigger_bot_conversations(tenant_id,id,visitor_id) VALUES($1,$2,$3)', console.A, conversation, uuid4())
+    draft = await w4.bot.lead_draft(console.A, conversation, 'placeholder product enquiry', {
+        'name': 'placeholder first placeholder last', 'first_name': 'placeholder first',
+        'last_name': 'placeholder last', 'email': 'placeholder@example.invalid'})
+    card, _ = await confirmed_bot_card(w4, 'trigger.bot.lead.confirm', {'draft_id': str(draft)})
+    replay = await w4.client.post('/v1/command/cards/'+card['card_id'], json={'action': 'confirm'}, headers=w4.private)
+    assert replay.status_code == 200 and replay.json()['status'] == 'confirmed'
+    assert calls == ['GET', 'POST']
+    w4.runtime._rig_call.reset_mock()
+    draft = uuid4()
+    data = {'product_id': 'placeholder-product', 'contact': {'name': 'placeholder person', 'email': 'placeholder@example.invalid'},
+            'title': 'placeholder quote', 'request': 'placeholder enquiry', 'quantity': 3, 'notice_version': 'placeholder-v1'}
+    await w4.pool.execute("INSERT INTO tank.trigger_bot_drafts(tenant_id,id,kind,data) VALUES($1,$2,'quote',$3::jsonb)", console.A, draft, json.dumps(data))
+    await confirmed_bot_card(w4, 'trigger.bot.quote.confirm', {'draft_id': str(draft)})
+    w4.runtime._rig_call.assert_awaited_once()
+    forwarded = json.loads(w4.runtime._rig_call.await_args.args[3])
+    assert forwarded['tenant_id'] == str(console.A) and forwarded['data'] == data
 
 
 def test_sheet_has_exactly_one_fixture_case_per_row():
