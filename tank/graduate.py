@@ -553,7 +553,12 @@ class SearchResult:
 
 def quotes_from_roster(models: list[dict[str, Any]]) -> list[Quote]:
     quotes: list[Quote] = []
+    seen = set()
     for model in models:
+        name = str(model["model_name"])
+        if name in seen:
+            continue
+        seen.add(name)
         info = model.get("model_info") or {}
         provider_model = str((model.get("litellm_params") or {}).get("model") or "")
         # Perplexity presets use the dedicated research route, never generic chat/shadow.

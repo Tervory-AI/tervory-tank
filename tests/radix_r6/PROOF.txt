@@ -1,0 +1,197 @@
+Radix R4 + I8 + R6 offline delivery evidence
+Source/test checkpoint: be777521d0f43dc1b9526e6f5aed2a760b25a5d7
+All commands ran in /workspace/codex-radix-w3. Main was never merged.
+Documentation-only commits follow this tested checkpoint.
+Exact regression/build/native commands: see PR.md verification section.
+FINAL BROAD REGRESSION (exit 0)
+................................................................... [ 16%]
+........................................................................ [ 33%]
+........................................................................ [ 51%]
+........................................................................ [ 68%]
+........................................................................ [ 85%]
+..........................................................               [100%]
+=============================== warnings summary ===============================
+tank/main.py:754: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/main.py:754: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/fastapi/applications.py:4723: 5 warnings
+tests/test_command_radix_repo.py: 105 warnings
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tank/main.py:814: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/main.py:814: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tank/agent_skills.py:531: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/agent_skills.py:531: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tank/skala_intake.py:71: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/skala_intake.py:71: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tank/skala_intake.py:77: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/skala_intake.py:77: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:192: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/skala_revalidation.py:192: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+413 passed, 245 warnings, 437 subtests passed in 99.17s (0:01:39)
+
+
+FOCUSED REVIEW REGRESSION (exit 0)
+........................................................................ [ 91%]
+.......                                                                  [100%]
+=============================== warnings summary ===============================
+tests/radix_r6/test_checks.py::test_changes_card_displays_states_items_and_fixed_findings_without_new_labels
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+tests/radix_r6/test_checks.py::test_changes_card_displays_states_items_and_fixed_findings_without_new_labels
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+tests/radix_r6/test_checks.py::test_changes_card_displays_states_items_and_fixed_findings_without_new_labels
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+79 passed, 3 warnings in 5.78s
+
+
+FINAL BROWSER FIXTURE (exit 0, network none, 1g, .25cpu)
+{"axe_image_alt": true, "cookies_before_interaction": 25, "third_party_refused": 2, "loopback_used_proxy": true, "websocket_refused": true}
+
+
+INTEGRATED NATIVE PROOF (exit 0; earlier runtime checkpoint, TLS correctly partial)
+{"axe_image_alt": true, "cookies_before_interaction": 5, "third_party_refused": 1, "proxy_other_host_port_refused": true, "regulation_browser_cookie_check": true, "clamav_eicar": "found", "proxy_dials": 15, "full_run_checks": {"pages": {"status": "complete", "pages": 1, "discovery_truncated": false}, "notices": {"status": "complete", "pages": 1}, "certificate": {"status": "complete", "not_after": "Nov 13 21:25:56 2026 GMT", "protocol": "TLSv1.3"}, "tls": {"status": "partial", "reason": "tls_run_incomplete"}, "malware": {"status": "complete", "scanned": 1, "database_date": "Tue Nov  3 06:27:52 2026", "discovery_truncated": false}, "browser": {"status": "complete", "cookies": [{"name": "placeholder_http", "domain": "placeholder.example", "path": "/", "expiry": -1, "Secure": true, "HttpOnly": true, "SameSite": "Lax", "first_party": true}, {"name": "placeholder_http", "domain": "placeholder.example", "path": "/", "expiry": -1, "Secure": true, "HttpOnly": true, "SameSite": "Lax", "first_party": true}, {"name": "placeholder_js", "domain": "placeholder.example", "path": "/", "expiry": -1, "Secure": true, "HttpOnly": false, "SameSite": "Lax", "first_party": true}, {"name": "placeholder_http", "domain": "placeholder.example", "path": "/", "expiry": -1, "Secure": true, "HttpOnly": true, "SameSite": "Lax", "first_party": true}, {"name": "placeholder_js", "domain": "placeholder.example", "path": "/", "expiry": -1, "Secure": true, "HttpOnly": false, "SameSite": "Lax", "first_party": true}], "third_party_refused": 1, "client_refused": 0}}}
+
+
+DIRECT CLAM UNDER ROOM MEMORY LIMIT (EICAR found; scanner exit 1 denotes infection)
+{"returncode": 1, "found": true, "maximum_rss_kib": 987088}
+
+
+BAKED SIGNATURE DATABASE
+ClamAV 1.4.3/28173/Tue Nov  3 06:27:52 2026
+
+
+IMAGE WILDCARD CERTIFICATE ASSERTIONS
+Python image wildcard matching: passed
+
+
+FINAL IMAGE SOURCE HASHES (8 files match checkout; obsolete collector absent)
+{"browser/check.cjs": "732f32dc32826101a3b9a101c92e208e9dc76e7d6cf3b5f933f7edfded1a8d35", "live.py": "06082a1c351c6334e48175c2f7e3d08c4c7cac7992c38d5f6f7d4b2277f23f30", "passive_r6.py": "9494b5b52b4b99ea5eee062d8ae4b8cfc59fb7a886484d40374cad35149993ba", "passive_routes.py": "9bc10d41e626ab42f3c595bc6fae3636c9000470f27cbb6aa886174ed7e7f7cf", "passive_store.py": "4559dc78427548f6396acdc61d3ee09ec2899b465566a5640f6700e74ede65cd", "regulation_events.py": "1c91e5fa2685ef44bcf58f7fd044837c9fa80453e8d717a117630ae168ac0c0e", "scanlib/comply.py": "150676db2fb3368c165dad84d3fc872c3f740228562512d58b4abefeebf2a3d7", "schema.sql": "be8c2df86d3dd202f2ba59bacc98605614967d983a02dcb00dad1916b00d25b2"}
+
+
+REPOSITORY CI LINT RULES: ruff check changed Python files --select E9,F (exit 0)
+All checks passed!
+
+
+FINAL IMAGE BUILD (exit 0), last lines:
+
+#42 exporting to image
+#42 exporting layers
+#42 exporting layers 1.3s done
+#42 exporting manifest sha256:2d175a5a5c8bba881f6e95b5015111aadbd57d6439c6013b339ccb174ae15b30 done
+#42 exporting config sha256:e2c6487b46c9337fa4dbbce42846509b63a67eef9cef2e605e3ffbfb609f03a7 0.0s done
+#42 exporting attestation manifest sha256:852c6f2f3bcd8e2d1e543e9887e27bfa5daf1473ee47deecfbe65d2af98d2472 0.0s done
+#42 exporting manifest list sha256:524bcba33050d07199d7a6154e8a82216f2701a9ee4c3005c941c85c81291349 0.0s done
+#42 naming to docker.io/library/codex-radix-w3:final done
+#42 unpacking to docker.io/library/codex-radix-w3:final
+#42 unpacking to docker.io/library/codex-radix-w3:final 0.4s done
+#42 DONE 1.9s
+
+IMAGE SIZE AFTER UNPACK
+Command: docker --host=unix:///var/run/docker.sock image inspect codex-radix-w3:before codex-radix-w3:final --format <Id and Size>
+Before: sha256:cb97d295ad72e63ef328d6635ac85d7d23f85aeb9ed4cde44feac18b3130e2c0 2390444664 bytes
+After: sha256:524bcba33050d07199d7a6154e8a82216f2701a9ee4c3005c941c85c81291349 4750496720 bytes
+Delta: 2360052056 bytes = 2.198 GiB
+Before source: exact pre-R6 55337dfbe265430f3901927cddf3dc449c64ce7d archived locally and rebuilt with the same builder, not a production tag.
+
+OTHER FINAL CHECKS (exit 0)
+node --check agents/radix/browser/check.cjs
+sh -n agents/radix/install-watch-tools.sh
+git diff --check
+git diff 5359bf0a -- agents/radix/egress.py agents/radix/egress-policy.json docker-compose.yml
+Result: no differences to egress/proxy policy/compose.
+
+Expanded default Ruff style rules were also probed and reported 40 style/import/modernization diagnostics including pre-existing code; the repository CI E9,F selection above passes. No rule suppression was introduced.
+
+REVIEW FIXES
+CodeQL 175: removed unused passive_notices.py; tests now exercise the shared bounded collector and assert the same notice/cookie safety properties.
+CodeQL 176: synthetic TLS server explicitly restricts protocol range to TLS 1.2-1.3. Final browser/native fixture passed with that range.
+Earlier full native proof: pages, notices, negotiated TLS/certificate, EICAR, axe and cookies succeeded. Testssl partial remains visible and is never described as passed. Subsequent browser-only proof covers the final observer including Cookie Store, frames, transient deleted cookies, value whitelist, case-insensitive domain handling, loopback proxy use and WebSocket refusal. 25 refers to metadata observations, not distinct cookies.
+
+BUILD/PROOF CORRECTIONS
+Added Debian bsdextrautils for testssl hexdump. Replaced an over-restrictive virtual-memory guard with child OOM priority inside unchanged 1g cgroup. Clam gets up to90 seconds within existing budget because .25cpu loading needs longer. Fixed runtime-removed ssl.match_hostname using Python DNS-name matcher, verified in actual image. Corrected test-only setup/bind/path probes without removing assertions.
+
+No production deploy, SQL, scan, main merge or PR merge. Founder live acceptance and hosted final-head CI remain pending; PR.md lists exact acceptance actions.
+
+
+FINAL SECRET SCAN (exit 0)
+Command: TMPDIR=/workspace/codex-radix-w3/.test-data/tmp /workspace/codex-radix-r4-py312/bin/python -m pytest -q tests/test_secrets.py
+..                                                                       [100%]
+2 passed in 12.08s
+
+HOSTED SOURCE-CHECKPOINT REVIEW
+CodeQL actions, JavaScript/TypeScript, Python and aggregate CodeQL checks all SUCCESS at be777521. Final documentation-head CI not claimed.
+{"instance_state":"fixed","number":175,"ref":"refs/pull/634/head"}
+{"instance_state":"fixed","number":176,"ref":"refs/pull/634/head"}

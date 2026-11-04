@@ -48,8 +48,10 @@ def config(filename):
 def test_new_models_have_provider_ids_keys_prices_and_dated_sources(filename):
     raw = (ROOT / "litellm" / filename).read_text()
     data = config(filename)
-    models = {row["model_name"]: row for row in data["model_list"]}
-    assert len(models) == len(data["model_list"])
+    models = {row["model_name"]: row for row in reversed(data["model_list"])}
+    from collections import Counter
+    counts = Counter(row["model_name"] for row in data["model_list"])
+    assert {name: count for name, count in counts.items() if count > 1} == {"kimi": 2, "kimi-lite": 2}
     for name, (model, key, input_price, output_price) in NEW.items():
         row = models[name]
         assert row["litellm_params"]["model"] == model

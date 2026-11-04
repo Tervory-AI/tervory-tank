@@ -25,6 +25,8 @@ services:
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_TIGER:-}
       TIGER_URL: http://tiger-browser-gateway:3000
+      # Reserved for a future caller; current extraction stays code-only.
+      TIGER_BRAIN_ENABLED: ${TIGER_BRAIN_ENABLED:-false}
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
       DOMAIN_INTERVAL_S: "10"
@@ -45,6 +47,64 @@ services:
       retries: 10
     expose:
       - "8000"
+
+  tiger-brain:
+    profiles: [brain]
+    build:
+      context: ../..
+      dockerfile: agents/rig/Dockerfile.brain
+    # Reuse the pinned Hermes build and shared adapter, never Rig's task API.
+    command: [uvicorn, "brain.standby:app", --host, "0.0.0.0", --port, "8001", --no-access-log]
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1
+    environment:
+      BRAIN_ROOM: tiger
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_TIGER:-}
+      TANK_REGION: ${TANK_REGION:-us-east}
+      HERMES_URL: http://hermes:8000
+      TIGER_BROWSER_URL: http://tiger-browser-gateway:3000
+      TIGER_SANDBOX_URL: http://tiger-sandbox:8002
+      SANDBOX_KEY: ${SANDBOX_KEY_TIGER:-}
+      DATA_DIR: /data
+    volumes: [tiger_brain_data:/data]
+    networks: [gw, sandbox]
+    depends_on:
+      tiger-sandbox:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  tiger-sandbox:
+    profiles: [brain]
+    build:
+      context: ../..
+      dockerfile: agents/base/Dockerfile.sandbox
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 64
+    environment:
+      BRAIN_ROOM: tiger
+      SANDBOX_KEY: ${SANDBOX_KEY_TIGER:-}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+      - /work:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700
+    networks: [sandbox]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
 
   tiger-browser:
     build:
@@ -96,8 +156,12 @@ volumes:
     name: fro6z8xlh579owlp1wwrjr8n_agent-tiger-data
   tiger_browser_data:
     name: tervory-tiger-browser-data
+  tiger_brain_data:
+    name: tervory-tiger-brain-data
 
 networks:
+  sandbox:
+    internal: true
   browser:
     internal: true
   gw:
