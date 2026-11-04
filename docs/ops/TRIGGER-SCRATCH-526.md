@@ -26,6 +26,9 @@ The test text and spawn error are explicit placeholders.
 
 - Scratch regression and patch-version guard: 97 passed (socket access disabled;
   local Unix event-loop sockets allowed).
+- Real-engine offline evals: **218/218 passed** across both versions of all five
+  skills (109/109 candidate cases and 109/109 baseline cases); zero model calls
+  and zero cost.
 - CI Ruff E9/F command with the existing base.socials F401 exception: passed.
 - Offline evals use the real versioned engines and Skala scorer, empty environment,
   no database, no HTTP client and a model method that raises. Complete results
