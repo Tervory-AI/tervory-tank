@@ -86,7 +86,8 @@ async def test_admin_exact_confirm_and_zero_receipt(api,runtime,monkeypatch):
         runtime._http=http
         thread=(await client.post('/v1/command/threads',json={},headers=headers)).json()['thread_id']
         for tool,args in [('radix.active.consent',{'domain':DOMAIN,'consent_text':'placeholder written consent'}),
-                          ('radix.active.consent.withdraw',{'domain':DOMAIN})]:
+                          ('radix.active.consent.withdraw',{'domain':DOMAIN}),
+                          ('radix.infra.scan',{'url':URL})]:
             response=await client.post(f'/v1/command/threads/{thread}/actions',json={'tool':tool,'arguments':args},headers=headers)
             assert response.status_code==200,response.text
             card=response.json();before=len(calls)

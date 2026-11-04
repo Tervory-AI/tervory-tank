@@ -172,6 +172,7 @@ def attach(app):
             response.raise_for_status()
         return result
 
+    @router.post('/infra')
     @router.post('/active')
     async def active_scan(body: Active, request: Request):
         identity(request, body.tenant_id)
@@ -179,7 +180,12 @@ def attach(app):
             raise HTTPException(403, 'scan not authorized')
         from active_routes import execute as execute_active
         try:
-            return await execute_active(Store(app.state.pool), body.tenant_id, body.url, client=request.headers.get('x-tervory-active-client') == 'true')
+            kwargs={}
+            if request.url.path.endswith('/infra'):
+                from passive_infra_tools import collect as collect_infra
+                kwargs={'scanner':collect_infra,'infra':True}
+            return await execute_active(Store(app.state.pool), body.tenant_id, body.url,
+                client=request.headers.get('x-tervory-active-client') == 'true',**kwargs)
         except (PermissionError, ValueError):
             raise HTTPException(403, 'scan not authorized') from None
         except HTTPException:

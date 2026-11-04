@@ -64,6 +64,8 @@ RUN sh /tmp/install-passive-tools.sh \
     && ln -s /opt/bin/nuclei /usr/local/bin/nuclei \
     && pip install --no-cache-dir dnspython==2.9.0 PyYAML==6.0.3 \
     && rm /tmp/install-passive-tools.sh
+COPY radix/install-infra-tools.sh /tmp/install-infra-tools.sh
+RUN sh /tmp/install-infra-tools.sh && rm /tmp/install-infra-tools.sh
 COPY radix/install-watch-tools.sh /tmp/install-watch-tools.sh
 RUN sh /tmp/install-watch-tools.sh && rm /tmp/install-watch-tools.sh
 COPY radix/browser/package*.json /app/browser/
@@ -88,7 +90,7 @@ RUN chown -R agent:agent /app /opt/osv
 # Root-owned and read-only for the agent; copied after the chown so it is one layer.
 COPY --from=osv /out/osv.sqlite /opt/osv/osv.sqlite
 # Policy is a merged source file, not a writable runtime setting.
-COPY --chmod=0444 radix/active-domains.json radix/active_guard.js /app/
+COPY --chmod=0444 radix/infra-ports.json radix/active-domains.json radix/active_guard.js /app/
 # testssl requires hexdump even with DNS disabled. No runtime package install.
 RUN apt-get update && apt-get install -y --no-install-recommends bsdextrautils \
     && rm -rf /var/lib/apt/lists/*

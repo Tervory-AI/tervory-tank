@@ -63,7 +63,7 @@ class Lease:
             self.proxy_server = None
 
     @tenant_path("tenant")
-    async def start(self, tenant: UUID, ident: UUID, *, active=False):
+    async def start(self, tenant: UUID, ident: UUID, *, active=False, infra=False):
         async with self.lock:
             if self.run is not None and self.now() < self.until:
                 raise HTTPException(409, 'scan busy')
@@ -71,7 +71,7 @@ class Lease:
             row = await self.store.pending(tenant, ident)
             if row is None:
                 raise HTTPException(403, 'domain proof required')
-            if bool(row.get('active', False)) != active:
+            if bool(row.get('infra',False)) != infra or bool(row.get('active', False)) != active:
                 raise HTTPException(403, 'scan not authorized')
             if active and row.get('active_consent_id') is not None:
                 if not await self.store.consent_valid(tenant,row['domain'],row['active_consent_id']):
@@ -103,9 +103,13 @@ class Lease:
             # Capture this lease's deadline, so a later tenant cannot revive an old tunnel.
             until = self.until
             from active_policy import BOUNDS as ACTIVE_BOUNDS
-            proxy = Proxy(**(ACTIVE_BOUNDS if active else {}), verified_host=domain, allow_storage=False,
-                require_sni=active,
-                resolve=lambda host: system_resolve(host, verified_host=domain),
+            proxy_class=Proxy
+            if infra:
+                from passive_infra_proxy import InfraProxy
+                proxy_class=InfraProxy
+            proxy = proxy_class(**(ACTIVE_BOUNDS if active else {}), verified_host=domain, allow_storage=False,
+                require_sni=active and not infra,
+                **({} if infra else {'resolve':lambda host: system_resolve(host, verified_host=domain)}),
                 active=lambda: self.run == (tenant, ident) and self.now() < until and not env_revoked())
             try:
                 self.proxy_server = self.server(proxy, host=private_bind_address(), port=8082).start()
@@ -199,6 +203,11 @@ async def lease(body: Run):
 @app.post('/active/lease')
 async def active_lease(body: Run):
     return await app.state.lease.start(body.tenant_id, body.scan_id, active=True)
+
+
+@app.post('/infra/lease')
+async def infra_lease(body: Run):
+    return await app.state.lease.start(body.tenant_id,body.scan_id,active=True,infra=True)
 
 
 @app.post('/active/revoke')

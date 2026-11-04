@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS agent_radix.passive_scans (
  PRIMARY KEY (tenant_id,id),
  FOREIGN KEY (tenant_id,domain) REFERENCES agent_radix.passive_domains(tenant_id,domain)
 );
+ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS infra boolean NOT NULL DEFAULT false;
 ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT false;
 ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS checks jsonb;
 ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS watched boolean NOT NULL DEFAULT false;
@@ -226,7 +227,7 @@ class Store:
             return bool(await conn.fetchval("""SELECT 1 FROM agent_radix.active_consents
               WHERE tenant_id=$1 AND domain=$2 AND id=$3 AND withdrawn_at IS NULL""",tenant,domain,ident))
 
-    async def create(self, tenant: UUID, target: str, artifact: str, *, watched: bool = False, active: bool = False, consent_id: UUID | None = None) -> UUID:
+    async def create(self, tenant: UUID, target: str, artifact: str, *, watched: bool = False, active: bool = False, consent_id: UUID | None = None, infra: bool = False) -> UUID:
         target, domain = target_url(target)
         artifact = artifact_id(artifact)
         if active and consent_id is None:
@@ -237,20 +238,20 @@ class Store:
             if consent_id is not None and not await conn.fetchval("""SELECT 1 FROM agent_radix.active_consents
               WHERE tenant_id=$1 AND domain=$2 AND id=$3 AND withdrawn_at IS NULL""",tenant,domain,consent_id):
                 raise PermissionError('scan not authorized')
-            row = await conn.fetchrow("""INSERT INTO agent_radix.passive_scans(tenant_id,id,domain,target,artifact,watched,active,active_consent_id)
-              SELECT d.tenant_id,$2,d.domain,$3,$4,$6,$7,$8 FROM agent_radix.passive_domains d
+            row = await conn.fetchrow("""INSERT INTO agent_radix.passive_scans(tenant_id,id,domain,target,artifact,watched,active,active_consent_id,infra)
+              SELECT d.tenant_id,$2,d.domain,$3,$4,$6,$7,$8,$9 FROM agent_radix.passive_domains d
               WHERE d.tenant_id=$1 AND d.domain=$5 AND
               (($6=false AND d.expires_at>now()) OR (($6=true OR $7=true) AND EXISTS (
                 SELECT 1 FROM agent_radix.passive_watches w WHERE w.tenant_id=d.tenant_id
                 AND w.domain=d.domain AND w.status='active' AND w.challenge=d.challenge))) RETURNING id""",
-              tenant, ident, target, artifact, domain, watched, active, consent_id)
+              tenant, ident, target, artifact, domain, watched, active, consent_id, infra)
         if row is None:
             raise PermissionError('domain proof required')
         return ident
 
     async def pending(self, tenant: UUID, ident: UUID):
         async with self.pool.acquire() as conn:
-            return await conn.fetchrow("""SELECT s.domain,d.challenge,s.active,s.active_consent_id FROM agent_radix.passive_scans s
+            return await conn.fetchrow("""SELECT s.domain,d.challenge,s.active,s.active_consent_id,s.infra FROM agent_radix.passive_scans s
               JOIN agent_radix.passive_domains d ON d.tenant_id=s.tenant_id AND d.domain=s.domain
               WHERE s.tenant_id=$1 AND s.id=$2 AND s.status='pending' AND
               ((s.watched=false AND d.expires_at>now()) OR ((s.watched=true OR s.active=true) AND EXISTS (
@@ -299,6 +300,7 @@ class Store:
                 await ensure_findings(conn, 'agent_radix')
                 prior = await conn.fetchval('''SELECT id FROM agent_radix.passive_scans
                   WHERE tenant_id=$1 AND domain=$2 AND status='complete' AND id<>$3
+                  AND infra=(SELECT infra FROM agent_radix.passive_scans WHERE tenant_id=$1 AND id=$3)
                   AND active=(SELECT active FROM agent_radix.passive_scans WHERE tenant_id=$1 AND id=$3)
                   AND NOT EXISTS(SELECT 1 FROM jsonb_each(coalesce(checks,'{}'::jsonb)) AS check_row
                     WHERE check_row.value->>'status' IN ('partial','skipped'))

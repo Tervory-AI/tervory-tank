@@ -45,7 +45,7 @@ def build_router(tank):
         if request.headers.get('x-tervory-squad') != 'radix' or not request.headers.get('x-tervory-user'):
             raise HTTPException(403, 'Radix access required')
         founders = {value.strip() for value in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if value.strip()}
-        if operation in {'active','consent','consent-withdraw'}:
+        if operation in {'active','infra','consent','consent-withdraw'}:
             user=request.headers['x-tervory-user']
             if user not in founders:
                 if request.headers.get('x-tervory-role')!='org:admin':
@@ -55,7 +55,7 @@ def build_router(tank):
                         raise HTTPException(403,'Radix access required')
             from trigger_commands import CONFIRMED
             bound=CONFIRMED.get()
-            tool={'active':'radix.active.scan','consent':'radix.active.consent','consent-withdraw':'radix.active.consent.withdraw'}[operation]
+            tool={'infra':'radix.infra.scan','active':'radix.active.scan','consent':'radix.active.consent','consent-withdraw':'radix.active.consent.withdraw'}[operation]
             if not bound or bound[:2]!=(tenant,user) or bound[3]!=tool:
                 raise HTTPException(409,'Confirmed action required')
             return
@@ -67,7 +67,7 @@ def build_router(tank):
 
     async def forward(request, tenant, operation, *, body=None, params=None, method='POST'):
         await authorize(request, tenant, operation.split('/')[0])
-        if operation in {'active','consent','consent-withdraw'}:
+        if operation in {'active','infra','consent','consent-withdraw'}:
             from trigger_commands import CONFIRMED
             if CONFIRMED.get()[4] != {key:value for key,value in body.items() if key!='tenant_id'}:
                 raise HTTPException(409, 'Confirmed action required')
@@ -76,11 +76,11 @@ def build_router(tank):
             raise HTTPException(503, 'Radix unavailable')
         try:
             response = await tank._http.request(method, 'http://agent-radix:8000/passive/' + operation,
-                json=body, params=params, timeout=1230 if operation == 'active' else 390 if operation == 'scans' else 15,
+                json=body, params=params, timeout=1230 if operation in {'active','infra'} else 390 if operation == 'scans' else 15,
                 headers={'X-Tank-Key': key, 'X-Tervory-Tenant': str(tenant),
                     **({'X-Tervory-Active-Authorized':'true','X-Tervory-User':request.headers['x-tervory-user'],
                         'X-Tervory-Active-Client':str(request.headers['x-tervory-user'] not in {v.strip() for v in os.environ.get('TERVORY_ADMIN_USER_IDS','').split(',')}).lower()}
-                        if operation in {'active','consent','consent-withdraw'} else {})}, follow_redirects=False)
+                        if operation in {'active','infra','consent','consent-withdraw'} else {})}, follow_redirects=False)
             if response.status_code not in {200,201}:
                 detail = response.json().get('detail')
                 if response.status_code == 403 and isinstance(detail, str) and detail in {
@@ -103,10 +103,10 @@ def build_router(tank):
 
     @router.post('/{operation}')
     async def call(operation: str, body: Body, request: Request):
-        if operation not in {'domains','scans','gate','watch','unwatch','active','consent','consent-withdraw'}:
+        if operation not in {'domains','scans','gate','watch','unwatch','active','infra','consent','consent-withdraw'}:
             raise HTTPException(404)
         payload = body.model_dump(mode='json', exclude_none=True)
-        required = ({'tenant_id','domain','consent_text'} if operation=='consent' else {'tenant_id','domain'} if operation=='consent-withdraw' else {'tenant_id','url'} if operation == 'active' else {'tenant_id','domain','interval'} if operation == 'watch' else
+        required = ({'tenant_id','domain','consent_text'} if operation=='consent' else {'tenant_id','domain'} if operation=='consent-withdraw' else {'tenant_id','url'} if operation in {'active','infra'} else {'tenant_id','domain','interval'} if operation == 'watch' else
                     {'tenant_id','domain'} if operation in {'domains','unwatch'} else
                     {'tenant_id','target','artifact'})
         if not required <= set(payload) or set(payload) - required - ({'run_now'} if operation == 'watch' else set()):

@@ -106,6 +106,8 @@ DO $$ BEGIN
  END IF;
 END $$;
 
+ALTER TABLE IF EXISTS agent_radix.passive_scans ADD COLUMN IF NOT EXISTS infra boolean NOT NULL DEFAULT false;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_radix.memory_records (
     id uuid PRIMARY KEY,
