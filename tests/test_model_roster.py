@@ -25,6 +25,10 @@ def test_every_model_has_a_price_and_a_key_from_the_environment() -> None:
         assert str(m["litellm_params"]["api_key"]).startswith("os.environ/"), m["model_name"]
 
 
+def test_boston_roster_does_not_include_the_za_owned_model() -> None:
+    assert "tervory-own-zenas-za" not in NAMES
+
+
 def test_deepseek_and_kimi_are_in_the_roster_with_their_keys() -> None:
     """MODELS-1 (18 Oct 2026): the China-provider ban is removed."""
     by_name = {m["model_name"]: m for m in reversed(CONFIG["model_list"])}

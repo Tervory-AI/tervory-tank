@@ -735,6 +735,18 @@ CREATE TABLE IF NOT EXISTS tank.training_pairs (
     UNIQUE (tenant_id, region, source, source_ref)
 );
 CREATE INDEX IF NOT EXISTS training_pairs_scope ON tank.training_pairs (tenant_id, region, agent);
+CREATE TABLE IF NOT EXISTS tank.judgment_splits (
+    region text NOT NULL CHECK (region IN ('us-east','za')),
+    source_id text NOT NULL,
+    document_id text NOT NULL,
+    version_id text NOT NULL,
+    status text NOT NULL CHECK (status IN ('split','excluded')),
+    reason text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (region, version_id)
+);
+CREATE INDEX IF NOT EXISTS judgment_splits_source
+    ON tank.judgment_splits (region, source_id, status);
 CREATE TABLE IF NOT EXISTS tank.training_exports (
     region text NOT NULL,
     day date NOT NULL,
