@@ -1,0 +1,330 @@
+{
+  "settingAvailable": false,
+  "requiredFrameId": "231:11986",
+  "mismatches": [
+    {
+      "frameId": "468:27698",
+      "instanceId": "468:27702",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I468:27702;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12042",
+      "instanceId": "465:46359",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:46359;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12224",
+      "instanceId": "465:47581",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:47581;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12340",
+      "instanceId": "465:47931",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:47931;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12284",
+      "instanceId": "465:47756",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:47756;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:26491",
+      "instanceId": "468:26495",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I468:26495;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12098",
+      "instanceId": "465:47228",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:47228;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12452",
+      "instanceId": "465:48286",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:48286;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:26347",
+      "instanceId": "468:26351",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I468:26351;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12396",
+      "instanceId": "465:48107",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:48107;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12150",
+      "instanceId": "465:47406",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:47406;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12504",
+      "instanceId": "465:48464",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:48464;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:11870",
+      "instanceId": "465:45832",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:45832;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:27804",
+      "instanceId": "468:27808",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I468:27808;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:28102",
+      "instanceId": "468:28106",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I468:28106;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:27996",
+      "instanceId": "468:28000",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I468:28000;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:11930",
+      "instanceId": "465:46007",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:46007;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:11986",
+      "instanceId": "465:46183",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:46183;180:8394",
+      "visible": true,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12478",
+      "instanceId": "465:48376",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:48376;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:27919",
+      "instanceId": "468:27923",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I468:27923;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12014",
+      "instanceId": "465:46270",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:46270;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:26455",
+      "instanceId": "468:26459",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I468:26459;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:28217",
+      "instanceId": "468:28221",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I468:28221;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12124",
+      "instanceId": "465:47318",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:47318;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:26599",
+      "instanceId": "468:26603",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I468:26603;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:28251",
+      "instanceId": "468:28255",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I468:28255;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12424",
+      "instanceId": "465:48195",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:48195;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "468:27953",
+      "instanceId": "468:27957",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I468:27957;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12187",
+      "instanceId": "465:47493",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:47493;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12368",
+      "instanceId": "465:48018",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:48018;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12541",
+      "instanceId": "465:48551",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:48551;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:11900",
+      "instanceId": "465:45919",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:45919;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12070",
+      "instanceId": "465:46447",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:46447;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12312",
+      "instanceId": "465:47843",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:47843;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:12254",
+      "instanceId": "465:47668",
+      "expected": "Tisan",
+      "current": "Trigger",
+      "headingNodeId": "I465:47668;180:8476",
+      "visible": false,
+      "missingSetting": true
+    },
+    {
+      "frameId": "231:11958",
+      "instanceId": "465:46094",
+      "expected": "Rig",
+      "current": "Trigger",
+      "headingNodeId": "I465:46094;180:8476",
+      "visible": false,
+      "missingSetting": true
+    }
+  ]
+}

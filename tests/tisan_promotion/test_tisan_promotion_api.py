@@ -48,6 +48,11 @@ async def test_room_identity_gate_binding_and_status(tmp_path, monkeypatch):
         assert url == TARGET
         return {'passed': True, 'artifact': 'local-proof'}
     monkeypatch.setattr(promotion_api, 'live_check', checked)
+    from agents.tisan import repo_scan
+    async def repo_gate(*args):
+        return {'ok': True, 'scan_id': '33333333-3333-4333-8333-333333333333', 'critical': 0,
+                'scan_complete': True, 'tenant_id': TENANT, 'archive_sha256': 'c' * 64}
+    monkeypatch.setattr(repo_scan, 'promotion_gate', repo_gate)
     app = FastAPI()
     promotion_api.mount(app, promotion)
     headers = {'x-tank-key': 'room-test-only', 'x-tervory-admin': 'founder'}

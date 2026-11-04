@@ -1,20 +1,25 @@
 """Tenant-bound quote requests. Submission itself records tacit approval.
 
-Only structured contact/item identifiers are accepted; there is no arbitrary
-payload, payment data, customer notes, or email copy supplied by callers.
+Designed request fields and a single immutable quote snapshot are accepted.
+No payment data or email copy is accepted from callers.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 import smtplib
 import socket
+from datetime import datetime, timezone
+from decimal import Decimal
 from email.headerregistry import Address
 from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+import asyncpg
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 State = Literal['draft', 'submitted', 'acknowledged', 'quoted', 'accepted', 'declined']
 MOVES = {
@@ -35,9 +40,44 @@ class Missing(LookupError):
     """No request in the supplied tenant."""
 
 
+def _text_without_controls(value: Any) -> Any:
+    if isinstance(value, str) and any(
+        (ord(char) < 32 and char not in '\n\t') or 127 <= ord(char) <= 159 for char in value
+    ):
+        raise ValueError('invalid_transition')
+    return value
+
+
 class Contact(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
+    name: str = Field(min_length=1, max_length=120)
     email: str = Field(min_length=3, max_length=254)
+    phone: str | None = Field(default=None, max_length=40)
+    company: str | None = Field(default=None, max_length=120)
+    reply_method: Literal['email', 'phone']
+
+    _text_fields = field_validator('name', 'company', mode='before')(_text_without_controls)
+
+    @field_validator('name')
+    @classmethod
+    def nonblank_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('invalid_contact')
+        return value
+
+    @field_validator('phone')
+    @classmethod
+    def phone_number(cls, value: str | None) -> str | None:
+        if value is not None and (re.fullmatch(r'[0-9 +()\-]*', value) is None
+                or (value and not any(c in '0123456789' for c in value))):
+            raise ValueError('invalid_contact')
+        return value
+
+    @model_validator(mode='after')
+    def reply_phone(self):
+        if self.reply_method == 'phone' and not self.phone:
+            raise ValueError('invalid_contact')
+        return self
 
     @field_validator('email')
     @classmethod
@@ -52,8 +92,20 @@ class Contact(BaseModel):
 
 class Item(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    item_id: UUID = Field(strict=False)
+    item_id: UUID | None = Field(default=None, strict=False)
+    type: Literal['product', 'service']
+    description: str = Field(min_length=1, max_length=240)
     quantity: int = Field(ge=1, le=10000)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    _text_fields = field_validator('description', 'notes', mode='before')(_text_without_controls)
+
+    @field_validator('description')
+    @classmethod
+    def nonblank_description(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('invalid_item')
+        return value
 
 
 class RequestData(BaseModel):
@@ -72,6 +124,66 @@ class Move(BaseModel):
     model_config = ConfigDict(extra='forbid')
     tenant_id: UUID
     state: State
+    # Validate quote fields only at the transition boundary. Supplying any of
+    # them on another move must produce the existing 409, including nulls.
+    quote_amount: Any = None
+    quote_currency: Any = None
+    valid_until: Any = None
+    quote_message: Any = None
+
+    _message_controls = field_validator('quote_message', mode='before')(_text_without_controls)
+
+
+_QUOTE_FIELDS = ('quote_amount', 'quote_currency', 'valid_until', 'quote_message')
+
+
+class QuoteData(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    quote_amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2, allow_inf_nan=False)
+    quote_currency: str = Field(strict=True)
+    valid_until: AwareDatetime
+    quote_message: str = Field(strict=True, min_length=1, max_length=2000)
+
+    _message_controls = field_validator('quote_message', mode='before')(_text_without_controls)
+
+    @field_validator('quote_amount')
+    @classmethod
+    def decimal_places(cls, value: Decimal) -> Decimal:
+        if value.as_tuple().exponent < -2:
+            raise ValueError('invalid_transition')
+        return value
+
+    @field_validator('quote_currency')
+    @classmethod
+    def currency(cls, value: str) -> str:
+        # Same uppercase/fullmatch rule as rigbox.fulfilment._currency.
+        if re.fullmatch(r'[A-Za-z]{3}', value) is None:
+            raise ValueError('invalid_transition')
+        return value.upper()
+
+    @field_validator('valid_until', mode='before')
+    @classmethod
+    def explicit_time(cls, value):
+        if not isinstance(value, (str, datetime)):
+            raise ValueError('invalid_transition')
+        return value
+
+    @field_validator('quote_message')
+    @classmethod
+    def nonblank_message(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('invalid_transition')
+        return value
+
+
+def _public(row) -> dict:
+    # Additive nullable columns must not fabricate fields on legacy requests.
+    result = {key: value for key, value in dict(row).items()
+              if key not in _QUOTE_FIELDS or value is not None}
+    if isinstance(result.get('quote_amount'), Decimal):
+        # Preserve the exact stored decimal through FastAPI's JSON boundary.
+        result['quote_amount'] = str(result['quote_amount'])
+    return result
 
 
 def transition(before: str, after: str) -> None:
@@ -94,7 +206,7 @@ class Quotes:
                      *, submitted: bool = False) -> dict:
         tenant = identity(tenant_id, actor)
         # Revalidate even when called without the HTTP models.
-        payload = RequestData.model_validate(data).model_dump(mode='json')
+        payload = RequestData.model_validate(data).model_dump(mode='json', exclude_unset=True)
         request_id = uuid4()
         async with self.pool.acquire() as conn, conn.transaction():
             row = await conn.fetchrow('''INSERT INTO agent_tisan.quote_requests
@@ -103,7 +215,7 @@ class Quotes:
             await self._event(conn, tenant, request_id, None, 'draft', actor)
             if submitted:
                 row = await self._move(conn, tenant, request_id, actor, 'submitted')
-        return dict(row)
+        return _public(row)
 
     async def read(self, tenant_id: UUID | str, request_id: UUID) -> dict:
         tenant = UUID(str(tenant_id))
@@ -115,7 +227,7 @@ class Quotes:
             events = await conn.fetch('''SELECT from_state,to_state,actor,happened_at
                 FROM agent_tisan.quote_events WHERE tenant_id=$1 AND request_id=$2 ORDER BY id''',
                 tenant, request_id)
-        return {**dict(row), 'events': [dict(event) for event in events]}
+        return {**_public(row), 'events': [dict(event) for event in events]}
 
     async def list(self, tenant_id: UUID | str, limit: int = 100) -> list[dict]:
         tenant = UUID(str(tenant_id))
@@ -124,22 +236,41 @@ class Quotes:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch('''SELECT * FROM agent_tisan.quote_requests
                 WHERE tenant_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2''', tenant, limit)
-        return [dict(row) for row in rows]
+        return [_public(row) for row in rows]
 
-    async def move(self, tenant_id: UUID | str, request_id: UUID, actor: str, state: str) -> dict:
+    async def move(self, tenant_id: UUID | str, request_id: UUID, actor: str, state: str,
+                   **quote_fields: Any) -> dict:
         tenant = identity(tenant_id, actor)
         async with self.pool.acquire() as conn, conn.transaction():
-            return dict(await self._move(conn, tenant, request_id, actor, state))
+            return _public(await self._move(conn, tenant, request_id, actor, state, quote_fields))
 
-    async def _move(self, conn, tenant, request_id, actor, state):
+    async def _move(self, conn, tenant, request_id, actor, state, quote_fields=None):
+        if state != 'quoted' and quote_fields:
+            raise Refused('invalid_transition')
         row = await conn.fetchrow('''SELECT * FROM agent_tisan.quote_requests
             WHERE tenant_id=$1 AND id=$2 FOR UPDATE''', tenant, request_id)
         if row is None:
             raise Missing
         transition(row['state'], state)
-        updated = await conn.fetchrow('''UPDATE agent_tisan.quote_requests
-            SET state=$3,updated_at=clock_timestamp() WHERE tenant_id=$1 AND id=$2 RETURNING *''',
-            tenant, request_id, state)
+        if state == 'quoted':
+            try:
+                quote = QuoteData.model_validate(quote_fields or {})
+            except ValidationError:
+                raise Refused('invalid_transition') from None
+            if quote.valid_until <= datetime.now(timezone.utc) or any(row.get(key) is not None for key in _QUOTE_FIELDS):
+                raise Refused('invalid_transition')
+            try:
+                updated = await conn.fetchrow('''UPDATE agent_tisan.quote_requests
+                    SET state=$3,quote_amount=$4,quote_currency=$5,valid_until=$6,quote_message=$7,
+                        updated_at=clock_timestamp() WHERE tenant_id=$1 AND id=$2 RETURNING *''',
+                    tenant, request_id, state, quote.quote_amount, quote.quote_currency,
+                    quote.valid_until, quote.quote_message)
+            except asyncpg.CheckViolationError:
+                raise Refused('invalid_transition') from None
+        else:
+            updated = await conn.fetchrow('''UPDATE agent_tisan.quote_requests
+                SET state=$3,updated_at=clock_timestamp() WHERE tenant_id=$1 AND id=$2 RETURNING *''',
+                tenant, request_id, state)
         await self._event(conn, tenant, request_id, row['state'], state, actor)
         return updated
 
@@ -254,7 +385,7 @@ def mount(app: Any, guard) -> None:
                            x_tervory_admin: str = Header(default='')):
         guard(x_tank_key, x_tervory_admin)
         return await result(store().create(body.tenant_id, x_tervory_admin,
-                            body.data.model_dump(mode='json'), submitted=True))
+                            body.data.model_dump(mode='json', exclude_unset=True), submitted=True))
 
     @app.get('/quotes')
     async def list_quotes(tenant_id: UUID, limit: int = Query(default=100, ge=1, le=200),
@@ -275,7 +406,8 @@ def mount(app: Any, guard) -> None:
                          x_tank_key: str = Header(default=''),
                          x_tervory_admin: str = Header(default='')):
         guard(x_tank_key, x_tervory_admin)
-        return await result(store().move(body.tenant_id, request_id, x_tervory_admin, body.state))
+        return await result(store().move(body.tenant_id, request_id, x_tervory_admin, body.state,
+            **body.model_dump(exclude={'tenant_id', 'state'}, exclude_unset=True)))
 
     @app.post('/quotes/{request_id}/email')
     async def email_quote(request_id: UUID, tenant_id: UUID,

@@ -1,0 +1,4671 @@
+[
+  {
+    "pageId": "10:114",
+    "pageName": "0 · Dashboards (approve first)",
+    "rows": []
+  },
+  {
+    "pageId": "0:1",
+    "pageName": "1 · The window",
+    "rows": []
+  },
+  {
+    "pageId": "5:114",
+    "pageName": "2 · Client screens",
+    "rows": []
+  },
+  {
+    "pageId": "5:115",
+    "pageName": "3 · Founder screens",
+    "rows": []
+  },
+  {
+    "pageId": "42:2",
+    "pageName": "1 · Case studies",
+    "rows": []
+  },
+  {
+    "pageId": "93:2",
+    "pageName": "2 · CRM",
+    "rows": [
+      {
+        "id": "182:8871",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "94:172",
+            "name": "Leads / List / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I182:8871;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 1515,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "182:8951",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "94:417",
+            "name": "Leads / List / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I182:8951;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 1515,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "182:9039",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "94:741",
+            "name": "Leads / Detail / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I182:9039;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 2615,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "182:9119",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "94:1061",
+            "name": "Leads / Detail / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I182:9119;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 2615,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:8287",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "94:1811",
+            "name": "Clients / List / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:8287;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 3815,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:8367",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "94:1978",
+            "name": "Clients / List / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:8367;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 3815,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:8455",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "94:2263",
+            "name": "Clients / Detail / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:8455;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 4915,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:8535",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "94:2510",
+            "name": "Clients / Detail / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:8535;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 4915,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:8623",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:2074",
+            "name": "Contacts / List / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:8623;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 6115,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:8703",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:2245",
+            "name": "Contacts / List / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:8703;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 6115,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:8791",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:2543",
+            "name": "Contacts / Detail / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:8791;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 7215,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:8871",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:2800",
+            "name": "Contacts / Detail / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:8871;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 7215,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:8959",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:3343",
+            "name": "Opportunities / List / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:8959;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 8415,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9039",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:3522",
+            "name": "Opportunities / List / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9039;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 8415,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9127",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:3846",
+            "name": "Opportunities / Detail / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9127;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 9515,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9207",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:4107",
+            "name": "Opportunities / Detail / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9207;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 9515,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9295",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:4662",
+            "name": "Cases / List / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9295;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 10715,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9375",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:4837",
+            "name": "Cases / List / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9375;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 10715,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9463",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:5148",
+            "name": "Cases / Detail / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9463;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 11815,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9543",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:5416",
+            "name": "Cases / Detail / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9543;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 11815,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9631",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:5994",
+            "name": "Tasks / List / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9631;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 13015,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9711",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:6165",
+            "name": "Tasks / List / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9711;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 13015,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9799",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:6463",
+            "name": "Tasks / Detail / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9799;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 14115,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "183:9879",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:6671",
+            "name": "Tasks / Detail / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I183:9879;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 14115,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "184:7387",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:7053",
+            "name": "Invoices / List / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I184:7387;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 15315,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "184:7467",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:7276",
+            "name": "Invoices / List / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I184:7467;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 15315,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "184:7555",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:7743",
+            "name": "Invoices / Detail / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I184:7555;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 16415,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "184:7635",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:8098",
+            "name": "Invoices / Detail / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I184:7635;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 16415,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "184:7723",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:8979",
+            "name": "Quotes / List / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I184:7723;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 17615,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "184:7803",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:9218",
+            "name": "Quotes / List / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I184:7803;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 17615,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "184:7891",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:9737",
+            "name": "Quotes / Detail / Desktop / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I184:7891;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 18715,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "184:7971",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "97:10064",
+            "name": "Quotes / Detail / Desktop / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I184:7971;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1777,
+              "y": 18715,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:21343",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8589",
+            "name": "Leads / Confirm Delete / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:21343;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 1515,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:21444",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8621",
+            "name": "Clients / Confirm Delete / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:21444;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 2475,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:21545",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8653",
+            "name": "Contacts / Confirm Delete / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:21545;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 3435,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:21646",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8685",
+            "name": "Opportunities / Confirm Delete / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:21646;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 4395,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:21747",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8717",
+            "name": "Cases / Confirm Delete / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:21747;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 5355,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:21848",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8749",
+            "name": "Tasks / Confirm Delete / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:21848;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 6315,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:21949",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8781",
+            "name": "Invoices / Confirm Send / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:21949;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 7275,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:22050",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8819",
+            "name": "Invoices / Confirm Mark paid / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:22050;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 8235,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:22151",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8893",
+            "name": "Quotes / Confirm Delete / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:22151;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 9195,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:22252",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8925",
+            "name": "Quotes / Confirm Send / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:22252;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 10155,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:22353",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:8963",
+            "name": "Quotes / Confirm Convert / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:22353;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 11115,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:22454",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:9013",
+            "name": "Invoices / Confirm Record payment / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:22454;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 12075,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:22555",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:9087",
+            "name": "Invoices / Confirm Delete payment / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:22555;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 13035,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "192:22656",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "98:9131",
+            "name": "Invoices / Confirm Delete line item / Desktop · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I192:22656;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 13995,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "187:12961",
+        "name": "Trigger / Navigation",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "98:9181",
+            "name": "Trigger / Mobile drawer / Zero · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I187:12961;180:8476",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 1737,
+              "y": 321,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "187:13042",
+        "name": "Trigger / Navigation",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "98:9227",
+            "name": "Trigger / Mobile drawer / Filled · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I187:13042;180:8476",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 2217,
+              "y": 321,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:15308",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:15307",
+            "name": "Leads / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:15308;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 13217,
+              "y": 147,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:15590",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:15589",
+            "name": "Leads / Detail / Desktop / Zero / Scrolled fields 2 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:15590;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9521,
+              "y": 147,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:15872",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:15871",
+            "name": "Leads / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:15872;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8017,
+              "y": 1147,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:16157",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:16156",
+            "name": "Leads / Detail / Desktop / Filled / Scrolled fields 2 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:16157;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9521,
+              "y": 1147,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:18992",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:18991",
+            "name": "Clients / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:18992;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8456,
+              "y": 3059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:19201",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:19200",
+            "name": "Clients / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:19201;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9960,
+              "y": 3059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:20184",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:20183",
+            "name": "Contacts / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:20184;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 10212,
+              "y": 4059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:20403",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:20402",
+            "name": "Contacts / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:20403;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8017,
+              "y": 5059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:21468",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:21467",
+            "name": "Opportunities / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:21468;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8456,
+              "y": 6059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:21691",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:21690",
+            "name": "Opportunities / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:21691;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9960,
+              "y": 6059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:22784",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:22783",
+            "name": "Cases / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:22784;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 10212,
+              "y": 7059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:23014",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:23013",
+            "name": "Cases / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:23014;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8017,
+              "y": 8059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:24467",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:24466",
+            "name": "Tasks / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:24467;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9334,
+              "y": 9059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:24978",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:24977",
+            "name": "Invoices / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:24978;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8895,
+              "y": 10059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:25349",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:25348",
+            "name": "Invoices / Detail / Desktop / Zero / Scrolled fields 2 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:25349;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 10399,
+              "y": 10059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:25720",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:25719",
+            "name": "Invoices / Detail / Desktop / Zero / Scrolled fields 3 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:25720;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8017,
+              "y": 11059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:26091",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:26090",
+            "name": "Invoices / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:26091;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9521,
+              "y": 11059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:26471",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:26470",
+            "name": "Invoices / Detail / Desktop / Filled / Scrolled fields 2 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:26471;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8017,
+              "y": 12059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:26851",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:26850",
+            "name": "Invoices / Detail / Desktop / Filled / Scrolled fields 3 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:26851;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9521,
+              "y": 12059,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:31564",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:31563",
+            "name": "Quotes / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:31564;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9334,
+              "y": 13971,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:31853",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:31852",
+            "name": "Quotes / Detail / Desktop / Zero / Scrolled fields 2 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:31853;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8017,
+              "y": 14971,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:32142",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:32141",
+            "name": "Quotes / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:32142;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9521,
+              "y": 14971,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:32438",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:32437",
+            "name": "Quotes / Detail / Desktop / Filled / Scrolled fields 2 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:32438;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8017,
+              "y": 15971,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:35404",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:35403",
+            "name": "Invoices / Confirm Mark paid / Desktop / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:35404;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8017,
+              "y": 17883,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:35585",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:35584",
+            "name": "Invoices / Confirm Record payment / Desktop / Scrolled fields 1 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:35585;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9960,
+              "y": 17883,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:35766",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:35765",
+            "name": "Invoices / Detail / Desktop / Zero / Scrolled to Items and Payments · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:35766;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 8017,
+              "y": 18883,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "310:36137",
+        "name": "Trigger / Navigation",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "310:36136",
+            "name": "Invoices / Detail / Desktop / Filled / Scrolled to Items and Payments · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "93:2",
+            "name": "2 · CRM",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I310:36137;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 9521,
+              "y": 18883,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "pageId": "136:11279",
+    "pageName": "Chat CLI review 31 Oct · PROPOSAL · not approved",
+    "rows": []
+  },
+  {
+    "pageId": "143:9",
+    "pageName": "Trigger · Client connected · 31 Oct · PROPOSALS",
+    "rows": []
+  },
+  {
+    "pageId": "148:9",
+    "pageName": "4 · Marketing",
+    "rows": []
+  },
+  {
+    "pageId": "148:10",
+    "pageName": "5 · Chat bot",
+    "rows": []
+  },
+  {
+    "pageId": "164:12",
+    "pageName": "3 · Tisan quote",
+    "rows": []
+  },
+  {
+    "pageId": "197:9",
+    "pageName": "6 · Tisan sections",
+    "rows": []
+  },
+  {
+    "pageId": "208:11727",
+    "pageName": "Archive · Trigger design history",
+    "rows": []
+  },
+  {
+    "pageId": "230:9",
+    "pageName": "7 · MCP",
+    "rows": [
+      {
+        "id": "465:43393",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:11797",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:11794",
+            "name": "CLI sign-ins and connected apps / Connected / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:43393;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 6515,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:43476",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:11835",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:11832",
+            "name": "CLI sign-ins and connected apps / Connected / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:45832",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:11873",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:11870",
+            "name": "Rig Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:45832;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 7575,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:45919",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:11903",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:11900",
+            "name": "Rig Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:46007",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:11933",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:11930",
+            "name": "Rig Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:46007;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 8635,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:46094",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:11961",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:11958",
+            "name": "Rig Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:46183",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:11989",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:11986",
+            "name": "Rig Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:46183;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 9695,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:46270",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12017",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12014",
+            "name": "Rig Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:46359",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12045",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12042",
+            "name": "Rig Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:46359;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 10755,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:46447",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12073",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12070",
+            "name": "Rig Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:47228",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12101",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12098",
+            "name": "Rig Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:47228;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 11815,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:47318",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12127",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12124",
+            "name": "Rig Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:47406",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12153",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12150",
+            "name": "Rig Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:47406;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 12875,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:47493",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12190",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12187",
+            "name": "Rig Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:47581",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12227",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12224",
+            "name": "Tisan Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:47581;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 13935,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:47668",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12257",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12254",
+            "name": "Tisan Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:47756",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12287",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12284",
+            "name": "Tisan Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:47756;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 14995,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:47843",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12315",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12312",
+            "name": "Tisan Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:47931",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12343",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12340",
+            "name": "Tisan Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:47931;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 16055,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:48018",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12371",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12368",
+            "name": "Tisan Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:48107",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12399",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12396",
+            "name": "Tisan Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:48107;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 17115,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:48195",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12427",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12424",
+            "name": "Tisan Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:48286",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12455",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12452",
+            "name": "Tisan Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:48286;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 18175,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:48376",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12481",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12478",
+            "name": "Tisan Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:48464",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12507",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12504",
+            "name": "Tisan Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:48464;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 19235,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:48551",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12544",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12541",
+            "name": "Tisan Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:48656",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12581",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12578",
+            "name": "Founder MCP servers / Servers / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:48656;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 20295,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:48743",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12632",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12629",
+            "name": "Founder MCP servers / Servers / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:48828",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12683",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12680",
+            "name": "Founder MCP servers / Add server / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:48828;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 21355,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:48912",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12715",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12712",
+            "name": "Founder MCP servers / Add server / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "465:48997",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "231:12747",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12744",
+            "name": "Founder MCP servers / Remove server / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:48997;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 22415,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:49081",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "231:12777",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "231:12774",
+            "name": "Founder MCP servers / Remove server / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:26071",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:26070",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:26067",
+            "name": "Computers and connected apps / Revoke Computer / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:26071;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 23475,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:26177",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:26176",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:26173",
+            "name": "Computers and connected apps / Revoke Computer / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:26211",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:26210",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:26207",
+            "name": "Computers and connected apps / Revoke App / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:26211;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 24539,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:26317",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:26316",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:26313",
+            "name": "Computers and connected apps / Revoke App / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:26351",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:26350",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:26347",
+            "name": "Rig Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:26351;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 25603,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:26459",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:26458",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:26455",
+            "name": "Rig Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:26495",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:26494",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:26491",
+            "name": "Tisan Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:26495;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 26667,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:26603",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:26602",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:26599",
+            "name": "Tisan Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:27702",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:27701",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:27698",
+            "name": "Rig Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:27702;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 27731,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:27808",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:27807",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:27804",
+            "name": "Rig Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:27808;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 28795,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:27923",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:27922",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:27919",
+            "name": "Rig Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:27957",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:27956",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:27953",
+            "name": "Rig Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:28000",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:27999",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:27996",
+            "name": "Tisan Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:28000;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 30835,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:28106",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:28105",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:28102",
+            "name": "Tisan Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:28106;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 31899,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:28221",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:28220",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:28217",
+            "name": "Tisan Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:28255",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:28254",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:28251",
+            "name": "Tisan Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:30893",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:30892",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:30889",
+            "name": "Founder MCP servers / Add server / Bad address / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:30893;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 33939,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:31000",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:30999",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:30996",
+            "name": "Founder MCP servers / Add server / Bad address / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:31035",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:31034",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:31031",
+            "name": "Founder MCP servers / Add server / Duplicate / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:31035;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 35003,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:31142",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:31141",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:31138",
+            "name": "Founder MCP servers / Add server / Duplicate / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:31177",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:31176",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:31173",
+            "name": "Founder MCP servers / Add server / Unreachable / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:31177;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 36067,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:31284",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:31283",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:31280",
+            "name": "Founder MCP servers / Add server / Unreachable / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      },
+      {
+        "id": "468:31319",
+        "name": "CRM navigation / White sidebar",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "468:31318",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:31315",
+            "name": "Computers and connected apps / Empty / Desktop / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I468:31319;180:8394",
+            "text": "Trigger",
+            "visible": true,
+            "box": {
+              "x": 17,
+              "y": 37131,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "468:31431",
+        "name": "CRM navigation / Mobile header",
+        "main": "180:8467",
+        "ancestors": [
+          {
+            "id": "468:31430",
+            "name": "Viewport / Vertical scroll",
+            "type": "FRAME"
+          },
+          {
+            "id": "468:31427",
+            "name": "Computers and connected apps / Empty / Mobile / Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "230:9",
+            "name": "7 · MCP",
+            "type": "PAGE"
+          }
+        ],
+        "headings": []
+      }
+    ]
+  },
+  {
+    "pageId": "237:9",
+    "pageName": "8 · Sign-in",
+    "rows": []
+  },
+  {
+    "pageId": "256:9",
+    "pageName": "9 · Tiger price position",
+    "rows": [
+      {
+        "id": "465:26693",
+        "name": "CRM Navigation · Tiger identity · original menu IDs retained",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "256:15",
+            "name": "TigerApp .panel",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:14",
+            "name": "TigerApp · existing responsive shell",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:10",
+            "name": "01 · Price position · 1440 · Approved 3 Nov · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:9",
+            "name": "9 · Tiger price position",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:26693;180:8394",
+            "text": "Tiger",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 404,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:26776",
+        "name": "CRM Navigation · Tiger identity · original menu IDs retained",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "256:288",
+            "name": "TigerApp .panel",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:287",
+            "name": "TigerApp · existing responsive shell",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:283",
+            "name": "02 · Matches to review · 1440 · Approved 3 Nov · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:9",
+            "name": "9 · Tiger price position",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:26776;180:8394",
+            "text": "Tiger",
+            "visible": true,
+            "box": {
+              "x": 2317,
+              "y": 404,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:26859",
+        "name": "CRM Navigation · Tiger identity · original menu IDs retained",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "256:476",
+            "name": "TigerApp .panel",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:475",
+            "name": "TigerApp · existing responsive shell",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:471",
+            "name": "03 · Competitor sites · 1440 · Approved 3 Nov · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:9",
+            "name": "9 · Tiger price position",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:26859;180:8394",
+            "text": "Tiger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 404,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:26942",
+        "name": "CRM Navigation · Tiger identity · original menu IDs retained",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "267:19238",
+            "name": "TigerApp .panel",
+            "type": "FRAME"
+          },
+          {
+            "id": "267:19237",
+            "name": "TigerApp · existing responsive shell",
+            "type": "FRAME"
+          },
+          {
+            "id": "267:19232",
+            "name": "02 · Matches to review · 1440 · Empty · Approved 3 Nov · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:9",
+            "name": "9 · Tiger price position",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:26942;180:8394",
+            "text": "Tiger",
+            "visible": true,
+            "box": {
+              "x": 2317,
+              "y": 3104,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      },
+      {
+        "id": "465:27025",
+        "name": "CRM Navigation · Tiger identity · original menu IDs retained",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "267:19430",
+            "name": "TigerApp .panel",
+            "type": "FRAME"
+          },
+          {
+            "id": "267:19429",
+            "name": "TigerApp · existing responsive shell",
+            "type": "FRAME"
+          },
+          {
+            "id": "267:19424",
+            "name": "03 · Competitor sites · 1440 · Empty · Approved 3 Nov · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "256:9",
+            "name": "9 · Tiger price position",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I465:27025;180:8394",
+            "text": "Tiger",
+            "visible": true,
+            "box": {
+              "x": 4417,
+              "y": 3104,
+              "width": 208,
+              "height": 24
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "pageId": "289:13919",
+    "pageName": "10 · Rig cart (US)",
+    "rows": [
+      {
+        "id": "456:18492",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:499",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "291:8053",
+            "name": "A07-choose · Shop platform · not connected · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:18492;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 21315,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:18492;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 21547,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:18598",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:533",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "291:8097",
+            "name": "A07-shopify · Shopify · enter credentials · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:18598;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 23415,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:18598;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 23647,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:18691",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:567",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "291:8151",
+            "name": "A07-woo · WooCommerce · enter credentials · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:18691;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 25515,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:18691;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 25747,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:18784",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:601",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "291:8213",
+            "name": "A07-big · BigCommerce · enter credentials · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:18784;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 27615,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:18784;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 27847,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:18877",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:635",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "291:8267",
+            "name": "A07-testing · Shop platform · testing · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:18877;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 29715,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:18877;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 29947,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:18970",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:669",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "291:8309",
+            "name": "A07-connected · Shop platform · connected · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:18970;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 31815,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:18970;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 32047,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:19063",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:703",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "291:8357",
+            "name": "A07-failed · Shop platform · connection failed · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:19063;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 33915,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:19063;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 34147,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:19156",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:737",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "291:8405",
+            "name": "A08 · Orders · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:19156;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 36015,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:19156;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 36247,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:19249",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:768",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "291:8444",
+            "name": "A09 · Store delivery time · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:19249;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 38115,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:19249;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 38347,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:19342",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:805",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "321:6304",
+            "name": "A08-late · Order paid after window · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:19342;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 46965,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:19342;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 47197,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "id": "456:19435",
+        "name": "Workspace navigation · CRM instance · Rig",
+        "main": "180:8387",
+        "ancestors": [
+          {
+            "id": "441:839",
+            "name": "Workspace shell · sidebar",
+            "type": "FRAME"
+          },
+          {
+            "id": "321:6382",
+            "name": "A07-choose-open · Choose a platform · open · 1440 · Changed after approval, awaiting founder",
+            "type": "FRAME"
+          },
+          {
+            "id": "289:13919",
+            "name": "10 · Rig cart (US)",
+            "type": "PAGE"
+          }
+        ],
+        "headings": [
+          {
+            "id": "I456:19435;180:8394",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 48126,
+              "width": 208,
+              "height": 24
+            }
+          },
+          {
+            "id": "I456:19435;180:8425",
+            "text": "Rig",
+            "visible": true,
+            "box": {
+              "x": 217,
+              "y": 48358,
+              "width": 208,
+              "height": 20
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

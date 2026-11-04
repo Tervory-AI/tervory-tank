@@ -33,7 +33,7 @@ test('ZA login opens Zitadel and stores only the unchanged Tank credential pair'
     expires_at: new Date(Date.now() + 3600_000).toISOString(),
     refresh_expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),
   };
-  await run(['login', '--region', 'za', '--sign-in', 'zitadel'], {
+  await run(['login', '--region', 'za'], {
     store: { set: async value => { saved = value; } },
     io: { write() {}, sleep: async () => {}, open: value => opened.push(value) },
     transport: async (url, init) => {
@@ -63,23 +63,19 @@ test('wrapped identity device codes are redacted across every chunk boundary', (
 });
 
 
-test('ZA default login sends the old request and opens Boston approval', async () => {
-  const opened = [];
-  let codes = 0;
+test('ZA default login requires Zitadel and never falls back to Boston', async () => {
+  let calls = 0;
   await assert.rejects(run(['login', '--region', 'za'], {
-    store: {},
-    io: { write() {}, sleep: async () => {}, open: url => opened.push(url) },
+    store: { set() { assert.fail('Must not store a refused login'); } },
+    io: { write() {}, open() { assert.fail('Must not open a refused login'); } },
     transport: async (url, init) => {
-      if (url.endsWith('/code')) {
-        codes += 1;
-        assert.deepEqual(Object.keys(JSON.parse(init.body)), ['device_name']);
-        return Response.json({ device_code: 'tvd1.za.synthetic', user_code: 'BCDF-GHJK', interval: 1 });
-      }
-      return Response.json({ error: 'access_denied' });
+      calls++;
+      assert.equal(new URL(url).origin, 'https://za.tervory.com');
+      assert.equal(JSON.parse(init.body).approval, 'zitadel');
+      return Response.json({ error: 'unavailable' }, { status: 503 });
     },
-  }), /denied/i);
-  assert.equal(codes, 1);
-  assert.deepEqual(opened, ['https://app.tervory.com/cli/device?code=BCDF-GHJK&region=za']);
+  }), /Login refused/);
+  assert.equal(calls, 1);
 });
 
 test('Zitadel flag is accepted only for ZA login', async () => {
@@ -93,4 +89,13 @@ test('Zitadel flag is accepted only for ZA login', async () => {
       io: { write() {} }, transport: () => assert.fail('Must refuse before network'),
     }), /Login accepts|Invalid command option/);
   }
+});
+
+
+test('ZA rejects a legacy approval response even when the ZA issuer is unavailable', async () => {
+  await assert.rejects(run(['login', '--region', 'za'], {
+    store: { set() { assert.fail('No credential may be saved'); } },
+    io: { write() {}, open() { assert.fail('Boston must not be opened'); } },
+    transport: async () => Response.json({ device_code: 'tvd1.za.placeholder', user_code: 'BCDF-GHJK' }),
+  }), /Login refused/);
 });

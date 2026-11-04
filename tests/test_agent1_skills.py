@@ -77,7 +77,7 @@ async def test_schema_export_submission_and_existing_run_guard(monkeypatch, tmp_
             exported = await client.get("/v1/agents/base/skills", params={"tenant_id": str(tenant)}, headers=headers)
             assert all(r["id"] != "base.learned.echo" for r in exported.json()["skills"])
             for path, method, payload in [
-                ("/v1/agents/tiger/skills", "GET", None),
+                ("/v1/agents/tiger/skills/candidates", "POST", body),
                 ("/v1/agents/base/skills", "GET", None),
                 ("/v1/agents/base/skills/candidates", "POST", body),
             ]:

@@ -1,0 +1,120 @@
+{
+  "mutatedNodeIds": [
+    "180:8396",
+    "180:8404",
+    "180:8424",
+    "180:8432",
+    "180:8446",
+    "502:19155",
+    "180:8395",
+    "180:8454",
+    "180:8387",
+    "180:8478",
+    "180:8486",
+    "180:8506",
+    "180:8514",
+    "180:8528",
+    "502:19156",
+    "180:8477",
+    "180:8536",
+    "180:8467",
+    "483:39623",
+    "483:39651",
+    "483:39615",
+    "483:39707",
+    "483:39735",
+    "483:39698"
+  ],
+  "createdNodeIds": [
+    "502:19155",
+    "502:19156"
+  ],
+  "newWords": [],
+  "headingSettingAvailable": false,
+  "evidence": [
+    {
+      "componentId": "180:8387",
+      "viewportId": "180:8395",
+      "viewportHeight": 744,
+      "overflow": "VERTICAL",
+      "clipsContent": true,
+      "footerId": "180:8454",
+      "footerParentId": "502:19155",
+      "footerTop": 888,
+      "menuEntryHeights": [
+        44
+      ],
+      "invoice": [
+        {
+          "id": "180:8429",
+          "top": 472,
+          "bottom": 516
+        }
+      ],
+      "sourceHeadingUnchanged": true
+    },
+    {
+      "componentId": "180:8467",
+      "viewportId": "180:8477",
+      "viewportHeight": 650,
+      "overflow": "VERTICAL",
+      "clipsContent": true,
+      "footerId": "180:8536",
+      "footerParentId": "502:19156",
+      "footerTop": 888,
+      "menuEntryHeights": [
+        44
+      ],
+      "invoice": [
+        {
+          "id": "180:8511",
+          "top": 472,
+          "bottom": 516
+        }
+      ],
+      "sourceHeadingUnchanged": true
+    },
+    {
+      "componentId": "483:39615",
+      "viewportId": "483:39623",
+      "viewportHeight": 744,
+      "overflow": "VERTICAL",
+      "clipsContent": true,
+      "footerId": "483:39651",
+      "footerParentId": "483:39623",
+      "footerTop": 528,
+      "menuEntryHeights": [
+        44
+      ],
+      "invoice": [
+        {
+          "id": "483:39639",
+          "top": 112,
+          "bottom": 156
+        }
+      ],
+      "sourceHeadingUnchanged": true
+    },
+    {
+      "componentId": "483:39698",
+      "viewportId": "483:39707",
+      "viewportHeight": 650,
+      "overflow": "VERTICAL",
+      "clipsContent": true,
+      "footerId": "483:39735",
+      "footerParentId": "483:39707",
+      "footerTop": 434,
+      "menuEntryHeights": [
+        44
+      ],
+      "invoice": [
+        {
+          "id": "483:39723",
+          "top": 18,
+          "bottom": 62
+        }
+      ],
+      "sourceHeadingUnchanged": true
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 """Optional auto-order: send Rig's supplier purchase order to the approved source.
 
-The PO is Rig's own row (agent_rig.supplier_purchase_orders, rigbox.fulfilment);
-Tervory no longer uses Odoo.
+The PO is Rig's own row (agent_rig.supplier_purchase_orders, rigbox.fulfilment).
 
 Sandbox only. There is no live sender: the only transport is a local outbox
 directory (one RFC 5322 .eml file per order), written with

@@ -19,7 +19,6 @@ async def owned_attachment(actor, attachment_id):
 
 async def scan(actor, body, *, attachment=None):
     from command import MAX_ATTACHMENT_BYTES
-    from ghost_routes import call_room
     from trigger_commands import confirmation
 
     confirmation(actor, "radix.repo.scan", body.model_dump(mode="json", exclude_none=True))
@@ -38,19 +37,27 @@ async def scan(actor, body, *, attachment=None):
     # Same signature check as ghost_routes; extraction remains in Radix.
     if not (own_commit or raw.startswith((b"PK\x03\x04", b"\x1f\x8b")) or raw[257:262] == b"ustar"):
         raise HTTPException(422, "Hand over a tar or zip archive.")
+    extra = {"repository": "Tervory-AI/tervory-tank", "commit": own_commit} if own_commit else None
+    submitted = await submit(actor.tenant_id, raw, row["name"], extra=extra)
+    if own_commit:
+        from radix_deploy import register
+        await register(actor, submitted["scan_id"], own_commit)
+    return submitted
+
+
+async def submit(tenant, raw: bytes, ref: str, *, extra: dict | None = None):
+    """Shared R5 job submission; caller supplies its already-authorized archive."""
+    from ghost_routes import call_room
     response = await call_room("POST", "radix", "/jobs", body={
-        "tenant_id": str(actor.tenant_id), "kind": "scan",
-        "input": {"tenant_id": str(actor.tenant_id), "source": "b64:" + base64.b64encode(raw).decode("ascii"),
-                  "ref": row["name"], **({"repository":"Tervory-AI/tervory-tank","commit":own_commit} if own_commit else {})},
+        "tenant_id": str(tenant), "kind": "scan",
+        "input": {"tenant_id": str(tenant), "source": "b64:" + base64.b64encode(raw).decode("ascii"),
+                  "ref": ref, **(extra or {})},
     })
     if response.status_code != 201:
         raise HTTPException(503, "Radix did not accept the scan.")
     data = response.json()
-    if data.get("tenant_id") != str(actor.tenant_id) or data.get("kind") != "scan":
+    if data.get("tenant_id") != str(tenant) or data.get("kind") != "scan":
         raise HTTPException(503, "Radix did not accept the scan.")
-    if own_commit:
-        from radix_deploy import register
-        await register(actor,data['id'],own_commit)
     return {"scan_id": str(UUID(data["id"])), "status": "pending"}
 
 
@@ -76,7 +83,7 @@ async def findings(actor, scan_id: UUID):
         if not isinstance(result.get("findings"), list):
             raise HTTPException(503, "Radix results are unavailable.")
         public.update({key: result.get(key) for key in
-                       ("summary", "critical", "tools", "tool_status", "scan_complete")})
+                       ("summary", "critical", "tools", "tool_status", "scan_complete", "ref", "leaked")})
         if result.get('repository')=='Tervory-AI/tervory-tank' and result.get('commit'):
             public.update(repository=result['repository'],commit=result['commit'])
         public["findings"] = [

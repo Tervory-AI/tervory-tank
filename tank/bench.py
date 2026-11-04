@@ -34,7 +34,12 @@ PRICE_LOCK_ID = 218002
 
 def price_book(rows: list[dict]) -> dict[str, dict]:
     book = {}
+    seen = set()
     for row in rows:
+        name = row["model_name"]
+        if name in seen:
+            continue
+        seen.add(name)
         info = row.get('model_info') or {}
         a, b = info.get('input_cost_per_token'), info.get('output_cost_per_token')
         if a is None or b is None or not all(math.isfinite(float(x)) and float(x) >= 0 for x in (a, b)):

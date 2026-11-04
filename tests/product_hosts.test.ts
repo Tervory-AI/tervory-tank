@@ -32,7 +32,6 @@ test("protect and autumbra both land on public Autumbra product page", () => {
 
 test("app and unknown hosts do not rewrite", () => {
   assert.equal(productHostRewritePath("app.tervory.com", "/"), null);
-  assert.equal(productHostRewritePath("rig.tervory.com", "/"), null);
   assert.equal(productHostRewritePath("mcp.tervory.com", "/"), null);
   assert.equal(productHostRewritePath("tervory.com", "/"), null);
   assert.equal(productHostFor("app.tervory.com"), null);
@@ -82,4 +81,17 @@ test("sign-in returns to the public address, never the internal bind or rewritte
   assert.equal(publicReturnUrl("evil.example", "/x"), "https://app.tervory.com/");
   assert.equal(publicReturnUrl("tervory.com.evil.example", "/x"), "https://app.tervory.com/");
   assert.equal(publicReturnUrl(null, "/x"), "https://app.tervory.com/");
+});
+
+
+test("Rig opens its Workspace app and administrator pages without changing API/static paths", () => {
+  assert.equal(productHostRewritePath("rig.tervory.com", "/"), "/rig");
+  assert.equal(productHostRewritePath("RIG.TERVORY.COM:443", "/admin/"), "/rig/admin");
+  assert.equal(productHostRewritePath("rig.tervory.com", "/admin/three-d"), "/rig/admin/three-d");
+  for (const path of ["/rig", "/rig/admin", "/rig/admin/api", "/rig/admin/three-d",
+    "/sign-in", "/sign-up", "/api/health", "/_next/static/chunk.js", "/rig-cart/cart.css",
+    "/v1/rig/search", "/widget/test", "/3d/config", "/administrator"]) {
+    assert.equal(productHostRewritePath("rig.tervory.com", path), null, path);
+  }
+  assert.equal(productHostRewritePath("app.tervory.com", "/admin"), null);
 });

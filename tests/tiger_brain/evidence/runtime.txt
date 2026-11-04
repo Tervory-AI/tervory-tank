@@ -1,0 +1,3 @@
+PASS pinned Hermes runtime installed; Tiger standby health is scoped
+PASS standby has no task API or model caller
+PASS authenticated Tiger sandbox executes WASI scratch with sockets unavailable

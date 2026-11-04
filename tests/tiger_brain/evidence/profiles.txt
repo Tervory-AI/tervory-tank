@@ -1,0 +1,2 @@
+{"profile": "default", "services": ["tiger-browser", "tiger-browser-gateway", "agent-tiger"]}
+{"profile": "brain", "services": ["agent-tiger", "tiger-sandbox", "tiger-brain", "tiger-browser", "tiger-browser-gateway"]}

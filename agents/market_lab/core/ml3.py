@@ -38,9 +38,18 @@ def build_router(*, key_ok, ledger_context, engine):
                 dates = {str(r["id"]): r["created_at"] for r in await ledger.conn.fetch(
                     "SELECT id,created_at FROM agent_market_lab.warnings WHERE tenant_id=$1 ORDER BY created_at DESC,id LIMIT 50", body.tenant_id)}
                 return {**result, "warnings": [{**w, "created_at": dates[w["id"]]} for w in result["warnings"]]}
+            if operation == "briefs":
+                return {"briefs": await ledger.briefs_for(tenant)}
+            if operation == "patterns":
+                from core.jobs import load_engine
+                from core.patterns import listing as patterns
+                return await patterns(ledger.memory, tenant, load_engine(engine).warning_plan())
+            if operation == "gate":
+                from core.predictions import gate
+                return gate(await ledger.predictions_for(tenant), tenant)
             if operation == "predictions":
                 return {"predictions": await ledger.predictions_for(tenant)}
-            if operation == "calibration":
+            if operation in {"calibration", "calibration.curve"}:
                 rows = await ledger.predictions_for(tenant)
                 return {**(await ledger.calibration_for(tenant)),
                         "hits": sum(r.get("outcome") == "hit" for r in rows),
@@ -82,8 +91,12 @@ class MailStore:
         return await call("alerts/finish", {"tenant_id": tenant, "warning_id": ident, "status": status})
 
 
-async def deliver(tenant: str) -> dict:
+async def deliver(tenant: str, *, ledger=None) -> dict:
     from agents.tiger.alert_email import deliver_pending
     mail = await deliver_pending(MailStore(), tenant, namespace="market_lab")
     hooks = await call("alerts/webhooks", {"tenant_id": tenant})
-    return {"mail": mail, "webhooks": hooks}
+    result = {"mail": mail, "webhooks": hooks}
+    if ledger is not None:
+        from core.briefs import deliver as deliver_briefs
+        result["briefs"] = await deliver_briefs(ledger, tenant)
+    return result

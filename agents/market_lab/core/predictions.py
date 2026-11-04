@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from core.pure import shift_detect, surge_detect
@@ -141,9 +141,12 @@ def gate(rows: list[dict], tenant_id: str, *, now: datetime | None = None) -> di
         groups[(original["kind"], original["feed"], original["horizon_seconds"])].append(original)
     cohorts = []
     for (kind, feed, horizon), originals in sorted(groups.items()):
-        days = max(0, (at - min(clock(row["made_at"]) for row in originals)).days) if originals else 0
+        first = min((clock(row["made_at"]) for row in originals), default=None)
+        opens_at = first + timedelta(days=90) if first is not None else None
+        days = max(0, (at - first).days) if first is not None else 0
         opened = bool(originals) and days >= 90
         cohorts.append({"kind": kind, "feed": feed, "horizon_seconds": horizon,
-                        "open": opened, "days_covered": days, "resolved_count": len(originals),
+                        "open": opened, "opens_at": opens_at.isoformat() if opens_at else None,
+                        "days_covered": days, "resolved_count": len(originals),
                         "reason": None if opened else "insufficient_history" if originals else "no_resolved_originals"})
     return {"tenant_id": str(tenant_id), "cohorts": cohorts}
