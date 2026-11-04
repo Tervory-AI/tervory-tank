@@ -1,0 +1,774 @@
+{
+  "status": "Proposed",
+  "fileUrl": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS",
+  "sourceBranch": "codex/market-lab-h7",
+  "sourceCommit": "1e6ef3af8334aef18ed1a7245ba1ac724a590ff5",
+  "baseline": [
+    {
+      "id": "566:395",
+      "name": "Brief detail / Report 1 / 1440 · Proposed",
+      "width": 1440,
+      "height": 1531,
+      "originalNodeCount": 109,
+      "originalTextCount": 60
+    },
+    {
+      "id": "566:601",
+      "name": "Brief detail / Report 2 / 1440 · Proposed",
+      "width": 1440,
+      "height": 1245,
+      "originalNodeCount": 101,
+      "originalTextCount": 54
+    },
+    {
+      "id": "566:799",
+      "name": "Brief detail / Report 3 / 1440 · Proposed",
+      "width": 1440,
+      "height": 1531,
+      "originalNodeCount": 109,
+      "originalTextCount": 60
+    },
+    {
+      "id": "566:2140",
+      "name": "Brief detail / Report 1 / 375 · Proposed",
+      "width": 375,
+      "height": 1625,
+      "originalNodeCount": 51,
+      "originalTextCount": 32
+    },
+    {
+      "id": "566:2249",
+      "name": "Brief detail / Report 2 / 375 · Proposed",
+      "width": 375,
+      "height": 1319,
+      "originalNodeCount": 43,
+      "originalTextCount": 26
+    },
+    {
+      "id": "566:2350",
+      "name": "Brief detail / Report 3 / 375 · Proposed",
+      "width": 375,
+      "height": 1625,
+      "originalNodeCount": 51,
+      "originalTextCount": 32
+    }
+  ],
+  "frames": [
+    {
+      "id": "566:395",
+      "name": "Brief detail / Report 1 / 1440 · Proposed",
+      "width": 1440,
+      "height": 2963,
+      "confidenceId": "689:1597",
+      "historyId": "689:1624",
+      "signalCount": 3,
+      "historyEventCount": 3,
+      "originalTextCount": 60,
+      "descendantCount": 149,
+      "types": {
+        "FRAME": 21,
+        "TEXT": 90,
+        "INSTANCE": 37,
+        "RECTANGLE": 1
+      },
+      "images": [
+        {
+          "id": "I566:400;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "type": "RECTANGLE",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "fonts": [
+        "Inter"
+      ],
+      "newContentOverflows": [],
+      "sections": [
+        {
+          "id": "689:1597",
+          "x": 64,
+          "y": 456,
+          "width": 1072,
+          "height": 922
+        },
+        {
+          "id": "689:1624",
+          "x": 64,
+          "y": 2296,
+          "width": 1072,
+          "height": 478
+        }
+      ],
+      "newCopy": [
+        "Confidence",
+        "Original signal confidence. Unknown values stay —.",
+        "Signal 1",
+        "[Claim 1]",
+        "Confidence: 75.0% · Frozen horizon: 30 days",
+        "Warning pair / feed: [Warning pair] / [Feed]",
+        "Prediction: [Saved prediction reference]",
+        "Open stored source",
+        "Signal 2",
+        "[Claim 2]",
+        "Confidence: — · Frozen horizon: —",
+        "Prediction: —",
+        "Signal 3",
+        "[Claim 3]",
+        "History",
+        "Only recorded events are shown. Earlier sends are not reconstructed.",
+        "Saved report",
+        "Date: 1 Nov 2026",
+        "Email · [Recorded status]",
+        "Date: [Recorded date and time]",
+        "Reason: [Recorded reason, when present]",
+        "Webhook · [Recorded status]"
+      ]
+    },
+    {
+      "id": "566:601",
+      "name": "Brief detail / Report 2 / 1440 · Proposed",
+      "width": 1440,
+      "height": 2127,
+      "confidenceId": "689:1639",
+      "historyId": "689:1658",
+      "signalCount": 2,
+      "historyEventCount": 1,
+      "originalTextCount": 54,
+      "descendantCount": 126,
+      "types": {
+        "FRAME": 20,
+        "TEXT": 73,
+        "INSTANCE": 32,
+        "RECTANGLE": 1
+      },
+      "images": [
+        {
+          "id": "I566:606;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "type": "RECTANGLE",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "fonts": [
+        "Inter"
+      ],
+      "newContentOverflows": [],
+      "sections": [
+        {
+          "id": "689:1639",
+          "x": 64,
+          "y": 456,
+          "width": 1072,
+          "height": 636
+        },
+        {
+          "id": "689:1658",
+          "x": 64,
+          "y": 1724,
+          "width": 1072,
+          "height": 214
+        }
+      ],
+      "newCopy": [
+        "Confidence",
+        "Original signal confidence. Unknown values stay —.",
+        "Signal 1",
+        "[Claim 1]",
+        "Confidence: — · Frozen horizon: —",
+        "Warning pair / feed: [Warning pair] / [Feed]",
+        "Prediction: —",
+        "Open stored source",
+        "Signal 2",
+        "[Claim 2]",
+        "History",
+        "Only recorded events are shown. Earlier sends are not reconstructed.",
+        "Saved report",
+        "Date: 1 Oct 2026",
+        "No recorded delivery events."
+      ]
+    },
+    {
+      "id": "566:799",
+      "name": "Brief detail / Report 3 / 1440 · Proposed",
+      "width": 1440,
+      "height": 2963,
+      "confidenceId": "689:1666",
+      "historyId": "689:1693",
+      "signalCount": 3,
+      "historyEventCount": 3,
+      "originalTextCount": 60,
+      "descendantCount": 149,
+      "types": {
+        "FRAME": 21,
+        "TEXT": 90,
+        "INSTANCE": 37,
+        "RECTANGLE": 1
+      },
+      "images": [
+        {
+          "id": "I566:804;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "type": "RECTANGLE",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "fonts": [
+        "Inter"
+      ],
+      "newContentOverflows": [],
+      "sections": [
+        {
+          "id": "689:1666",
+          "x": 64,
+          "y": 456,
+          "width": 1072,
+          "height": 922
+        },
+        {
+          "id": "689:1693",
+          "x": 64,
+          "y": 2296,
+          "width": 1072,
+          "height": 478
+        }
+      ],
+      "newCopy": [
+        "Confidence",
+        "Original signal confidence. Unknown values stay —.",
+        "Signal 1",
+        "[Claim 1]",
+        "Confidence: — · Frozen horizon: —",
+        "Warning pair / feed: [Warning pair] / [Feed]",
+        "Prediction: —",
+        "Open stored source",
+        "Signal 2",
+        "[Claim 2]",
+        "Signal 3",
+        "[Claim 3]",
+        "History",
+        "Only recorded events are shown. Earlier sends are not reconstructed.",
+        "Saved report",
+        "Date: 1 Sep 2026",
+        "Email · [Recorded status]",
+        "Date: [Recorded date and time]",
+        "Reason: [Recorded reason, when present]",
+        "Webhook · [Recorded status]"
+      ]
+    },
+    {
+      "id": "566:2140",
+      "name": "Brief detail / Report 1 / 375 · Proposed",
+      "width": 375,
+      "height": 3117,
+      "confidenceId": "689:1708",
+      "historyId": "689:1735",
+      "signalCount": 3,
+      "historyEventCount": 3,
+      "originalTextCount": 32,
+      "descendantCount": 91,
+      "types": {
+        "FRAME": 13,
+        "TEXT": 62,
+        "RECTANGLE": 1,
+        "INSTANCE": 15
+      },
+      "images": [
+        {
+          "id": "566:2147",
+          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "type": "RECTANGLE",
+          "width": 186,
+          "height": 34
+        }
+      ],
+      "fonts": [
+        "Inter"
+      ],
+      "newContentOverflows": [],
+      "sections": [
+        {
+          "id": "689:1708",
+          "x": 24,
+          "y": 450,
+          "width": 327,
+          "height": 962
+        },
+        {
+          "id": "689:1735",
+          "x": 24,
+          "y": 2390,
+          "width": 327,
+          "height": 498
+        }
+      ],
+      "newCopy": [
+        "Confidence",
+        "Original signal confidence. Unknown values stay —.",
+        "Signal 1",
+        "[Claim 1]",
+        "Confidence: 75.0% · Frozen horizon: 30 days",
+        "Warning pair / feed: [Warning pair] / [Feed]",
+        "Prediction: [Saved prediction reference]",
+        "Open stored source",
+        "Signal 2",
+        "[Claim 2]",
+        "Confidence: — · Frozen horizon: —",
+        "Prediction: —",
+        "Signal 3",
+        "[Claim 3]",
+        "History",
+        "Only recorded events are shown. Earlier sends are not reconstructed.",
+        "Saved report",
+        "Date: 1 Nov 2026",
+        "Email · [Recorded status]",
+        "Date: [Recorded date and time]",
+        "Reason: [Recorded reason, when present]",
+        "Webhook · [Recorded status]"
+      ]
+    },
+    {
+      "id": "566:2249",
+      "name": "Brief detail / Report 2 / 375 · Proposed",
+      "width": 375,
+      "height": 2241,
+      "confidenceId": "689:1750",
+      "historyId": "689:1769",
+      "signalCount": 2,
+      "historyEventCount": 1,
+      "originalTextCount": 26,
+      "descendantCount": 68,
+      "types": {
+        "FRAME": 12,
+        "TEXT": 45,
+        "RECTANGLE": 1,
+        "INSTANCE": 10
+      },
+      "images": [
+        {
+          "id": "566:2256",
+          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "type": "RECTANGLE",
+          "width": 186,
+          "height": 34
+        }
+      ],
+      "fonts": [
+        "Inter"
+      ],
+      "newContentOverflows": [],
+      "sections": [
+        {
+          "id": "689:1750",
+          "x": 24,
+          "y": 450,
+          "width": 327,
+          "height": 656
+        },
+        {
+          "id": "689:1769",
+          "x": 24,
+          "y": 1778,
+          "width": 327,
+          "height": 234
+        }
+      ],
+      "newCopy": [
+        "Confidence",
+        "Original signal confidence. Unknown values stay —.",
+        "Signal 1",
+        "[Claim 1]",
+        "Confidence: — · Frozen horizon: —",
+        "Warning pair / feed: [Warning pair] / [Feed]",
+        "Prediction: —",
+        "Open stored source",
+        "Signal 2",
+        "[Claim 2]",
+        "History",
+        "Only recorded events are shown. Earlier sends are not reconstructed.",
+        "Saved report",
+        "Date: 1 Oct 2026",
+        "No recorded delivery events."
+      ]
+    },
+    {
+      "id": "566:2350",
+      "name": "Brief detail / Report 3 / 375 · Proposed",
+      "width": 375,
+      "height": 3097,
+      "confidenceId": "689:1777",
+      "historyId": "689:1804",
+      "signalCount": 3,
+      "historyEventCount": 3,
+      "originalTextCount": 32,
+      "descendantCount": 91,
+      "types": {
+        "FRAME": 13,
+        "TEXT": 62,
+        "RECTANGLE": 1,
+        "INSTANCE": 15
+      },
+      "images": [
+        {
+          "id": "566:2357",
+          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "type": "RECTANGLE",
+          "width": 186,
+          "height": 34
+        }
+      ],
+      "fonts": [
+        "Inter"
+      ],
+      "newContentOverflows": [],
+      "sections": [
+        {
+          "id": "689:1777",
+          "x": 24,
+          "y": 450,
+          "width": 327,
+          "height": 942
+        },
+        {
+          "id": "689:1804",
+          "x": 24,
+          "y": 2370,
+          "width": 327,
+          "height": 498
+        }
+      ],
+      "newCopy": [
+        "Confidence",
+        "Original signal confidence. Unknown values stay —.",
+        "Signal 1",
+        "[Claim 1]",
+        "Confidence: — · Frozen horizon: —",
+        "Warning pair / feed: [Warning pair] / [Feed]",
+        "Prediction: —",
+        "Open stored source",
+        "Signal 2",
+        "[Claim 2]",
+        "Signal 3",
+        "[Claim 3]",
+        "History",
+        "Only recorded events are shown. Earlier sends are not reconstructed.",
+        "Saved report",
+        "Date: 1 Sep 2026",
+        "Email · [Recorded status]",
+        "Date: [Recorded date and time]",
+        "Reason: [Recorded reason, when present]",
+        "Webhook · [Recorded status]"
+      ]
+    }
+  ],
+  "retained": [
+    {
+      "id": "566:395",
+      "removedOriginalIds": [],
+      "changedOriginalText": []
+    },
+    {
+      "id": "566:601",
+      "removedOriginalIds": [],
+      "changedOriginalText": []
+    },
+    {
+      "id": "566:799",
+      "removedOriginalIds": [],
+      "changedOriginalText": []
+    },
+    {
+      "id": "566:2140",
+      "removedOriginalIds": [],
+      "changedOriginalText": []
+    },
+    {
+      "id": "566:2249",
+      "removedOriginalIds": [],
+      "changedOriginalText": []
+    },
+    {
+      "id": "566:2350",
+      "removedOriginalIds": [],
+      "changedOriginalText": []
+    }
+  ],
+  "createdNodeIds": [
+    "689:1585",
+    "689:1586",
+    "689:1587",
+    "689:1588",
+    "689:1589",
+    "689:1590",
+    "689:1591",
+    "I689:1591;266:3035",
+    "689:1593",
+    "689:1594",
+    "689:1595",
+    "689:1596",
+    "689:1597",
+    "689:1598",
+    "689:1599",
+    "689:1600",
+    "I689:1600;689:1586",
+    "I689:1600;689:1587",
+    "I689:1600;689:1588",
+    "I689:1600;689:1589",
+    "I689:1600;689:1590",
+    "I689:1600;689:1591",
+    "I689:1600;689:1591;266:3035",
+    "689:1608",
+    "I689:1608;689:1586",
+    "I689:1608;689:1587",
+    "I689:1608;689:1588",
+    "I689:1608;689:1589",
+    "I689:1608;689:1590",
+    "I689:1608;689:1591",
+    "I689:1608;689:1591;266:3035",
+    "689:1616",
+    "I689:1616;689:1586",
+    "I689:1616;689:1587",
+    "I689:1616;689:1588",
+    "I689:1616;689:1589",
+    "I689:1616;689:1590",
+    "I689:1616;689:1591",
+    "I689:1616;689:1591;266:3035",
+    "689:1624",
+    "689:1625",
+    "689:1626",
+    "689:1627",
+    "I689:1627;689:1594",
+    "I689:1627;689:1595",
+    "689:1631",
+    "I689:1631;689:1594",
+    "I689:1631;689:1595",
+    "I689:1631;689:1596",
+    "689:1635",
+    "I689:1635;689:1594",
+    "I689:1635;689:1595",
+    "I689:1635;689:1596",
+    "689:1639",
+    "689:1640",
+    "689:1641",
+    "689:1642",
+    "I689:1642;689:1586",
+    "I689:1642;689:1587",
+    "I689:1642;689:1588",
+    "I689:1642;689:1589",
+    "I689:1642;689:1590",
+    "I689:1642;689:1591",
+    "I689:1642;689:1591;266:3035",
+    "689:1650",
+    "I689:1650;689:1586",
+    "I689:1650;689:1587",
+    "I689:1650;689:1588",
+    "I689:1650;689:1589",
+    "I689:1650;689:1590",
+    "I689:1650;689:1591",
+    "I689:1650;689:1591;266:3035",
+    "689:1658",
+    "689:1659",
+    "689:1660",
+    "689:1661",
+    "I689:1661;689:1594",
+    "I689:1661;689:1595",
+    "689:1665",
+    "689:1666",
+    "689:1667",
+    "689:1668",
+    "689:1669",
+    "I689:1669;689:1586",
+    "I689:1669;689:1587",
+    "I689:1669;689:1588",
+    "I689:1669;689:1589",
+    "I689:1669;689:1590",
+    "I689:1669;689:1591",
+    "I689:1669;689:1591;266:3035",
+    "689:1677",
+    "I689:1677;689:1586",
+    "I689:1677;689:1587",
+    "I689:1677;689:1588",
+    "I689:1677;689:1589",
+    "I689:1677;689:1590",
+    "I689:1677;689:1591",
+    "I689:1677;689:1591;266:3035",
+    "689:1685",
+    "I689:1685;689:1586",
+    "I689:1685;689:1587",
+    "I689:1685;689:1588",
+    "I689:1685;689:1589",
+    "I689:1685;689:1590",
+    "I689:1685;689:1591",
+    "I689:1685;689:1591;266:3035",
+    "689:1693",
+    "689:1694",
+    "689:1695",
+    "689:1696",
+    "I689:1696;689:1594",
+    "I689:1696;689:1595",
+    "689:1700",
+    "I689:1700;689:1594",
+    "I689:1700;689:1595",
+    "I689:1700;689:1596",
+    "689:1704",
+    "I689:1704;689:1594",
+    "I689:1704;689:1595",
+    "I689:1704;689:1596",
+    "689:1708",
+    "689:1709",
+    "689:1710",
+    "689:1711",
+    "I689:1711;689:1586",
+    "I689:1711;689:1587",
+    "I689:1711;689:1588",
+    "I689:1711;689:1589",
+    "I689:1711;689:1590",
+    "I689:1711;689:1591",
+    "I689:1711;689:1591;266:3035",
+    "689:1719",
+    "I689:1719;689:1586",
+    "I689:1719;689:1587",
+    "I689:1719;689:1588",
+    "I689:1719;689:1589",
+    "I689:1719;689:1590",
+    "I689:1719;689:1591",
+    "I689:1719;689:1591;266:3035",
+    "689:1727",
+    "I689:1727;689:1586",
+    "I689:1727;689:1587",
+    "I689:1727;689:1588",
+    "I689:1727;689:1589",
+    "I689:1727;689:1590",
+    "I689:1727;689:1591",
+    "I689:1727;689:1591;266:3035",
+    "689:1735",
+    "689:1736",
+    "689:1737",
+    "689:1738",
+    "I689:1738;689:1594",
+    "I689:1738;689:1595",
+    "689:1742",
+    "I689:1742;689:1594",
+    "I689:1742;689:1595",
+    "I689:1742;689:1596",
+    "689:1746",
+    "I689:1746;689:1594",
+    "I689:1746;689:1595",
+    "I689:1746;689:1596",
+    "689:1750",
+    "689:1751",
+    "689:1752",
+    "689:1753",
+    "I689:1753;689:1586",
+    "I689:1753;689:1587",
+    "I689:1753;689:1588",
+    "I689:1753;689:1589",
+    "I689:1753;689:1590",
+    "I689:1753;689:1591",
+    "I689:1753;689:1591;266:3035",
+    "689:1761",
+    "I689:1761;689:1586",
+    "I689:1761;689:1587",
+    "I689:1761;689:1588",
+    "I689:1761;689:1589",
+    "I689:1761;689:1590",
+    "I689:1761;689:1591",
+    "I689:1761;689:1591;266:3035",
+    "689:1769",
+    "689:1770",
+    "689:1771",
+    "689:1772",
+    "I689:1772;689:1594",
+    "I689:1772;689:1595",
+    "689:1776",
+    "689:1777",
+    "689:1778",
+    "689:1779",
+    "689:1780",
+    "I689:1780;689:1586",
+    "I689:1780;689:1587",
+    "I689:1780;689:1588",
+    "I689:1780;689:1589",
+    "I689:1780;689:1590",
+    "I689:1780;689:1591",
+    "I689:1780;689:1591;266:3035",
+    "689:1788",
+    "I689:1788;689:1586",
+    "I689:1788;689:1587",
+    "I689:1788;689:1588",
+    "I689:1788;689:1589",
+    "I689:1788;689:1590",
+    "I689:1788;689:1591",
+    "I689:1788;689:1591;266:3035",
+    "689:1796",
+    "I689:1796;689:1586",
+    "I689:1796;689:1587",
+    "I689:1796;689:1588",
+    "I689:1796;689:1589",
+    "I689:1796;689:1590",
+    "I689:1796;689:1591",
+    "I689:1796;689:1591;266:3035",
+    "689:1804",
+    "689:1805",
+    "689:1806",
+    "689:1807",
+    "I689:1807;689:1594",
+    "I689:1807;689:1595",
+    "689:1811",
+    "I689:1811;689:1594",
+    "I689:1811;689:1595",
+    "I689:1811;689:1596",
+    "689:1815",
+    "I689:1815;689:1594",
+    "I689:1815;689:1595",
+    "I689:1815;689:1596"
+  ],
+  "mutatedNodeIds": [
+    "566:400",
+    "566:395",
+    "566:399",
+    "566:401",
+    "566:606",
+    "566:601",
+    "566:605",
+    "566:607",
+    "566:804",
+    "566:799",
+    "566:803",
+    "566:805",
+    "566:2140",
+    "566:2144",
+    "566:2150",
+    "566:2249",
+    "566:2253",
+    "566:2259",
+    "566:2350",
+    "566:2354",
+    "566:2360"
+  ],
+  "components": [
+    {
+      "id": "689:1585",
+      "name": "H7 / Signal confidence · Proposed",
+      "properties": {
+        "Signal": "Signal#689:9",
+        "Claim": "Claim#689:10",
+        "Metrics": "Metrics#689:11",
+        "Pair": "Pair#689:12",
+        "Prediction": "Prediction#689:13"
+      }
+    },
+    {
+      "id": "689:1593",
+      "name": "H7 / Recorded history event · Proposed",
+      "properties": {
+        "Event": "Event#689:14",
+        "Time": "Time#689:15",
+        "Reason": "Reason#689:16",
+        "ShowReason": "Show reason#689:17"
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "text": "Skip to content\nMenu\n1. Organization\n2. Industry\n3. File\n4. Run\nChoose an industry\n\nWe use that industry’s own list and words. The rest of the work is the same for every industry.\n\nWhich industry are these records?\nFirearms dealers\nLicensed firearms dealers.\nBack\nContinue",
+  "title": "Autumbra",
+  "width": 375,
+  "height": 1100,
+  "controls": [],
+  "fonts": [
+    "Inter, Inter, sans-serif",
+    "Jost, Jost, sans-serif",
+    "Arial"
+  ]
+}

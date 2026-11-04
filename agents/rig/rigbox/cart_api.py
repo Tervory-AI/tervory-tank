@@ -115,6 +115,8 @@ async def admin_commerce(operation: str, request: Request):
 
 @router.post('/commerce/webhooks/{tenant_id}')
 async def platform_webhook(tenant_id: UUID, request: Request):
+    from rigbox.rooms import require_owner
+    require_owner(tenant_id)
     activate_tenant(tenant_id)
     try:
         raw = bytearray()

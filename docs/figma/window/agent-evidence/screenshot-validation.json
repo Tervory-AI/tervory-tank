@@ -1,0 +1,113 @@
+{
+  "status": "pass",
+  "frames": [
+    {
+      "file": "F1-W03-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "2175b991539c68d742763aa74e3ba9c435aa65dbf2001bf55422c50aab642edf"
+    },
+    {
+      "file": "F1-W03-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "52150983bffa1c84590ef32c8aa618a8eda04e26b8ae618f7fcc7bac48d7e82d"
+    },
+    {
+      "file": "F1-W09-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "efc1ad047d60438e50d8c6581959015de68c3a456be388af33998870bbc71a0c"
+    },
+    {
+      "file": "F1-W09-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "36569e1b6da324b1c2aa2889fd8cf850f28ec373821d9652d78774d3ffd106f0"
+    },
+    {
+      "file": "F1-W12-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "65979e65ca325bee34ed8074b1b115bea5ee03a1852e7345567dc0d6e6d831cf"
+    },
+    {
+      "file": "F1-W12-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "3b84f4128fb2022f70b81cfdb51a8533b3a84bb71d140ee259cc16eea5b57aca"
+    },
+    {
+      "file": "F1-W13-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "68dc53eca624845abd9d1985165354b33be6d6af163a75445ff99fb484d4d1b5"
+    },
+    {
+      "file": "F1-W13-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "4c9d9c801f2ade6e32ee80146f0eac54b61a5f9902ee8b155d2d9a332599dfec"
+    },
+    {
+      "file": "F1-W14-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "320fbd4a6051fbdbe0a0096a09aeec3a8683dab0aa7927a06178e7dfb4d300b6"
+    },
+    {
+      "file": "F1-W14-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "1393b0f155d3de063512f3a3b3bdb9f51484c5c43cf685f281132abca31dd502"
+    },
+    {
+      "file": "F1-W15-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "4497ae95316ddd4a4237d390f7fd9ae92ad06dd1312ae5363a40abc495f653e1"
+    },
+    {
+      "file": "F1-W15-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "f8dddc7fd3652e563fac9a114bb67c0ddd819f91478d2de23c6c561c7b0f24a3"
+    },
+    {
+      "file": "F1-W16-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "b8802629e38e0f9a9a2335a18f8c30f851fbd0703794077604be81c2328b22b9"
+    },
+    {
+      "file": "F1-W16-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "737dcde718598aa4acdcc184d3ba5cd74174f840a74c9ed0f946af6c517e75dd"
+    },
+    {
+      "file": "F1-W17-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "28bebc5c91d2d0ee39822b42afbcca24f9f376d1ebc9f761852f2a0c18861f38"
+    },
+    {
+      "file": "F1-W17-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "c866754c67bbb824a2542448318c4f2eec4b8a8e1e76ac20ecf3dc2fa73d6dfd"
+    },
+    {
+      "file": "F1-W18-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "02921e307226e7d9dd71a0834576e8d6f0eeb6ae29b994312bb862649ad000c5"
+    },
+    {
+      "file": "F1-W18-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "16513c28a955bb922a88c1a93219aa222dff216c35307eea857c56c2a09e76d0"
+    }
+  ]
+}

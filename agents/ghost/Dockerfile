@@ -10,6 +10,7 @@ COPY rig/rigbox/reserve.py /app/agents/rig/rigbox/reserve.py
 # Shared API client only; Autumbra never invokes Tisan product logic.
 COPY tisan/promotion.py /app/enforce_coolify.py
 COPY ghost /app/ghost
+COPY rig/docker-compose.room.yml /app/ghost/docker-compose.room.yml
 USER agent
 ENV AGENT_NAME=ghost DATA_DIR=/data PYTHONUNBUFFERED=1
 EXPOSE 8000

@@ -1,0 +1,142 @@
+{
+  "frames": [
+    {
+      "id": "581:289",
+      "name": "Player / Empty / 1440 · Proposed",
+      "screen": "Player",
+      "state": "Empty",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:296",
+        "products": "581:298"
+      },
+      "screenshot": "player-empty-1440.png"
+    },
+    {
+      "id": "581:303",
+      "name": "Player / Loading / 1440 · Proposed",
+      "screen": "Player",
+      "state": "Loading",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:310",
+        "products": "581:312"
+      },
+      "screenshot": "player-loading-1440.png"
+    },
+    {
+      "id": "581:320",
+      "name": "Player / Error / 1440 · Proposed",
+      "screen": "Player",
+      "state": "Error",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:327",
+        "products": "581:329",
+        "retry": "581:333"
+      },
+      "screenshot": "player-error-1440.png"
+    }
+  ],
+  "checks": [
+    {
+      "id": "581:289",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "images": []
+    },
+    {
+      "id": "581:303",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "images": []
+    },
+    {
+      "id": "581:320",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "images": []
+    }
+  ],
+  "createdNodeIds": [
+    "581:289",
+    "581:290",
+    "581:291",
+    "581:292",
+    "581:293",
+    "581:294",
+    "581:295",
+    "581:296",
+    "I581:296;266:3035",
+    "581:298",
+    "I581:298;266:3035",
+    "581:300",
+    "581:301",
+    "581:302",
+    "581:303",
+    "581:304",
+    "581:305",
+    "581:306",
+    "581:307",
+    "581:308",
+    "581:309",
+    "581:310",
+    "I581:310;266:3035",
+    "581:312",
+    "I581:312;266:3035",
+    "581:314",
+    "581:315",
+    "581:316",
+    "581:317",
+    "581:318",
+    "581:319",
+    "581:320",
+    "581:321",
+    "581:322",
+    "581:323",
+    "581:324",
+    "581:325",
+    "581:326",
+    "581:327",
+    "I581:327;266:3035",
+    "581:329",
+    "I581:329;266:3035",
+    "581:331",
+    "581:332",
+    "581:333",
+    "I581:333;266:3033",
+    "581:335"
+  ],
+  "status": "Proposed",
+  "copy": [
+    "Proposed",
+    "Illustrative video, product and timing · Figma only",
+    "Watch video",
+    "Products in this video",
+    "No video yet.",
+    "Loading…",
+    "The video could not be loaded.",
+    "Try again"
+  ]
+}
