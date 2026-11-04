@@ -10,7 +10,8 @@ function load(file, mocks = {}) {
   const exported = {};
   new Function('require', 'exports', code)(name => {
     if (name in mocks) return mocks[name];
-    return load(path.join(path.dirname(file), name + '.ts'), mocks);
+    const relative = path.join(path.dirname(file), name);
+    return load(relative + (fs.existsSync(path.join(root, 'workspace', relative + '.tsx')) ? '.tsx' : '.ts'), mocks);
   }, exported);
   return exported;
 }
@@ -152,7 +153,7 @@ test('missing account name renders an explicit status, and nameless rows render 
   const { TigerApp } = load('app/tiger/view.tsx', {
     react: React,
     'react/jsx-runtime': require(path.join(root, 'workspace/node_modules/react/jsx-runtime')),
-    './actions': {}, '../squad-links': { SquadLinks: () => null },
+    './actions': {}, './position-views': { PositionViews: () => null }, '../squad-links': { SquadLinks: () => null },
   });
   const data = present([watch], [{ ...observation, product_name: null, last_product_name: null }], []);
   for (const initialTab of ['overview', 'watch', 'history']) {

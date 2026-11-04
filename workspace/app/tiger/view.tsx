@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { addProduct, removeProduct } from "./actions";
 import { EVERY_OPTIONS, FOOT, LEDE } from "./copy";
 import { SECTIONS, searchTiger, type AlertRow, type ProductRow, type ReadRow, type Section, type TigerData } from "./model";
 import { SquadLinks } from "../squad-links";
+import { AttemptTime, PageLink, Pill, SimpleTable } from "./parts";
+import { PositionViews } from "./position-views";
+import type { ComparisonData, WatchView } from "./position-model";
 
 function SearchIcon() {
   return (
@@ -13,12 +16,6 @@ function SearchIcon() {
       <path d="M10.5 10.5 L14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
-}
-
-function Pill({ status }: { status: string }) {
-  const solid = status === "Price changed" || status === "Stock changed";
-  const hollow = status === "Not checked";
-  return <span className={solid ? "pill solid" : hollow ? "pill hollow" : "pill"}><i />{status}</span>;
 }
 
 function RowStatus({ row }: { row: ProductRow }) {
@@ -31,24 +28,20 @@ function ProductIdentifier({ name, url }: { name: string | null; url: string }) 
   return url ? <a href={url} title={url} target="_blank" rel="noreferrer">{name || url}</a> : name ? <>{name}</> : null;
 }
 
-function PageLink({ row }: { row: ProductRow }) {
-  return row.url ? <a href={row.url} title={row.url} target="_blank" rel="noreferrer">{row.store}</a> : null;
-}
-
-function AttemptTime({ row }: { row: ProductRow }) {
-  return row.attemptedAt ? <time dateTime={row.attemptedAt}>{row.checked}</time> : row.reason ? null : <>Not checked yet</>;
-}
-
 export function TigerApp({
   data,
   notice,
   initialTab,
   accountName,
+  comparison,
+  initialView = "position",
 }: {
   data: TigerData;
   notice: string;
   initialTab: Section;
   accountName: string | null;
+  comparison?: ComparisonData;
+  initialView?: WatchView;
 }) {
   const [section, setSection] = useState<Section>(initialTab);
   const [addOpen, setAddOpen] = useState(false);
@@ -80,21 +73,22 @@ export function TigerApp({
     setSection(next);
   }
 
-  const rootClass = ["tiger", addOpen ? "add-open" : "", menuOpen ? "menu-open" : ""].filter(Boolean).join(" ");
+  const comparing = section === "watch" && comparison !== undefined;
+  const rootClass = ["tiger", comparing ? "position-view" : "", addOpen ? "add-open" : "", menuOpen ? "menu-open" : ""].filter(Boolean).join(" ");
 
   return (
     <div className={rootClass}>
       <header className="topbar">
-        <img src="/brand/tervory-logo-reversed.png" alt="Tervory" />
+        <img src={comparing ? "/brand/tervory-logo-on-white.png" : "/brand/tervory-logo-reversed.png"} alt="Tervory" />
         <button type="button" className="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Menu</button>
       </header>
 
       <aside className="panel" aria-label="Tiger">
         <div className="panel-top">
-          <img src="/brand/tiger-on-dark.png" alt="Tiger" width={2607} height={801} />
+          {comparing ? <><img src="/brand/tervory-logo-on-white.png" alt="Tervory" width={208} height={38} /><div className="position-account">{accountName?.trim()}<span aria-hidden="true">⌄</span></div><p className="panel-identity">Tiger</p></> : <img src="/brand/tiger-on-dark.png" alt="Tiger" width={2607} height={801} />}
         </div>
         <nav className="panel-account" aria-label="Account">
-          <p className="account" role={accountName?.trim() ? undefined : "status"}>{accountName?.trim() || "Account name could not be loaded."}</p>
+          <p hidden={comparing} className="account" role={accountName?.trim() ? undefined : "status"}>{accountName?.trim() || "Account name could not be loaded."}</p>
           <a className="nav" href="https://app.tervory.com/">Dashboard</a>
           <a className="nav" href="/tasks" onClick={() => setMenuOpen(false)}>Tasks</a>
           <a className="nav" href="/chats" onClick={() => setMenuOpen(false)}>Chats</a>
@@ -110,24 +104,24 @@ export function TigerApp({
           </nav>
         </div>
         <div className="panel-bottom">
-          <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
+          {!comparing ? <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} /> : null}
           <button type="button" className="nav" onClick={() => { setHelp((open) => !open); setMenuOpen(false); }}>Support</button>
         </div>
       </aside>
 
       <div className="body">
         <form className={query ? "search on" : "search"} role="search" onSubmit={(event) => { event.preventDefault(); setQuery(draft.trim()); }}>
-          <SearchIcon />
+          {comparing ? <img className="search-icon" src="/tiger/search.svg" alt="" /> : <SearchIcon />}
           <input
-            aria-label="Search watched products, reads and alerts"
-            placeholder="Search watched products, reads and alerts"
+            aria-label={comparing ? "Search watched products, readings and alerts" : "Search watched products, reads and alerts"}
+            placeholder={comparing ? "Search watched products, readings and alerts" : "Search watched products, reads and alerts"}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
           />
-          {query ? (
+          {!comparing && query ? (
             <button type="button" className="text" onClick={() => { setQuery(""); setDraft(""); }}>Clear</button>
           ) : (
-            <span className="hint">Press Enter to search</span>
+            !comparing ? <span className="hint">Press Enter to search</span> : null
           )}
         </form>
 
@@ -136,16 +130,17 @@ export function TigerApp({
             <h1>Tiger</h1>
             <p className="lede">{LEDE}</p>
           </div>
-          <button type="button" className={headerRed ? "primary" : "line"} onClick={() => setAddOpen(true)}>Add a product</button>
+          {!comparing ? <button type="button" className={headerRed ? "primary" : "line"} onClick={() => setAddOpen(true)}>Add a product</button> : null}
         </header>
 
-        {notice ? <p className="notice">{notice}</p> : null}
-        {help ? <p className="notice">Manage check intervals and alert preferences when adding a product. Each watch shows its latest check status; completed readings are available in History.</p> : null}
+        {notice && !comparing ? <p className="notice">{notice}</p> : null}
+        {help && !comparing ? <p className="notice">Manage check intervals and alert preferences when adding a product. Each watch shows its latest check status; completed readings are available in History.</p> : null}
 
-        {hit ? <Results hit={hit} /> : null}
+        {hit && !comparing ? <Results hit={hit} /> : null}
         {!hit && section === "overview" ? <Overview data={visible} onWatch={() => show("watch")} onAlerts={() => show("alerts")} /> : null}
         {!hit && section === "alerts" ? <Alerts rows={data.alerts} example={data.example} /> : null}
-        {!hit && section === "watch" ? (
+        {section === "watch" && comparison ? <PositionViews data={comparison} initialView={initialView} query={query} plugins={comparison.plugins ?? null} /> : null}
+        {!hit && section === "watch" && !comparison ? (
           <Watch rows={products} note={data.listNote} onHide={(id) => setHidden((current) => [...current, id])} />
         ) : null}
         {!hit && section === "history" ? (
@@ -373,24 +368,6 @@ function Results({ hit }: { hit: NonNullable<ReturnType<typeof searchTiger>> }) 
         empty="No alerts match."
       />
     </section>
-  );
-}
-
-function SimpleTable({ heads, rows, empty, priceCol }: { heads: string[]; rows: ReactNode[][]; empty: string; priceCol?: number }) {
-  if (rows.length === 0) return <p className="fine">{empty}</p>;
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead><tr>{heads.map((head) => <th key={head}>{head}</th>)}</tr></thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={index}>
-              {row.map((cell, cellIndex) => <td key={cellIndex} className={cellIndex === priceCol ? "price" : cellIndex === 0 && priceCol === undefined ? "name" : ""}>{cell}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

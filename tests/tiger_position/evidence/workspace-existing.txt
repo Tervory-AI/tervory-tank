@@ -1,0 +1,410 @@
+TAP version 13
+# Subtest: unlabelled records count credits but never accuracy
+ok 1 - unlabelled records count credits but never accuracy
+  ---
+  duration_ms: 6.939127
+  type: 'test'
+  ...
+# Subtest: official phone and address truth score even when vendor fields are absent
+ok 2 - official phone and address truth score even when vendor fields are absent
+  ---
+  duration_ms: 0.993696
+  type: 'test'
+  ...
+# Subtest: context reports cannot read a different tenant's records
+ok 3 - context reports cannot read a different tenant's records
+  ---
+  duration_ms: 0.364262
+  type: 'test'
+  ...
+# Subtest: credit cap reached is shown without counting an uncalled record as a charge
+ok 4 - credit cap reached is shown without counting an uncalled record as a charge
+  ---
+  duration_ms: 1.176156
+  type: 'test'
+  ...
+# Subtest: trial accuracy uses checked answers, includes missing answers and unknown charges
+ok 5 - trial accuracy uses checked answers, includes missing answers and unknown charges
+  ---
+  duration_ms: 0.353422
+  type: 'test'
+  ...
+# Subtest: social comparison accepts source formats with the same checked links
+ok 6 - social comparison accepts source formats with the same checked links
+  ---
+  duration_ms: 0.426732
+  type: 'test'
+  ...
+# Subtest: totals add up across batches and skipped steps stay one combined count
+ok 7 - totals add up across batches and skipped steps stay one combined count
+  ---
+  duration_ms: 22.493441
+  type: 'test'
+  ...
+# Subtest: a missing skipped count is shown as not reported, never as zero
+ok 8 - a missing skipped count is shown as not reported, never as zero
+  ---
+  duration_ms: 0.415972
+  type: 'test'
+  ...
+# Subtest: Tank down is an error, an empty list is empty
+ok 9 - Tank down is an error, an empty list is empty
+  ---
+  duration_ms: 1.220607
+  type: 'test'
+  ...
+# Subtest: batch status reads in plain words
+ok 10 - batch status reads in plain words
+  ---
+  duration_ms: 0.457132
+  type: 'test'
+  ...
+# Subtest: only approved Base skills are listed; a candidate never shows as in use
+ok 11 - only approved Base skills are listed; a candidate never shows as in use
+  ---
+  duration_ms: 1.155777
+  type: 'test'
+  ...
+# Subtest: times read in Pacific time
+ok 12 - times read in Pacific time
+  ---
+  duration_ms: 0.837044
+  type: 'test'
+  ...
+# Subtest: search matches every word, by name, city or phone written any way
+ok 13 - search matches every word, by name, city or phone written any way
+  ---
+  duration_ms: 24.315312
+  type: 'test'
+  ...
+# Subtest: a hit shows each value with where it came from, and no value as none
+ok 14 - a hit shows each value with where it came from, and no value as none
+  ---
+  duration_ms: 0.520203
+  type: 'test'
+  ...
+# Subtest: Ask Base answers from records and lists the records it used as Sources
+ok 15 - Ask Base answers from records and lists the records it used as Sources
+  ---
+  duration_ms: 26.649663
+  type: 'test'
+  ...
+# Subtest: Ask Base never starts or changes anything
+ok 16 - Ask Base never starts or changes anything
+  ---
+  duration_ms: 0.622693
+  type: 'test'
+  ...
+# Subtest: Base uses base.vault and the base squad only
+ok 17 - Base uses base.vault and the base squad only
+  ---
+  duration_ms: 8.053954
+  type: 'test'
+  ...
+# Subtest: an off vault shows the off message and no items
+ok 18 - an off vault shows the off message and no items
+  ---
+  duration_ms: 8.964978
+  type: 'test'
+  ...
+# Subtest: an on vault passes names and masks, never values, tokens or bytes
+ok 19 - an on vault passes names and masks, never values, tokens or bytes
+  ---
+  duration_ms: 0.721283
+  type: 'test'
+  ...
+# Subtest: a payload for any other vault is refused
+ok 20 - a payload for any other vault is refused
+  ---
+  duration_ms: 0.258501
+  type: 'test'
+  ...
+# Subtest: Tank errors become plain words
+ok 21 - Tank errors become plain words
+  ---
+  duration_ms: 0.328691
+  type: 'test'
+  ...
+# (node:661980) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-tiger-w4/workspace/app/control/values.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /workspace/codex-tiger-w4/workspace/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: missing measurements cannot turn into displayed zeroes
+ok 22 - missing measurements cannot turn into displayed zeroes
+  ---
+  duration_ms: 1.700728
+  type: 'test'
+  ...
+# Subtest: the current month's daily buckets use UTC and include today once
+ok 23 - the current month's daily buckets use UTC and include today once
+  ---
+  duration_ms: 0.722994
+  type: 'test'
+  ...
+# Subtest: integer and currency formatting do not depend on the host locale
+ok 24 - integer and currency formatting do not depend on the host locale
+  ---
+  duration_ms: 26.377042
+  type: 'test'
+  ...
+# Subtest: signup age changes at UTC midnight with the approved wording
+ok 25 - signup age changes at UTC midnight with the approved wording
+  ---
+  duration_ms: 0.382372
+  type: 'test'
+  ...
+# Subtest: a sparkline requires two observations and keeps a constant series finite
+ok 26 - a sparkline requires two observations and keeps a constant series finite
+  ---
+  duration_ms: 0.446433
+  type: 'test'
+  ...
+# Subtest: source URLs remain relative and encode task identifiers as data
+ok 27 - source URLs remain relative and encode task identifiers as data
+  ---
+  duration_ms: 0.454482
+  type: 'test'
+  ...
+# Subtest: every control entry point authorizes the founder before reading or writing sources
+ok 28 - every control entry point authorizes the founder before reading or writing sources
+  ---
+  duration_ms: 0.696633
+  type: 'test'
+  ...
+# Subtest: the approved shared confirmation is reused and removed sections stay absent
+ok 29 - the approved shared confirmation is reused and removed sections stay absent
+  ---
+  duration_ms: 0.350503
+  type: 'test'
+  ...
+# Subtest: keys never count as fetched feeds
+ok 30 - keys never count as fetched feeds
+  ---
+  duration_ms: 1.79901
+  type: 'test'
+  ...
+# Subtest: a successful stored feed counts once and opens its document
+ok 31 - a successful stored feed counts once and opens its document
+  ---
+  duration_ms: 1.533978
+  type: 'test'
+  ...
+# Subtest: a failed or empty last fetch cannot retain an On badge
+ok 32 - a failed or empty last fetch cannot retain an On badge
+  ---
+  duration_ms: 0.562864
+  type: 'test'
+  ...
+# Subtest: no readings leave the on section empty, and a store error is its own state
+ok 33 - no readings leave the on section empty, and a store error is its own state
+  ---
+  duration_ms: 0.449842
+  type: 'test'
+  ...
+# Subtest: linked pages count checks without inventing a change
+ok 34 - linked pages count checks without inventing a change
+  ---
+  duration_ms: 0.949706
+  type: 'test'
+  ...
+# Subtest: tenant source metadata uses the existing cards and exact stored document
+ok 35 - tenant source metadata uses the existing cards and exact stored document
+  ---
+  duration_ms: 1.120976
+  type: 'test'
+  ...
+# Subtest: new official feeds open stored documents in the existing cards
+ok 36 - new official feeds open stored documents in the existing cards
+  ---
+  duration_ms: 0.337662
+  type: 'test'
+  ...
+# Subtest: numbers stay exact and blank FRED values are skipped
+ok 37 - numbers stay exact and blank FRED values are skipped
+  ---
+  duration_ms: 2.319423
+  type: 'test'
+  ...
+# Subtest: dates do not shift with the timezone
+ok 38 - dates do not shift with the timezone
+  ---
+  duration_ms: 21.935638
+  type: 'test'
+  ...
+# Subtest: search hits feeds and linked pages, and skips a question with no reading
+ok 39 - search hits feeds and linked pages, and skips a question with no reading
+  ---
+  duration_ms: 2.062641
+  type: 'test'
+  ...
+# Subtest: plugin state sent to the browser is a set of booleans and never a saved secret
+ok 40 - plugin state sent to the browser is a set of booleans and never a saved secret
+  ---
+  duration_ms: 2.040851
+  type: 'test'
+  ...
+# Subtest: a vault key turns a feed on only while that vault is on
+ok 41 - a vault key turns a feed on only while that vault is on
+  ---
+  duration_ms: 0.627874
+  type: 'test'
+  ...
+# Subtest: an off vault shows the plain sentence and drops any secret that arrived with it
+ok 42 - an off vault shows the plain sentence and drops any secret that arrived with it
+  ---
+  duration_ms: 0.397433
+  type: 'test'
+  ...
+# Subtest: key flags are booleans and secret text is stripped before it can leave the server
+ok 43 - key flags are booleans and secret text is stripped before it can leave the server
+  ---
+  duration_ms: 0.852084
+  type: 'test'
+  ...
+# Subtest: plugin errors and statuses use client words
+ok 44 - plugin errors and statuses use client words
+  ---
+  duration_ms: 0.722324
+  type: 'test'
+  ...
+# Subtest: a blocked linked page does not reuse its previous successful status
+ok 45 - a blocked linked page does not reuse its previous successful status
+  ---
+  duration_ms: 0.921995
+  type: 'test'
+  ...
+# Subtest: stored freight and linked freight have distinct client titles
+ok 46 - stored freight and linked freight have distinct client titles
+  ---
+  duration_ms: 0.243462
+  type: 'test'
+  ...
+# Subtest: approve with a matter id uses the release path
+ok 47 - approve with a matter id uses the release path
+  ---
+  duration_ms: 0.918275
+  type: 'test'
+  ...
+# Subtest: reject never uses the release path
+ok 48 - reject never uses the release path
+  ---
+  duration_ms: 0.259022
+  type: 'test'
+  ...
+# Subtest: approve without a matter id keeps the reviews path
+ok 49 - approve without a matter id keeps the reviews path
+  ---
+  duration_ms: 0.175781
+  type: 'test'
+  ...
+# Subtest: an empty search shows nothing
+ok 50 - an empty search shows nothing
+  ---
+  duration_ms: 7.444901
+  type: 'test'
+  ...
+# Subtest: search stays inside Tank's own records
+ok 51 - search stays inside Tank's own records
+  ---
+  duration_ms: 0.665544
+  type: 'test'
+  ...
+# Subtest: the vault line names tank.vault and no key
+ok 52 - the vault line names tank.vault and no key
+  ---
+  duration_ms: 0.480803
+  type: 'test'
+  ...
+# Subtest: each agent has one box, one logo, and a pipeline
+ok 53 - each agent has one box, one logo, and a pipeline
+  ---
+  duration_ms: 0.348982
+  type: 'test'
+  ...
+# Subtest: Ask Tank hides a key and refuses to pass one through
+ok 54 - Ask Tank hides a key and refuses to pass one through
+  ---
+  duration_ms: 3.148967
+  type: 'test'
+  ...
+# Subtest: the panel shows the fixture tasks: status, PR link, minutes, model cost
+ok 55 - the panel shows the fixture tasks: status, PR link, minutes, model cost
+  ---
+  duration_ms: 2.952756
+  type: 'test'
+  ...
+# Subtest: only the panel's columns survive, and only GitHub pull request links
+ok 56 - only the panel's columns survive, and only GitHub pull request links
+  ---
+  duration_ms: 1.144106
+  type: 'test'
+  ...
+# Subtest: no workers, or no answer, is an empty read-only panel
+ok 57 - no workers, or no answer, is an empty read-only panel
+  ---
+  duration_ms: 0.415273
+  type: 'test'
+  ...
+# Subtest: an off vault shows the exact message and no stored rows
+ok 58 - an off vault shows the exact message and no stored rows
+  ---
+  duration_ms: 1.782499
+  type: 'test'
+  ...
+# Subtest: a saved key reaches the browser only as dots
+ok 59 - a saved key reaches the browser only as dots
+  ---
+  duration_ms: 0.440351
+  type: 'test'
+  ...
+# Subtest: areas of law lists the forty-nine civil areas
+ok 60 - areas of law lists the forty-nine civil areas
+  ---
+  duration_ms: 0.926066
+  type: 'test'
+  ...
+# Subtest: an off vault shows the plain sentence and drops any secret that arrived with it
+ok 61 - an off vault shows the plain sentence and drops any secret that arrived with it
+  ---
+  duration_ms: 1.148785
+  type: 'test'
+  ...
+# Subtest: an on vault keeps names and masks and still drops the value
+ok 62 - an on vault keeps names and masks and still drops the value
+  ---
+  duration_ms: 0.443261
+  type: 'test'
+  ...
+# Subtest: the deadlines panel keeps the drawn blanks and does not add matters
+ok 63 - the deadlines panel keeps the drawn blanks and does not add matters
+  ---
+  duration_ms: 0.495913
+  type: 'test'
+  ...
+# Subtest: search stays inside the drawn record kinds
+ok 64 - search stays inside the drawn record kinds
+  ---
+  duration_ms: 0.212962
+  type: 'test'
+  ...
+# Subtest: moot court text edition panel starts with no selected match
+ok 65 - moot court text edition panel starts with no selected match
+  ---
+  duration_ms: 1.983122
+  type: 'test'
+  ...
+# Subtest: the panel does not invent a case, a student score, or a sign-up
+ok 66 - the panel does not invent a case, a student score, or a sign-up
+  ---
+  duration_ms: 0.478403
+  type: 'test'
+  ...
+1..66
+# tests 66
+# suites 0
+# pass 66
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1699.513202
