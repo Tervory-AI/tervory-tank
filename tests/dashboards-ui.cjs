@@ -70,19 +70,19 @@ async function render() {
   const unavailable=renderToStaticMarkup(await ClientPage({searchParams:Promise.resolve({})}));
   assert(unavailable.includes('Your activity could not be loaded'));
   sourceError=false;
-  const {FounderDashboard} = require('../workspace/app/control/view.tsx');
+  const {FounderDashboard,WorkersTile} = require('../workspace/app/control/view.tsx');
   const {activity}=require('../workspace/app/control/values.ts');
   const now=Date.UTC(2026,9,21,12);
   const view={data:fixture,activity:activity(fixture,now),now,checks:0,workersPaused:false,signups:{total:1,thisWeek:1,recent:[{id:'user',name:'Alex Example',company:'Example Company',country:'United States',plan:'Trial',createdAt:Date.UTC(2026,9,21)}],days:[]},paying:{total:0,thisWeek:0,days:[]},paused:false,models:[],refused:[],errors:[]};
   const control=renderToStaticMarkup(React.createElement(FounderDashboard,{view}));
-  for (const label of ['Control panel','Nothing needs you.','Squad workers','Workers']) assert(control.includes(label));
+  for (const label of ['Control panel','Nothing needs you.','Squad workers','Spent this month']) assert(control.includes(label));
   for (const label of ['GHOST-1','AGENT-1','BATCH-1']) assert(!control.includes(label));
   // The original assets render in plain Node without an SVG module loader.
-  assert(control.includes('data:image/svg+xml,'));
+  assert(control.includes('/dashboards/control/status-dot-grey.svg'));
   // WORKERS-2 tile: status, commit, last check-in, Pause/Resume; "not checking in" after 3 minutes.
-  assert(control.includes('Workers status unavailable') && control.includes('Workers pause unavailable'));
+  assert(!control.includes('data-tile="workers"'));
   const beat=(ageS,state='running',issue=211)=>({worker:'boston',state,issue,commit:'c379a45deadbeef',last_error:null,seen_at:new Date(Date.now()-ageS*1000).toISOString(),age_s:ageS,checking_in:ageS<=180});
-  const tile=w=>renderToStaticMarkup(React.createElement(FounderDashboard,{view:{...view,workers:w,now:Date.now()}}));
+  const tile=w=>renderToStaticMarkup(React.createElement(WorkersTile,{workers:w,now:Date.now()}));
   const live=tile({workers_paused:false,worker:beat(30),stale_after_s:180});
   assert(live.includes('Running · issue #211') && live.includes('c379a45deadb') && live.includes('Pause workers') && !live.includes('not checking in'));
   const stale=tile({workers_paused:true,worker:beat(200,'paused',null),stale_after_s:180});
