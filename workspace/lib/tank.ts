@@ -1209,6 +1209,35 @@ export async function setCommandSquad(userId: string, tenantId: string, agent: s
   });
 }
 
+// Client-roster startup only: keep request-time squad behavior unchanged. A
+// single deadline covers both fetch and JSON, even if upstream ignores abort.
+export const CLIENT_STARTUP_LIMITS = { requestMs: 1500 };
+async function startupSquadRequest<T>(userId: string, tenantId: string, path: string, init: RequestInit): Promise<T> {
+  return boundedFetch(new URL(`/v1/command/squads${path}`, TANK_URL), {
+    ...init, cache: "no-store",
+    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY,
+      ...commandSquadHeaders(userId, tenantId) },
+  }, CLIENT_STARTUP_LIMITS.requestMs, async response => {
+    // Never consume an error body (or put it in an exception/log).
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => undefined);
+      throw new Error("Client startup squad request failed");
+    }
+    return await response.json() as T;
+  });
+}
+export async function readStartupCommandSquads(userId: string, tenantId: string) {
+  const [grants, log] = await Promise.all([
+    startupSquadRequest<CommandSquadGrant[]>(userId, tenantId, "", { method: "GET" }),
+    startupSquadRequest<CommandSquadChange[]>(userId, tenantId, "/log", { method: "GET" }),
+  ]);
+  return { grants, log };
+}
+export async function setStartupCommandSquad(userId: string, tenantId: string, agent: string) {
+  return startupSquadRequest<{ agent: string; enabled: boolean; changed: boolean }>(
+    userId, tenantId, `/${encodeURIComponent(agent)}`, { method: "PUT", body: JSON.stringify({ enabled: true }) });
+}
+
 // ---- COMMAND-1: same-box conversations; caller identity is server-owned. ----
 export class CommandRequestError extends Error {
   status: number;
