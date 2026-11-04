@@ -10,9 +10,9 @@ Module._resolveFilename = function(name, parent, ...rest) {
 };
 require.extensions['.ts'] = (m, f) => m._compile(ts.transpileModule(fs.readFileSync(f, 'utf8'),
   {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022}}).outputText, f);
-Object.assign(process.env, {TANK_URL: 'http://us.invalid', TANK_API_KEY: 'local-workspace',
-  TANK_REGION: 'us-east', TANK_URL_ZA: 'https://za.invalid', TANK_CONTENT_API_KEY_ZA: 'za-content',
-  TANK_API_KEY_ZA: 'homes-only'});
+Object.assign(process.env, {TANK_URL: 'http://us.invalid', TANK_API_KEY: 'placeholder-local-workspace',
+  TANK_REGION: 'us-east', TANK_URL_ZA: 'https://za.invalid', TANK_CONTENT_API_KEY_ZA: 'placeholder-za-content',
+  TANK_API_KEY_ZA: 'placeholder-homes-only'});
 const tank = require('../workspace/lib/tank.ts');
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', other = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 const identity = {tenantId: tenant, userId: 'clerk-user'};
@@ -24,7 +24,7 @@ global.fetch = async (raw, init) => {
   if (url.pathname === '/v1/tenants/' + tenant + '/home') {
     assert(init.signal instanceof AbortSignal);
     assert.equal(url.origin, 'http://us.invalid');
-    assert.equal(headers.get('x-tank-key'), 'local-workspace');
+    assert.equal(headers.get('x-tank-key'), 'placeholder-local-workspace');
     if (init.method === 'PUT') return Response.json({tenant_id: tenant, home_region: 'za'});
     assert.equal(init.method, 'GET');
     assert.equal(init.body, undefined); // Metadata lookup never receives content.
@@ -45,7 +45,7 @@ global.fetch = async (raw, init) => {
   assert.deepEqual(await tank.commandTools(identity), ['base.list']);
   assert.equal(calls.length, 2);
   assert.equal(calls[1].url.origin, 'https://za.invalid');
-  assert.equal(calls[1].headers.get('x-tank-key'), 'za-content');
+  assert.equal(calls[1].headers.get('x-tank-key'), 'placeholder-za-content');
   assert.equal(calls[1].headers.get('x-tervory-home-region'), 'za');
   calls=[];
   await tank.commandRequest(identity,'turns',{method:'POST',headers:{
@@ -57,13 +57,13 @@ global.fetch = async (raw, init) => {
   assert.equal(calls[1].headers.get('x-tervory-user'),'clerk-user');
   assert.equal(calls[1].headers.get('x-tervory-squad'),null);
   assert.equal(calls[1].headers.get('x-tervory-role'),'');
-  assert.equal(calls[1].headers.get('x-tank-key'),'za-content');
+  assert.equal(calls[1].headers.get('x-tank-key'),'placeholder-za-content');
   assert.equal(calls[1].headers.get('x-tervory-home-region'),'za');
   assert.equal(JSON.parse(calls[1].body).text,'private content');
   calls=[];
   await tank.createTask(tenant,'clerk-user','Task','tier0.answer',[{role:'user',content:'private task'}]);
   assert.equal(calls[1].url.origin,'https://za.invalid');
-  assert.equal(calls[1].headers.get('x-tank-key'),'za-content');
+  assert.equal(calls[1].headers.get('x-tank-key'),'placeholder-za-content');
   for (const send of [
     ()=>tank.marketLabRequest(tenant,'overview'),
     ()=>tank.baseProductRequest(tenant,'overview'),
@@ -75,7 +75,7 @@ global.fetch = async (raw, init) => {
     await send();
     assert.equal(calls.length,2);
     assert.equal(calls[1].url.origin,'https://za.invalid');
-    assert.equal(calls[1].headers.get('x-tank-key'),'za-content');
+    assert.equal(calls[1].headers.get('x-tank-key'),'placeholder-za-content');
     if (calls[1].url.pathname.startsWith('/v1/zenas/')) assert.equal(calls[1].url.searchParams.get('home_region'),'za');
   }
   calls=[];
@@ -86,7 +86,7 @@ global.fetch = async (raw, init) => {
   calls=[];
   await assert.rejects(()=>tank.commandTools(identity));
   assert.equal(calls.length,1); // Homes credential cannot substitute for content.
-  process.env.TANK_CONTENT_API_KEY_ZA='za-content';
+  process.env.TANK_CONTENT_API_KEY_ZA='placeholder-za-content';
   for (mode of ['unavailable','old-endpoint','mismatch','invalid','redirect']) {
     calls=[];
     await assert.rejects(()=>tank.commandTools(identity));
@@ -105,7 +105,7 @@ global.fetch = async (raw, init) => {
   mode='missing';calls=[];
   await tank.commandTools(identity);
   assert.equal(calls[1].url.origin,'http://us.invalid');
-  assert.equal(calls[1].headers.get('x-tank-key'),'local-workspace');
+  assert.equal(calls[1].headers.get('x-tank-key'),'placeholder-local-workspace');
   calls=[];
   await tank.onboardTenantHome('founder-user',other,tenant,'za');
   assert.equal(calls.length,1);

@@ -28,6 +28,7 @@ def request(token=TOKEN, method='GET', path='/v1/command/tools', **headers):
 @pytest.fixture
 def runtime(monkeypatch):
     conn = SimpleNamespace(fetchrow=AsyncMock(return_value={'token_id': uuid.uuid4(), 'user_id': 'client', 'stale': None}),
+                           fetchval=AsyncMock(return_value=None),  # Legacy tenant home.
                            execute=AsyncMock(),
                            fetch=AsyncMock(return_value=[{'agent': 'tiger'}]))
     @asynccontextmanager
