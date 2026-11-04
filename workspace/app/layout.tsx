@@ -1,13 +1,19 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { TriggerSigninProvider } from "./trigger-signin-provider";
 import { auth } from "@/lib/trigger-signin";
 import { isListedFounder } from "./review/founder";
 import { Shell, type ShellAccess } from "./shell";
 import { inter, jost, mono } from "./fonts";
 import "./globals.css";
+import { InstallShell } from "./mobile-shell/install";
+
+export const viewport: Viewport = { themeColor: "#001840" };
 
 export const metadata: Metadata = {
   title: "Tervory",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "Tervory", statusBarStyle: "default" },
+  icons: { apple: "/icons/tervory-180.png", icon: "/icons/tervory-192.png" },
   description: "Ask for work. See what it cost.",
 };
 
@@ -26,9 +32,9 @@ async function readAccess(): Promise<ShellAccess> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const access = await accessForRequest();
   return (
-    // SigninDirectory 7 (Core 3): ClerkProvider sits inside <body>, not around <html>.
     <html lang="en" className={`${jost.variable} ${inter.variable} ${mono.variable}`}>
       <body>
+        <InstallShell />
         <TriggerSigninProvider>
           <Shell founder={access.founder} reviewer={access.reviewer} readAccess={readAccess}>{children}</Shell>
         </TriggerSigninProvider>

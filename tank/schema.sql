@@ -3101,6 +3101,56 @@ END $$;
 ALTER TABLE tank.trigger_bot_config ADD COLUMN IF NOT EXISTS settings jsonb NOT NULL DEFAULT '{}';
 ALTER TABLE tank.trigger_bot_messages ADD COLUMN IF NOT EXISTS person text;
 
+-- BEGIN trigger (new blocks for trigger go here)
+-- END trigger
+-- BEGIN base (new blocks for base go here)
+-- END base
+-- BEGIN tiger (new blocks for tiger go here)
+-- END tiger
+-- BEGIN market_lab (new blocks for market_lab go here)
+-- END market_lab
+-- BEGIN rig (new blocks for rig go here)
+-- END rig
+-- BEGIN tisan (new blocks for tisan go here)
+-- END tisan
+-- BEGIN radix (new blocks for radix go here)
+-- END radix
+-- BEGIN zenas (new blocks for zenas go here)
+-- END zenas
+-- BEGIN mcp (new blocks for mcp go here)
+-- END mcp
+-- BEGIN skala (new blocks for skala go here)
+-- END skala
+-- BEGIN worker (new blocks for worker go here)
+-- END worker
+-- BEGIN platform (new blocks for platform go here)
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
+-- END platform
+
+-- BEGIN trigger_signin
+ALTER TABLE tank.oauth_codes ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin_issuer text;
+
+CREATE TABLE IF NOT EXISTS tank.trigger_signin_config (
+    region text PRIMARY KEY CHECK (region IN ('us-east','za')),
+    issuer text NOT NULL UNIQUE,
+    client_id text NOT NULL,
+    workspace_client_id text NOT NULL,
+    project_id text NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_signin_organisations (
+    region text NOT NULL REFERENCES tank.trigger_signin_config(region),
+    org_id text NOT NULL,
+    tenant_id uuid NOT NULL REFERENCES tank.case_study_clients(tenant_id),
+    PRIMARY KEY (region,org_id),
+    UNIQUE (region,tenant_id)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_signin_founders (
+    region text PRIMARY KEY REFERENCES tank.trigger_signin_config(region),
+    subject text NOT NULL
+);
+-- END trigger_signin
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
@@ -3151,25 +3201,3 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
-
-ALTER TABLE tank.oauth_codes ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
-ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin_issuer text;
-
-CREATE TABLE IF NOT EXISTS tank.trigger_signin_config (
-    region text PRIMARY KEY CHECK (region IN ('us-east','za')),
-    issuer text NOT NULL UNIQUE,
-    client_id text NOT NULL,
-    workspace_client_id text NOT NULL,
-    project_id text NOT NULL
-);
-CREATE TABLE IF NOT EXISTS tank.trigger_signin_organisations (
-    region text NOT NULL REFERENCES tank.trigger_signin_config(region),
-    org_id text NOT NULL,
-    tenant_id uuid NOT NULL REFERENCES tank.case_study_clients(tenant_id),
-    PRIMARY KEY (region,org_id),
-    UNIQUE (region,tenant_id)
-);
-CREATE TABLE IF NOT EXISTS tank.trigger_signin_founders (
-    region text PRIMARY KEY REFERENCES tank.trigger_signin_config(region),
-    subject text NOT NULL
-);

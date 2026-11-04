@@ -40,7 +40,10 @@ def test_tank_storage_imports_without_chassis():
     dockerfile = (ROOT / 'tank/Dockerfile').read_text()
     assert (ROOT / 'tank/storage.py').is_file()
     assert '*.py' in next(line for line in dockerfile.splitlines() if line.startswith('COPY ') and '*.py' in line).split()
-    assert 'app.include_router(__import__("storage").router)' in (ROOT / 'tank/main.py').read_text()
+    from routes_registry import ROUTES
+    assert ('early', 'storage', 'router', None, True) in ROUTES
+    main = (ROOT / 'tank/main.py').read_text()
+    assert main.count(".register_routes(__import__(\"sys\").modules[__name__], 'early')") == 1
 
 
 def test_compose_only_passes_own_pairs_and_boston_backup_is_persistent():

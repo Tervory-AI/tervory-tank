@@ -305,9 +305,12 @@ def test_storage_is_additive_and_main_only_registers_routes():
     assert "ALTER TABLE" not in block and "DROP" not in block
     assert "CHECK (name = 'paid_paused')" in schema
     main = (ROOT / "tank/main.py").read_text()
-    assert 'app.include_router(__import__("workers_status").router)' in main
-    assert 'app.include_router(__import__("workers_status").founder_router)' in main
-    assert main.count("include_router(__import__(\"workers_status\")") == 2
+    from routes_registry import ROUTES
+    assert [entry for entry in ROUTES if entry[1] == 'workers_status'] == [
+        ('early', 'workers_status', 'router', None, True),
+        ('early', 'workers_status', 'founder_router', None, True),
+    ]
+    assert main.count(".register_routes(__import__(\"sys\").modules[__name__], 'early')") == 1
     assert 'return await __import__("workers_status").panel()' in main
     assert (ROOT / "tank/workers_status.py").is_file() and "COPY *.py " in (ROOT / "tank/Dockerfile").read_text()
 
