@@ -101,7 +101,8 @@ def test_stack_is_isolated_pinned_and_uses_only_existing_proxy():
     assert services['trigger-signin-setup']['depends_on']['trigger-signin-init']['condition'] == 'service_completed_successfully'
     env = services['trigger-signin-setup']['environment']
     assert env['ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED'] == 'true'
-    assert env['ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWREGISTER'] == 'false'
+    # Open sign-up matches setup's login policy; a new account has no tenant access until invited.
+    assert env['ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWREGISTER'] == 'true'
     assert env['ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH'] == '/bootstrap/machine-key.json'
     assert services['trigger-signin-login']['volumes'] == ['identity_login_token:/login:ro']
     assert 'identity_bootstrap:/bootstrap' in services['tervory-setup']['volumes']

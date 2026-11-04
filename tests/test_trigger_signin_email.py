@@ -51,3 +51,13 @@ def test_missing_mail_secret_stops_setup(tmp_path):
     env = {k: v for k, v in ENV.items() if k != 'TRIGGER_SIGNIN_SMTP_PASSWORD'}
     with pytest.raises(ValueError, match='TRIGGER_SIGNIN_SMTP_PASSWORD'):
         EMAIL['configure_email'](Native(), tmp_path, env)
+
+
+def test_existing_mail_settings_are_reused_not_duplicated(tmp_path):
+    api = Native()
+    api.configs.append({'id': 'live', 'description': 'set by hand', 'host': 'smtp.gmail.com:587',
+                        'user': 'tervory@gmail.com', 'senderAddress': 'tervory@gmail.com',
+                        'state': 'SMTP_CONFIG_ACTIVE'})
+    EMAIL['configure_smtp'](api, ENV)
+    assert not any(m == 'POST' and p == '/admin/v1/smtp' for m, p, _ in api.calls)
+    assert not any(p.endswith('/_activate') for _, p, _ in api.calls)
