@@ -65,8 +65,9 @@ async def google_signing_keys(kid: str = Query(default="", max_length=200)):
 
 
 async def call_room(method: str, room: str, path: str, *, body=None, params=None, tenant=None, timeout=60):
-    lifecycle = room == "ghost" and path.startswith("/ghost/autumbra/enforce/")
-    key = os.environ.get("AUTUMBRA_LIFECYCLE_KEY" if lifecycle else f"TANK_KEY_{room.upper()}", "")
+    rig_lifecycle = room == "ghost" and path.startswith("/rig/rooms/")
+    lifecycle = rig_lifecycle or (room == "ghost" and path.startswith("/ghost/autumbra/enforce/"))
+    key = os.environ.get("RIG_LIFECYCLE_KEY" if rig_lifecycle else "AUTUMBRA_LIFECYCLE_KEY" if lifecycle else f"TANK_KEY_{room.upper()}", "")
     http = runtime()._http
     if not key or http is None:
         raise HTTPException(503, "The room is unavailable.")

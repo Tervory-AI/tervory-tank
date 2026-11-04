@@ -1,0 +1,4978 @@
+{
+  "figmaFile": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS",
+  "status": "Proposed",
+  "records": [
+    {
+      "product": "Rig",
+      "frameId": "231:11870",
+      "frameName": "Rig Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:45832",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:45832",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:11900",
+      "frameName": "Rig Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:45919",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:45919",
+        "mainId": "539:19647",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:11930",
+      "frameName": "Rig Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:46007",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:46007",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:11958",
+      "frameName": "Rig Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:46094",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:46094",
+        "mainId": "539:19647",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:11986",
+      "frameName": "Rig Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:46183",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:46183",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:12014",
+      "frameName": "Rig Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:46270",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:46270",
+        "mainId": "539:19647",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:12042",
+      "frameName": "Rig Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:46359",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:46359",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:12070",
+      "frameName": "Rig Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:46447",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:46447",
+        "mainId": "539:19647",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:12098",
+      "frameName": "Rig Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:47228",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:47228",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:12124",
+      "frameName": "Rig Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:47318",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:47318",
+        "mainId": "539:19647",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:12150",
+      "frameName": "Rig Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:47406",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:47406",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "231:12187",
+      "frameName": "Rig Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:47493",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:47493",
+        "mainId": "539:19647",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12224",
+      "frameName": "Tisan Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:47581",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:47581",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12254",
+      "frameName": "Tisan Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:47668",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:47668",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12284",
+      "frameName": "Tisan Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:47756",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:47756",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12312",
+      "frameName": "Tisan Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:47843",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:47843",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12340",
+      "frameName": "Tisan Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:47931",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:47931",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12368",
+      "frameName": "Tisan Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:48018",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:48018",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12396",
+      "frameName": "Tisan Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:48107",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:48107",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12424",
+      "frameName": "Tisan Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:48195",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:48195",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12452",
+      "frameName": "Tisan Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:48286",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:48286",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12478",
+      "frameName": "Tisan Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:48376",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:48376",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12504",
+      "frameName": "Tisan Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:48464",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "465:48464",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "231:12541",
+      "frameName": "Tisan Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:48551",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "465:48551",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "513:40528",
+      "frameName": "J4 / ready / 1440 / Proposed",
+      "before": {
+        "menuId": "513:40529",
+        "mainId": "180:8387",
+        "name": "Shared menu / Desktop",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Trigger",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "513:40529",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "513:40686",
+      "frameName": "J4 / ready / 375 / Proposed",
+      "before": {
+        "menuId": "513:40687",
+        "mainId": "180:8550",
+        "name": "Shared menu / Mobile",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Trigger",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "513:40687",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "514:5990",
+      "frameName": "J4 / empty / 1440 / Proposed",
+      "before": {
+        "menuId": "514:5991",
+        "mainId": "180:8387",
+        "name": "Shared menu / Desktop",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Trigger",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "514:5991",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "514:6148",
+      "frameName": "J4 / empty / 375 / Proposed",
+      "before": {
+        "menuId": "514:6149",
+        "mainId": "180:8550",
+        "name": "Shared menu / Mobile",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Trigger",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:6149",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "514:18203",
+      "frameName": "J4 / missing / 1440 / Proposed",
+      "before": {
+        "menuId": "514:18204",
+        "mainId": "180:8387",
+        "name": "Shared menu / Desktop",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Trigger",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "514:18204",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "514:18361",
+      "frameName": "J4 / missing / 375 / Proposed",
+      "before": {
+        "menuId": "514:18362",
+        "mainId": "180:8550",
+        "name": "Shared menu / Mobile",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Trigger",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:18362",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "514:18586",
+      "frameName": "J4 / invalid / 1440 / Proposed",
+      "before": {
+        "menuId": "514:18587",
+        "mainId": "180:8387",
+        "name": "Shared menu / Desktop",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Trigger",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "514:18587",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "514:18744",
+      "frameName": "J4 / invalid / 375 / Proposed",
+      "before": {
+        "menuId": "514:18745",
+        "mainId": "180:8550",
+        "name": "Shared menu / Mobile",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Trigger",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:18745",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "514:18891",
+      "frameName": "J4 / loading / 1440 / Proposed",
+      "before": {
+        "menuId": "514:18892",
+        "mainId": "180:8387",
+        "name": "Shared menu / Desktop",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Trigger",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "514:18892",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 1000,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "514:19050",
+      "frameName": "J4 / loading / 375 / Proposed",
+      "before": {
+        "menuId": "514:19051",
+        "mainId": "180:8550",
+        "name": "Shared menu / Mobile",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Trigger",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:19051",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 64,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "468:26347",
+      "frameName": "Rig Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:26351",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "468:26351",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "468:26455",
+      "frameName": "Rig Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:26459",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "468:26459",
+        "mainId": "539:19647",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "468:27698",
+      "frameName": "Rig Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:27702",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "468:27702",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "468:27804",
+      "frameName": "Rig Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:27808",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "468:27808",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "468:27919",
+      "frameName": "Rig Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:27923",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "468:27923",
+        "mainId": "539:19647",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "468:27953",
+      "frameName": "Rig Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:27957",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "468:27957",
+        "mainId": "539:19647",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "291:8053",
+      "frameName": "A07-choose \u00b7 Shop platform \u00b7 not connected \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:18492",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:18492",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "291:8097",
+      "frameName": "A07-shopify \u00b7 Shopify \u00b7 enter credentials \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:18598",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:18598",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "291:8151",
+      "frameName": "A07-woo \u00b7 WooCommerce \u00b7 enter credentials \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:18691",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 920,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:18691",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 920,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "291:8213",
+      "frameName": "A07-big \u00b7 BigCommerce \u00b7 enter credentials \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:18784",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:18784",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "291:8267",
+      "frameName": "A07-testing \u00b7 Shop platform \u00b7 testing \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:18877",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:18877",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "291:8309",
+      "frameName": "A07-connected \u00b7 Shop platform \u00b7 connected \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:18970",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:18970",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "291:8357",
+      "frameName": "A07-failed \u00b7 Shop platform \u00b7 connection failed \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:19063",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:19063",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "291:8405",
+      "frameName": "A08 \u00b7 Orders \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:19156",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 1050,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:19156",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 1050,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "291:8444",
+      "frameName": "A09 \u00b7 Store delivery time \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:19249",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:19249",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "321:6304",
+      "frameName": "A08-late \u00b7 Order paid after window \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:19342",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 906,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:19342",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 906,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "321:6382",
+      "frameName": "A07-choose-open \u00b7 Choose a platform \u00b7 open \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "456:19435",
+        "mainId": "180:8387",
+        "name": "Workspace navigation \u00b7 CRM instance \u00b7 Rig",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Overview",
+          "Ledger",
+          "Billing",
+          "Tasks",
+          "Data",
+          "Google posts",
+          "Prices",
+          "Settings",
+          "CLI sign-ins",
+          "Support"
+        ]
+      },
+      "after": {
+        "menuId": "456:19435",
+        "mainId": "533:19231",
+        "width": 240,
+        "height": 900,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tiger",
+      "frameId": "256:10",
+      "frameName": "01 \u00b7 Price position \u00b7 1440 \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:26693",
+        "mainId": "180:8387",
+        "name": "CRM Navigation \u00b7 Tiger identity \u00b7 original menu IDs retained",
+        "width": 240,
+        "height": 1360,
+        "labels": [
+          "{Store name}",
+          "\u2304",
+          "Tiger"
+        ]
+      },
+      "after": {
+        "menuId": "465:26693",
+        "mainId": "533:19787",
+        "width": 240,
+        "height": 1360,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tiger",
+          "Account",
+          "Dashboard",
+          "Tasks",
+          "Chats",
+          "Squad",
+          "Tiger",
+          "Overview",
+          "Alerts",
+          "Watch list",
+          "History",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tiger",
+      "frameId": "256:283",
+      "frameName": "02 \u00b7 Matches to review \u00b7 1440 \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:26776",
+        "mainId": "180:8387",
+        "name": "CRM Navigation \u00b7 Tiger identity \u00b7 original menu IDs retained",
+        "width": 240,
+        "height": 1076,
+        "labels": [
+          "{Store name}",
+          "\u2304",
+          "Tiger"
+        ]
+      },
+      "after": {
+        "menuId": "465:26776",
+        "mainId": "533:19787",
+        "width": 240,
+        "height": 1076,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tiger",
+          "Account",
+          "Dashboard",
+          "Tasks",
+          "Chats",
+          "Squad",
+          "Tiger",
+          "Overview",
+          "Alerts",
+          "Watch list",
+          "History",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tiger",
+      "frameId": "256:471",
+      "frameName": "03 \u00b7 Competitor sites \u00b7 1440 \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:26859",
+        "mainId": "180:8387",
+        "name": "CRM Navigation \u00b7 Tiger identity \u00b7 original menu IDs retained",
+        "width": 240,
+        "height": 1056,
+        "labels": [
+          "{Store name}",
+          "\u2304",
+          "Tiger"
+        ]
+      },
+      "after": {
+        "menuId": "465:26859",
+        "mainId": "533:19787",
+        "width": 240,
+        "height": 1056,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tiger",
+          "Account",
+          "Dashboard",
+          "Tasks",
+          "Chats",
+          "Squad",
+          "Tiger",
+          "Overview",
+          "Alerts",
+          "Watch list",
+          "History",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tiger",
+      "frameId": "267:19232",
+      "frameName": "02 \u00b7 Matches to review \u00b7 1440 \u00b7 Empty \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:26942",
+        "mainId": "180:8387",
+        "name": "CRM Navigation \u00b7 Tiger identity \u00b7 original menu IDs retained",
+        "width": 240,
+        "height": 848,
+        "labels": [
+          "{Store name}",
+          "\u2304",
+          "Tiger"
+        ]
+      },
+      "after": {
+        "menuId": "465:26942",
+        "mainId": "533:19787",
+        "width": 240,
+        "height": 848,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tiger",
+          "Account",
+          "Dashboard",
+          "Tasks",
+          "Chats",
+          "Squad",
+          "Tiger",
+          "Overview",
+          "Alerts",
+          "Watch list",
+          "History",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tiger",
+      "frameId": "267:19424",
+      "frameName": "03 \u00b7 Competitor sites \u00b7 1440 \u00b7 Empty \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "465:27025",
+        "mainId": "180:8387",
+        "name": "CRM Navigation \u00b7 Tiger identity \u00b7 original menu IDs retained",
+        "width": 240,
+        "height": 848,
+        "labels": [
+          "{Store name}",
+          "\u2304",
+          "Tiger"
+        ]
+      },
+      "after": {
+        "menuId": "465:27025",
+        "mainId": "533:19787",
+        "width": 240,
+        "height": 848,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tiger",
+          "Account",
+          "Dashboard",
+          "Tasks",
+          "Chats",
+          "Squad",
+          "Tiger",
+          "Overview",
+          "Alerts",
+          "Watch list",
+          "History",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "468:26491",
+      "frameName": "Tisan Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:26495",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "468:26495",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "468:26599",
+      "frameName": "Tisan Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:26603",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "468:26603",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "468:27996",
+      "frameName": "Tisan Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:28000",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "468:28000",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "468:28102",
+      "frameName": "Tisan Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:28106",
+        "mainId": "180:8387",
+        "name": "CRM navigation / White sidebar",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "468:28106",
+        "mainId": "533:19517",
+        "width": 240,
+        "height": 860,
+        "labels": [
+          "Business",
+          "\u2304",
+          "Tisan",
+          "Workspace",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Tisan",
+          "Overview",
+          "Builds",
+          "Design",
+          "Tests",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "468:28217",
+      "frameName": "Tisan Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:28221",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "468:28221",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Tisan",
+      "frameId": "468:28251",
+      "frameName": "Tisan Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+      "before": {
+        "menuId": "468:28255",
+        "mainId": "180:8467",
+        "name": "CRM navigation / Mobile header",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "\u00d7",
+          "Menu",
+          "\u2304"
+        ]
+      },
+      "after": {
+        "menuId": "468:28255",
+        "mainId": "539:19711",
+        "width": 375,
+        "height": 72,
+        "labels": [
+          "Tisan",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4045",
+      "frameName": "06 \u00b7 ready \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4050",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4050",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4101",
+      "frameName": "06 \u00b7 ready \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4106",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4106",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4157",
+      "frameName": "06 \u00b7 rotated \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4162",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4162",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4213",
+      "frameName": "06 \u00b7 rotated \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4218",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4218",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4269",
+      "frameName": "06 \u00b7 exploded \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4274",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4274",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4328",
+      "frameName": "06 \u00b7 exploded \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4333",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4333",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4387",
+      "frameName": "06 \u00b7 anchors \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4392",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4392",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4447",
+      "frameName": "06 \u00b7 anchors \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4452",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4452",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4507",
+      "frameName": "06 \u00b7 empty \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4512",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4512",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4551",
+      "frameName": "06 \u00b7 empty \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4556",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4556",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4595",
+      "frameName": "06 \u00b7 loading \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4600",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4600",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4640",
+      "frameName": "06 \u00b7 loading \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4645",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4645",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4685",
+      "frameName": "06 \u00b7 error \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4690",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4690",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4729",
+      "frameName": "06 \u00b7 error \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4734",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4734",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4773",
+      "frameName": "06 \u00b7 photos \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4778",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4778",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4816",
+      "frameName": "06 \u00b7 photos \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4821",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4821",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4859",
+      "frameName": "06 \u00b7 menu \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4864",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:4864",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:4859",
+      "frameName": "06 \u00b7 menu \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:4915",
+        "mainId": "180:8467",
+        "name": "Shared CRM menu \u00b7 Proposed content context",
+        "width": 343,
+        "height": 812,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "514:4915",
+        "mainId": "533:19273",
+        "width": 343,
+        "height": 812,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:5000",
+      "frameName": "06 \u00b7 menu \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:5005",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "514:5005",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "514:5000",
+      "frameName": "06 \u00b7 menu \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "514:5056",
+        "mainId": "180:8467",
+        "name": "Shared CRM menu \u00b7 Proposed content context",
+        "width": 343,
+        "height": 812,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "514:5056",
+        "mainId": "533:19273",
+        "width": 343,
+        "height": 812,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:421",
+      "frameName": "07 \u00b7 attract \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:426",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:426",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:481",
+      "frameName": "07 \u00b7 attract \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:486",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:486",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:541",
+      "frameName": "07 \u00b7 attract-rotated \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:546",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:546",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:601",
+      "frameName": "07 \u00b7 attract-rotated \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:606",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:606",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:661",
+      "frameName": "07 \u00b7 attract-still \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:666",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:666",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:721",
+      "frameName": "07 \u00b7 attract-still \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:726",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:726",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:781",
+      "frameName": "07 \u00b7 ready \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:786",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:786",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:841",
+      "frameName": "07 \u00b7 ready \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:846",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:846",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:901",
+      "frameName": "07 \u00b7 rotated \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:906",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:906",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:961",
+      "frameName": "07 \u00b7 rotated \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:966",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:966",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1021",
+      "frameName": "07 \u00b7 exploded \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1026",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1026",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1084",
+      "frameName": "07 \u00b7 exploded \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1089",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1089",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1147",
+      "frameName": "07 \u00b7 anchors \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1152",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1152",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1211",
+      "frameName": "07 \u00b7 anchors \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1216",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1216",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1275",
+      "frameName": "07 \u00b7 phone \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1280",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1280",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1347",
+      "frameName": "07 \u00b7 phone \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1352",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1352",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1419",
+      "frameName": "07 \u00b7 email \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1424",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1424",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1491",
+      "frameName": "07 \u00b7 email \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1496",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1496",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1563",
+      "frameName": "07 \u00b7 sending \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1568",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1568",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1636",
+      "frameName": "07 \u00b7 sending \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1641",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1641",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1709",
+      "frameName": "07 \u00b7 saved \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1714",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1714",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1770",
+      "frameName": "07 \u00b7 saved \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1775",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1775",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1831",
+      "frameName": "07 \u00b7 empty \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1836",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1836",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1879",
+      "frameName": "07 \u00b7 empty \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1884",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1884",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1927",
+      "frameName": "07 \u00b7 loading \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1932",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1932",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:1976",
+      "frameName": "07 \u00b7 loading \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:1981",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:1981",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2025",
+      "frameName": "07 \u00b7 error \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2030",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2030",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2073",
+      "frameName": "07 \u00b7 error \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2078",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2078",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2121",
+      "frameName": "07 \u00b7 error-quote \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2126",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2126",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2194",
+      "frameName": "07 \u00b7 error-quote \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2199",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2199",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2267",
+      "frameName": "07 \u00b7 offline \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2272",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2272",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2328",
+      "frameName": "07 \u00b7 offline \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2333",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2333",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2389",
+      "frameName": "07 \u00b7 reset \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2394",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2394",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2435",
+      "frameName": "07 \u00b7 reset \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2440",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2440",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2481",
+      "frameName": "07 \u00b7 photos \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2486",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2486",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2528",
+      "frameName": "07 \u00b7 photos \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2533",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2533",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2575",
+      "frameName": "07 \u00b7 menu \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2580",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2580",
+        "mainId": "539:19647",
+        "width": 160,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2575",
+      "frameName": "07 \u00b7 menu \u00b7 1440 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2635",
+        "mainId": "180:8467",
+        "name": "Shared CRM menu \u00b7 Proposed content context",
+        "width": 343,
+        "height": 812,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "516:2635",
+        "mainId": "533:19273",
+        "width": 343,
+        "height": 812,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2720",
+      "frameName": "07 \u00b7 menu \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2725",
+        "mainId": "180:8550",
+        "name": "Shared menu \u00b7 linked CRM component \u00b7 Rig",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ]
+      },
+      "after": {
+        "menuId": "516:2725",
+        "mainId": "539:19647",
+        "width": 120,
+        "height": 64,
+        "labels": [
+          "Rig",
+          "\u2630"
+        ],
+        "nonInter": []
+      }
+    },
+    {
+      "product": "Rig",
+      "frameId": "516:2720",
+      "frameName": "07 \u00b7 menu \u00b7 375 \u00b7 Proposed",
+      "before": {
+        "menuId": "516:2780",
+        "mainId": "180:8467",
+        "name": "Shared CRM menu \u00b7 Proposed content context",
+        "width": 343,
+        "height": 812,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Writing",
+          "Write",
+          "Voice",
+          "CRM",
+          "Leads",
+          "Clients",
+          "Contacts",
+          "Opportunities",
+          "Cases",
+          "Tasks",
+          "Sales",
+          "Quotes",
+          "Invoices",
+          "Marketing",
+          "Channels",
+          "Calendar",
+          "Composer",
+          "Google posts",
+          "Google reviews",
+          "Chat bot",
+          "Inbox",
+          "Settings",
+          "All products",
+          "Receipts",
+          "Billing",
+          "Account settings"
+        ]
+      },
+      "after": {
+        "menuId": "516:2780",
+        "mainId": "533:19273",
+        "width": 343,
+        "height": 812,
+        "labels": [
+          "\u00d7",
+          "Business",
+          "\u2304",
+          "Rig",
+          "Account",
+          "Dashboard",
+          "Projects",
+          "Chats",
+          "Squad",
+          "Rig",
+          "Search",
+          "Overview",
+          "Catalogues",
+          "Fits to review",
+          "Skins",
+          "Progress",
+          "Plugins",
+          "Settings",
+          "Support"
+        ],
+        "nonInter": []
+      }
+    }
+  ]
+}

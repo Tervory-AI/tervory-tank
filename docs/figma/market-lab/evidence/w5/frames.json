@@ -1,0 +1,202 @@
+[
+  {
+    "id": "566:395",
+    "screen": "Brief detail",
+    "state": "Report 1",
+    "width": 1440,
+    "height": 1531,
+    "screenshot": "brief-detail-report-1-1440.png",
+    "sha256": "38eb191fc74b3825e1a545632018dfc035263e3ce1a55b901921beea3e306fb8",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:601",
+    "screen": "Brief detail",
+    "state": "Report 2",
+    "width": 1440,
+    "height": 1245,
+    "screenshot": "brief-detail-report-2-1440.png",
+    "sha256": "83e2f7ed3c5f94a45e87f4f4e1932f442da36bb780fae1fccdb3044e75462f0a",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:799",
+    "screen": "Brief detail",
+    "state": "Report 3",
+    "width": 1440,
+    "height": 1531,
+    "screenshot": "brief-detail-report-3-1440.png",
+    "sha256": "d3467e71d2cdc24babde10d06be925ca6d11a719a8f21e091c8e752858a83018",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:2140",
+    "screen": "Brief detail",
+    "state": "Report 1",
+    "width": 375,
+    "height": 1625,
+    "screenshot": "brief-detail-report-1-375.png",
+    "sha256": "18e421d249eab4f51eb17396d28f9753bd0334541376931db5f46d4a0076b932",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:2249",
+    "screen": "Brief detail",
+    "state": "Report 2",
+    "width": 375,
+    "height": 1319,
+    "screenshot": "brief-detail-report-2-375.png",
+    "sha256": "6cffdf7707b683c337566cfb70f75cdf5f2e9f922640095568163f404a22c4ba",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:2350",
+    "screen": "Brief detail",
+    "state": "Report 3",
+    "width": 375,
+    "height": 1625,
+    "screenshot": "brief-detail-report-3-375.png",
+    "sha256": "0af1806f788b78ed78cae8763826e310281a4bf4643a43d0442bec6fd3a10558",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:2459",
+    "screen": "Brief detail",
+    "state": "Empty",
+    "width": 1440,
+    "height": 1037,
+    "screenshot": "brief-detail-empty-1440.png",
+    "sha256": "b68b901dac03eae364f34cafd01d90e2ae4139bc29956226d1aa078b168c3056",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:2634",
+    "screen": "Brief detail",
+    "state": "Loading",
+    "width": 1440,
+    "height": 1037,
+    "screenshot": "brief-detail-loading-1440.png",
+    "sha256": "ab97b3f7a9dc90db02a6e6917bcd7065ff4f6be888ec9ce2c7c57964faa612a4",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:2812",
+    "screen": "Brief detail",
+    "state": "Error",
+    "width": 1440,
+    "height": 1037,
+    "screenshot": "brief-detail-error-1440.png",
+    "sha256": "ad185e15c6c62c5e00034c4879562d4a2f492cafe366c7f6a1fbbf021cf80015",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:2989",
+    "screen": "Brief detail",
+    "state": "Empty",
+    "width": 375,
+    "height": 900,
+    "screenshot": "brief-detail-empty-375.png",
+    "sha256": "0508fe7803cb902fbae3954cf68b41910bf4743c0f998ba7f0bba05557149ae6",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:3067",
+    "screen": "Brief detail",
+    "state": "Loading",
+    "width": 375,
+    "height": 900,
+    "screenshot": "brief-detail-loading-375.png",
+    "sha256": "98339c8e6b4a05952db37af2914fb1363ede27ca48207a24b6c8cc29d5445e8c",
+    "status": "Proposed"
+  },
+  {
+    "id": "566:3148",
+    "screen": "Brief detail",
+    "state": "Error",
+    "width": 375,
+    "height": 900,
+    "screenshot": "brief-detail-error-375.png",
+    "sha256": "6d40ddecb197b92e085e79cef6e88d833db4d1d066eeb1570ae8254718366770",
+    "status": "Proposed"
+  },
+  {
+    "id": "567:941",
+    "screen": "Calibration",
+    "state": "Filled",
+    "width": 1440,
+    "height": 1378,
+    "screenshot": "calibration-filled-1440.png",
+    "sha256": "51904656fd628781617e8df276740dcedbe7e546a67a60a26e3a2e90ad51fd1a",
+    "status": "Proposed"
+  },
+  {
+    "id": "567:1193",
+    "screen": "Calibration",
+    "state": "Empty",
+    "width": 1440,
+    "height": 1037,
+    "screenshot": "calibration-empty-1440.png",
+    "sha256": "623aa9c31d517672f59bdaa9b4862c93aeb7f1c91fca3dead08c5de8d66d2424",
+    "status": "Proposed"
+  },
+  {
+    "id": "567:1369",
+    "screen": "Calibration",
+    "state": "Loading",
+    "width": 1440,
+    "height": 1037,
+    "screenshot": "calibration-loading-1440.png",
+    "sha256": "15b9c7e3a0344cafa21333fe090e90caa62ebf3f4b1a2375fb9572fffec56926",
+    "status": "Proposed"
+  },
+  {
+    "id": "567:1548",
+    "screen": "Calibration",
+    "state": "Error",
+    "width": 1440,
+    "height": 1037,
+    "screenshot": "calibration-error-1440.png",
+    "sha256": "ca3ac6d10ea2b41641cf3bd2dea5e16e4d49e13a656b5e016afff4ac935f22c3",
+    "status": "Proposed"
+  },
+  {
+    "id": "567:1726",
+    "screen": "Calibration",
+    "state": "Filled",
+    "width": 375,
+    "height": 1311,
+    "screenshot": "calibration-filled-375.png",
+    "sha256": "9bb9c3815bb0e3db36c6b8b6df1659e824e8f6249783194538ef6153b7d7b593",
+    "status": "Proposed"
+  },
+  {
+    "id": "567:1846",
+    "screen": "Calibration",
+    "state": "Empty",
+    "width": 375,
+    "height": 900,
+    "screenshot": "calibration-empty-375.png",
+    "sha256": "39b088189de9052fadd9ac0eb2fb51afe36d9923954612a879db26eac000bab2",
+    "status": "Proposed"
+  },
+  {
+    "id": "567:1925",
+    "screen": "Calibration",
+    "state": "Loading",
+    "width": 375,
+    "height": 900,
+    "screenshot": "calibration-loading-375.png",
+    "sha256": "7329671271a4e3a34fbfc720c795ef9c52ed6c9b81791201e66dec0b11fe2a5d",
+    "status": "Proposed"
+  },
+  {
+    "id": "567:2007",
+    "screen": "Calibration",
+    "state": "Error",
+    "width": 375,
+    "height": 900,
+    "screenshot": "calibration-error-375.png",
+    "sha256": "4d4a0ae058e72e8766a500a43f739a62ed7169c23dcf638717576d1e0f0e5bbf",
+    "status": "Proposed"
+  }
+]

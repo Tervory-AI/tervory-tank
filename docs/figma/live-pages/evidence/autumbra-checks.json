@@ -1,0 +1,30 @@
+{
+  "frames": [
+    {
+      "id": "649:10",
+      "width": 1440,
+      "height": 1044,
+      "copyExact": true,
+      "pngSha256": "1023a77f87938df9f460faebdc77b1667ae4da38070abaafd77ecc925abc76ad",
+      "textBoundsPassed": true,
+      "browserScrollbar": "hidden by CDP before measurements, matching screenshot capture; product CSS unchanged"
+    },
+    {
+      "id": "649:22",
+      "width": 375,
+      "height": 1044,
+      "copyExact": true,
+      "pngSha256": "c01cd2327cda0a947a6fd1accbd4f81ed64568c487dd5aa5caec407c19f1902e",
+      "textBoundsPassed": true,
+      "browserScrollbar": "hidden by CDP before measurements, matching screenshot capture; product CSS unchanged"
+    }
+  ],
+  "sourceHashes": {
+    "workspace/app/autumbra/page.tsx": "2535797c490567c21671cb8371f3e994052cebadbbbca73e655e82fca9c385f3",
+    "workspace/app/autumbra/public.css": "018bd7ac2be9d361b307d1a5a1ed48140e3f2707f42c9c9aa32ac27f4dfb2656",
+    "workspace/app/shell.tsx": "c3a2e10162e62167bb7009bda439ae794e0f2354bc63fd23790823a7d82f85b0",
+    "workspace/app/globals.css": "7b6d446d98d4f131941c365a6f7b3ad84ebbac19a26469efc402f6c49c622b0d"
+  },
+  "font": "The Linux browser resolves system-ui to Liberation Mono. Cousine is its metrics-compatible Figma substitute; SF Pro from automatic import was not used.",
+  "newProductWords": []
+}

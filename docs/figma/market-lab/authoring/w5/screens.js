@@ -1,0 +1,45 @@
+// Proposed founder paid-step settings. Illustrative dynamic rows; no runtime paid policy changes.
+const mobile=__MOBILE__, states=__STATES__, screen=__SCREEN__;
+const page=await figma.getNodeByIdAsync('513:37050');await figma.setCurrentPageAsync(page);
+const source=await figma.getNodeByIdAsync(mobile?'514:5414':'514:5141');
+const fonts=new Map();for(const t of source.findAllWithCriteria({types:['TEXT']}))for(const s of t.getStyledTextSegments(['fontName']))fonts.set(JSON.stringify(s.fontName),s.fontName);
+for(const f of fonts.values())await figma.loadFontAsync(f);for(const style of ['Regular','Semi Bold','Medium'])await figma.loadFontAsync({family:'Inter',style});
+const vars={};for(const [k,id] of Object.entries({navy:'42:14',white:'42:13',canvas:'42:12',border:'465:26692',s8:'42:23',s16:'42:24',s24:'42:25',r8:'42:31'}))vars[k]=await figma.variables.getVariableByIdAsync('VariableID:'+id);
+const rgb={navy:{r:0,g:24/255,b:64/255},white:{r:1,g:1,b:1},canvas:{r:244/255,g:246/255,b:251/255},border:{r:132/255,g:141/255,b:163/255}};
+const paint=k=>figma.variables.setBoundVariableForPaint({type:'SOLID',color:rgb[k]},'color',vars[k]);
+const primary=await figma.getNodeByIdAsync('266:3032'),secondary=await figma.getNodeByIdAsync('266:3034'),field=await figma.getNodeByIdAsync('93:6');
+function box(parent,name,w,pad=0,gap=16){const n=figma.createAutoLayout('VERTICAL');n.name=name;n.resize(w,10);n.primaryAxisSizingMode='AUTO';n.counterAxisSizingMode='FIXED';n.fills=[];n.itemSpacing=gap;if(vars['s'+gap])n.setBoundVariable('itemSpacing',vars['s'+gap]);for(const p of ['paddingTop','paddingBottom','paddingLeft','paddingRight']){n[p]=pad;if(vars['s'+pad])n.setBoundVariable(p,vars['s'+pad]);}parent.appendChild(n);return n;}
+function text(parent,value,size=14,bold=false){const t=figma.createText();t.name=value;t.fontName={family:'Inter',style:bold?'Semi Bold':'Regular'};t.fontSize=size;t.lineHeight={unit:'PIXELS',value:Math.ceil(size*1.4)};t.fills=[paint('navy')];t.characters=value;parent.appendChild(t);t.textAutoResize='HEIGHT';t.resize(parent.width-parent.paddingLeft-parent.paddingRight,Math.max(20,t.height));t.layoutSizingHorizontal='FILL';return t;}
+function button(parent,label,main=false){const src=main?primary:secondary,n=src.createInstance();const owner=src.parent.type==='COMPONENT_SET'?src.parent:src;const key=Object.keys(owner.componentPropertyDefinitions).find(k=>k.startsWith('Label#'));n.setProperties({[key]:label});n.name='Action / '+label;parent.appendChild(n);n.resize(Math.min(280,parent.width-parent.paddingLeft-parent.paddingRight),48);n.fills=[paint(main?'navy':'white')];if(!main){n.strokes=[paint('navy')];n.strokeWeight=1;}n.cornerRadius=8;n.setBoundVariable('cornerRadius',vars.r8);for(const t of n.findAllWithCriteria({types:['TEXT']})){t.fontName={family:'Inter',style:'Semi Bold'};t.fills=[paint(main?'white':'navy')];}return n;}
+function card(parent,title){const n=box(parent,title,parent.width-parent.paddingLeft-parent.paddingRight,16);n.fills=[paint('white')];n.strokes=[paint('border')];n.strokeWeight=1;n.cornerRadius=8;n.setBoundVariable('cornerRadius',vars.r8);if(title)text(n,title,20,true);return n;}
+async function wire(n,to){await n.setReactionsAsync([{trigger:{type:'ON_CLICK'},actions:[{type:'NODE',destinationId:to,navigation:'NAVIGATE',transition:null,preserveScrollPosition:false}]}]);}
+const frames=[],created=[];let x=Math.max(...page.children.map(n=>n.x+n.width))+160;
+const reports=[{date:'1 Nov 2026',count:3,email:'Sent',webhook:'Sent'},{date:'1 Oct 2026',count:2,email:'Pending',webhook:'Suppressed'},{date:'1 Sep 2026',count:3,email:'Held',webhook:'Held'}];
+for(const state of states){
+ const name=screen+' / '+state+' / '+(mobile?'375':'1440')+' · Proposed';if(page.children.some(n=>n.name===name))throw Error('Already exists '+name);
+ const root=source.clone();page.appendChild(root);root.name=name;root.x=x;root.y=1700;x+=mobile?535:1600;const shell=root.children[1],body=shell.children[1];for(const n of [...body.children])n.remove();body.itemSpacing=16;body.setBoundVariable('itemSpacing',vars.s16);
+ text(body,'Market Lab',mobile?28:32,true);const tabs=box(body,'Screen navigation',body.width-48,0,8);tabs.layoutMode='HORIZONTAL';tabs.primaryAxisSizingMode='FIXED';tabs.counterAxisSizingMode='AUTO';const list=button(tabs,'Monthly briefs'),calibration=button(tabs,'Calibration');list.resize(mobile?151:200,48);calibration.resize(mobile?151:200,48);text(body,screen,mobile?28:32,true);
+ let retry,back,sourceButtons=[];
+ if(['Empty','Loading','Error'].includes(state)){
+  const title=state==='Empty'?(screen==='Brief detail'?'No brief selected.':'No resolved predictions yet.'):state==='Loading'?'Loading…':screen+' could not be loaded.';const c=card(body,title);
+  if(state==='Loading')for(let i=0;i<3;i++){const s=box(c,'Loading placeholder',c.width-32,0);s.resize(c.width-32,48);s.primaryAxisSizingMode='FIXED';s.fills=[paint('canvas')];}
+  if(state==='Error')retry=button(c,'Try again',true);
+  if(screen==='Calibration')text(c,'Confidence: — · Actual hit rate: — · Samples: —');
+ }else if(screen==='Brief detail'){
+  const index=Number(state.split(' ')[1])-1,r=reports[index];text(body,'Proposed · Saved-report placeholders; no live evidence',12,true);const report=card(body,'Where is demand outrunning supply?');text(report,r.date);text(report,'[Saved answer from this report]');text(report,'Email · '+r.email+'    Webhook · '+r.webhook);text(body,r.count+' · Sources cited',20,true);
+  for(let i=1;i<=r.count;i++){const c=card(body,'Citation '+i);text(c,'[Claim '+i+']');text(c,'Date: —');text(c,'[Stored source URL]');text(c,'[Page / row / prediction reference, when present]');const b=button(c,'Open stored source');b.opacity=.5;await b.setReactionsAsync([]);sourceButtons.push(b.id);}
+  back=button(body,'Monthly briefs');
+ }else{
+  text(body,'Proposed · Illustrative calibration, not observed accuracy',12,true);text(body,'Resolved originals only · Unknown and unmeasurable excluded');
+  if(!mobile){const table=card(body,'Resolved predictions');const headings=['Warning pair / feed','Frozen horizon','Confidence','Actual hit rate','Samples'];for(const vals of [headings,['[kind] / [feed]','30 days','75.0%','71.4%','7'],['[kind] / [feed]','7 days','75.0%','50.0%','4']]){const row=box(table,'Calibration table row',table.width-32,0,8);row.layoutMode='HORIZONTAL';row.primaryAxisSizingMode='FIXED';row.counterAxisSizingMode='AUTO';for(const v of vals){const cell=box(row,'Cell',(row.width-32)/5,0,8);text(cell,v,14,vals===headings);}}}
+  const c=card(body,'[Warning pair] · Horizon: 30 days');text(c,'[kind] / [feed]');text(c,'Confidence: 75.0% · Actual hit rate: 71.4%');text(c,'Samples: 7 · Hits: 5');
+  const chart=(await figma.getNodeByIdAsync(mobile?'50:2504':'50:2434')).createInstance();c.appendChild(chart);chart.resize(Math.min(chart.width,c.width-32),chart.height);chart.name='Calibration / selected warning pair and frozen horizon';
+  for(const t of chart.findAllWithCriteria({types:['TEXT']}))if(t.name==='total')t.characters='Confidence 75.0% / Actual hit rate 71.4%';
+  const second=card(body,'[Warning pair] · Horizon: 7 days');text(second,'[kind] / [feed]');text(second,'Confidence: 75.0% · Actual hit rate: 50.0%');text(second,'Samples: 4 · Hits: 2');text(body,'Each warning pair and frozen horizon stays separate.');
+ }
+ const needed=body.children.reduce((a,n)=>a+n.height,0)+body.itemSpacing*(body.children.length-1)+body.paddingTop+body.paddingBottom;const sh=Math.max(mobile?823:960,needed+(mobile?shell.children[0].height:0));shell.resize(mobile?375:1440,sh);body.resize(mobile?375:1200,sh-(mobile?shell.children[0].height:0));if(!mobile)shell.children[0].resize(240,sh);root.resize(mobile?375:1440,sh+root.children[0].height);
+ for(const t of root.findAllWithCriteria({types:['TEXT']})){t.setBoundVariable('fontFamily',null);t.fontName={family:'Inter',style:t.fontName.style==='Semi Bold'?'Semi Bold':'Regular'};}
+ const rec={id:root.id,name,screen,state,mobile,width:root.width,height:root.height,list:list.id,calibration:calibration.id,retry:retry?.id,back:back?.id,sourceButtons,screenshot:screen.toLowerCase().replaceAll(' ','-')+'-'+state.toLowerCase().replaceAll(' ','-')+'-'+root.width+'.png'};frames.push(rec);created.push(root.id,...root.findAll(()=>true).map(n=>n.id));
+}
+const checks=[];for(const r of frames){const f=await figma.getNodeByIdAsync(r.id);const ts=f.findAllWithCriteria({types:['TEXT']});checks.push({id:f.id,nonInter:ts.filter(t=>t.fontName.family!=='Inter').map(t=>t.id),textOverflow:ts.filter(t=>t.visible&&t.parent&&t.parent.type!=='PAGE'&&(t.x < -1||t.y < -1||t.x+t.width>t.parent.width+1||t.y+t.height>t.parent.height+1)).map(t=>({id:t.id,text:t.characters,parent:t.parent.id}))});figma.io.write(r.screenshot,await f.exportAsync({format:'PNG',constraint:{type:'SCALE',value:1}}));}
+return{frames,checks,status:'Proposed',createdNodeIds:created,copy:[...new Set(frames.flatMap(r=>page.children.find(n=>n.id===r.id).findAllWithCriteria({types:['TEXT']}).map(t=>t.characters)))]};

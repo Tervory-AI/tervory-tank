@@ -1,0 +1,97 @@
+{
+  "pageId": "513:40527",
+  "checks": [
+    {
+      "id": "513:40529",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 1000,
+      "expectedW": 240,
+      "expectedH": 1000,
+      "nonInter": []
+    },
+    {
+      "id": "513:40687",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 64,
+      "expectedW": 375,
+      "expectedH": 64,
+      "nonInter": []
+    },
+    {
+      "id": "514:5991",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 1000,
+      "expectedW": 240,
+      "expectedH": 1000,
+      "nonInter": []
+    },
+    {
+      "id": "514:6149",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 64,
+      "expectedW": 375,
+      "expectedH": 64,
+      "nonInter": []
+    },
+    {
+      "id": "514:18204",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 1000,
+      "expectedW": 240,
+      "expectedH": 1000,
+      "nonInter": []
+    },
+    {
+      "id": "514:18362",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 64,
+      "expectedW": 375,
+      "expectedH": 64,
+      "nonInter": []
+    },
+    {
+      "id": "514:18587",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 1000,
+      "expectedW": 240,
+      "expectedH": 1000,
+      "nonInter": []
+    },
+    {
+      "id": "514:18745",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 64,
+      "expectedW": 375,
+      "expectedH": 64,
+      "nonInter": []
+    },
+    {
+      "id": "514:18892",
+      "mainId": "533:19517",
+      "w": 240,
+      "h": 1000,
+      "expectedW": 240,
+      "expectedH": 1000,
+      "nonInter": []
+    },
+    {
+      "id": "514:19051",
+      "mainId": "539:19711",
+      "w": 375,
+      "h": 64,
+      "expectedW": 375,
+      "expectedH": 64,
+      "nonInter": []
+    }
+  ],
+  "remainingSharedSourceInstances": [],
+  "exports": []
+}

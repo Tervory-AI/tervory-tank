@@ -37,7 +37,8 @@ from rigbox.quotes.limits import proxy_configured
 from rigbox.quotes.store import retention_days
 
 AGENT = os.environ.get("AGENT_NAME", "rig")
-HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
+from rigbox.rooms import owner, require_owner, RoomGateway, bind_database
+HEARTBEAT_TENANT = owner() or "00000000-0000-0000-0000-000000000001"
 
 log = logging.getLogger("agent")
 
@@ -126,6 +127,7 @@ from rigbox.cart_api import mount as mount_cart
 mount_cart(app)
 mount_quotes(app)
 mount_widget(app)
+app.add_middleware(RoomGateway)
 
 # Chassis job intake and the generated docs are not part of the shopper API.
 # The worker and the scheduler still run inside this process.
@@ -232,6 +234,7 @@ def _room_tenant(values: list[str]) -> tuple[str | None, JSONResponse | None]:
             return None, _room_error(400, "tenant", "tenant_id is required")
     if any(item != parsed[0] for item in parsed):
         return None, _room_error(403, "tenant", "tenant mismatch")
+    require_owner(parsed[0])
     return parsed[0], None
 
 
@@ -393,6 +396,7 @@ async def _lifespan(app: FastAPI):
     async with _inner(app):
         store = PgStore(app.state.pool)
         await store.apply_schema()
+        await bind_database(app.state.pool)
         retention_days()
         service = QuoteService(store, _TankModels(app.state.tank), RetailerHandoff(app.state.http),
                                PgQuotes(app.state.pool))

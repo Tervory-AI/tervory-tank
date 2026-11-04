@@ -4586,10 +4586,19 @@ async def _rig_call(method: str, path: str, params: list[tuple[str, str]], conte
     headers = {"X-Tank-Key": key, "Accept": "application/json"}
     if content is not None:
         headers["Content-Type"] = "application/json"
+    base = RIG_AGENT_URL
+    if os.environ.get("RIG_LIFECYCLE_KEY"):
+        from rig_rooms import public_endpoint
+        named = next((value for name, value in params if name == "tenant_id"), None)
+        if named is None and content:
+            named = json.loads(content).get("tenant_id")
+        if named is None:
+            raise HTTPException(400, "A store is required")
+        base = await public_endpoint(pool(), uuid.UUID(str(named)))
     try:
         return await _http.request(
             method,
-            RIG_AGENT_URL + path,
+            base + path,
             params=params,
             content=content,
             headers=headers,

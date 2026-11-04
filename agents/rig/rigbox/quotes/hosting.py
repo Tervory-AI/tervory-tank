@@ -108,10 +108,12 @@ def mount(application: FastAPI) -> None:
         fonts = ' fonts="/widget/fonts/custom-nation.css"' if theme == "custom-nation" else ""
         file = html.escape(manifest()["file"], quote=True)
         public_key = html.escape(key, quote=True)
+        from rigbox.rooms import api_base, owner
+        base = api_base() if owner() else ""
         return HTMLResponse(f'''<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rig · retailer test page</title><style>body{{margin:0}}tervory-rig{{display:block}}</style>
-</head><body><tervory-rig api-base="" rig-key="{public_key}" theme="{theme}"{fonts}></tervory-rig>
+</head><body><tervory-rig api-base="{base}" rig-key="{public_key}" theme="{theme}"{fonts}></tervory-rig>
 <script src="/widget/assets/{file}"></script></body></html>''', headers={
             "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
             "X-Robots-Tag": "noindex, nofollow",

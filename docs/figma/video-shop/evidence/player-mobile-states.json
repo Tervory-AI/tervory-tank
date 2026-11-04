@@ -1,0 +1,142 @@
+{
+  "frames": [
+    {
+      "id": "581:336",
+      "name": "Player / Empty / 375 · Proposed",
+      "screen": "Player",
+      "state": "Empty",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:343",
+        "products": "581:345"
+      },
+      "screenshot": "player-empty-375.png"
+    },
+    {
+      "id": "581:350",
+      "name": "Player / Loading / 375 · Proposed",
+      "screen": "Player",
+      "state": "Loading",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:357",
+        "products": "581:359"
+      },
+      "screenshot": "player-loading-375.png"
+    },
+    {
+      "id": "581:367",
+      "name": "Player / Error / 375 · Proposed",
+      "screen": "Player",
+      "state": "Error",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:374",
+        "products": "581:376",
+        "retry": "581:380"
+      },
+      "screenshot": "player-error-375.png"
+    }
+  ],
+  "checks": [
+    {
+      "id": "581:336",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "images": []
+    },
+    {
+      "id": "581:350",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "images": []
+    },
+    {
+      "id": "581:367",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "images": []
+    }
+  ],
+  "createdNodeIds": [
+    "581:336",
+    "581:337",
+    "581:338",
+    "581:339",
+    "581:340",
+    "581:341",
+    "581:342",
+    "581:343",
+    "I581:343;266:3035",
+    "581:345",
+    "I581:345;266:3035",
+    "581:347",
+    "581:348",
+    "581:349",
+    "581:350",
+    "581:351",
+    "581:352",
+    "581:353",
+    "581:354",
+    "581:355",
+    "581:356",
+    "581:357",
+    "I581:357;266:3035",
+    "581:359",
+    "I581:359;266:3035",
+    "581:361",
+    "581:362",
+    "581:363",
+    "581:364",
+    "581:365",
+    "581:366",
+    "581:367",
+    "581:368",
+    "581:369",
+    "581:370",
+    "581:371",
+    "581:372",
+    "581:373",
+    "581:374",
+    "I581:374;266:3035",
+    "581:376",
+    "I581:376;266:3035",
+    "581:378",
+    "581:379",
+    "581:380",
+    "I581:380;266:3033",
+    "581:382"
+  ],
+  "status": "Proposed",
+  "copy": [
+    "Proposed",
+    "Illustrative video, product and timing · Figma only",
+    "Watch video",
+    "Products in this video",
+    "No video yet.",
+    "Loading…",
+    "The video could not be loaded.",
+    "Try again"
+  ]
+}

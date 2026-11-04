@@ -1,0 +1,156 @@
+{
+  "status": "passed",
+  "date": "2026-11-04",
+  "scope": "Figma design and documentation only",
+  "frameCount": 6,
+  "slotCount": 12,
+  "cardInstanceCount": 30,
+  "createdNodeCount": 228,
+  "allOriginalNodesAndTextRetained": true,
+  "fontFamilies": [
+    "Inter"
+  ],
+  "newContentOverflowCount": 0,
+  "bodyOverlapCount": 0,
+  "editableLayers": true,
+  "rasterContent": "Inherited logo assets only",
+  "existingNavigationDestinations": [
+    {
+      "id": "566:563",
+      "destinationId": "514:5141"
+    },
+    {
+      "id": "566:565",
+      "destinationId": "567:941"
+    },
+    {
+      "id": "566:599",
+      "destinationId": "514:5141"
+    },
+    {
+      "id": "566:769",
+      "destinationId": "514:5141"
+    },
+    {
+      "id": "566:771",
+      "destinationId": "567:941"
+    },
+    {
+      "id": "566:797",
+      "destinationId": "514:5141"
+    },
+    {
+      "id": "566:967",
+      "destinationId": "514:5141"
+    },
+    {
+      "id": "566:969",
+      "destinationId": "567:941"
+    },
+    {
+      "id": "566:1003",
+      "destinationId": "514:5141"
+    },
+    {
+      "id": "566:2211",
+      "destinationId": "514:5414"
+    },
+    {
+      "id": "566:2213",
+      "destinationId": "567:1726"
+    },
+    {
+      "id": "566:2247",
+      "destinationId": "514:5414"
+    },
+    {
+      "id": "566:2320",
+      "destinationId": "514:5414"
+    },
+    {
+      "id": "566:2322",
+      "destinationId": "567:1726"
+    },
+    {
+      "id": "566:2348",
+      "destinationId": "514:5414"
+    },
+    {
+      "id": "566:2421",
+      "destinationId": "514:5414"
+    },
+    {
+      "id": "566:2423",
+      "destinationId": "567:1726"
+    },
+    {
+      "id": "566:2457",
+      "destinationId": "514:5414"
+    }
+  ],
+  "screenshots": [
+    {
+      "frameId": "566:395",
+      "frameUrl": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-395",
+      "screenshot": "brief-detail-report-1-1440.png",
+      "width": 1440,
+      "height": 2963,
+      "bytes": 197479,
+      "sha256": "970db80d7aa381af0e2e87179ab81e0ebdd63e603da2c2ad9ddcad784b8e2275",
+      "visualInspection": "passed after layout correction"
+    },
+    {
+      "frameId": "566:601",
+      "frameUrl": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-601",
+      "screenshot": "brief-detail-report-2-1440.png",
+      "width": 1440,
+      "height": 2127,
+      "bytes": 148827,
+      "sha256": "f9d6f4941449981b8fc13902b6b654cf94c14274584a2692fc6d5fe772d1c41f",
+      "visualInspection": "passed after layout correction"
+    },
+    {
+      "frameId": "566:799",
+      "frameUrl": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-799",
+      "screenshot": "brief-detail-report-3-1440.png",
+      "width": 1440,
+      "height": 2963,
+      "bytes": 194225,
+      "sha256": "d91c2faf5403a1ce044ba0abd52a3e4639b08e1f869df1ee1b84545b27488797",
+      "visualInspection": "passed after layout correction"
+    },
+    {
+      "frameId": "566:2140",
+      "frameUrl": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-2140",
+      "screenshot": "brief-detail-report-1-375.png",
+      "width": 375,
+      "height": 3117,
+      "bytes": 146269,
+      "sha256": "3446ec2c1d8530cd5a6c6a0f32cdb2773cf1848920a20dd9d43d7ac9a8ceb918",
+      "visualInspection": "passed after layout correction"
+    },
+    {
+      "frameId": "566:2249",
+      "frameUrl": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-2249",
+      "screenshot": "brief-detail-report-2-375.png",
+      "width": 375,
+      "height": 2241,
+      "bytes": 104348,
+      "sha256": "9187fce399cd3ff610a90989c630dd4b2af369d16d7f0ddb105fbfb797d6af54",
+      "visualInspection": "passed after layout correction"
+    },
+    {
+      "frameId": "566:2350",
+      "frameUrl": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-2350",
+      "screenshot": "brief-detail-report-3-375.png",
+      "width": 375,
+      "height": 3097,
+      "bytes": 143116,
+      "sha256": "451726960f6ce10c243c0be8542659921ff9e616ad4db8399d693f2a4dd948f4",
+      "visualInspection": "passed after layout correction"
+    }
+  ],
+  "javascriptSyntax": "Both authoring scripts parse as async function bodies",
+  "applicationTests": "Not applicable; no runtime code changed",
+  "screenshotRetrieval": "Figma connector inline image responses; cloud proxy blocked screenshot URLs"
+}
