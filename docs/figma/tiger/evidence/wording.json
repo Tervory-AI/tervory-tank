@@ -1,0 +1,345 @@
+[
+  {
+    "text": "Account",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "Alerts",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "Business",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "Chats",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "Competitor sites",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Confirm",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Dashboard",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "FL-DL01 \u00b7 North shop",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Fieldlight desk lamp",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "History",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "Illustrative values \u00b7 Figma only.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Loading\u2026",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216"
+    ]
+  },
+  {
+    "text": "Matches to review",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Menu",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:216",
+      "622:499",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Overview",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "Price position",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Price position could not be loaded.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:309",
+      "622:499"
+    ]
+  },
+  {
+    "text": "Prices and position are unavailable while loading.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216"
+    ]
+  },
+  {
+    "text": "Proposed",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Proposed wording and example data",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Reject",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Same brand and maker part number. No barcode match. Confirm the product before it affects price position.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Scheduled checks of public product pages. Alerts for confirmed price and stock changes.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Search watched products, readings and alerts",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Squad",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "Support",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "Tasks",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "That could not be saved. Try again.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Tiger",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Tiger is not reachable right now. No products are shown.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:309",
+      "622:499"
+    ]
+  },
+  {
+    "text": "Track product prices and stock availability across your watched stores.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Try again",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Watch list",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  },
+  {
+    "text": "Your decision was not saved. This match is still awaiting review.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "north-shop.example/products/desk-lamp",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "\u2304",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594"
+    ]
+  }
+]
