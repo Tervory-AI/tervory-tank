@@ -56,6 +56,20 @@
       "height": 1195,
       "screenshot": "T04-375.png",
       "sha256": "911def3329a153879125bc2eb6da83eb5ce4578b7a78ccc12e6ceaec21c8b6da"
+    },
+    {
+      "id": "628:205",
+      "width": 1440,
+      "height": 1189,
+      "screenshot": "T05-1440.png",
+      "sha256": "3a2bb04aa48f45261596626677c1529807fcab643449fc8b91fe26220e024598"
+    },
+    {
+      "id": "628:376",
+      "width": 375,
+      "height": 900,
+      "screenshot": "T05-375.png",
+      "sha256": "2719c993930964a53321ead6b5c670236df1664af8371ccd0562dd7b61af35d9"
     }
   ]
 }
