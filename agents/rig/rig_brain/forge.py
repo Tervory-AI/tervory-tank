@@ -102,6 +102,10 @@ async def forward(method, base, path, *, key=None, **kwargs):
         async with httpx.AsyncClient(trust_env=False, timeout=40) as client:
             response = await client.request(method, base + path,
                 headers={"X-Tank-Key": key} if key else {}, **kwargs)
+            if key and response.status_code == 202 and "paid_run_id" in response.json():
+                from chassis.tank import paid_result
+                value = await paid_result(client, base, key, str(kwargs["json"]["tenant_id"]), response.json())
+                return JSONResponse(value)
         if response.status_code not in {200, 202, 400, 401, 403, 404, 409, 422, 429, 503}:
             raise ValueError("upstream unavailable")
         return JSONResponse(response.json(), status_code=response.status_code)

@@ -79,8 +79,12 @@ async def brain_addresses():
 
 
 async def relay(action: str, body: dict) -> dict:
-    async with httpx.AsyncClient(trust_env=False, timeout=30) as client:
-        response = await client.post("http://rig-brain:8001/forge/relay/" + action, json=body)
+    # The brain polls Tank while a founder decides. There is one claim POST;
+    # the 24h approval expiry bounds the wait without relaunching a GPU job.
+    timeout = httpx.Timeout(30, read=None) if action == "claim" else 30
+    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+        async with asyncio.timeout(25 * 3600):
+            response = await client.post("http://rig-brain:8001/forge/relay/" + action, json=body)
         if response.status_code != 200:
             raise RuntimeError("Tank receipt or budget authorization is unavailable.")
         return response.json()

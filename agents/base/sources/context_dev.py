@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import ipaddress
 import math
 import os
@@ -121,6 +123,7 @@ class ContextDev:
                 "call_id": str(uuid.uuid4()), "agent": "base",
                 "task_type": "base.context_dev", "reserved_credits": BRAND_CREDITS,
                 "record_id": record_id,
+                "request_hash": hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest(),
             }
             try:
                 reservation = await self.ledger.reserve(event, self.max_credits)
