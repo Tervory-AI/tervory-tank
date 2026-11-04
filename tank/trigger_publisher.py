@@ -24,14 +24,18 @@ async def receipt(tenant, task):
 class Publisher:
     def __init__(self, marketing):
         self.service, self.pool, self.google = marketing, marketing.pool, marketing.google
+        self.meta = marketing.meta
 
     async def claim(self, tenant):
         async with self.pool.acquire() as conn, conn.transaction():
-            # A process may have died after Google accepted a POST. Never return
+            # A process may have died after the platform accepted a POST. Never return
             # that claim to the send queue, including on another Tank instance.
             await conn.execute("""UPDATE tank.trigger_posts SET state='failed',delivery='uncertain',retryable=false,
                 retry_at=NULL,updated_at=now() WHERE tenant_id=$1 AND delivery='inflight' AND lease_until<now()""", tenant)
-            row = await conn.fetchrow('''SELECT * FROM tank.trigger_posts WHERE tenant_id=$1 AND channel='gbp'
+            row = await conn.fetchrow('''SELECT p.* FROM tank.trigger_posts p WHERE tenant_id=$1 AND channel IN ('gbp','facebook')
+                AND (channel='gbp' OR EXISTS(SELECT 1 FROM tank.trigger_meta_connections m
+                    WHERE m.tenant_id=p.tenant_id AND m.status='connected' AND m.sealed IS NOT NULL
+                    AND m.page_id=p.location AND m.generation=p.connection_generation))
                 AND delivery='pending' AND planned_at<=now() AND attempts<$2 AND approved_revision=revision
                 AND (state='scheduled' OR (state='failed' AND retryable AND retry_at<=now()))
                 ORDER BY planned_at,id FOR UPDATE SKIP LOCKED LIMIT 1''', tenant, MAX_ATTEMPTS)
@@ -49,9 +53,12 @@ class Publisher:
         if claimed is None:
             return None
         # The claim is committed BEFORE this transaction/network call. Row locks
-        # serialize cancellation/disconnect with the actual Google request.
+        # serialize cancellation/disconnect with the actual platform request.
         async with self.pool.acquire() as conn, conn.transaction():
-            connection = await conn.fetchrow('SELECT * FROM tank.trigger_gbp_connections WHERE tenant_id=$1 FOR UPDATE', tenant)
+            if claimed['channel'] == 'facebook':
+                connection = await conn.fetchrow('SELECT generation,status,page_id AS location FROM tank.trigger_meta_connections WHERE tenant_id=$1 FOR UPDATE', tenant)
+            else:
+                connection = await conn.fetchrow('SELECT * FROM tank.trigger_gbp_connections WHERE tenant_id=$1 FOR UPDATE', tenant)
             row = await self.service.post(tenant, claimed['id'], conn=conn, lock=True)
             if row['attempt_id'] != claimed['attempt_id'] or row['delivery'] != 'inflight':
                 return public(row)
@@ -61,10 +68,13 @@ class Publisher:
                 if (not connection or connection['status'] != 'connected'
                         or connection['generation'] != row['connection_generation'] or connection['location'] != row['location']):
                     raise HTTPException(409)
-                data = await self.google.request(tenant, 'POST', V4 + row['location'] + '/localPosts',
-                                                 conn=conn, json={'topicType': 'STANDARD', 'summary': row['text']})
+                if row['channel'] == 'facebook':
+                    data = await self.meta.publish(tenant, row['location'], row['text'], conn=conn)
+                else:
+                    data = await self.google.request(tenant, 'POST', V4 + row['location'] + '/localPosts',
+                                                     conn=conn, json={'topicType': 'STANDARD', 'summary': row['text']})
                 name, url = data.get('name'), data.get('searchUrl')
-                if not isinstance(name, str) or not name.startswith(row['location']+'/localPosts/'):
+                if row['channel'] == 'gbp' and (not isinstance(name, str) or not name.startswith(row['location']+'/localPosts/')):
                     raise GoogleFailure(502, uncertain=True)
                 row = await conn.fetchrow("""UPDATE tank.trigger_posts SET state='published',delivery='done',
                     retryable=false,retry_at=NULL,platform_error=NULL,platform_id=$3,platform_url=$4,published_at=now(),
@@ -114,11 +124,14 @@ async def publish_due(runtime):
     from trigger_marketing import Marketing
     admin = runtime.admin_pool()
     with tenant_scope(None, administrative=True):
-        tenants = await admin.fetch('''SELECT DISTINCT tenant_id FROM tank.trigger_posts
-            WHERE channel='gbp' AND planned_at<=now() AND (
+        tenants = await admin.fetch('''SELECT DISTINCT tenant_id FROM tank.trigger_posts p
+            WHERE channel IN ('gbp','facebook') AND planned_at<=now() AND (
                 (delivery='inflight' AND lease_until<now()) OR
                 (delivery='pending' AND attempts<3 AND (state='scheduled' OR
-                    (state='failed' AND retryable AND retry_at<=now()))))
+                    (state='failed' AND retryable AND retry_at<=now()))
+                AND (channel='gbp' OR EXISTS(SELECT 1 FROM tank.trigger_meta_connections m
+                    WHERE m.tenant_id=p.tenant_id AND m.status='connected' AND m.sealed IS NOT NULL
+                    AND m.page_id=p.location AND m.generation=p.connection_generation))))
             ORDER BY tenant_id LIMIT 100''')
     for row in tenants:
         with tenant_scope(row['tenant_id']):

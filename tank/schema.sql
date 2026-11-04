@@ -2958,6 +2958,102 @@ BEGIN
     END IF;
 END
 $$;
+-- Trigger M2: tenant-private Facebook connection and one-use consent states.
+CREATE TABLE IF NOT EXISTS tank.trigger_meta_connections (
+ tenant_id uuid PRIMARY KEY, generation uuid NOT NULL, sealed text,
+ status text NOT NULL CHECK(status IN ('connected','disconnecting','disconnected')),
+ page_id text, page_name text, user_id text NOT NULL,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_meta_states (
+ tenant_id uuid NOT NULL, state_hash text NOT NULL, user_id text NOT NULL,
+ generation uuid NOT NULL, sealed text NOT NULL, expires_at timestamptz NOT NULL,
+ consumed_at timestamptz, PRIMARY KEY(tenant_id,state_hash)
+);
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_meta_connections ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_meta_connections FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_connections'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_meta_connections FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_connections'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_meta_connections AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_meta_states ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_meta_states FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_states'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_meta_states FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_states'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_meta_states AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
+-- Trigger B3: WhatsApp conversation identities, durable inbound claims and free-tier budget.
+-- Preserve the legacy web-only channel check; identify the delivery transport additively.
+ALTER TABLE tank.trigger_bot_conversations ADD COLUMN IF NOT EXISTS transport
+ text NOT NULL DEFAULT 'web' CHECK(transport IN ('web','whatsapp'));
+ALTER TABLE tank.trigger_bot_conversations ADD COLUMN IF NOT EXISTS whatsapp_sealed text;
+CREATE TABLE IF NOT EXISTS tank.trigger_whatsapp_months (
+ tenant_id uuid NOT NULL, phone_number_id text NOT NULL, month date NOT NULL,
+ timezone text NOT NULL, count integer NOT NULL CHECK(count BETWEEN 1 AND 1000),
+ PRIMARY KEY(tenant_id,phone_number_id,month)
+);
+-- Rebinding a business phone to another tenant cannot replenish this month's budget.
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_whatsapp_phone_month
+ ON tank.trigger_whatsapp_months(phone_number_id,month);
+CREATE TABLE IF NOT EXISTS tank.trigger_whatsapp_events (
+ tenant_id uuid NOT NULL, event_hash text NOT NULL, conversation_id uuid NOT NULL,
+ state text NOT NULL DEFAULT 'claimed' CHECK(state IN ('claimed','sending','sent','uncertain','handed_over')),
+ created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tenant_id,event_hash),
+ FOREIGN KEY(tenant_id,conversation_id) REFERENCES tank.trigger_bot_conversations(tenant_id,id) ON DELETE CASCADE
+);
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_whatsapp_months ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_whatsapp_months FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_whatsapp_months'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_whatsapp_months FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_whatsapp_months'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_whatsapp_months AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_whatsapp_events ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_whatsapp_events FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_whatsapp_events'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_whatsapp_events FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_whatsapp_events'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_whatsapp_events AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
 
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
