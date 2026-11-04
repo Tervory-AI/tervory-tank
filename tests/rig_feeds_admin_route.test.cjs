@@ -11,7 +11,7 @@ function moduleFrom(relative, bindings, globals = {}) {
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: name => {
     assert(name in bindings, `Unexpected dependency ${name}`); return bindings[name];
-  }, process: { env: {} }, URL, Uint8Array, TextDecoder, Set, Error, ...globals });
+  }, process: { env: globals.env || {} }, URL, URLSearchParams, Headers, AbortSignal, AbortController, setTimeout, clearTimeout, Uint8Array, TextDecoder, Set, Error, console, ...globals });
   return exports;
 }
 
@@ -49,9 +49,14 @@ async function main() {
   // Only the HTTP boundary is replaced; real actions and route call the real tank.ts exports.
   const forwarded = [];
   const regionTransport = moduleFrom('workspace/app/api/zenas/tank.ts', {});
-  const tank = moduleFrom('workspace/lib/tank.ts', { '@/app/api/zenas/tank': regionTransport }, { fetch: async (url, options) => {
+  const tank = moduleFrom('workspace/lib/tank.ts', { '@/app/api/zenas/tank': regionTransport }, { env: { TANK_API_KEY: 'test-key' }, fetch: async (url, options) => {
+    // Tenant home lookup: no recorded home, so the call stays on this Tank.
+    if (String(url).includes('/v1/tenants/') && String(url).endsWith('/home')) {
+      return { ok: false, status: 404, json: async () => ({ detail: { code: 'tenant_home_missing' } }) };
+    }
+    url = String(url);
     forwarded.push({ url, options });
-    return { ok: true, json: async () => url.endsWith('/mapping')
+    return { ok: true, status: 200, json: async () => url.endsWith('/mapping')
       ? { preview_id: 'server-preview', fields: ['code'], columns: { sku: 'code' }, required: ['sku'] }
       : { saved: true } };
   } });
@@ -70,14 +75,14 @@ async function main() {
   role = 'org:admin';
   const data = { distributor: 'catalogue', currency: 'NZD', country: 'NZ', price_basis: 'cost' };
   const preview = await realRoute.POST(request({ operation: 'mapping', data }));
-  assert.equal(preview.body.ok, true);
+  assert.equal(preview.body.ok, true, JSON.stringify(preview.body));
   assert.equal(preview.body.mapping.preview_id, 'server-preview');
   assert(forwarded[0].url.endsWith('/v1/access/rig/admin/mapping'));
   assert.deepEqual(JSON.parse(forwarded[0].options.body), { data });
   assert.equal(forwarded[0].options.method, 'POST');
   assert.equal(forwarded[0].options.cache, 'no-store');
-  assert.equal(forwarded[0].options.headers['x-tervory-tenant'], 'server-tenant');
-  assert.equal(forwarded[0].options.headers['x-tervory-user'], 'server-user');
+  assert.equal(new Headers(forwarded[0].options.headers).get('x-tervory-tenant'), 'server-tenant');
+  assert.equal(new Headers(forwarded[0].options.headers).get('x-tervory-user'), 'server-user');
   for (const operation of ['confirm-mapping', 'import']) {
     const response = await realRoute.POST(request({ operation, data }));
     assert.equal(response.body.ok, true);
