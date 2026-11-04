@@ -1,6 +1,7 @@
 import { runTests } from '@vscode/test-electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -39,5 +40,8 @@ await fs.rm(project,{recursive:true,force:true});
 await fs.mkdir(project,{recursive:true});
 await fs.writeFile(path.join(project,'account.ts'),'// Recover access when a user forgets their password.\nexport function resetPassword(email: string) { return email; }\n');
 await fs.writeFile(path.join(project,'landscape.ts'),'// Paint trees, mountains and a river on a canvas.\nexport function drawLandscape() { return "green"; }\n');
+const profile=await fs.mkdtemp(path.join(process.env.TMPDIR??tmpdir(),'vi-'));
+try {
 await runTests({vscodeExecutablePath:executable,extensionDevelopmentPath:root,extensionTestsPath:path.join(root,'dist/test/electron.test.js'),
-  launchArgs:[project,'--no-sandbox','--disable-gpu','--disable-workspace-trust','--skip-welcome','--skip-release-notes','--disable-telemetry','--user-data-dir',path.join(directory,'test-profile'),'--extensions-dir',path.join(directory,'extensions')]});
+  launchArgs:[project,'--no-sandbox','--disable-gpu','--disable-workspace-trust','--skip-welcome','--skip-release-notes','--disable-telemetry','--user-data-dir',profile,'--extensions-dir',path.join(directory,'extensions')]});
+} finally {await fs.rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});}
