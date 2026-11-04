@@ -29,9 +29,15 @@ services:
 
   backend:
     build:
-      # tag v1.39.0 → commit cd7c12a607df1719518fcdaf289864f6ba7d0bcd
-      context: https://github.com/Django-CRM/Django-CRM.git#cd7c12a607df1719518fcdaf289864f6ba7d0bcd
-      dockerfile: Dockerfile
+      # Pinned Django-CRM image (built for celery-worker from tag v1.39.0 →
+      # commit cd7c12a607df1719518fcdaf289864f6ba7d0bcd) + the two connector
+      # files COPYed to /run/tervory. Baked in, not bind-mounted: Coolify runs
+      # Compose in its helper container, where file configs resolved to host
+      # paths under /artifacts that do not exist (deploy zys9op9e failed so).
+      context: .
+      dockerfile: Dockerfile.backend
+      additional_contexts:
+        crm-pinned: service:celery-worker
     restart: unless-stopped
     mem_limit: 1g
     cpus: 1
@@ -72,13 +78,6 @@ services:
         python manage.py create_default_admin
         python manage.py collectstatic --noinput
         exec gunicorn --pythonpath /run/tervory tervory_connector_wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 4
-    configs:
-      - source: trigger_crm_binding_middleware
-        target: /run/tervory/tervory_crm_middleware.py
-        mode: 0444
-      - source: trigger_crm_binding_wsgi
-        target: /run/tervory/tervory_connector_wsgi.py
-        mode: 0444
     depends_on:
       redis:
         condition: service_healthy
@@ -242,10 +241,3 @@ networks:
   gw:
     external: true
     name: tervory-gw-trigger-crm
-
-# Repository-owned nonsecret source; Compose validates each config file exists.
-configs:
-  trigger_crm_binding_middleware:
-    file: ./tervory_crm_middleware.py
-  trigger_crm_binding_wsgi:
-    file: ./tervory_connector_wsgi.py

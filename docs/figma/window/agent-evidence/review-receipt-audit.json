@@ -1,0 +1,314 @@
+[
+  {
+    "id": "557:4283",
+    "name": "F1-W03-1440 · Multi-file and hunk review · Proposed",
+    "width": 1440,
+    "height": 900,
+    "types": {
+      "FRAME": 35,
+      "RECTANGLE": 2,
+      "TEXT": 42,
+      "VECTOR": 8,
+      "INSTANCE": 12
+    },
+    "images": [
+      {
+        "id": "557:4285",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:4299;551:166",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:43",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "YOU · file.txt + notes.txt",
+      "Update both examples to the new wording.",
+      "TERVORY · Proposed changes",
+      "Two files are ready for review.",
+      "file.txt",
+      "Accept file",
+      "Reject file",
+      "Hunk 1 of 1",
+      "− old",
+      "+ new",
+      "Accept hunk",
+      "Reject hunk",
+      "notes.txt",
+      "Accept file",
+      "Reject file",
+      "Hunk 1 of 1",
+      "− Old note",
+      "+ New note",
+      "Accept hunk",
+      "Reject hunk",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 754,
+    "contentBottom": 584,
+    "outside": []
+  },
+  {
+    "id": "557:4392",
+    "name": "F1-W03-1280 · Multi-file and hunk review · Proposed",
+    "width": 1280,
+    "height": 800,
+    "types": {
+      "FRAME": 35,
+      "RECTANGLE": 2,
+      "TEXT": 42,
+      "VECTOR": 8,
+      "INSTANCE": 12
+    },
+    "images": [
+      {
+        "id": "557:4394",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:4408;551:168",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:76",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "YOU · file.txt + notes.txt",
+      "Update both examples to the new wording.",
+      "TERVORY · Proposed changes",
+      "Two files are ready for review.",
+      "file.txt",
+      "Accept file",
+      "Reject file",
+      "Hunk 1 of 1",
+      "− old",
+      "+ new",
+      "Accept hunk",
+      "Reject hunk",
+      "notes.txt",
+      "Accept file",
+      "Reject file",
+      "Hunk 1 of 1",
+      "− Old note",
+      "+ New note",
+      "Accept hunk",
+      "Reject hunk",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 654,
+    "contentBottom": 584,
+    "outside": []
+  },
+  {
+    "id": "557:4501",
+    "name": "F1-W09-1440 · Receipt and savings · Proposed",
+    "width": 1440,
+    "height": 900,
+    "types": {
+      "FRAME": 31,
+      "RECTANGLE": 2,
+      "TEXT": 30,
+      "VECTOR": 8,
+      "INSTANCE": 6
+    },
+    "images": [
+      {
+        "id": "557:4503",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:4517;551:166",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:43",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Turn receipt",
+      "Example receipt · Proposed values",
+      "Refactor examples · turn 24",
+      "Route: code → cache\nModel spend: $0.00\nTotal: $0.00",
+      "Savings",
+      "Comparison estimate: $0.04\nSaved: $0.04 · 100%\nEstimate, not a billed amount.",
+      "View receipt",
+      "Export receipt",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 754,
+    "contentBottom": 475,
+    "outside": []
+  },
+  {
+    "id": "557:4592",
+    "name": "F1-W09-1280 · Receipt and savings · Proposed",
+    "width": 1280,
+    "height": 800,
+    "types": {
+      "FRAME": 31,
+      "RECTANGLE": 2,
+      "TEXT": 30,
+      "VECTOR": 8,
+      "INSTANCE": 6
+    },
+    "images": [
+      {
+        "id": "557:4594",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 96,
+        "height": 18
+      },
+      {
+        "id": "I557:4608;551:168",
+        "name": "tervory-logo-on-white.png",
+        "type": "RECTANGLE",
+        "width": 40,
+        "height": 8
+      }
+    ],
+    "fonts": [
+      "Inter"
+    ],
+    "componentMains": [
+      "548:76",
+      "553:1313",
+      "93:4"
+    ],
+    "words": [
+      "File   Edit   Selection   View   Go   Run   Terminal   Help",
+      "tervory-tank — Tervory",
+      "EXPLORER",
+      "TERVORY-TANK",
+      "⌄  workspace",
+      "    app",
+      "    public",
+      "⌄  cli",
+      "    src",
+      "AGENTS.md",
+      "README.md",
+      "file.txt",
+      "file.txt    ×",
+      "README.md",
+      "tervory-tank  /  file.txt",
+      "1\n2\n3\n4\n5\n6\n7\n8",
+      "old",
+      "Tervory",
+      "New chat",
+      "Plugins",
+      "Turn receipt",
+      "Example receipt · Proposed values",
+      "Refactor examples · turn 24",
+      "Route: code → cache\nModel spend: $0.00\nTotal: $0.00",
+      "Savings",
+      "Comparison estimate: $0.04\nSaved: $0.04 · 100%\nEstimate, not a billed amount.",
+      "View receipt",
+      "Export receipt",
+      "  main    ·    0 errors    0 warnings",
+      "Ln 1, Col 1    UTF-8    Plain Text"
+    ],
+    "contentHeight": 654,
+    "contentBottom": 475,
+    "outside": []
+  }
+]
