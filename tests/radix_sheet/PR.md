@@ -23,6 +23,7 @@ Audited `d5d3ea2eeb08c9b7a9061274504f0acf53bab2a6`, including merged #634 and #6
 | Durable weekly passive/infra pair, restart dedupe and withdrawal | agents/radix/passive_weekly.py | Real worker/scheduler/queue/lease boundaries and fake scanners; worker timeout fixed above. |
 | Own-main immutable repository provenance, per-app critical deploy gate, founder confirmed override, fail-open unreachable read | tank/radix_deploy.py; .github/scripts/deploy_changed.py | Real local bundle, fake fixed GitHub/room/Coolify, real Confirm/receipt, per-app isolation and standalone map parity. |
 | Private code-template report and evidence links, optional installed PDF, $0 receipt | tank/radix_report.py; Workspace /chats/api/radix/reports | Real Command/private room/download corridor; code renderer and fake observations, no model or remote assets. |
+| Retained fixed-host passive header/certificate probe and egress guard | agents/radix/live.py; net.py; egress.py | Fake HTTP/TLS, real header/cookie redaction and same-host redirect guards. Existing fixed legacy approval only. |
 | IaC candidate eval and private frozen gold-source/evidence checks | agents/radix/app.py; gold_sources.py | Real room-key ASGI checks and deterministic supplied fixtures, no automatic skill approval. |
 
 HIBP remains conditional on free domain search and founder configuration. No paid lookup or new integration is added, and a key name alone is not counted as a shipped scan. Approved consent text comes from FOUNDER-SETTINGS D1; the sheet will ask for that text, never supply invented wording. Existing missing explanatory frames for measured hashes/cookie provenance/partial coverage remain listed in #634's evidence; no UI is built for them.
@@ -32,3 +33,7 @@ HIBP remains conditional on free domain search and founder configuration. No pai
 1. Inventory and bounded-worker fix, with all existing Radix offline checks and before/after regression.
 2. Founder acceptance sheet and the required setting-name additions to FOUNDER-SETTINGS.
 3. Exactly one offline case per acceptance row, plus exact row/case parity. `scripts/precheck.sh` runs before each push without skipping Gitleaks or Semgrep. Container runs use --rm, label tervory.test=1 and codex-radix-sheet-prefixed names; all test temporary files use this checkout's .tmp.
+
+## Founder sheet and settings
+
+The sheet has 58 founder checks, each naming its exact offline case, address, action, expected result and existing setting names. Adds TANK_GITHUB_READ_TOKEN (Tank's existing fixed-repository reader), RADIX_DEPLOY_TENANT_ID (GitHub repository variable) and the existing GitHub TANK_API_KEY secret to FOUNDER-SETTINGS. No values or new credentials. D1 currently requests the consent wording rather than supplying it: that approved copy remains an explicitly missing founder frame, never fixture consent. HIBP is conditional on free domain search and is not enabled here.
