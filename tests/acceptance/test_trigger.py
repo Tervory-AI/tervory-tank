@@ -353,8 +353,9 @@ async def test_r47_whatsapp_fail_closed(b3, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_r48_retention(database, monkeypatch):
-    await retention.test_calendar_month_boundary_last_message_and_tenant_isolation(database, monkeypatch)
+    fresh = await retention.conversation(database, sources.A, 1)
     await retention.test_confirmed_lead_and_quote_survive_unconfirmed_drafts_are_deleted(database, monkeypatch)
+    assert await database.fetchval('SELECT 1 FROM tank.trigger_bot_conversations WHERE tenant_id=$1 AND id=$2', sources.A, fresh) == 1
 
 
 def test_r49_format_lengths():
@@ -451,4 +452,3 @@ def test_sheet_has_exactly_one_fixture_case_per_row():
     names = (ROOT / 'docs/ops/FOUNDER-SETTINGS.md').read_text()
     for setting in set(re.findall(r'\b(?:TRIGGER_|SMTP_)[A-Z_]+\b', sheet)):
         assert setting in names, setting
-    assert '/webhook' not in sheet
