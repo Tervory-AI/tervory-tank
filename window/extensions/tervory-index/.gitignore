@@ -1,0 +1,6 @@
+node_modules/
+dist/
+models/
+.vscode-test/
+*.vsix
+benchmark-results.json

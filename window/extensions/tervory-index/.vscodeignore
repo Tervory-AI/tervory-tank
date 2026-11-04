@@ -1,0 +1,4 @@
+test/**
+scripts/**
+.vscode-test/**
+node_modules/.cache/**

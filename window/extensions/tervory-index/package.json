@@ -1,0 +1,51 @@
+{
+  "name": "tervory-index",
+  "displayName": "[Project index]",
+  "publisher": "tervory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local project indexing and retrieval",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "main": "./dist/src/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "tervory.index.rebuild",
+        "title": "[Rebuild project index]"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test dist/test/core.test.js",
+    "model": "node scripts/model.mjs",
+    "test:electron": "npm run build && node scripts/electron.mjs",
+    "benchmark": "npm run build && node dist/test/benchmark.js"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.2",
+    "@orama/orama": "3.1.18",
+    "ignore": "7.0.5",
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "@types/vscode": "1.95.0",
+    "@vscode/test-electron": "2.5.2"
+  }
+}
