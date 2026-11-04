@@ -90,19 +90,20 @@ def test_source_archive_locks_require_hashes_and_reject_editable_directories():
         assert pins.lock_errors("cumesh @ " + location + " --hash=sha256:" + "a" * 64)
 
 
-def test_secrets_workflow_covers_docs_only_pull_requests():
+def test_install_gate_covers_prs_and_merge_queue_without_secret_baseline():
     import yaml
 
-    workflow = yaml.safe_load((SCRIPT.parents[2] / ".github/workflows/secrets.yml").read_text())
+    workflow = yaml.safe_load((SCRIPT.parents[2] / ".github/workflows/install-pins.yml").read_text())
     triggers = workflow.get("on", workflow.get(True))
-    assert "pull_request" in triggers
+    assert set(triggers) == {"pull_request", "merge_group", "workflow_dispatch"}
     assert not triggers["pull_request"]
-    job = workflow["jobs"]["gitleaks"]
+    assert triggers["merge_group"]["types"] == ["checks_requested"]
+    assert workflow["permissions"] == {"contents": "read"}
+    job = workflow["jobs"]["install-pins"]
     assert "if" not in job and not job.get("continue-on-error")
-    scan = next(step for step in job["steps"] if step.get("name") == "Gitleaks")
-    assert "if" not in scan and not scan.get("continue-on-error")
-    assert "sha256sum --check --status" in scan["run"]
-    assert "check_secret_baseline.py" in scan["run"] and "--gitleaks" in scan["run"]
+    gate = job["steps"][-1]
+    assert "--base" in gate["run"] and "github.event.merge_group.base_sha" in gate["env"]["PIN_BASE"]
+    assert "baseline" not in json.dumps(workflow).lower()
 
 
 def test_node_requires_transitive_integrity_and_manifest_agreement():

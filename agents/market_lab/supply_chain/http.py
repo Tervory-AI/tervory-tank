@@ -26,9 +26,14 @@ class Client:
 
     def json(self, url: str, body: dict | None = None, *, method: str = "GET"):
         target = urlsplit(url)
-        hosts = {urlsplit(source.url).hostname for source in SOURCES} | {"pypi.org"}
+        hosts = {urlsplit(source.url).hostname for source in SOURCES}
         if target.scheme != "https" or target.hostname not in hosts or target.username or target.password or target.port not in (None, 443):
             raise SourceError("Source URL is outside Market Lab's allowlist.")
+        if not ((method == "GET" and body is None) or (
+            method == "POST" and target.hostname == "api.osv.dev"
+            and target.path == "/v1/querybatch" and not target.query and isinstance(body, dict)
+        )):
+            raise SourceError("Only read-only advisory requests are permitted.")
         headers = {"Accept": "application/json", "User-Agent": "tervory-market-lab-supply-chain"}
         if target.hostname == "api.github.com":
             headers["X-GitHub-Api-Version"] = "2022-11-28"

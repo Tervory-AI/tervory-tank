@@ -1,4 +1,4 @@
-"""Feed, resolver and draft publication boundaries; all I/O is isolated.
+"""Read-only feed boundaries; all I/O is isolated.
 
 The PostCSS regression uses the real GHSA-r28c-9q8g-f849 affected range and
 fixed release, retrieved from GitHub's public advisory on 2026-10-26.
@@ -6,12 +6,10 @@ fixed release, retrieved from GitHub's public advisory on 2026-10-26.
 import importlib
 import json
 from pathlib import Path
-import subprocess
 
 import pytest
 
 from agents.market_lab.supply_chain import Inventory, inventory, scan
-from agents.market_lab.supply_chain import fixes
 from agents.market_lab.supply_chain.http import Client, SourceError
 from agents.market_lab.supply_chain.locks import Dependency, node_locks, python_locks
 from agents.market_lab.supply_chain.sources import SOURCE_URLS
@@ -75,14 +73,12 @@ def test_either_advisory_source_can_find_a_vulnerability(osv, github):
     assert report["complete"] and report["fixes"][0]["fixed_version"] == "8.5.18"
 
 
-def test_source_failure_is_not_a_clean_scan_or_permission_to_publish():
+def test_source_failure_is_not_a_clean_scan():
     class Unavailable(AdvisoryClient):
         def json(self, *args, **kwargs):
             raise SourceError("Source unavailable.")
     report = scan(locked_postcss(), Unavailable())
     assert not report["complete"] and report["errors"]
-    with pytest.raises(fixes.FixError, match="Incomplete"):
-        fixes.grouped_fixes(report)
 
 
 def test_incomplete_batch_and_unknown_lock_stop_clean_status(tmp_path):
@@ -138,26 +134,8 @@ def test_real_repository_lock_formats_are_accounted_for():
     assert any(dep.repository == "microsoft/TRELLIS.2" and len(dep.revision) == 40 for dep in items.dependencies)
 
 
-def test_registry_update_replaces_hashes_and_preserves_python_markers():
-    fix = {"package": "httpx", "versions": ["0.27.2"], "target": "0.28.1"}
-    old = 'httpx==0.27.2 ; python_version >= "3.10" \\\n    --hash=sha256:' + "a" * 64 + "\nanyio==4.8.0\n"
-    changed = fixes._replace_python(old, fix, ["b" * 64])
-    assert 'httpx==0.28.1 ; python_version >= "3.10"' in changed
-    assert "a" * 64 not in changed and "b" * 64 in changed
-    assert "anyio==4.8.0" in changed
 
 
-def test_node_resolver_only_updates_locks_and_disables_scripts(tmp_path, monkeypatch):
-    manifest = tmp_path / "package.json"
-    manifest.write_text(json.dumps({"dependencies": {"postcss": "8.4.31"}}))
-    (tmp_path / "package-lock.json").write_text("{}")
-    commands = []
-    monkeypatch.setattr(fixes, "command", lambda args, root: commands.append(args))
-    fixes.node_fix(tmp_path, {"package": "postcss", "target": "8.5.18", "versions": ["8.4.31"], "locks": ["package-lock.json"]})
-    assert json.loads(manifest.read_text())["dependencies"]["postcss"] == "8.5.18"
-    assert all("--ignore-scripts" in args for args in commands)
-    assert commands[0][:3] == ["npm", "update", "--package-lock-only"]
-    assert commands[1][:2] == ["npm", "ci"]
 
 
 def test_import_has_no_network_or_publication_side_effect(monkeypatch):
@@ -172,72 +150,57 @@ def test_http_refuses_unlisted_or_credential_bearing_source_urls(url):
         Client().json(url)
 
 
-def test_one_draft_per_fix_never_overwrites_an_existing_review_branch(tmp_path):
-    class Existing:
-        token = "present"  # Sentinel, not a credential; the fake has no network method.
-        def json(self, url, body=None, *, method="GET"):
-            assert method == "GET"
-            if url.endswith("/tervory-tank"):
-                return {"default_branch": "main"}
-            if "/git/ref/" in url:
-                return {"object": {"sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tmp_path).decode().strip()}}
-            if "/pulls?" in url:
-                return [{"html_url": "https://github.com/zenascapetown-code/tervory-tank/pull/329"}]
-            raise AssertionError(url)
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=Policy test", "-c", "user.email=policy-test@localhost", "commit", "--allow-empty", "-qm", "main"], check=True)
-    report = scan(locked_postcss(), AdvisoryClient())
-    assert len(fixes.publish(tmp_path, report, Existing(), "zenascapetown-code/tervory-tank")) == 1
-    fix = fixes.grouped_fixes(report)[0]
-    changed_advisories = {**fix, "advisories": [*fix["advisories"], "CVE-2026-73646"]}
-    assert fixes.fix_key(fix) == fixes.fix_key(changed_advisories)
+@pytest.mark.parametrize("method,url,body", [
+    ("POST", "https://api.github.com/repos/placeholder/repo/pulls", {}),
+    ("DELETE", "https://api.github.com/repos/placeholder/repo/git/refs/heads/main", None),
+    ("PATCH", "https://api.github.com/repos/placeholder/repo", {}),
+    ("POST", SOURCE_URLS["cisa-kev"], {}),
+    ("POST", SOURCE_URLS["osv"] + "vulns/placeholder", {}),
+    ("GET", "https://api.github.com/advisories", {}),
+])
+def test_http_cannot_write_even_with_a_token(method, url, body, monkeypatch):
+    from agents.market_lab.supply_chain import http
+    monkeypatch.setattr(http, "build_opener", lambda *args: pytest.fail("Forbidden request reached transport"))
+    with pytest.raises(SourceError, match="read-only"):
+        Client("placeholder-read-token").json(url, body, method=method)
 
 
-@pytest.mark.parametrize("orphan", ["none", "matching", "different"])
-def test_draft_payload_contains_real_changes_and_never_a_merge_operation(tmp_path, monkeypatch, orphan):
-    def git(*args):
-        return subprocess.check_output(["git", *args], cwd=tmp_path).decode().strip()
-    git("init", "-q")
-    git("config", "user.name", "Policy test")
-    git("config", "user.email", "policy-test@localhost")
-    (tmp_path / "package.json").write_text('{"dependencies":{"postcss":"8.4.31"}}')
-    git("add", ".")
-    git("commit", "-qm", "main")
-    calls = []
-    class GitHub:
-        token = "present"
-        def json(self, url, body=None, *, method="GET"):
-            calls.append((url, body, method))
-            if url.endswith("/tervory-tank"):
-                return {"default_branch": "main"}
-            if "/git/ref/" in url:
-                return {"object": {"sha": "b" * 40 if "autumbra" in url else git("rev-parse", "HEAD")}}
-            if "/pulls?" in url:
-                return []
-            if "/git/commits/" in url:
-                if url.endswith("/" + "b" * 40):
-                    return {"tree": {"sha": ("b" if orphan == "matching" else "c") * 40},
-                            "message": "Autumbra: fix postcss at 8.5.18"}
-                return {"tree": {"sha": "a" * 40}}
-            if url.endswith("/git/refs") and orphan != "none":
-                raise SourceError("Ref exists", status=422)
-            if url.endswith("/pulls"):
-                return {"html_url": "https://github.com/zenascapetown-code/tervory-tank/pull/329"}
-            return {"sha": "b" * 40}
-    def prepare(root, fix, client, tracked):
-        (root / "package.json").write_text('{"dependencies":{"postcss":"8.5.18"}}')
-    monkeypatch.setattr(fixes, "prepare", prepare)
-    if orphan == "different":
-        with pytest.raises(fixes.PublicationError, match="preserved"):
-            fixes.publish(tmp_path, scan(locked_postcss(), AdvisoryClient()), GitHub(), "zenascapetown-code/tervory-tank")
-        assert not any(url.endswith("/pulls") for url, _, _ in calls)
-        return
-    fixes.publish(tmp_path, scan(locked_postcss(), AdvisoryClient()), GitHub(), "zenascapetown-code/tervory-tank")
-    pull = next(body for url, body, method in calls if url.endswith("/pulls"))
-    assert pull["draft"] is True and pull["base"] == "main"
-    assert any("8.5.18" in body.get("content", "") for _, body, _ in calls if body)
-    assert all(method in {"GET", "POST"} and not url.endswith("/merge") for url, _, method in calls)
-    assert (tmp_path / "package.json").read_text().endswith('"8.4.31"}}')
+@pytest.mark.parametrize("case,expected", [("findings", 1), ("clean", 0), ("incomplete", 1)])
+def test_read_only_cli_persists_report_and_fails_on_findings_or_missing_coverage(case, expected, monkeypatch, tmp_path):
+    from agents.market_lab.supply_chain import __main__ as cli
+    import sys
+
+    class Unavailable(AdvisoryClient):
+        def json(self, *args, **kwargs):
+            raise SourceError("Source unavailable.")
+
+    provider = (Unavailable() if case == "incomplete" else
+                AdvisoryClient(osv=case != "clean", github=case != "clean"))
+    monkeypatch.setattr(cli, "Client", lambda token: provider)
+    monkeypatch.setattr(cli, "inventory", lambda root: locked_postcss())
+    report = tmp_path / "report.json"
+    monkeypatch.setattr(sys, "argv", ["watch", "--root", str(tmp_path), "--report", str(report)])
+    assert cli.main() == expected
+    data = json.loads(report.read_text())
+    assert data["complete"] is (case != "incomplete")
+    assert bool(data["findings"]) is (case == "findings")
+    assert all(method == "GET" or (url.endswith("querybatch") and method == "POST")
+               for url, _, method in provider.calls)
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["report.json"]
+
+
+def test_removed_publish_option_is_rejected_before_any_io(monkeypatch, tmp_path):
+    from agents.market_lab.supply_chain import __main__ as cli
+    import sys
+    monkeypatch.setattr(cli, "Client", lambda *args: pytest.fail("No I/O permitted"))
+    monkeypatch.setattr(sys, "argv", ["watch", "--report", str(tmp_path / "report.json"), "--publish"])
+    with pytest.raises(SystemExit) as result:
+        cli.main()
+    assert result.value.code == 2 and not list(tmp_path.iterdir())
+
+
+
+
 
 
 def test_nightly_is_default_branch_only_and_does_not_run_pr_code():
@@ -253,17 +216,6 @@ def test_nightly_is_default_branch_only_and_does_not_run_pr_code():
     steps = job["steps"]
     assert steps[0]["with"]["persist-credentials"] is False
     run = next(step for step in steps if step.get("name", "").startswith("Scan every lock"))
-    assert "secrets.SUPPLY_CHAIN_GITHUB_TOKEN" in run["env"]["GH_TOKEN"]
-    assert "--publish" in run["run"]
-
-
-def test_fix_cannot_introduce_a_new_vulnerable_transitive_dependency(tmp_path, monkeypatch):
-    monkeypatch.setattr(fixes, "python_fix", lambda *args: None)
-    monkeypatch.setattr(fixes, "inventory", lambda *args: Inventory([], {"requirements.lock": "software"}))
-    monkeypatch.setattr(fixes, "scan", lambda *args: {"complete": True, "findings": [
-        {"ecosystem": "PyPI", "package": "starlette", "version": "0.36.3", "locks": ["requirements.lock"]},
-    ]})
-    fix = {"ecosystem": "PyPI", "package": "httpx", "versions": ["0.27.2"], "target": "0.28.1",
-           "locks": ["requirements.lock"], "baseline_findings": []}
-    with pytest.raises(fixes.FixError, match="new vulnerable dependency"):
-        fixes.prepare(tmp_path, fix, AdvisoryClient(), [])
+    assert run["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
+    assert "--publish" not in run["run"]
+    assert "SUPPLY_CHAIN_GITHUB_TOKEN" not in json.dumps(workflow)
