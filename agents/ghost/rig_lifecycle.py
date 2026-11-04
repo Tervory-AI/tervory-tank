@@ -34,12 +34,13 @@ def plan_destroy(value):
 
 def receipt_for(plan, *, outcome='planned'):
     return {**plan, 'at': now_iso(), 'outcome': outcome, 'product': 'Rig',
-            'api_base': 'https://rig.tervory.com/rooms/' + plan['tenant_id'],
+            'api_base': 'https://rig.tervory.com/v1/rig/rooms/' + plan['tenant_id'],
             'secret_value_present': False}
 
 
 class CoolifyRigBackend(CoolifyEnforceBackend):
     prefix = 'rig-room'
+    create_options = {'is_raw_compose_deployment_enabled': True}
     delete_connected_networks = 'false'  # Never remove the shared Rig corridor.
     compose_location = COMPOSE
     description_prefix = 'rig-room:'

@@ -286,6 +286,7 @@ class CoolifyEnforceBackend:
     compose_location = "/agents/ghost/docker-compose.enforce.yml"
     description_prefix = "autumbra-enforce:"
     compose_path = None
+    create_options = {}
     delete_connected_networks = "true"
     settings_names = COOLIFY_SETTINGS
     plan_create = staticmethod(plan_create)
@@ -362,7 +363,7 @@ class CoolifyEnforceBackend:
                       "git_branch": "main", "build_pack": "dockercompose", "name": plan["project"],
                       "description": self.description_prefix + plan["tenant_id"],
                       "docker_compose_location": self.compose_location,
-                      "instant_deploy": False, "is_auto_deploy_enabled": False})
+                      "instant_deploy": False, "is_auto_deploy_enabled": False, **self.create_options})
             try:
                 app_uuid = identifier(created.get("uuid", ""))
             except (ValueError, TypeError):

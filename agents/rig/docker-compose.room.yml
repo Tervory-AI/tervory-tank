@@ -1,3 +1,4 @@
+# coolify: raw compose
 # Per-store data plane only. Brain, browser and 3D workers remain shared.
 # Coolify lifecycle creates this application without deploying it. Fill the
 # receipt's founder_fills in this application, then deploy through Coolify.

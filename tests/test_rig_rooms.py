@@ -41,6 +41,7 @@ class FakeCoolify:
             assert path == '/applications/private-github-app'
             body = json.loads(request.content)
             assert body['server_uuid'] == 'fixture-server'
+            assert body['is_raw_compose_deployment_enabled'] is True
             assert body['instant_deploy'] is False and body['is_auto_deploy_enabled'] is False
             row = {**body, 'uuid': 'fixture-app-' + str(len(self.calls)), 'status': 'exited'}
             self.apps.append(row)
@@ -78,6 +79,7 @@ async def test_profile_reuses_lifecycle_and_preserves_other_room():
         second = await rooms.create(plan_create(B))
         assert first['outcome'] == second['outcome'] == 'created'
         assert first['uuid'] != second['uuid']
+        assert first['api_base'] == 'https://rig.tervory.com/v1/rig/rooms/' + A
         assert first['storage_prefix'] != second['storage_prefix']
         assert first['volume'] != second['volume']
         assert first['database_volume'] != second['database_volume']

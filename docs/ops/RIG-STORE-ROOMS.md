@@ -123,3 +123,8 @@ it does not validate browser/GPU/model workloads or extrapolate capacity.
 **About 60–80 clients on a KVM 8 remains unmeasured.** `capacity_claim` stays null.
 The CI fixture replay verifies the real k6 scenario and report contracts without
 Docker or an external service; its timing values are synthetic, not benchmarks.
+
+The store-room lifecycle requests `is_raw_compose_deployment_enabled=true` at
+creation, matching the template’s first-line raw Compose marker. This prevents
+Coolify from adding its application network to the private database. The API
+field is documented in [Coolify’s private GitHub application endpoint](https://coolify.io/docs/api/endpoints/applications/create-private-github-app-application).

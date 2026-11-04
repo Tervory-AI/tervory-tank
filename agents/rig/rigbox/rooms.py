@@ -61,18 +61,29 @@ async def bind_database(pool):
                 END IF;
                 RETURN NULL;
               END $$''')
-            tables = await conn.fetch("SELECT table_name FROM information_schema.columns WHERE table_schema='agent_rig' AND column_name='tenant_id'")
-            for row in tables:
-                name = row['table_name']
-                if not re.fullmatch('[a-z][a-z0-9_]*', name):
-                    raise RuntimeError('Unexpected room table')
-                exists = await conn.fetchval("SELECT 1 FROM pg_constraint WHERE conrelid=$1::regclass AND conname='rig_room_owner'", 'agent_rig.' + name)
-                if name != 'room_owner':
-                    trigger = await conn.fetchval("SELECT 1 FROM pg_trigger WHERE tgrelid=$1::regclass AND tgname='rig_room_freeze'", 'agent_rig.' + name)
-                    if not trigger:
-                        await conn.execute(f'CREATE TRIGGER rig_room_freeze BEFORE INSERT OR UPDATE OR DELETE ON agent_rig.{name} FOR EACH STATEMENT EXECUTE FUNCTION agent_rig.room_write_guard()')
-                if not exists:
-                    await conn.execute(f"ALTER TABLE agent_rig.{name} ADD CONSTRAINT rig_room_owner CHECK (tenant_id = '{bound}'::uuid)")
+            # PostgreSQL quotes its own catalogue identifiers and the saved UUID.
+            # Keep the driver query static; no identifier is interpolated into SQL
+            # in Python, and no caller-supplied identifier reaches this block.
+            await conn.execute("""DO $room_binding$
+              DECLARE item record; room_tenant uuid; relation regclass;
+              BEGIN
+                SELECT tenant_id INTO STRICT room_tenant FROM agent_rig.room_owner;
+                FOR item IN SELECT table_name FROM information_schema.columns
+                  WHERE table_schema='agent_rig' AND column_name='tenant_id'
+                LOOP
+                  relation := format('%I.%I', 'agent_rig', item.table_name)::regclass;
+                  IF item.table_name <> 'room_owner' AND NOT EXISTS (
+                    SELECT 1 FROM pg_trigger WHERE tgrelid=relation AND tgname='rig_room_freeze'
+                  ) THEN
+                    EXECUTE format('CREATE TRIGGER rig_room_freeze BEFORE INSERT OR UPDATE OR DELETE ON %I.%I FOR EACH STATEMENT EXECUTE FUNCTION agent_rig.room_write_guard()', 'agent_rig', item.table_name);
+                  END IF;
+                  IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conrelid=relation AND conname='rig_room_owner'
+                  ) THEN
+                    EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT rig_room_owner CHECK (tenant_id = %L::uuid)', 'agent_rig', item.table_name, room_tenant);
+                  END IF;
+                END LOOP;
+              END $room_binding$""")
 
 
 def quiesced():
