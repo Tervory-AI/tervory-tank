@@ -1255,7 +1255,7 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
   headers.set("x-tank-key", TANK_API_KEY);
   headers.set("x-tervory-user", identity.userId);
   headers.set("x-tervory-tenant", identity.tenantId);
-  headers.set("x-tervory-admin", identity.userId);
+  headers.delete("x-tervory-admin");
   // Lane A resolves tenant_squad from the database on each authenticated call.
   // Never turn a caller header into tool authority.
   headers.delete("x-tervory-squad");
@@ -1468,7 +1468,7 @@ export async function triggerCrmRead(
     method: "GET", cache: "no-store", redirect: "error", signal,
     headers: {
       "accept": "application/json", "x-tank-key": TANK_API_KEY,
-      "x-tervory-user": identity.userId, "x-tervory-admin": identity.userId,
+      "x-tervory-user": identity.userId,
       "x-tervory-tenant": identity.tenantId,
     },
   });

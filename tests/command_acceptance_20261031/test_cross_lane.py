@@ -278,7 +278,9 @@ assert.equal(new URL(input.origin).hostname, '127.0.0.1');
         headers.set('x-trigger-signin-token', input.workspaceProof);
         headers.set('x-trigger-signin-org', input.org);
       }
-      return fetch(url, {...init, headers});
+      const response = await fetch(url, {...init, headers});
+      assert(response.ok, `Offline Tank ${new URL(url).pathname}: ${response.status}`);
+      return response;
     },
     mocks: {
       '@/lib/tenant': {activeTenant: async () => identity},
