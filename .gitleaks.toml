@@ -8,3 +8,13 @@ useDefault = true
 description = "Claude-reviewed exact Clerk publishable CI dummy; not a credential"
 regexTarget = "secret"
 regexes = ['''^pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==$''']
+
+# Public Figma document ID verified against docs/figma/autumbra-connect/REGISTER.md.
+# Historical fileKey metadata remains in this PR's commits; no credential exemption.
+[[allowlists]]
+description = "Exact public Autumbra Figma document metadata, two inventory files only"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^ZnphBOJU6657tohGLD3IzS$''']
+paths = ['''^docs/figma/autumbra-connect/(cloudflare|google-workspace)\.json$''']

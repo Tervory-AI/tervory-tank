@@ -512,5 +512,42 @@ class GitleaksAllowlistTests(unittest.TestCase):
         self.check_value(self.dummy[:offset] + replacement + self.dummy[offset + 1:], 1, 1)
 
 
+class GitleaksFigmaMetadataTests(unittest.TestCase):
+    """History exception requires both the exact public ID and exact inventory path."""
+
+    def test_public_document_exception_keeps_value_and_path_controls(self):
+        folder = "docs/figma/autumbra-connect/"
+        value = json.loads((ROOT / folder / "cloudflare.json").read_text())["figmaDocumentId"]
+        self.assertIn("https://www.figma.com/design/" + value,
+                      (ROOT / folder / "REGISTER.md").read_text())
+        changed = ("A" if value[0] != "A" else "B") + value[1:]
+        cases = [
+            (folder + "cloudflare.json", value, 0),
+            (folder + "google-workspace.json", value, 0),
+            (folder + "cloudflare.json", changed, 1),
+            (folder + "other.json", value, 1),
+            ("unrelated/cloudflare.json", value, 1),
+        ]
+        for name, candidate, expected in cases:
+            with self.subTest(path=name, expected=expected), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / name
+                path.parent.mkdir(parents=True)
+                path.write_text(json.dumps({"fileKey": candidate}))
+                report = root / "report.json"
+                result = subprocess.run([
+                    "gitleaks", "dir", ".", "--no-banner", "--redact=100",
+                    "--config", str(ROOT / ".gitleaks.toml"),
+                    "--gitleaks-ignore-path", str(ROOT / ".gitleaksignore"),
+                    "--ignore-gitleaks-allow", "--report-format", "json", "--report-path", str(report),
+                ], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=30, check=False)
+                self.assertEqual(result.returncode, expected)
+                findings = json.loads(report.read_text())
+                self.assertEqual(len(findings), expected)
+                if expected:
+                    self.assertEqual(findings[0]["RuleID"], "generic-api-key")
+
+
 if __name__ == "__main__":
     unittest.main()
