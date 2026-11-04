@@ -1,0 +1,86 @@
+[
+  {
+    "id": "241:545",
+    "screenshot": "241-545.png",
+    "width": 1440,
+    "height": 972,
+    "sha256": "be12bf09f06dc556aff41af18105cdeaf38046d00861485fa2fde5b640dcebe8"
+  },
+  {
+    "id": "241:576",
+    "screenshot": "241-576.png",
+    "width": 375,
+    "height": 972,
+    "sha256": "c3498be1534cddd51c37c255f0108690b27cb3f3fe6d5553ba89fb6345bc7cbb"
+  },
+  {
+    "id": "243:399",
+    "screenshot": "243-399.png",
+    "width": 1440,
+    "height": 960,
+    "sha256": "240c8d2f2f41d4d3b82cf0f657b9a9b25b6822cfc84f7ea55819b25c9ad9447e"
+  },
+  {
+    "id": "243:416",
+    "screenshot": "243-416.png",
+    "width": 375,
+    "height": 960,
+    "sha256": "bbd800a60fe35b396231173fbaa9ccd7c32eebfb39e68b15546fb33bbadfaa54"
+  },
+  {
+    "id": "243:433",
+    "screenshot": "243-433.png",
+    "width": 1440,
+    "height": 960,
+    "sha256": "3c7bfa83a692baa11588a34c63eae56fdc741472637855ef311b3aa21a57f55c"
+  },
+  {
+    "id": "243:450",
+    "screenshot": "243-450.png",
+    "width": 375,
+    "height": 960,
+    "sha256": "36dd8a4f185e4303f142cbdfbe2a3dd2eb4b80901ecd086433f403db656001a3"
+  },
+  {
+    "id": "243:467",
+    "screenshot": "243-467.png",
+    "width": 1440,
+    "height": 960,
+    "sha256": "bfc5d1e6787aca8c27b9c14e0b42b0c9bc726c16d2456883070673466a9ba3b3"
+  },
+  {
+    "id": "243:484",
+    "screenshot": "243-484.png",
+    "width": 375,
+    "height": 960,
+    "sha256": "170a19e315ce6375cf05eb479f81793c4d099944320e8c820706bb41bfa7184a"
+  },
+  {
+    "id": "243:1561",
+    "screenshot": "243-1561.png",
+    "width": 375,
+    "height": 989,
+    "sha256": "2a4cbb46fa49f464ccd08e358d9802bb707624c330ac09bfc62cfd54765b6174"
+  },
+  {
+    "id": "243:1803",
+    "screenshot": "243-1803.png",
+    "width": 375,
+    "height": 967,
+    "sha256": "6ff5756ca66859fb487c836a7f63130c09572b1e9d066eb4ce4c3d7cc960e63a"
+  },
+  {
+    "id": "243:532",
+    "screenshot": "243-532.png",
+    "width": 375,
+    "height": 972,
+    "sha256": "831ee610fda715f9f5201ee9c890e40eb0988d43826abedc5874f856aa684bba"
+  },
+  {
+    "id": "274:24126",
+    "screenshot": "274-24126.png",
+    "width": 375,
+    "height": 1029,
+    "sha256": "bc1a2d3d04b2683c2839b4d13d9e998c1c9b668c806453e36c8f3ffe7c945788"
+  }
+]

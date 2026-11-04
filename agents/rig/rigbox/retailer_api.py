@@ -15,7 +15,7 @@ from rigbox.service import RigError
 from rigbox.quotes.senders import DeliveryError
 
 router = APIRouter()
-OPERATIONS = {"commerce-connect", "commerce-orders", "store-delivery", "confirm-store-payment", "panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
+OPERATIONS = {"room-archive", "commerce-connect", "commerce-orders", "store-delivery", "confirm-store-payment", "panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
 
 
 @router.post("/internal/retailer/{operation}")
@@ -39,11 +39,18 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
             raise ValueError()
     except (ValueError, KeyError, TypeError):
         raise RigError("invalid", "A tenant and valid operation fields are required.", 422) from None
+    from rigbox.rooms import require_owner, quiesced
+    require_owner(tenant)
+    if quiesced() and operation != "room-archive":
+        raise RigError("unavailable", "This store room is archived.", 503)
     activate_tenant(tenant)
     service = request.app.state.rig
     retailer = Retailer(service)
     try:
-        if operation in {"commerce-connect", "commerce-orders", "store-delivery"}:
+        if operation == "room-archive":
+            from rigbox.rooms import archive
+            result = await archive(service, tenant)
+        elif operation in {"commerce-connect", "commerce-orders", "store-delivery"}:
             from rigbox.cart_api import cart, commerce_operation
             from rigbox.commerce import CommerceError
             try:

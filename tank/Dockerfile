@@ -15,12 +15,15 @@ RUN --mount=type=secret,id=proxy_ca \
 # Every Tank module is copied by pattern, so a PR that adds a module never edits this line
 # (it used to be a hand-kept list that clashed on almost every Tank PR).
 COPY *.py schema.sql cl100k_base.tiktoken cl100k_base.LICENSE ./
+COPY command_tools ./command_tools
 COPY fonts ./fonts
 COPY skills ./skills
 COPY training_jobs ./training_jobs
 COPY plugin_packages ./plugin_packages
 RUN useradd -m tank && chown -R tank /app
-# Baked at image build. Coolify passes SOURCE_COMMIT. A local build can pass GIT_SHA.
+# Baked at image build when GIT_SHA (local build) or SOURCE_COMMIT (Coolify with
+# "include source commit in build" on) is passed. Otherwise tank_sha() reads
+# SOURCE_COMMIT from the runtime environment.
 ARG SOURCE_COMMIT=
 ARG GIT_SHA=
 ENV LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false

@@ -317,11 +317,9 @@ async def test_export_za_preserves_identifiers_excludes_holdout_and_inactive_pri
 
 @pytest.mark.asyncio
 async def test_official_court_split_is_saved_and_reported_per_source(database, monkeypatch):
-    import sys
-
     pool, rt = database
     rt.box_region = lambda: "za"
-    monkeypatch.setitem(sys.modules, "main", SimpleNamespace(TANK_API_KEY="placeholder-tank-key"))
+    monkeypatch.setenv("TANK_KEY_ZENAS", "placeholder-tank-key")
     monkeypatch.setattr(training, "is_holdout", lambda *_args: False)
     async with pool.acquire() as conn:
         await conn.execute((ROOT / "agents/zenas/pool/schema.sql").read_text())

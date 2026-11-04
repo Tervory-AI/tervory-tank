@@ -155,8 +155,10 @@ def _flat(tmp_path: Path, skills_dir: Path | None) -> dict:
     (app / "base_source_scores.py").write_text((ROOT / "tank/base_source_scores.py").read_text())
     shutil.copytree(ROOT / "agents/base/base_gold", app / "base_gold", ignore=shutil.ignore_patterns("__pycache__"))
     env = {k: v for k, v in os.environ.items() if k != "SKILLS_DIR"}
-    if skills_dir:
-        env["SKILLS_DIR"] = str(skills_dir)
+    # The room image sets SKILLS_DIR=/app/skills even when that folder is absent.
+    # A checkout-local TMPDIR must not let the copied app discover the host repo
+    # by walking its ancestors; that tree does not exist in the container.
+    env["SKILLS_DIR"] = str(skills_dir or app / "skills")
     code = textwrap.dedent("""
         import json, pipeline
         print(json.dumps({"a": pipeline.engine_terms("ffl", "1.0.0"),
