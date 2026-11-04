@@ -2,6 +2,12 @@
 
 ## Product fixes first
 
+The saved-page gold scorer now captures the external event publisher. After the
+event-bus integration it constructed a real HTTP/TLS client inside a code-only
+2 ms benchmark, breaking both the offline promise and timing check. The reader,
+watch check, observation, alert and event facts still execute; only delivery is
+faked. The threshold is unchanged, with no security/test exception.
+
 The approved price-position implementation was still on `codex/tiger-w4`, not
 main. This branch brings it forward without merging: tenant-scoped match review,
 confirmed Undo, real site-check summaries, and the three approved responsive
@@ -31,7 +37,7 @@ and its executable cases accompany this inventory in the next two steps.
 | Price position, Matches to review, Competitor sites; desktop/mobile and framed empty states; existing overview/history/alerts | #596 approved register and the completed TG2 implementation; `workspace/app/tiger/` | `tests/tiger_position/workspace.test.cjs`, `browser.cjs`, ten independent frame exports; `tests/tiger_works/workspace.test.cjs` |
 | Rig's eligible product watches, price/stock delivery, idempotent retries, shared URLs, cancellation, read-only check-now | #458 and Rig/Tiger handoff waves; `agents/tiger/rig_watch.py` | `tests/rig_tiger_prices/` |
 | Tenant-private official feeds/portal prices; approved browser credentials and handback, revocation, archive rules; vault keys/files/links/MCP | ACCESS1; `tank/access.py`, `agents/_browser/`, Tiger Plugins/server actions | `tests/test_access1.py`, `test_access1_sources.py`, `test_tiger_works.py`, Workspace tests |
-| Code-only public layout playbooks with independent-page promotion/retirement; reader evaluation and unverified correction inbox | #403 and reader waves; `agents/tiger/playbooks.py`, `gold_feedback.py` | `tests/tiger_playbooks/`, `tiger_price_read/`, `tiger_alert_page/` |
+| Code-only public layout playbooks with independent-page promotion/retirement; reader evaluation and unverified correction inbox | #403 and reader waves; `agents/tiger/domain_playbooks.py`, `gold_feedback.py` | `tests/tiger_playbooks/`, `tiger_price_read/`, `tiger_alert_page/` |
 | Optional sealed Tiger brain/sandbox, profile off, no caller, owning-key Tank accounting, wrong-room rejection before SQL | #638; `agents/tiger/docker-compose.yml`, `tank/agent_skills.py`, isolation/seal scripts | `tests/tiger_brain/test_tg3.py`, `test_room_seal.py`, `test_ledger_sql_param.py` |
 
 ## Validation and limits
