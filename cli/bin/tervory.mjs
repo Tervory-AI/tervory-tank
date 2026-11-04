@@ -9,7 +9,7 @@ import { updateNotice } from '../src/update.mjs';
 // Sign-in is a browser device approval: no credential is typed, pasted, passed
 // in argv or the environment, or written anywhere except the OS keychain.
 function openBrowser(url) {
-  if (!/^https:\/\/app\.tervory\.com\/cli\/device\?/.test(url)) return;
+  if (!/^https:\/\/(?:app\.tervory\.com\/cli\/device\?|auth-za\.tervory\.com(?:\/|$))/.test(url)) return;
   const [command, args] = process.platform === 'darwin' ? ['open', [url]]
     : process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]] : ['xdg-open', [url]];
   try {
@@ -39,6 +39,7 @@ try {
     },
     io: {
       signal: controller.signal,
+      interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
       write: value => process.stdout.write(safe(value)),
       // Provisional answer stays on one stderr line. Only the validated final
       // answer enters stdout, so replace events never append stale previews.
@@ -62,7 +63,7 @@ try {
   });
 } catch (error) {
   // Never print native-keychain or transport errors: they can include input.
-  const known = /^(?:Personal token refused\.|Tank |Login |Signed |Node 22|Unknown command|Invalid |A thread|Command |Run requires|This tool|Update )/;
+  const known = /^(?:Personal token refused\.|Tank |Login |Signed |Node 22|Unknown command|Code |Invalid |A thread|Command |Run requires|This tool|Update )/;
   process.stderr.write(known.test(error.message) ? `${safe(error.message)}\n` : 'Command failed. Check your OS keychain and Tank connection.\n');
   process.exitCode = 1;
 } finally {

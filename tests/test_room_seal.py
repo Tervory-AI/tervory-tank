@@ -24,11 +24,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 RAW_MARKER = "# coolify: raw compose"
 COOLIFY_APP_NETWORK = "<coolify app network>"
-# Autumbra Watch/Enforce are optional until dogfood; seal-check reports
-# absence without failing. Tests expect that status line so Autumbra coverage stays honest.
-AUTUMBRA_ABSENT_LINE = (
-    "autumbra: no Watch/Enforce rooms running "
-    "(ok until dogfood; pin EXPECTED_SEALED after first clean run)"
+# Required A2 rooms are included in the historical samples by the fixture helper.
+AUTUMBRA_SEALED_LINES = (
+    "agent-ghost (placeholder-watch): sealed",
+    "autumbra-enforce (placeholder-enforce): sealed",
 )
 ROOM_FILES = sorted((ROOT / "agents").glob("*/docker-compose*.yml"))
 SEAL_CHECK = ROOT / "ops" / "seal-check.sh"
@@ -93,7 +92,7 @@ def test_no_room_service_would_leak_when_coolify_deploys_it(path: Path) -> None:
     assert leaks(path.read_text(encoding="utf-8")) == []
 
 
-@pytest.mark.parametrize("room", ["base", "radix", "tiger", "rig"])
+@pytest.mark.parametrize("room", ["base", "radix", "tiger", "rig", "zenas"])
 def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
     text = (ROOT / "agents" / room / "docker-compose.yml").read_text(encoding="utf-8")
     assert is_raw(text), f"agents/{room}/docker-compose.yml must start with {RAW_MARKER!r}"
@@ -101,10 +100,10 @@ def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
 
 @pytest.mark.parametrize("room, sealed", [
     ("base", {"base-sandbox", "base-browser"}),
-    ("tiger", {"tiger-browser"}),
+    ("tiger", {"tiger-browser", "tiger-sandbox"}),
     ("rig", {"rig-sandbox", "rig-browser", "rig-forge"}),
     # Radix is sealed on the live host today; this keeps it so.
-    ("radix", {"agent-radix"}),
+    ("radix", {"agent-radix", "radix-brain", "radix-sandbox", "radix-browser", "radix-browser-gateway"}),
 ])
 def test_normal_mode_would_put_sealed_services_on_coolifys_network(room: str, sealed: set[str]) -> None:
     text = (ROOT / "agents" / room / "docker-compose.yml").read_text(encoding="utf-8")
@@ -156,6 +155,20 @@ def test_raw_compose_files_need_nothing_from_coolify(path: Path) -> None:
         for key, value in (service.get("environment") or {}).items():
             assert isinstance(value, (str, int, float)), f"{name}.{key} must be explicit"
     for key, spec in (compose.get("volumes") or {}).items():
+        snapshot = ROOT / "tests/room_brains/snapshots" / (path.parent.name + ".json")
+        if snapshot.is_file():
+            original = json.loads(snapshot.read_text())["volumes"]
+            prior = yaml.safe_load("volumes:\n" + original).get("volumes") if original else {}
+            if key in prior:
+                assert spec == prior[key], f"volume {key} must stay unchanged from main"
+                continue
+        if path.parent.name == "zenas":
+            # Existing Zenas room volumes must retain main's declarations.
+            # Its new brain volume still requires its own explicit name below.
+            room_data = "za_agent_data" if path.name == "docker-compose.za.yml" else "agent_zenas_data"
+            if key == room_data:
+                assert spec is None, f"volume {key} must stay unchanged from main"
+                continue
         # The live name, so the data survives the switch from normal mode.
         assert spec and spec.get("name"), f"volume {key} must keep its live name"
 
@@ -217,11 +230,24 @@ async def test_browser_accepts_work_only_from_its_gateway(monkeypatch: pytest.Mo
         assert (await client.post("/missing", json={})).status_code == 503
 
 
-def run_seal_check(tmp_path: Path, fixture: str) -> subprocess.CompletedProcess:
+def run_seal_check(tmp_path: Path, fixture: str, *, include_autumbra=True, include_tisan=True) -> subprocess.CompletedProcess:
     fake = tmp_path / "docker"
     fake.write_text(f"#!{sys.executable}\n" + FAKE_DOCKER, encoding="utf-8")
     fake.chmod(0o755)
-    env = dict(os.environ, DOCKER=str(fake), SEAL_FIXTURE=str(FIXTURES / fixture))
+    path = FIXTURES / fixture
+    data = json.loads(path.read_text())
+    if include_autumbra and data["containers"] and path.name != "no_rooms.json":
+        add_autumbra_placements(data)
+        path = tmp_path / "placeholder-all-required.json"
+        path.write_text(json.dumps(data))
+    if include_tisan and data["containers"] and path.name != "no_rooms.json":
+        if not any(c['service'] in {'agent-tisan', 'figma-egress-proxy'} for c in data['containers'].values()):
+            sample = json.loads((FIXTURES / 'tisan.json').read_text())
+            data['containers'].update(sample['containers'])
+            data['networks'].update(sample['networks'])
+        path = tmp_path / 'placeholder-tisan-required.json'
+        path.write_text(json.dumps(data))
+    env = dict(os.environ, DOCKER=str(fake), SEAL_FIXTURE=str(path))
     return subprocess.run(["bash", str(SEAL_CHECK)], capture_output=True, text=True, env=env, timeout=30)
 
 
@@ -238,7 +264,10 @@ elif args[:1] == ["inspect"]:
     print("|".join([c["uuid"], c.get("resource", ""), c["service"], c.get("project", c["uuid"]), "/" + c["name"],
                     "".join(n + " " for n in sorted(c["networks"]))]))
 elif args[:2] == ["network", "inspect"]:
-    print("true" if data["networks"][args[-1]] else "false")
+    if '.Labels' in args[args.index('-f') + 1]:
+        print(data.get('network_labels', {}).get(args[-1], '|'))
+    else:
+        print("true" if data["networks"][args[-1]] else "false")
 else:
     sys.exit("fake docker: refused " + " ".join(args))
 '''
@@ -254,7 +283,8 @@ def test_seal_check_reports_sealed_rooms(tmp_path: Path) -> None:
         "agent-radix (radixuuid): sealed",
         "agent-tiger (tigeruuid): sealed",
         "agent-rig (riguuid): sealed",
-        AUTUMBRA_ABSENT_LINE,
+        *AUTUMBRA_SEALED_LINES,
+        "agent-tisan (placeholder-tisan): sealed",
     ]
 
 
@@ -267,8 +297,9 @@ def test_seal_check_names_each_leaking_container_and_network(tmp_path: Path) -> 
         " LEAK: base-brain-baseuuid on baseuuid",
         "agent-radix (radixuuid): LEAK: agent-radix-radixuuid on radixuuid",
         "agent-rig (riguuid): sealed",
+        *AUTUMBRA_SEALED_LINES,
+        "agent-tisan (placeholder-tisan): sealed",
         "agent-tiger: NOT FOUND",
-        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -291,7 +322,8 @@ def test_seal_check_finds_raw_compose_rooms_by_label_not_container_name(tmp_path
         "agent-radix (radixuuid): sealed",
         "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
         "agent-rig (riguuid): sealed",
-        AUTUMBRA_ABSENT_LINE,
+        *AUTUMBRA_SEALED_LINES,
+        "agent-tisan (placeholder-tisan): sealed",
     ]
 
 
@@ -324,8 +356,9 @@ def test_seal_check_reports_leaks_in_raw_compose_rooms(tmp_path: Path) -> None:
         "agent-base (baseuuid): LEAK: baseuuid-base-sandbox-1 on baseuuid",
         "agent-radix (radixuuid): sealed",
         "agent-rig (riguuid): sealed",
+        *AUTUMBRA_SEALED_LINES,
+        "agent-tisan (placeholder-tisan): sealed",
         "agent-tiger: NOT FOUND",
-        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -338,8 +371,9 @@ def test_seal_check_fails_when_an_expected_room_is_missing(tmp_path: Path) -> No
         "agent-base (baseuuid): sealed",
         "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
         "agent-rig (riguuid): sealed",
+        *AUTUMBRA_SEALED_LINES,
+        "agent-tisan (placeholder-tisan): sealed",
         "agent-radix: NOT FOUND",
-        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -353,7 +387,8 @@ def test_seal_check_never_passes_when_only_the_hub_is_running(tmp_path: Path) ->
         "agent-radix: NOT FOUND",
         "agent-tiger: NOT FOUND",
         "agent-rig: NOT FOUND",
-        AUTUMBRA_ABSENT_LINE,
+        "agent-ghost: NOT FOUND",
+        "agent-tisan: NOT FOUND",
     ]
 
 
@@ -463,7 +498,7 @@ def test_trigger_radix_samples_match_the_declared_compose_networks():
             declared = {compose["networks"][key].get("name", row["project"] + "_" + key)
                         for key in compose["services"][service]["networks"]}
             assert set(row["networks"]) == declared
-    assert "EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig)" in SEAL_CHECK.read_text()
+    assert "EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost agent-tisan)" in SEAL_CHECK.read_text()
 
 
 def test_trigger_radix_exact_placements_pass(tmp_path):
@@ -527,3 +562,135 @@ def test_languagetool_cannot_join_the_trigger_corridor(tmp_path):
     result = run_seal_check(tmp_path, str(path))
     assert result.returncode == 1, result.stdout + result.stderr
     assert "LEAK: triggerproject-trigger-languagetool-1 on tervory-gw-trigger" in result.stdout
+
+
+
+def add_autumbra_placements(data):
+    data['networks'].update({'tervory-gw-ghost': False, 'placeholder-enforce-private': True})
+    for service in ('agent-ghost', 'ghost-browser'):
+        data['containers'][service] = {
+            'uuid': 'placeholder-watch', 'resource': 'agent-ghost', 'service': service,
+            'project': 'placeholder-watch', 'name': 'placeholder-' + service,
+            'networks': ['tervory-gw-ghost'],
+        }
+    data['containers']['placeholder-enforce'] = {
+        'uuid': 'placeholder-enforce', 'resource': 'autumbra-enforce-placeholder', 'service': 'enforce',
+        'project': 'placeholder-enforce', 'name': 'placeholder-enforce',
+        'networks': ['placeholder-enforce-private'],
+    }
+    data['networks'].update({'placeholder-enforce-egress': False,
+                             'placeholder-health-private': True, 'placeholder-health-egress': False})
+    labels = data.setdefault('network_labels', {})
+    for network, logical in [('placeholder-enforce-private', 'enforce_internal'),
+                             ('placeholder-enforce-egress', 'egress'),
+                             ('placeholder-health-private', 'health_internal'),
+                             ('placeholder-health-egress', 'health_egress')]:
+        labels[network] = 'placeholder-enforce|' + logical
+    for service, networks in {
+        'egress-proxy': ['placeholder-enforce-private', 'placeholder-enforce-egress'],
+        'health-observer': ['placeholder-health-private'],
+        'health-egress-proxy': ['placeholder-health-private', 'placeholder-health-egress'],
+    }.items():
+        data['containers']['placeholder-' + service] = {
+            'uuid': 'placeholder-enforce', 'resource': 'autumbra-enforce-placeholder',
+            'service': service, 'project': 'placeholder-enforce',
+            'name': 'placeholder-' + service, 'networks': networks,
+        }
+    return data
+
+
+def test_autumbra_required_rooms_cannot_be_absent(tmp_path):
+    result = run_seal_check(tmp_path, 'sealed.json', include_autumbra=False)
+    assert result.returncode == 1
+    assert 'agent-ghost: NOT FOUND' in result.stdout
+    assert 'autumbra-enforce: NOT FOUND' not in result.stdout
+
+
+@pytest.mark.parametrize('service', ['agent-ghost', 'ghost-browser', 'placeholder-enforce'])
+@pytest.mark.parametrize('internal', [False, True])
+def test_autumbra_extra_network_always_fails(tmp_path, service, internal):
+    data = add_autumbra_placements(json.loads((FIXTURES / 'sealed.json').read_text()))
+    data['networks']['placeholder-extra'] = internal
+    data['containers'][service]['networks'].append('placeholder-extra')
+    path = tmp_path / 'placeholder-extra-network.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path), include_autumbra=False)
+    assert result.returncode == 1 and 'LEAK:' in result.stdout
+    if service == 'placeholder-enforce':
+        assert 'must have exactly one internal network' in result.stdout
+
+
+def test_autumbra_enforce_without_internal_network_fails(tmp_path):
+    data = add_autumbra_placements(json.loads((FIXTURES / 'sealed.json').read_text()))
+    data['networks']['placeholder-enforce-private'] = False
+    path = tmp_path / 'placeholder-public-enforce.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path), include_autumbra=False)
+    assert result.returncode == 1 and 'LEAK:' in result.stdout
+
+
+def test_watch_host_without_enforce_passes(tmp_path):
+    data = add_autumbra_placements(json.loads((FIXTURES / 'sealed.json').read_text()))
+    data['containers'] = {key: row for key, row in data['containers'].items()
+                          if row['uuid'] != 'placeholder-enforce'}
+    path = tmp_path / 'placeholder-watch-only.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path), include_autumbra=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'agent-ghost (placeholder-watch): sealed' in result.stdout
+    assert 'autumbra-enforce: NOT FOUND' not in result.stdout
+
+
+@pytest.mark.parametrize('resource', ['autumbra-enforce-placeholder', 'agent-placeholder-custom'])
+@pytest.mark.parametrize('missing', [None, 'egress-proxy', 'health-observer', 'health-egress-proxy'])
+def test_every_enforce_app_requires_all_services_regardless_of_name(tmp_path, resource, missing):
+    data = add_autumbra_placements(json.loads((FIXTURES / 'sealed.json').read_text()))
+    for row in data['containers'].values():
+        if row['uuid'] == 'placeholder-enforce':
+            row['resource'] = resource
+    if missing:
+        del data['containers']['placeholder-' + missing]
+    path = tmp_path / 'placeholder-enforce-services.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path), include_autumbra=False)
+    assert result.returncode == (1 if missing else 0), result.stdout + result.stderr
+    if missing:
+        assert 'NOT FOUND: ' + missing in result.stdout
+    else:
+        assert 'autumbra-enforce: NOT FOUND' not in result.stdout
+
+
+@pytest.mark.parametrize('service', ['agent-tisan', 'figma-egress-proxy'])
+@pytest.mark.parametrize('internal', [False, True])
+def test_tisan_extra_network_is_always_a_leak(tmp_path, service, internal):
+    data = json.loads((FIXTURES / 'sealed.json').read_text())
+    sample = json.loads((FIXTURES / 'tisan.json').read_text())
+    data['containers'].update(sample['containers'])
+    data['networks'].update(sample['networks'])
+    data['containers']['placeholder-' + service]['networks'].append('placeholder-extra')
+    data['networks']['placeholder-extra'] = internal
+    path = tmp_path / 'placeholder-tisan-extra.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f'LEAK: placeholder-{service} on placeholder-extra' in result.stdout
+
+
+def test_tisan_expected_placements_pass_and_missing_room_fails(tmp_path):
+    assert run_seal_check(tmp_path, 'sealed.json').returncode == 0
+    result = run_seal_check(tmp_path, 'sealed.json', include_tisan=False)
+    assert result.returncode == 1 and 'agent-tisan: NOT FOUND' in result.stdout
+
+
+@pytest.mark.parametrize('service', ['agent-tisan', 'figma-egress-proxy'])
+def test_tisan_internal_link_cannot_become_outbound(tmp_path, service):
+    data = json.loads((FIXTURES / 'sealed.json').read_text())
+    sample = json.loads((FIXTURES / 'tisan.json').read_text())
+    data['containers'].update(sample['containers'])
+    data['networks'].update(sample['networks'])
+    data['networks']['placeholder-tisan_figma_internal'] = False
+    path = tmp_path / 'placeholder-tisan-not-internal.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1
+    assert f'NOT SEALED: placeholder-{service} on non-internal placeholder-tisan_figma_internal' in result.stdout

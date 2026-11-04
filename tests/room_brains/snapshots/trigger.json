@@ -1,0 +1,10 @@
+{
+  "main": "de113044",
+  "volumes": null,
+  "mounts": {
+    "agent-trigger": null,
+    "trigger-languagetool": [
+      "./languagetool.properties:/etc/trigger-lt.properties:ro"
+    ]
+  }
+}

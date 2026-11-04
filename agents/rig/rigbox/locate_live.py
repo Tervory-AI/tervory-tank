@@ -301,7 +301,7 @@ async def confirm(store: Any, tenant: str, product: dict, checker: LiveChecker, 
         return {"public": {"status": "check_with_store"}, "store": {"offer": offer, "live": {**evidence, "reason": "price"}}}
     expires_at = moment + timedelta(seconds=ttl or hold_seconds())
     hold_id = "h_" + secrets.token_hex(16)
-    public = {"status": "available_to_order", "eta": offer.get("eta"),
+    public = {"status": "available_to_order", "eta": offer.get("eta"), "ship_days": offer.get("ship_days"),
               "price": {"amount": str(amount), "currency": product["currency"]},
               "expires_at": expires_at.isoformat()}
     private = {"offer": offer, "source": {**{key: source.get(key) for key in

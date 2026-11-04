@@ -2,7 +2,7 @@
 
 Per-store ``blind_ship`` switch, off by default. Per-source
 ``neutral_slip_required``. The order and the supplier PO are Rig's own rows
-(rigbox.fulfilment; Tervory no longer uses Odoo): the PO carries the shopper's
+(rigbox.fulfilment): the PO carries the shopper's
 delivery address and, when the source requires it, the neutral-slip
 instruction. No supplier identity reaches the shopper. Offline here, except the
 real Postgres test (RIG_TEST_DATABASE_URL).
@@ -32,7 +32,7 @@ from rigbox.quotes.store import MemoryQuotes
 from rigbox.retailer import Retailer
 from rigbox.service import RigError, Service
 from rigbox.store import MemoryStore
-from test_rig_locate_checkout import TENANT, FakeProvider, Live, available, rate_stub, shop
+from test_rig_locate_checkout import TENANT, Live, available, rate_stub, shop
 
 ADDRESS = {"name": "Thandi Mokoena", "street": "12 Long Street", "city": "Cape Town", "zip": "8001",
            "state": "Western Cape", "country": "za", "phone": "+27 21 000 0000"}
@@ -62,9 +62,6 @@ def only_order(store, tenant=TENANT):
 def env(monkeypatch):
     monkeypatch.setenv("RIG_LOCATE_HOLD_SECRET", "s" * 40)
     monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
-    monkeypatch.setenv("RIG_LOCATE_PAYMENTS_MODE", "test")
-    for name in ("STRIPE_SECRET_KEY", "PAYSTACK_SECRET_KEY"):
-        monkeypatch.delenv(name, raising=False)
 
 
 async def blind_shop(monkeypatch, *, blind=True, neutral=True, fail=False):
@@ -78,9 +75,8 @@ async def blind_shop(monkeypatch, *, blind=True, neutral=True, fail=False):
     if fail:
         service.fulfilment = FailingOrders(store)
     service.locate_checker = Live(available("45.00"))
-    service.payments = FakeProvider()
     held = await service.locate_confirm(TENANT, "part-1")
-    body = {"product_id": "part-1", "hold": held["hold"], "payment_token": "tok_test_visa",
+    body = {"product_id": "part-1", "hold": held["hold"],
             "contact": {"name": "Thandi Mokoena", "email": "thandi@example.com"}, "delivery": dict(ADDRESS)}
     return store, service, orders, held, body
 
@@ -137,8 +133,10 @@ def test_ship_address_is_strict():
 @pytest.mark.asyncio
 async def test_blind_accept_records_a_rig_order_and_a_neutral_slip_po_to_the_shopper(monkeypatch):
     store, service, orders, held, body = await blind_shop(monkeypatch)
-    result = await service.locate_accept(TENANT, body)
-    assert result["state"] == "ordered" and result["ships_direct"] is True
+    accepted = await service.locate_accept(TENANT, body)
+    assert accepted["state"] == "accepted" and store.locate_orders == {}
+    result = await service.confirm_store_payment(TENANT, accepted["request_id"])
+    assert result["state"] == "ordered"
     order, po = only_order(store)
     number, po_number = numbers(TENANT, result["request_id"])
     assert order == {"quote_id": result["request_id"], "number": number, "state": "placed", "product_id": "part-1",
@@ -165,17 +163,19 @@ async def test_blind_accept_without_address_refuses_before_hold_or_payment(monke
         with pytest.raises(RigError) as raised:
             await service.locate_accept(TENANT, {**body, "delivery": delivery})
         assert raised.value.status == 422
-    assert service.payments.captured == [] and orders.sent == [] and store.locate_orders == {}
+    assert orders.sent == [] and store.locate_orders == {}
     hold_id = held["hold"].split(".")[0]
     assert store.supply_state[TENANT]["holds"][hold_id]["used_at"] is None
-    assert (await service.locate_accept(TENANT, body))["state"] == "ordered"
+    assert (await service.locate_accept(TENANT, body))["state"] == "accepted"
 
 
 @pytest.mark.asyncio
 async def test_switch_off_keeps_the_existing_ship_to_store_order(monkeypatch):
     store, service, orders, held, body = await blind_shop(monkeypatch, blind=False)
-    result = await service.locate_accept(TENANT, body)
-    assert result["state"] == "ordered" and "ships_direct" not in result
+    accepted = await service.locate_accept(TENANT, body)
+    assert accepted["state"] == "accepted" and store.locate_orders == {}
+    result = await service.confirm_store_payment(TENANT, accepted["request_id"])
+    assert result["state"] == "ordered"
     order, po = only_order(store)
     assert order["ship_to"] is None and po["ship_to"] is None
     assert po["neutral_slip"] is False and po["instructions"] == ""  # ships to the store: no blind slip
@@ -183,13 +183,16 @@ async def test_switch_off_keeps_the_existing_ship_to_store_order(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_blind_order_failure_refunds(monkeypatch):
+async def test_blind_transient_order_failure_releases_lease(monkeypatch):
     store, service, orders, _, body = await blind_shop(monkeypatch, fail=True)
-    with pytest.raises(RigError) as raised:
-        await service.locate_accept(TENANT, body)
-    assert raised.value.status == 502
-    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "order_failed_refunded"
-    assert service.payments.refunded == ["order_failed"] and store.locate_orders == {}
+    accepted = await service.locate_accept(TENANT, body)
+    result = await service.confirm_store_payment(TENANT, accepted["request_id"])
+    assert result["state"] == "store_confirmed" and store.locate_orders == {}
+    state = (await store.quote_for(TENANT, accepted["request_id"]))["payload"]["locate_state"]
+    assert state["attempted_at"] is None
+    service.fulfilment = RigOrders(store)
+    assert (await service.confirm_store_payment(TENANT, accepted["request_id"]))["state"] == "ordered"
+    assert len(store.locate_orders) == 1
 
 
 # 3. Shopper HTTP responses: no supplier identity or supplier cost (an invented POF-style row, 92445).
@@ -228,7 +231,6 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
         await rate_stub(store)
         service = QuoteService(store, None, HandoffDouble(), MemoryQuotes(store))
         service.locate_checker = Live(available("987.00"))
-        service.payments = FakeProvider()
         return service
 
     app = FastAPI()
@@ -243,10 +245,11 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
         assert located.status_code == held.status_code == product.status_code == 200, (located.text, held.text)
         assert held.json()["status"] == "available_to_order"
         accepted = client.post("/v1/rig/locate/accept", headers=headers, json={
-            "product_id": "92445", "hold": held.json()["hold"], "payment_token": "tok_test_visa",
+            "product_id": "92445", "hold": held.json()["hold"],
             "contact": {"name": "Thandi Mokoena", "email": "thandi@example.com"}, "delivery": ADDRESS})
         assert accepted.status_code == 200, accepted.text
-        assert accepted.json()["ships_direct"] is True
+        assert accepted.json()["state"] == "accepted"
+        assert accepted.json()["items"][0]["delivery"]["ship_days"] == 8
     for response in (located, held, product, accepted):
         text = response.text
         # The supplier's live cost (a made-up 987 USD, not a real supplier price). Random ids (hold token, request id,
@@ -255,8 +258,7 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
         assert "neutral_slip" not in text and "landed" not in text
         for marker in ("other-store", "other.example", "RSR|POF92445", "RSR", "tiger"):
             assert marker not in text, (marker, text)
-    order, po = only_order(app.state.rig.store, SAMPLE)
-    assert order["ship_to"]["city"] == po["ship_to"]["city"] == "Cape Town" and po["neutral_slip"] is True
+    assert app.state.rig.store.locate_orders == {}
 
 
 # 4. RigOrders: Rig's own order rows, no ERP.

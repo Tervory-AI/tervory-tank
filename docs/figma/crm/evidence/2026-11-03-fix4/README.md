@@ -1,3 +1,5 @@
+> Provenance note · 4 Nov 2026: this is the preserved 3 Nov authoring record from PR #436 head `314bf273`. Its measurements and screenshots have not been re-run against the live canvas in this reconciliation. Status remains **Changed after approval, awaiting founder**. Current approval/wording precedence is documented in [the reconciliation](../../RECONCILIATION-20261104.md); do not replay these old writes or treat them as founder-browser acceptance.
+
 # CRM corrections · 3 November 2026 · Figma 4
 
 Status: **Changed after approval, awaiting founder**. Figma file `ZnphBOJU6657tohGLD3IzS`, page `93:2`. Branch `codex/crm-design`; existing PR #436. Includes the founder's 3 November 11:37 PT light-background ruling. No production code changed.

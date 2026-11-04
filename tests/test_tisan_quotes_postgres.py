@@ -13,7 +13,7 @@ import asyncpg
 import pytest
 import pytest_asyncio
 
-from test_tisan_quotes import A, B, DATA, ROOT, q
+from test_tisan_quotes import A, B, DATA, ROOT, q, quote_fields
 
 sys.path.insert(0, str(ROOT / 'agents/_chassis'))
 from chassis.tenant_db import TenantPool, tenant_scope
@@ -66,7 +66,8 @@ async def test_real_schema_audit_isolation_and_all_moves(database):
     with tenant_scope(A):
         row = await store.create(A, 'requester', DATA, submitted=True)
         for target in ('acknowledged', 'quoted', 'declined'):
-            await store.move(A, row['id'], 'store-actor', target)
+            await store.move(A, row['id'], 'store-actor', target,
+                             **(quote_fields() if target == 'quoted' else {}))
         result = await store.read(A, row['id'])
         assert [e['to_state'] for e in result['events']] == ['draft', 'submitted', 'acknowledged', 'quoted', 'declined']
         assert all(e['happened_at'].tzinfo for e in result['events'])
@@ -168,7 +169,7 @@ async def test_schema_reapplies_as_provisioned_room_without_tank_access(rollout_
                            'ALTER TABLE agent_tisan.quote_requests FORCE ROW LEVEL SECURITY; '
                            'ALTER TABLE agent_tisan.quote_events ENABLE ROW LEVEL SECURITY; '
                            'ALTER TABLE agent_tisan.quote_events FORCE ROW LEVEL SECURITY')
-        await apply_roles(conn, {'AGENT_DB_PASSWORD_TISAN': 'disposable-test-password'})
+        await apply_roles(conn, {'AGENT_DB_PASSWORD_TISAN': 'placeholder-disposable-test-password'})
         await conn.execute('SET ROLE agent_tisan')
         assert not await conn.fetchval("SELECT has_schema_privilege(current_user,'tank','USAGE')")
         await conn.execute(schema)

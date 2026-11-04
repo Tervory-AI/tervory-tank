@@ -1,9 +1,14 @@
 FROM python:3.12-slim
 WORKDIR /app
 COPY _chassis/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
+COPY ghost/requirements.txt ghost-requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt -r ghost-requirements.txt \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data && chown agent:agent /data
+# Same unmodified SMTP sender Tiger uses; no Rig product code is invoked.
+COPY rig/rigbox/reserve.py /app/agents/rig/rigbox/reserve.py
+# Shared API client only; Autumbra never invokes Tisan product logic.
+COPY tisan/promotion.py /app/enforce_coolify.py
 COPY ghost /app/ghost
 USER agent
 ENV AGENT_NAME=ghost DATA_DIR=/data PYTHONUNBUFFERED=1

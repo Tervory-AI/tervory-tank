@@ -103,6 +103,8 @@ _pool: Any = None
 _admin_pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
 _batch_task: asyncio.Task[None] | None = None
+_bot_task: asyncio.Task[None] | None = None
+_marketing_task: asyncio.Task[None] | None = None
 _http: httpx.AsyncClient | None = None
 _redis: aioredis.Redis | None = None
 REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
@@ -226,6 +228,26 @@ def sa_hosted_models() -> frozenset[str]:
             if name:
                 names.add(name)
     return frozenset(names)
+
+
+_OWN_ZA_MODEL = "tervory-own-zenas-za"
+_graduated_sa_models: set[str] = set()
+
+
+def identifier_safe_sa_models() -> frozenset[str]:
+    """Return deployed SA routes that may receive identifiers.
+
+    ZA_HOSTED_MODELS retains its existing deployment contract. The owned route
+    remains a candidate until Tank's graduation path promotes it; rollback
+    removes that permission again.
+    """
+    deployed = {
+        part.strip()
+        for part in os.environ.get("ZA_HOSTED_MODELS", "").split(",")
+        if part.strip()
+    }
+    deployed.discard(_OWN_ZA_MODEL)
+    return frozenset(deployed | _graduated_sa_models)
 
 
 def is_build_only_model(name: Any, provider_model: Any = None) -> bool:
@@ -421,7 +443,7 @@ def model_call_refusal(
         if model is not None and allow is not None and model not in allow:
             return ALLOW_REFUSAL
         return None
-    hosted = sa_hosted_models()
+    hosted = identifier_safe_sa_models()
     if prompt_has_identifier(text) and not public_record:
         permitted = hosted if allow is None else hosted & allow
         if model is None:
@@ -638,7 +660,7 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key")
     path = request.url.path
     skill_run = path.startswith("/v1/skala/") and path.endswith("/run") and path.count("/") == 4
-    ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
+    ghost_route = matched == "ghost" and __import__("ghost_routes").room_method(request.method, path)
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
     batch_route = path == "/v1/route/batch" or (request.method == "GET" and path.startswith("/v1/route/batch/"))
     # Its own queued background calls only; route_job checks the caller.
@@ -700,6 +722,7 @@ class PolicyRow(BaseModel):
     tenant_id: uuid.UUID | None = None
     rung: int = Field(default=1, ge=1, le=4)
     model: str
+    fallbacks: list[str] | None = None
     priority: str = "standard"
     batch_eligible: bool = False
     cache_scope: str = "none"
@@ -778,6 +801,15 @@ async def _startup() -> None:
         ddl = f.read()
     async with (_admin_pool or raw_pool).acquire() as conn:
         await conn.execute(ddl)
+        own_model_promoted = await conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM tank.policy WHERE tenant_id IS NULL "
+            "AND model=$1 AND promoted_at IS NOT NULL)",
+            _OWN_ZA_MODEL,
+        )
+        if own_model_promoted:
+            _graduated_sa_models.add(_OWN_ZA_MODEL)
+        else:
+            _graduated_sa_models.discard(_OWN_ZA_MODEL)
         # A one-shot task (chat, draft) that was mid-flight when Tank restarted did not finish.
         # Base batches are not in this list: Base resumes them in its own room.
         await conn.execute(
@@ -801,10 +833,23 @@ async def _startup() -> None:
     await _warn_unapproved_policy_pins()
     global _batch_task
     _batch_task = asyncio.create_task(_batch_loop())
+    global _bot_task
+    from trigger_bot import refresh_loop
+    _bot_task = asyncio.create_task(refresh_loop(__import__("sys").modules[__name__]))
+    global _marketing_task
+    from trigger_publisher import publish_loop
+    _marketing_task = asyncio.create_task(publish_loop(__import__("sys").modules[__name__]))
 
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    _graduated_sa_models.discard(_OWN_ZA_MODEL)
+    if _bot_task:
+        _bot_task.cancel()
+        await asyncio.gather(_bot_task, return_exceptions=True)
+    if _marketing_task:
+        _marketing_task.cancel()
+        await asyncio.gather(_marketing_task, return_exceptions=True)
     if _batch_task:
         _batch_task.cancel()
         await asyncio.gather(_batch_task, return_exceptions=True)
@@ -904,24 +949,30 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
         problem = graduate.code_candidate_problem(body.model, state=await skill_state(*parsed), task_type=pkg.task_type, on_disk=True)
         if problem:
             raise HTTPException(409, problem)
+    await __import__("routing_data").validate_fallbacks(__import__("sys").modules[__name__], body.model, body.fallbacks)
     async with pool().acquire() as conn:
-        await conn.execute(
+        async with conn.transaction():
+            await conn.execute(
             """
             INSERT INTO tank.policy
               (task_type, tenant_id, rung, model, priority, batch_eligible, cache_scope,
-               max_tokens_out, system_prompt, eval_threshold, escalation_model,confidence_floor,acceptance_window_s,semantic_cache,matter_matching,max_cost_usd,updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now())
+               max_tokens_out, system_prompt, eval_threshold, escalation_model,confidence_floor,acceptance_window_s,semantic_cache,matter_matching,max_cost_usd,fallbacks,updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now())
             ON CONFLICT (task_type, COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
             DO UPDATE SET rung=$3, model=$4, priority=$5, batch_eligible=$6, cache_scope=$7,
                           max_tokens_out=$8, system_prompt=$9, eval_threshold=$10, escalation_model=$11,confidence_floor=$12,
-                          acceptance_window_s=$13,semantic_cache=$14,matter_matching=$15,max_cost_usd=$16,updated_at=now()
+                          acceptance_window_s=$13,semantic_cache=$14,matter_matching=$15,max_cost_usd=$16,fallbacks=$17,updated_at=now()
             """,
             body.task_type, body.tenant_id, body.rung, body.model, body.priority,
             body.batch_eligible, body.cache_scope, body.max_tokens_out, body.system_prompt,
             body.eval_threshold, body.escalation_model, body.confidence_floor, body.acceptance_window_s,
-            body.semantic_cache, body.matter_matching, body.max_cost_usd,
-        )
-    return {"ok": True}
+            body.semantic_cache, body.matter_matching, body.max_cost_usd, body.fallbacks,
+            )
+            held = await conn.fetchval(
+                "SELECT held_swap_id IS NOT NULL FROM tank.policy WHERE task_type=$1 AND tenant_id IS NOT DISTINCT FROM $2",
+                task_type, body.tenant_id,
+            )
+    return {"ok": True, **({"held": True} if held else {})}
 
 
 @app.delete("/v1/policy/{task_type}", dependencies=[Depends(require_key)])
@@ -1003,7 +1054,7 @@ def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
 
 # The shared override gate for Command and MoA. Never persist policy changes
 # to pin one call; MoA uses the parent task's policy limits.
-MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn"})
+MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn", "command.code"})
 MOA_SEAT_TASK = re.compile(r"[a-zA-Z0-9_.-]+#moa\.[a-z][a-z0-9_]{0,79}")
 
 
@@ -1385,17 +1436,26 @@ async def run_route(
                 WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", _receipt_id, req.tenant_id, sent_at)
     started = time.perf_counter()
     dispatched_settings = {"max_tokens": max_tokens, **generation}
+    routing = await __import__("routing_data").dispatch(
+        __import__("sys").modules[__name__], policy=policy, model=model,
+        generation=generation, offpeak=_offpeak_dispatch, text=sent,
+        refusal_args={"box": box, "tenant_id": str(req.tenant_id), "task_type": req.task_type,
+                      "caller": caller, "skill": req.skill, "pool_read": pool_read},
+    )
     try:
         if _on_token is not None and req.task_type == "command.turn":
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
-                                        {"model": model, "messages": messages, **dispatched_settings}, _on_token)
+                                        {"model": model, "messages": messages, **dispatched_settings, **routing}, _on_token)
         else:
             async with httpx.AsyncClient(timeout=120) as client:
                 r = await client.post(
                     f"{LITELLM_URL}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                    json={"model": model, "messages": messages, **dispatched_settings},
+                    json={"model": model, "messages": messages, **dispatched_settings, **routing},
                 )
+        answered_group = r.headers.get("x-litellm-model-group")
+        if answered_group in routing.aliases:
+            r.headers["x-litellm-model-group"] = routing.aliases[answered_group]
     except StreamFailure as exc:
         ledger_id = uuid.uuid4()
         async with pool().acquire() as conn:
@@ -1677,7 +1737,12 @@ async def _roster_models() -> list[dict[str, Any]]:
     import yaml
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row and not _build_row(row)]
+    first = {}
+    for item in raw.get("model_list") or []:
+        row = _roster_row(item)
+        if row and not _build_row(row):
+            first.setdefault(row["model_name"], row)
+    return list(first.values())
 
 
 async def _live_price_quotes() -> list[graduate.Quote]:
@@ -1845,7 +1910,7 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
 _POLICY_MOVE = """
     SELECT task_type, model, candidate_model, previous_model, rung, eval_threshold,
            min_shadow_samples, max_reject_rate, auto_promote, field_floors,
-           semantic_cache, promoted_at, number_tolerance, shadow_rate
+           semantic_cache, promoted_at, number_tolerance, shadow_rate, held_swap_id, fallbacks
     FROM tank.policy
     WHERE task_type=$1 AND tenant_id IS NULL
 """
@@ -1946,6 +2011,8 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
         log.warning("graduation %s: build-only model not promoted", task_type)
         return
     if move.action == "promote":
+        await __import__("routing_data").validate_fallbacks(
+            __import__("sys").modules[__name__], move.policy["model"], before.get("fallbacks"))
         updated = await conn.execute(
             """
             UPDATE tank.policy
@@ -1957,6 +2024,8 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
         )
         if str(updated).endswith(" 0"):
             return
+        if move.policy["model"] == _OWN_ZA_MODEL:
+            _graduated_sa_models.add(_OWN_ZA_MODEL)
         await conn.execute(
             """
             INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
@@ -1968,17 +2037,22 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
         return
     if move.action != "rollback":
         return
+    await conn.execute("SELECT set_config('tank.policy_swap_apply','on',true)")
     updated = await conn.execute(
         """
         UPDATE tank.policy
-        SET model=previous_model, previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
+        SET model=CASE WHEN held_swap_id IS NOT NULL THEN model ELSE previous_model END,
+            previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
             rung=$3, shadow_rate=0, updated_at=now()
-        WHERE task_type=$1 AND tenant_id IS NULL AND previous_model IS NOT NULL AND promoted_at IS NOT NULL
+        WHERE task_type=$1 AND tenant_id IS NULL
+          AND (held_swap_id IS NOT NULL OR (previous_model IS NOT NULL AND promoted_at IS NOT NULL))
         """,
         task_type, bool(move.policy.get("semantic_cache")), int(move.policy["rung"]),
     )
+    await conn.execute("SELECT set_config('tank.policy_swap_apply','',true)")
     if str(updated).endswith(" 0"):
         return
+    _graduated_sa_models.discard(_OWN_ZA_MODEL)
     await conn.execute(
         """
         INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
@@ -2011,8 +2085,15 @@ async def _move_task(task_type: str, *, by: str = "tank", automatic: bool = True
                 move = graduate.apply(policy, evidence, now)
             else:
                 move = graduate.promote_if_proven(policy, evidence, now, automatic=False)
+            if automatic and policy.get("held_swap_id") and move.action == "promote":
+                return graduate.Move("hold", policy)
             if move.action != "hold":
                 await _apply_move(conn, move, policy, by)
+                if move.action == "promote":
+                    held = await conn.fetchval(
+                        "SELECT held_swap_id IS NOT NULL FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task_type)
+                    if held:
+                        move.policy["held"] = True
             return move
 
 
@@ -2374,35 +2455,40 @@ async def promote(task_type: str, body: PromoteBody) -> dict[str, Any]:
         if move.reason == graduate.ROUTER_BLOCK:
             raise HTTPException(status_code=400, detail=move.reason)
         raise HTTPException(status_code=409, detail=move.reason or "not proven")
-    return {"ok": True, "model": move.policy["model"], "previous_model": move.policy["previous_model"]}
+    return {"ok": True, "model": move.policy["model"], "previous_model": move.policy["previous_model"],
+            **({"held": True} if move.policy.get("held") else {})}
 
 
 @app.post("/v1/graduation/{task_type}/rollback", dependencies=[Depends(require_key)])
 async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
     async with pool().acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT model, previous_model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL",
-            task_type,
-        )
-        if row is None or not row["previous_model"]:
-            raise HTTPException(status_code=400, detail="nothing to roll back to")
-        if graduate.router_cannot_serve(row["previous_model"]):
-            raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
-        rung, semantic = _rung_for(row["previous_model"])
-        await conn.execute(
-            """
-            UPDATE tank.policy
-            SET model=previous_model, previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
-                rung=$3, shadow_rate=0, updated_at=now()
-            WHERE task_type=$1 AND tenant_id IS NULL
-            """,
-            task_type, semantic, rung,
-        )
-        await conn.execute(
-            "INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail) VALUES ($1,'rollback',$2,$3,$4,$5::jsonb)",
-            task_type, row["model"], row["previous_model"], body.by, json.dumps({"automatic": False}),
-        )
-    return {"ok": True, "model": row["previous_model"]}
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT model,previous_model,held_swap_id FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL FOR UPDATE",
+                task_type,
+            )
+            if row is None or (not row["previous_model"] and not row["held_swap_id"]):
+                raise HTTPException(status_code=400, detail="nothing to roll back to")
+            target = row["model"] if row["held_swap_id"] else row["previous_model"]
+            if graduate.router_cannot_serve(target):
+                raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
+            rung, semantic = _rung_for(target)
+            await conn.execute("SELECT set_config('tank.policy_swap_apply','on',true)")
+            await conn.execute(
+                """UPDATE tank.policy
+                SET model=$2,previous_model=NULL,promoted_at=NULL,semantic_cache=$3,
+                    rung=$4,shadow_rate=0,updated_at=now()
+                WHERE task_type=$1 AND tenant_id IS NULL""",
+                task_type, target, semantic, rung,
+            )
+            await conn.execute("SELECT set_config('tank.policy_swap_apply','',true)")
+            await conn.execute(
+                "INSERT INTO tank.policy_log (task_type,action,from_model,to_model,by_user,detail) VALUES ($1,'rollback',$2,$3,$4,$5::jsonb)",
+                task_type, row["model"], target, body.by, json.dumps({"automatic": False}),
+            )
+            if row["model"] == _OWN_ZA_MODEL:
+                _graduated_sa_models.discard(_OWN_ZA_MODEL)
+    return {"ok": True, "model": target}
 
 
 @app.put("/v1/graduation/{task_type}/auto", dependencies=[Depends(require_key)])
@@ -3260,11 +3346,12 @@ class EvalRun(BaseModel):
 
 
 async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: skala.SkillContext) -> dict[str, Any]:
-    key = os.environ.get("TANK_KEY_TISAN", "")
-    if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build"} or not key or _http is None:
+    room = "radix" if pkg.id == "scan.iac" else "tisan"
+    key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
+    if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} or not key or _http is None:
         raise RuntimeError("eval room is unavailable")
     response = await _http.post(
-        "http://agent-tisan:8000/evals/run",
+        f"http://agent-{room}:8000/evals/run",
         headers={"X-Tank-Key": key},
         json={"skill_id": pkg.id, "version": pkg.version, "tenant_id": str(ctx.tenant_id), "input": payload},
         timeout=660,
@@ -3288,7 +3375,7 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         pkg, lambda: __import__("skala_revalidation").eval_context(
             __import__("sys").modules[__name__], pkg,
             make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here)),
-        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build"} else None,
+        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} else None,
     )
     if __import__("skala_revalidation").ACTIVE.get() is not None:
         return await __import__("skala_revalidation").record(
@@ -3529,19 +3616,14 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants|answers|moot/fixtures|moot/published)$"
+    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|playbooks|tenants|answers|contract-reviews|moot/published)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
     r"|^matters/[0-9a-fA-F-]{36}/release$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
-    r"|^moot/problems/[A-Za-z0-9._-]{1,80}/counsel/(appellant|respondent)$"
-    r"|^moot/problems/[A-Za-z0-9._-]{1,80}/(edit|lock)$"
     r"|^regulations/(watches|changes)$"
     r"|^regulations/watches/[0-9a-fA-F-]{36}$"
-    r"|^moot/matches/ai-ai$"
-    r"|^moot/matches/student$"
-    r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
     r"|^moot/hearing-sources$|^moot/hearings$"
     r"|^moot/hearings/[0-9a-fA-F-]{36}(/(edit|lock|start|handover|issue|turn|ai|abandon|publish|pair|fairness))?$"
 )
@@ -4073,6 +4155,9 @@ async def tiger_alerts(request: Request) -> Response:
     url = _tiger_query(request, "url")
     if url:
         params.append(("url", url.strip()))
+    kind = _tiger_query(request, "kind")
+    if kind is not None:
+        params.append(("kind", kind))
     resp = await _tiger_call("GET", "/alerts", params, None)
     return _tiger_response(resp, tenant_id)
 
@@ -4191,6 +4276,13 @@ app.include_router(__import__("case_studies").router)
 app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("base_lists").build_router())
+app.include_router(__import__("base_compare").build_router())
+app.include_router(__import__("base_campaign_commands").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("tiger_watch_commands").build_router())
+app.include_router(__import__("tiger_alerts").build_router())
+app.include_router(__import__("tisan_requests").build_router())
+app.include_router(__import__("base_audit_commands").build_router())
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)
 
@@ -4676,8 +4768,13 @@ __import__("research").register(app, globals())
 # COMMAND-1A: conversation routes live in their own module.
 app.include_router(__import__("command").router)
 __import__("personal_tokens").register(app)
+__import__("mcp_server").register(app)
 app.include_router(__import__("trigger_routes").router)
+app.include_router(__import__("trigger_marketing_api").router)
 app.include_router(__import__("trigger_crm").router)
+app.include_router(__import__("trigger_bot_api").router)
+app.include_router(__import__("trigger_console").router)
+app.include_router(__import__("trigger_widget").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
 app.include_router(__import__("access").router)
@@ -4698,6 +4795,7 @@ app.include_router(semantic_cache.build_router(__import__("sys").modules[__name_
 __import__("skala_intake").install(app, __import__("sys").modules[__name__])
 
 app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("mcp_client_oauth").router)
 
 # D1-D3 memory: founder-only record/publication corridor.
 from memory_routes import router as memory_router

@@ -5,6 +5,7 @@ starlette==1.10.0
 uvicorn[standard]==0.54.0
 asyncpg==0.30.0
 httpx==0.28.1
+huggingface-hub==1.7.2
 # LiteLLM's OpenAI-compatible streaming API; use the SDK's SSE decoder.
 openai==2.54.0
 jiter==0.18.0
@@ -44,5 +45,8 @@ python-multipart==0.0.31
 feedparser==6.0.14
 # feedparser's only dependency, pinned so a new release cannot change parsing under us.
 feedparser-sgmllib==2.1.0
+
+# IDENTITY-ZA: standard OIDC/JWKS verification; reuse existing cryptography backend.
+PyJWT[crypto]==2.15.1
 # Offline phone validation and line types from Apache-2.0 libphonenumber metadata.
 phonenumbers==9.0.42

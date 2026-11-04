@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -32,7 +32,7 @@ class ClientAutumbraSettings(BaseModel):
     time_zone: str = Field(default="", max_length=80)
     # Separately for shields and for code fixes.
     shield_mode: ApplyMode = DEFAULT_MODE
-    fix_mode: ApplyMode = DEFAULT_MODE
+    fix_mode: Literal[ApplyMode.approve_each, ApplyMode.never] = DEFAULT_MODE
     # When True, a single threat source may trigger a shield (default False = cross-check).
     act_on_single_source: bool = False
     # Hostnames this tenant has registered for shielding (e.g. shop-a.example.com).
@@ -47,6 +47,12 @@ class ClientAutumbraSettings(BaseModel):
     google_workspace_connected: bool = False
     shopify_connected: bool = False
     host_firewall_connected: bool = False
+
+    @field_validator("fix_mode", mode="before")
+    @classmethod
+    def fixes_always_need_approval(cls, value):
+        # Read old automatic preferences safely; never carry them into execution.
+        return ApplyMode.approve_each if value == ApplyMode.auto_when_checks_pass else value
 
     @field_validator("watched_hosts")
     @classmethod
@@ -99,6 +105,8 @@ def load_settings(store, tenant_id: str) -> ClientAutumbraSettings:
     raw = store.get_state(tenant_id, "autumbra_client_settings", None)
     if not isinstance(raw, dict):
         return ClientAutumbraSettings(tenant_id=tenant_id)
+    if raw.get("fix_mode") == ApplyMode.auto_when_checks_pass.value:
+        raw = {**raw, "fix_mode": ApplyMode.approve_each.value}
     try:
         return ClientAutumbraSettings.model_validate({**raw, "tenant_id": tenant_id})
     except Exception:

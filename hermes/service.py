@@ -43,6 +43,7 @@ class MemoryIn(BaseModel):
     confidence: float = Field(default=.5, ge=0, le=1)
     last_verified: datetime | None = None
     id: uuid.UUID | None = None
+    index: bool = True
 
 
 class RecallIn(BaseModel):
@@ -152,7 +153,7 @@ def create_app(
                 saved = await holder['records'].save(agent,str(body.tenant_id),body.text,
                     list(dict.fromkeys([body.source,*body.evidence])),confidence=body.confidence,
                     last_verified=body.last_verified,kind=body.kind,meta=body.meta,
-                    row_id=str(body.id) if body.id else None)
+                    row_id=str(body.id) if body.id else None, **({"index": False} if not body.index else {}))
                 return JSONResponse(saved,status_code=201)
             except ClaimTooLong as exc:
                 raise claim_validation_error("text", exc) from None
@@ -161,6 +162,8 @@ def create_app(
             except Exception:
                 log.warning('record write failed')
                 raise HTTPException(503,'memory store unreachable') from None
+        if not body.index:
+            raise HTTPException(503, "memory store unreachable")
         name = collection(agent)
         ready, model = current()
         try:

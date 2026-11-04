@@ -155,7 +155,7 @@ test('tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal', { 
   const newer = await import(pathToFileURL(join(cliDir, '0.1.1/src/client.mjs')));
   await newer.run(['update', '--version', '0.1.0'], { transport, io, env: { TERVORY_CLI_VERSION: '0.1.1' } });
   assert.equal(readlinkSync(join(cliDir, 'current')), '0.1.0');
-  const launched = await run(join(home, 'bin/tervory'), ['version'], { env: { PATH: process.env.PATH, HOME: home } });
+  const launched = await run(join(home, 'bin/tervory'), ['version'], { env: { PATH: process.env.PATH, HOME: home, TERVORY_NO_UPDATE_CHECK: '1' } });
   assert.equal(launched.stdout, `tervory 0.1.0 (${PLATFORM})\n`);
 
   // Review of #506 should-fix 3: latest.json pointing below the installed copy (a rollback,
@@ -175,7 +175,7 @@ test('tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal', { 
 });
 
 test('install.sh: deadlines on every download, wrapped in main, atomic swap', () => {
-  const script = readFileSync(join(CLI, 'install.sh'), 'utf8');
+  const script = readFileSync(join(CLI, 'install.sh'), 'utf8').replaceAll('\r\n', '\n');
   assert.match(script, /PROTO='=https'; LOOPBACK=0/);
   assert.match(script, /http:\/\/127\.0\.0\.1:\*\|http:\/\/127\.0\.0\.1\/\*\|http:\/\/localhost:\*\|http:\/\/localhost\/\*\) PROTO='=https,http'; LOOPBACK=1/);
   assert.match(script, /curl -fsSL --proto "\$PROTO" --proto-redir "\$PROTO" --connect-timeout 15 --max-time 300/);

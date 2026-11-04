@@ -231,12 +231,28 @@ class Cdp {
   }
 }
 
-async function waitJson(url: string, proc: ChildProcess): Promise<unknown> {
-  const started = Date.now();
-  while (Date.now() - started < 15000) {
+async function waitDebuggingPort(profile: string, proc: ChildProcess, deadline: number): Promise<number> {
+  const activePort = join(profile, "DevToolsActivePort");
+  while (Date.now() < deadline) {
+    if (proc.exitCode !== null || proc.signalCode !== null) throw new Error("Chrome exited before writing DevToolsActivePort");
+    try {
+      const [portText, browserPath] = (await readFile(activePort, "utf8")).trim().split("\n");
+      const port = Number(portText);
+      // Chrome writes the port and browser endpoint into this run's private profile.
+      if (Number.isInteger(port) && port > 0 && port <= 65535 && browserPath?.startsWith("/devtools/browser/")) return port;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Chrome did not write DevToolsActivePort within the startup budget");
+}
+
+async function waitJson(url: string, proc: ChildProcess, deadline: number): Promise<unknown> {
+  while (Date.now() < deadline) {
     if (proc.exitCode !== null) throw new Error("Chrome exited before the debugging port opened");
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())) });
       if (response.ok) return await response.json();
     } catch {
       // Chrome is still starting.
@@ -328,20 +344,23 @@ async function main(): Promise<void> {
     fixtures.set(path, html.replaceAll(new URL("workspace/", ROOT).href, `${fixtureOrigin}/workspace/`));
     return fixtureOrigin + path;
   }
-  const port = 9400 + Math.floor(Math.random() * 400);
+  const profile = join(dir, "profile");
+  // Busy CI runners can take more than 15 s to start Chrome; 60 s stops false failures.
+  const startupDeadline = Date.now() + 60000;
   const proc = spawn(executable, [
     "--headless=new",
     "--disable-gpu",
     "--no-sandbox",
     "--disable-dev-shm-usage",
     "--hide-scrollbars",
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${join(dir, "profile")}`,
+    "--remote-debugging-port=0",
+    `--user-data-dir=${profile}`,
     "about:blank",
   ], { stdio: "ignore" });
   try {
-    await waitJson(`http://127.0.0.1:${port}/json/version`, proc);
-    const list = (await waitJson(`http://127.0.0.1:${port}/json/list`, proc)) as { type: string; webSocketDebuggerUrl: string }[];
+    const port = await waitDebuggingPort(profile, proc, startupDeadline);
+    await waitJson(`http://127.0.0.1:${port}/json/version`, proc, startupDeadline);
+    const list = (await waitJson(`http://127.0.0.1:${port}/json/list`, proc, startupDeadline)) as { type: string; webSocketDebuggerUrl: string }[];
     const page = list.find((item) => item.type === "page");
     if (!page) throw new Error("Chrome did not open a page");
     const ws = new WebSocket(page.webSocketDebuggerUrl);

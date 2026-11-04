@@ -135,26 +135,45 @@ class Journal:
         return [self.get(tenant, site, row['id']) for row in ids]
 
 
+class CoolifyUnknown(Refused):
+    """A mutation may have reached Coolify; callers must never retry it."""
+
+
 class Coolify:
-    def __init__(self, http: httpx.AsyncClient, base: str, token: str) -> None:
+    def __init__(self, http: httpx.AsyncClient, base: str, token: str, *,
+                 url_setting: str = "TISAN_COOLIFY_URL",
+                 token_setting: str = "TISAN_COOLIFY_TOKEN") -> None:
         p = urlsplit(base)
         if p.scheme != 'https' or not p.hostname or p.username or p.password or p.query or p.fragment or p.path not in ('', '/', '/api/v1', '/api/v1/'):
-            raise Refused('TISAN_COOLIFY_URL must be an HTTPS API origin')
+            raise Refused(f'{url_setting} must be an HTTPS API origin')
         if not token:
-            raise Refused('TISAN_COOLIFY_TOKEN is not set')
+            raise Refused(f'{token_setting} is not set')
         self.http, self.base, self._token = http, base.rstrip('/').removesuffix('/api/v1'), token
 
-    async def call(self, method: str, path: str, **kwargs: Any) -> dict:
+    async def call(self, method: str, path: str, *, allow_list: bool = False,
+                   mutation: bool = False, discard_response: bool = False, **kwargs: Any) -> dict | list:
         try:
             r = await self.http.request(method, self.base + '/api/v1' + path,
                 headers={'Authorization': 'Bearer ' + self._token}, follow_redirects=False, timeout=30, **kwargs)
+            if mutation and r.status_code >= 500:
+                raise CoolifyUnknown("Coolify mutation outcome unknown")
             if r.status_code >= 300:
                 raise Refused('Coolify request failed')
+            if discard_response:
+                return {}
             data = r.json()
-            if not isinstance(data, dict):
+            if not isinstance(data, (dict, list) if allow_list else dict):
                 raise Refused('Coolify response shape unavailable')
             return data
+        except CoolifyUnknown:
+            raise
+        except Refused:
+            if mutation:
+                raise
+            raise Refused("Coolify response unavailable") from None
         except (httpx.HTTPError, ValueError):
+            if mutation:
+                raise CoolifyUnknown("Coolify mutation outcome unknown") from None
             raise Refused('Coolify response unavailable') from None
 
     async def current(self, app: str, *, allow_failed: bool = False) -> dict:
@@ -180,8 +199,10 @@ class Coolify:
 
 class Promotion:
     def __init__(self, journal: Journal, coolify: Coolify, live_check: Callable[[str], Awaitable[dict]],
-                 radix_gate: Callable[[str, str, str], Awaitable[dict]]) -> None:
+                 radix_gate: Callable[[str, str, str], Awaitable[dict]],
+                 repo_gate: Callable[[str, str, str], Awaitable[dict]] | None = None) -> None:
         self.journal, self.coolify, self.live_check, self.radix_gate = journal, coolify, live_check, radix_gate
+        self.repo_gate = repo_gate
 
     async def run(self, tenant: str, site: str, operation: str, action: str, actor: str, expected: str) -> dict:
         tenant, operation = str(uuid.UUID(tenant)), str(uuid.UUID(operation))
@@ -214,6 +235,17 @@ class Promotion:
                     raise Refused('staging and production sources differ')
                 if config['url'] not in [origin(u.strip()) for u in (staging['fqdn'] or '').split(',') if u.strip()]:
                     raise Refused('staging origin differs from registered application')
+                if self.repo_gate is None:
+                    raise Refused('repo scan required')
+                details['repo_scan'] = await self.repo_gate(tenant, site, expected)
+                if (not isinstance(details['repo_scan'], dict) or details['repo_scan'].get('ok') is not True
+                        or details['repo_scan'].get('tenant_id') != tenant
+                        or details['repo_scan'].get('scan_complete') is not True
+                        or type(details['repo_scan'].get('critical')) is not int
+                        or details['repo_scan']['critical'] != 0
+                        or not re.fullmatch(r'[a-f0-9]{64}', details['repo_scan'].get('archive_sha256', ''))):
+                    raise Refused('repo scan did not pass')
+                uuid.UUID(details['repo_scan'].get('scan_id', ''))
                 details['staging_deployment'] = staging['deployment']
                 details['live_check'] = await self.live_check(config['url'])
                 if not isinstance(details['live_check'], dict) or details['live_check'].get('passed') is not True:

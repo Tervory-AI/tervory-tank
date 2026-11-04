@@ -1,0 +1,677 @@
+Full offline Tank run — 3 November 2026
+Working directory: /workspace/codex-cli-code-mode
+Python/runtime tree: main cf95a07e merged at dc7cd7c0; no Tank Python or SQL
+changes during this run. Later changes only strengthen CLI tests and evidence.
+This is an unsuccessful full-suite attempt, not a passing coverage claim.
+
+Dependency preparation (all local/ignored):
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pip install --target .task-tmp/deps -r tank/requirements.txt -r tank/requirements-dev.txt
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pip install --target .task-tmp/forge-deps --require-hashes -r agents/rig/forge/requirements.lock
+(cd workspace && npm ci --no-audit --no-fund)
+
+Owned disposable database preparation:
+docker rm -f cli-code-mode-tests
+docker run -d --name cli-code-mode-tests -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=pooltest -p 127.0.0.1:55468:5432 postgres:16
+docker exec cli-code-mode-tests pg_isready -U postgres
+
+Actual invocation:
+GITHUB_ACTIONS=true PYTHONPATH=.task-tmp/deps /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python .task-tmp/full-suite.py
+Exit code: 1
+
+Exact local environment wrapper (.task-tmp/full-suite.py):
+import os, pathlib, subprocess, asyncio, asyncpg
+root=pathlib.Path.cwd()
+async def prepare():
+    conn=await asyncpg.connect('postgresql://postgres@127.0.0.1:55468/pooltest')
+    for name in ['radix_passive_test','market_test']:
+        if not await conn.fetchval('SELECT 1 FROM pg_database WHERE datname=$1',name):
+            await conn.execute(f'CREATE DATABASE "{name}"')
+    await conn.close()
+asyncio.run(prepare())
+base='postgresql://postgres@127.0.0.1:55468/'
+for name in ['POOL_SCHEMA','ZENAS_SCHEMA','MEMORY_TEST','BASE_TEST','RLS_TEST','SKALA_B3_TEST','SKALA_INTAKE_TEST','TIGER_MAIL_TEST','RIG_TEST','TRAINING_SCHEMA']:
+    os.environ[name+'_DATABASE_URL']=base+'pooltest'
+os.environ['RADIX_PASSIVE_TEST_DATABASE_URL']=base+'radix_passive_test'
+os.environ['DATABASE_URL']=base+'market_test'
+os.environ['TMPDIR']=str(root/'.task-tmp')
+os.environ['PYTHONPATH']=str(root/'.task-tmp/deps')+':'+str(root/'.task-tmp/forge-deps')+':tank:tests'
+os.environ['READ1_CHROMIUM_EXECUTABLE']='/home/ammosync/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome'
+os.environ['SUITE_WORKERS']='4'
+os.environ['GITHUB_ACTIONS']='true'
+os.environ['SUITE_BUDGET_SCALE']='2'
+raise SystemExit(subprocess.call(['/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python','.github/scripts/offline_suite.py']))
+
+Captured stdout/stderr (trailing whitespace normalized):
+
+===== offline suite: main =====
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [  1%]
+........................................................................ [  2%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+........................................................................ [  5%]
+........................................................................ [  6%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 15%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 18%]
+........................................................................ [ 19%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+........................................................................ [ 24%]
+.........F
+::error file=tests/test_read1_review.py,line=363,title=Pytest failure::test_raw_text_containers_are_removed_before_serializing (call)
+.............................................................. [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 27%]
+......................................................................F
+::error file=tests/test_moa_integration.py,line=207,title=Pytest failure::test_all_seven_bench_shapes_use_routed_receipts_and_never_enable (call)
+. [ 28%]
+........................................................................ [ 29%]
+.......................................................................Timeout (0:04:00)!
+Thread 0x0000704513f896c0 (most recent call first):
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 359 in wait
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 655 in wait
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 1431 in run
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 1075 in _bootstrap_inner
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 1032 in _bootstrap
+
+Thread 0x0000704541dff6c0 (most recent call first):
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 534 in read
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 567 in from_io
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 1160 in _thread_receiver
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 341 in run
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 411 in _perform_spawn
+
+Thread 0x0000704542810780 (most recent call first):
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/selectors.py", line 468 in select
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 1961 in _run_once
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 645 in run_forever
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 678 in run_until_complete
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118 in run
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pytest_asyncio/plugin.py", line 906 in inner
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/python.py", line 167 in pytest_pyfunc_call
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/python.py", line 1707 in runtest
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pytest_asyncio/plugin.py", line 570 in runtest
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 184 in pytest_runtest_call
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 250 in <lambda>
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 361 in from_call
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 249 in call_and_report
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 139 in runtestprotocol
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 118 in pytest_runtest_protocol
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/xdist/remote.py", line 227 in run_one_test
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/xdist/remote.py", line 206 in pytest_runtestloop
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/main.py", line 384 in _main
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/main.py", line 330 in wrap_session
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/main.py", line 377 in pytest_cmdline_main
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/xdist/remote.py", line 427 in <module>
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 1291 in executetask
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 341 in run
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 411 in _perform_spawn
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 389 in integrate_as_primary_thread
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 1273 in serve
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 1806 in serve
+  File "<string>", line 8 in <module>
+  File "<string>", line 1 in <module>
+. [ 30%]
+......[gw2] node down: Not properly terminated
+F
+::error file=tests/test_tiger_public_policy.py,line=1,title=Pytest failure::tests/test_tiger_public_policy.py (???)
+............................................Timeout (0:04:00)!
+Thread 0x0000772bfaffd6c0 (most recent call first):
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 359 in wait
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 655 in wait
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 1431 in run
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 1075 in _bootstrap_inner
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/threading.py", line 1032 in _bootstrap
+
+Thread 0x0000772c386ff6c0 (most recent call first):
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 534 in read
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 567 in from_io
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 1160 in _thread_receiver
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 341 in run
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 411 in _perform_spawn
+
+Thread 0x0000772c39134780 (most recent call first):
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/selectors.py", line 468 in select
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 1961 in _run_once
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 645 in run_forever
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 678 in run_until_complete
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118 in run
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pytest_asyncio/plugin.py", line 906 in inner
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/python.py", line 167 in pytest_pyfunc_call
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/python.py", line 1707 in runtest
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pytest_asyncio/plugin.py", line 570 in runtest
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 184 in pytest_runtest_call
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 250 in <lambda>
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 361 in from_call
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 249 in call_and_report
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 139 in runtestprotocol
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/runner.py", line 118 in pytest_runtest_protocol
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/xdist/remote.py", line 227 in run_one_test
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/xdist/remote.py", line 206 in pytest_runtestloop
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/main.py", line 384 in _main
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/main.py", line 330 in wrap_session
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/_pytest/main.py", line 377 in pytest_cmdline_main
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_execution.py", line 147 in _multicall
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_manager.py", line 183 in _hookexec
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/pluggy/_caller.py", line 197 in __call__
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/xdist/remote.py", line 427 in <module>
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 1291 in executetask
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 341 in run
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 411 in _perform_spawn
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 389 in integrate_as_primary_thread
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 1273 in serve
+  File "/workspace/codex-cli-code-mode/.task-tmp/deps/execnet/gateway_base.py", line 1806 in serve
+  File "<string>", line 8 in <module>
+  File "<string>", line 1 in <module>
+......[gw3] node down: Not properly terminated
+F
+::error file=tests/test_read1_review.py,line=1,title=Pytest failure::tests/test_read1_review.py (???)
+..................                                                      [ 32%]
+=================================== FAILURES ===================================
+______ test_raw_text_containers_are_removed_before_serializing[noframes] _______
+[gw3] linux -- Python 3.12.16 /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python
+
+real_chromium = <Browser type=<BrowserType name=chromium executable_path=/home/ammosync/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome> version=156.0.8078.4>
+tag = 'noframes'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('tag', ['noscript', 'template', 'iframe', 'noembed', 'noframes', 'xmp'])
+    async def test_raw_text_containers_are_removed_before_serializing(real_chromium, tag):
+        page = await real_chromium.new_page()
+>       await page.set_content(f'<{tag}>HIDDEN-raw-text</{tag}><div hidden>HIDDEN-normal-node</div><p>Visible control</p>')
+
+tests/test_read1_review.py:367:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.task-tmp/deps/playwright/async_api/_generated.py:20365: in set_content
+    await self._impl_obj.set_content(
+.task-tmp/deps/playwright/_impl/_page.py:555: in set_content
+    return await self._main_frame.set_content(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.task-tmp/deps/playwright/_impl/_frame.py:509: in set_content
+    await self._channel.send(
+.task-tmp/deps/playwright/_impl/_connection.py:78: in send
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x772c0a520290>
+cb = <function Channel.send.<locals>.<lambda> at 0x772c0a63f100>
+is_internal = False, title = None
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        parsed_st = _attach_api_call_information(
+            getattr(task, "__pw_stack__", None) or _capture_stack_trace(),
+            is_internal,
+            title,
+        )
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.TimeoutError: Page.set_content: Timeout 30000ms exceeded.
+E           Call log:
+E             - setting frame content, waiting until "load"
+
+.task-tmp/deps/playwright/_impl/_connection.py:636: TimeoutError
+_______ test_all_seven_bench_shapes_use_routed_receipts_and_never_enable _______
+[gw0] linux -- Python 3.12.16 /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python
+
+database = (<asyncpg.pool.Pool object at 0x7b1bbe997d00>, namespace(pool=<function database.<locals>.<lambda> at 0x7b1bbe920cc0>,...on test_all_seven_bench_shapes_use_routed_receipts_and_never_enable.<locals>.routed_by_instruction at 0x7b1bbe921a80>))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7b1bbe97a8a0>
+
+    @pytest.mark.asyncio
+    async def test_all_seven_bench_shapes_use_routed_receipts_and_never_enable(database,monkeypatch):
+        import bench
+        import controls
+        from decimal import Decimal
+        pool,rt=database
+        monkeypatch.setattr(moa,'runtime',lambda:rt)
+        monkeypatch.setattr(controls,'db',lambda:pool)
+        p=policy(bench_enabled=True)
+        p.enabled=False
+        await pool.execute("INSERT INTO tank.policy(task_type,model,moa_config) VALUES('fixture','top',$1::jsonb)",json.dumps(p.model_dump()))
+        row=dict(await pool.fetchrow("SELECT * FROM tank.policy WHERE task_type='fixture'"))
+        async def load(*args): return row
+        models={s.model for s in p.seats}|{'top','cheap','frontier'}
+        async def roster():
+            return [{'model_name':m,'litellm_params':{'model':'openai/'+m},
+                     'model_info':{'input_cost_per_token':.00001,'output_cost_per_token':.00001}} for m in models]
+        async def cases(*args): return [{'ref':'fixture','kind':'eval','input':'question','expected':'supported answer'}]
+        called=[]
+        async def routed(request,caller=None,*,model_override=None):
+            called.append(request)
+            assert request.task_type.startswith('fixture#moa.') and model_override in models
+            seat=request.task_type.split('#moa.')[1]
+            content='{"seat":"logic"}' if seat.startswith('aggregator') else 'supported answer'
+            ledger=await pool.fetchval('''INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,tokens_out,cost_usd)
+                VALUES($1,'bench',$2,$3,20,10,.0003) RETURNING id''',PLATFORM_TENANT,request.task_type,model_override)
+            return main.RouteResponse(ledger_id=ledger,model=model_override,rung=1,content=content,
+                                      tokens_in=20,tokens_out=10,cost_usd=.0003,latency_ms=0)
+        # Synthesis needs a final answer, while the select judge must choose a seat.
+        original=routed
+        async def routed_by_instruction(request,caller=None,*,model_override=None):
+            result=await original(request,caller,model_override=model_override)
+            if 'Synthesize' in request.messages[-1].content:
+                return result.model_copy(update={'content':'supported answer'})
+            return result
+        rt.load_policy=load;rt._roster_models=roster;rt.RouteRequest=main.RouteRequest;rt.run_route=routed_by_instruction
+        monkeypatch.setattr(bench,'cases_for',cases)
+        results=await moa.bench_task(row,bench.price_book(await roster()),'us-east',Decimal(5),force=True)
+>       assert len(results)==7 and all(r['status']=='complete' for r in results)
+E       AssertionError: assert (1 == 7)
+E        +  where 1 = len([{'shape': 'single', 'mode': 'select', 'status': 'failed', 'score': None, ...}])
+
+tests/test_moa_integration.py:245: AssertionError
+______________________ tests/test_tiger_public_policy.py _______________________
+[gw2] linux -- Python 3.12.16 /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python
+worker 'gw2' crashed while running 'tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[429]'
+__________________________ tests/test_read1_review.py __________________________
+[gw3] linux -- Python 3.12.16 /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python
+worker 'gw3' crashed while running 'tests/test_read1_review.py::test_cumulative_opacity_below_point_one_is_hidden[<div style="opacity:0.01">HIDDEN-opacity</div>]'
+=============================== warnings summary ===============================
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tank/main.py:752: 12 warnings
+  /workspace/codex-cli-code-mode/tank/main.py:752: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+.task-tmp/deps/fastapi/applications.py:4723: 60 warnings
+  /workspace/codex-cli-code-mode/.task-tmp/deps/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tank/main.py:806: 12 warnings
+  /workspace/codex-cli-code-mode/tank/main.py:806: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/agent_skills.py:531: 12 warnings
+  /workspace/codex-cli-code-mode/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tank/skala_intake.py:71: 12 warnings
+  /workspace/codex-cli-code-mode/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tank/skala_intake.py:77: 12 warnings
+  /workspace/codex-cli-code-mode/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:192: 12 warnings
+  /workspace/codex-cli-code-mode/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_autumbra_dogfood_hf.py:45
+tests/test_autumbra_dogfood_hf.py:45
+tests/test_autumbra_dogfood_hf.py:45
+tests/test_autumbra_dogfood_hf.py:45
+  /workspace/codex-cli-code-mode/tests/test_autumbra_dogfood_hf.py:45: PytestUnknownMarkWarning: Unknown pytest.mark.integration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.integration
+
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "WriteIn" shadows an attribute in parent "CheckerIn"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 15 durations =============================
+170.54s call     tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[vertex_ai]
+124.36s call     tests/test_agent1_isolation.py::test_twenty_unresolved_records_exclude_large_profiles_and_passes
+82.98s setup    tests/test_read1_review.py::test_low_contrast_and_transparent_text_fill_are_removed[color:black;-webkit-text-fill-color:transparent]
+69.15s call     tests/test_read1_review.py::test_raw_text_containers_are_removed_before_serializing[noframes]
+61.08s setup    tests/test_rig_3d_engine.py::test_forge_relay_contract_and_failure_do_not_leak_upstream
+56.61s call     tests/test_grad1_hf_training.py::test_reservation_blocks_second_submission_even_after_hf_error[True]
+50.23s setup    tests/test_grad1_hf_training.py::test_public_za_decided_case_exports_but_client_matter_does_not
+49.68s call     tests/test_moa_integration.py::test_all_seven_bench_shapes_use_routed_receipts_and_never_enable
+41.53s call     tests/test_command.py::test_code_first_proposal_never_routes_or_dispatches_until_confirm
+36.69s call     tests/test_rig_cn_archon.py::test_a_denial_never_pastes_a_typed_word
+31.42s call     tests/test_rig_cn_archon.py::test_nothing_is_fabricated
+20.13s call     tests/test_room_seal.py::test_trigger_radix_private_network_must_stay_internal[radixuuid_proxy-link]
+15.41s setup    tests/test_command.py::test_pinned_failure_is_clear_and_logs_only_exception_type
+15.29s setup    tests/test_command.py::test_code_first_proposal_never_routes_or_dispatches_until_confirm
+15.21s setup    tests/test_read1_review.py::test_noscript_closing_tag_escape_cannot_reach_parser_or_model
+::error::4432 of 6524 collected tests never ran
+=========================== short test summary info ============================
+FAILED tests/test_read1_review.py::test_raw_text_containers_are_removed_before_serializing[noframes]
+FAILED tests/test_moa_integration.py::test_all_seven_bench_shapes_use_routed_receipts_and_never_enable
+FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[429]
+FAILED tests/test_read1_review.py::test_cumulative_opacity_below_point_one_is_hidden[<div style="opacity:0.01">HIDDEN-opacity</div>]
+SKIPPED [1] tests/market_lab_gpt_researcher/test_researcher.py:20: could not import 'gpt_researcher': No module named 'gpt_researcher'
+SKIPPED [1] tests/test_perplexity_litellm_contract.py:25: run in isolated environment with deployed LiteLLM pin
+SKIPPED [1] tests/test_trigger_crm_wsgi.py:14: Run with the pinned CRM Django runtime for WSGI smoke
+SKIPPED [1] tests/trigger_crm_acceptance_20261031/test_combined.py:18: Explicit frozen backend/Workspace assembly required; see EVIDENCE.md
+4 failed, 2088 passed, 4 skipped, 152 warnings in 1002.85s (0:16:42)
+===== main: exit 1 in 1005s =====
+
+===== offline suite: tests/tiger_g5 =====
+bringing up nodes...
+bringing up nodes...
+
+..............................................                           [100%]
+=============================== warnings summary ===============================
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tank/main.py:752
+tank/main.py:752
+tank/main.py:752
+tank/main.py:752
+  /workspace/codex-cli-code-mode/tank/main.py:752: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+.task-tmp/deps/fastapi/applications.py:4723: 20 warnings
+  /workspace/codex-cli-code-mode/.task-tmp/deps/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tank/main.py:806
+tank/main.py:806
+tank/main.py:806
+tank/main.py:806
+  /workspace/codex-cli-code-mode/tank/main.py:806: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/agent_skills.py:531
+tank/agent_skills.py:531
+tank/agent_skills.py:531
+tank/agent_skills.py:531
+  /workspace/codex-cli-code-mode/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tank/skala_intake.py:71
+tank/skala_intake.py:71
+tank/skala_intake.py:71
+tank/skala_intake.py:71
+  /workspace/codex-cli-code-mode/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tank/skala_intake.py:77
+tank/skala_intake.py:77
+tank/skala_intake.py:77
+tank/skala_intake.py:77
+  /workspace/codex-cli-code-mode/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:192
+tank/skala_revalidation.py:192
+tank/skala_revalidation.py:192
+tank/skala_revalidation.py:192
+  /workspace/codex-cli-code-mode/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 15 durations =============================
+6.63s call     tests/tiger_g5/test_alerts.py::test_market_gap_counts_muted_competitor_unknowns_own_stock_and_staleness[postgres]
+4.78s setup    tests/tiger_g5/test_alerts.py::test_concurrent_checks_create_one_alert_and_state_rolls_back_with_mail
+3.80s setup    tests/tiger_g5/test_alerts.py::test_market_gap_counts_muted_competitor_unknowns_own_stock_and_staleness[postgres]
+3.71s call     tests/tiger_g5/test_alerts.py::test_cost_requires_own_matching_row_currency_and_transition[postgres]
+3.38s call     tests/tiger_g5/test_alerts.py::test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-market_gap]
+3.07s teardown tests/tiger_g5/test_alerts.py::test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-new_product]
+3.07s setup    tests/tiger_g5/test_alerts.py::test_migration_twice_preserves_switches_and_rejects_schema_injection
+3.03s teardown tests/tiger_g5/test_alerts.py::test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-below_cost]
+2.99s teardown tests/tiger_g5/test_alerts.py::test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-market_gap]
+2.97s teardown tests/tiger_g5/test_integration.py::test_switches_create_patch_read_and_cross_tenant_refusal
+2.79s setup    tests/tiger_g5/test_alerts.py::test_cost_requires_own_matching_row_currency_and_transition[postgres]
+2.71s teardown tests/tiger_g5/test_integration.py::test_agent_job_to_existing_email_path[below_cost]
+2.59s call     tests/tiger_g5/test_integration.py::test_agent_job_to_existing_email_path[new_product]
+2.58s call     tests/tiger_g5/test_integration.py::test_agent_job_to_existing_email_path[market_gap]
+2.54s teardown tests/tiger_g5/test_alerts.py::test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-market_gap]
+46 passed, 56 warnings in 97.12s (0:01:37)
+===== tests/tiger_g5: exit 0 in 103s =====
+
+===== offline suite: tests/zenas_regulation_alerts =====
+bringing up nodes...
+bringing up nodes...
+
+........................................                                 [100%]
+=============================== warnings summary ===============================
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/tank/main.py:752: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/.task-tmp/deps/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/tank/main.py:806: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+  /workspace/codex-cli-code-mode/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 15 durations =============================
+43.35s call     tests/zenas_regulation_alerts/test_alerts.py::test_postgres_persists_atomic_changes_and_claims
+39.36s call     tests/zenas_regulation_alerts/test_integrations.py::test_laws_africa_minimum_act_version_link_and_outage
+17.04s call     tests/zenas_regulation_alerts/test_alerts.py::test_api_real_routes_tenant_home_auth_and_persistence
+7.08s call     tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
+0.17s call     tests/zenas_regulation_alerts/test_review.py::test_first_night_bus_once_and_recovery
+0.12s call     tests/zenas_regulation_alerts/test_alerts.py::test_ecfr_removed_section_changes_part_but_new_date_alone_does_not
+0.06s call     tests/zenas_regulation_alerts/test_integrations.py::test_existing_nightly_command_calls_alert_job_after_sources
+0.03s call     tests/zenas_regulation_alerts/test_alerts.py::test_ecfr_uses_official_date_and_existing_xml_parser
+0.03s call     tests/zenas_regulation_alerts/test_alerts.py::test_smtp_rejection_retries_but_ambiguous_acceptance_does_not
+0.03s teardown tests/zenas_regulation_alerts/test_integrations.py::test_laws_africa_minimum_act_version_link_and_outage
+0.03s setup    tests/zenas_regulation_alerts/test_alerts.py::test_saved_response_to_mailbox_once
+0.02s call     tests/zenas_regulation_alerts/test_alerts.py::test_saved_response_to_mailbox_once
+0.02s call     tests/zenas_regulation_alerts/test_alerts.py::test_outage_and_partial_paging_never_advance_or_email
+0.01s call     tests/zenas_regulation_alerts/test_alerts.py::test_failed_tank_retries_without_losing_or_redetecting
+0.01s setup    tests/zenas_regulation_alerts/test_alerts.py::test_api_real_routes_tenant_home_auth_and_persistence
+40 passed, 14 warnings in 65.94s (0:01:05)
+===== tests/zenas_regulation_alerts: exit 0 in 74s =====
+
+Offline suite finished in 1182s; failed: main

@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
-from command import Actor, authorized_actor, identity, require_founder, require_tool
+from command import Actor, authorized_actor, identity, require_tool
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jsonschema import Draft4Validator, FormatChecker
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -25,6 +25,8 @@ FIELDS = frozenset({"id", "title", "first_name", "last_name", "email", "phone", 
                     "invoice_number", "invoice_title", "due_date", "amount_due", "amount_paid", "is_overdue",
                     "reminder_enabled", "reminder_days_before", "reminder_days_after", "reminder_frequency",
                     "last_reminder_sent", "reminder_count", "account", "contact"})
+# Approved CRM field register (PR #642); credentials and public invoice links are excluded.
+FIELDS = FIELDS | {"payments"} | frozenset(['accepted_at', 'accepted_by_email', 'accepted_by_name', 'accepted_user_agent', 'account', 'address_line', 'amount_due', 'amount_paid', 'assigned_to', 'billing_address_line', 'billing_city', 'billing_country', 'billing_period', 'billing_postcode', 'billing_state', 'city', 'client_address_line', 'client_city', 'client_country', 'client_email', 'client_name', 'client_phone', 'client_postcode', 'client_state', 'close_date', 'company_name', 'contact', 'contacts', 'converted_to_invoice', 'country', 'created_at', 'created_by', 'currency', 'custom_fields', 'declined_at', 'department', 'deposit_invoice', 'deposit_percent', 'description', 'details', 'discount_amount', 'discount_type', 'discount_value', 'do_not_call', 'due_date', 'email', 'estimate_number', 'expiry_date', 'external_id', 'external_source', 'first_name', 'first_response_at', 'first_response_by', 'first_response_by_details', 'industry', 'introduction', 'invoice_number', 'invoice_title', 'is_active', 'is_expired', 'is_overdue', 'is_unanswered', 'issue_date', 'job_title', 'last_contacted', 'last_enquiry_at', 'last_name', 'last_outbound_at', 'last_reminder_sent', 'line_items', 'linked_accounts', 'linkedin_url', 'next_follow_up', 'notes', 'opportunity', 'opportunity_amount', 'organization', 'paid_at', 'payment_terms', 'phone', 'phone_e164', 'po_number', 'postcode', 'probability', 'project', 'project_billing_type', 'rating', 'reminder_count', 'reminder_days_after', 'reminder_days_before', 'reminder_enabled', 'reminder_frequency', 'salutation', 'sent_at', 'shipping_amount', 'source', 'source_detail', 'source_ref', 'stage', 'start_project', 'state', 'status', 'subtotal', 'tags', 'tax_amount', 'tax_rate', 'teams', 'template', 'terms', 'title', 'total_amount', 'updated_at', 'updated_by', 'viewed_at', 'waiting_since', 'website'])
 STATUSES = {"assigned", "closed", "converted", "in process", "recycled"}
 
 
@@ -48,10 +50,18 @@ class CRMWriteArgs(BaseModel):
         return self
 
 
-async def authority(actor: Actor) -> Actor:
+async def authority(actor: Actor, tool: str = "trigger.crm.write") -> Actor:
     actor = await authorized_actor(actor)
-    require_founder(actor)
-    require_tool(actor, "trigger.crm.write")
+    # Preserve the actor-bound, durably confirmed Base list capability.
+    from trigger_commands import CONFIRMED, confirmation
+    bound = CONFIRMED.get()
+    if bound and bound[3] == "base.list.to_crm":
+        require_tool(actor, "base.list.to_crm")
+        confirmation(actor, "base.list.to_crm", bound[4])
+        return actor
+    if not (actor.founder or actor.tenant_admin):
+        raise HTTPException(403, "This tool is not available to this user")
+    require_tool(actor, tool)
     return actor
 
 
@@ -91,12 +101,13 @@ def binding(actor: Actor) -> tuple[str, str, str]:
 
 
 async def upstream(actor: Actor, resource: Resource, *, record_id: UUID | None = None,
-                   method: str = "GET", data: dict | None = None, params: dict | None = None) -> dict:
+                   method: str = "GET", data: dict | None = None, params: dict | None = None,
+                   _authorize=None) -> dict:
     url, token, organization = binding(actor)
     if method != "GET":
         # An old/unmodified CRM must fail before any write, not after a side effect.
         await upstream(actor, resource, params={"offset": 0, "limit": 1})
-        actor = await authority(actor)
+        actor = await (_authorize or authority)(actor)
     path = PATHS[resource] + (f"{record_id}/" if record_id else "")
     try:
         async with (
@@ -137,13 +148,31 @@ def project(item: dict) -> dict:
         UUID(item["id"])
     except ValueError:
         raise HTTPException(502, "Invalid CRM response") from None
-    return {key: value for key, value in item.items() if key in FIELDS and
-            (value is None or isinstance(value, (str, bool, int, float)))}
+    return {key: projected({k: v for k, v in value.items() if k in {'id', 'name', 'first_name', 'last_name'}}
+                           if key in {'created_by', 'updated_by', 'first_response_by', 'first_response_by_details'} and isinstance(value, dict)
+                           else value) for key, value in item.items() if key in FIELDS}
+
+
+def projected(value, depth=0):
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value[:20000] if isinstance(value, str) else value
+    if depth >= 4:
+        return None
+    if isinstance(value, list):
+        return [projected(item, depth+1) for item in value[:200]]
+    if isinstance(value, dict):
+        safe = {'id', 'name', 'title', 'first_name', 'last_name', 'email', 'phone', 'company_name',
+                'description', 'quantity', 'unit_price', 'price', 'amount', 'total', 'subtotal',
+                'product_name', 'payment_date', 'payment_method', 'reference_number',
+                'tax_rate', 'tax_amount', 'discount', 'currency', 'product', 'sku', 'value', 'label'}
+        return {key: projected(item, depth+1) for key, item in value.items() if key in safe}
+    return None
 
 
 @router.get("/{resource}")
 async def listing(resource: Resource, request: Request, actor: Annotated[Actor, Depends(identity)]):
-    actor = await authority(actor)
+    from trigger_routes import code_receipt
+    actor = await authority(actor, "trigger.crm.list")
     query = dict(request.query_params)
     allowed = {"page"} | ({"name"} if resource == "contacts" else {"title", "status"} if resource == "leads" else set())
     if set(query) - allowed or len(request.query_params.multi_items()) != len(query):
@@ -175,15 +204,21 @@ async def listing(resource: Resource, request: Request, actor: Annotated[Actor, 
     if not isinstance(rows, list) or len(rows) > 1000:
         raise HTTPException(502, "Invalid CRM response")
     return {"resource": resource, "items": [project(item) for item in rows], "page": page,
-            "count": count if type(count) is int and count >= 0 else None}
+            "count": count if type(count) is int and count >= 0 else None,
+            "model_calls": 0, "cost_usd": 0,
+            "ledger_id": str(await code_receipt(actor.tenant_id, "trigger.crm.list"))}
 
 
 @router.get("/{resource}/{record_id}")
 async def detail(resource: Resource, record_id: UUID, actor: Annotated[Actor, Depends(identity)]):
-    actor = await authority(actor)
+    from trigger_routes import code_receipt
+    actor = await authority(actor, "trigger.crm.get")
     raw = await upstream(actor, resource, record_id=record_id)
     key = {"leads": "lead_obj", "contacts": "contact_obj", "estimates": "estimate", "invoices": "invoice"}[resource]
-    return {"resource": resource, "item": project(raw.get(key))}
+    item = project(raw.get(key))
+    return {"resource": resource, "record_id": str(record_id), "item": item,
+            "model_calls": 0, "cost_usd": 0,
+            "ledger_id": str(await code_receipt(actor.tenant_id, "trigger.crm.get"))}
 
 
 @router.post("/write")
@@ -211,3 +246,25 @@ async def write(request: Request, actor: Annotated[Actor, Depends(identity)]):
         item = {"id": result.get("id", str(args.record_id) if args.record_id else None)}
     return {"resource": args.resource, "item": project(item), "model_calls": 0, "cost_usd": 0,
             "ledger_id": str(await code_receipt(actor.tenant_id, "trigger.crm.write"))}
+
+
+async def confirmed_bot_lead(actor: Actor, draft_id: UUID, data: dict, arguments: dict) -> dict:
+    """Narrow bot create-only capability; generic CRM access requires a founder or tenant admin."""
+    from trigger_commands import confirmation
+
+    async def authorize(current):
+        current = await authorized_actor(current)
+        if not (current.founder or current.tenant_admin):
+            raise HTTPException(403, "This tool is not available to this user")
+        require_tool(current, "trigger.bot.lead.confirm")
+        confirmation(current, "trigger.bot.lead.confirm", arguments)
+        import hashlib
+        expected = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        if arguments.get("draft_id") != str(draft_id) or arguments.get("expected_digest") != expected:
+            raise HTTPException(409, "Confirmed action required")
+        return current
+
+    actor = await authorize(actor)
+    validate_data("leads", data)
+    # binding() and authenticated organization preflight happen before any POST.
+    return await upstream(actor, "leads", method="POST", data=data, _authorize=authorize)

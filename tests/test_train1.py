@@ -216,7 +216,7 @@ async def test_lawyer_released_and_decided_case_pairs(database):
         public = await conn.fetchval("INSERT INTO agent_zenas.worked_matters(region,source,jurisdiction,material_type) VALUES ('us-east','case','us','public_record') RETURNING id")
         await conn.execute("INSERT INTO agent_zenas.training_pairs(region,source,worked_id,request) VALUES ('us-east','case',$1,'public decision')", public)
         await training.collect_zenas(conn, None)
-        assert await conn.fetchval("SELECT count(*) FROM tank.training_pairs") == 2
+        assert await conn.fetchval("SELECT count(*) FROM tank.training_pairs") == 1
 
 
 @pytest.mark.asyncio
@@ -313,6 +313,37 @@ async def test_export_za_preserves_identifiers_excludes_holdout_and_inactive_pri
     result = await training.export_once()
     assert result == {"status": "complete", "exported": 0}
     assert requests == []
+
+
+@pytest.mark.asyncio
+async def test_official_court_split_is_saved_and_reported_per_source(database, monkeypatch):
+    import sys
+
+    pool, rt = database
+    rt.box_region = lambda: "za"
+    monkeypatch.setitem(sys.modules, "main", SimpleNamespace(TANK_API_KEY="placeholder-tank-key"))
+    monkeypatch.setattr(training, "is_holdout", lambda *_args: False)
+    async with pool.acquire() as conn:
+        await conn.execute((ROOT / "agents/zenas/pool/schema.sql").read_text())
+    body = training.CourtTextPair(
+        source_id="concourt", document_id="placeholder-document", version_id="placeholder-version",
+        status="split", input={"facts": "placeholder facts", "issues": "placeholder issue"},
+        output={"reasoning": "placeholder reasons", "order": "The application is granted.",
+                "outcome": "granted", "costs": "without costs"},
+    )
+    request = SimpleNamespace(headers={"x-tank-key": "placeholder-tank-key"})
+    assert await training.save_court_text_pair(body, request) == {"ok": True}
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM tank.training_pairs WHERE source='court_text'")
+        assert row["tenant_id"] == gold.PLATFORM_TENANT
+        assert row["public"] is True and row["client_matter"] is False and row["holdout"] is False
+        assert row["source_ref"] == "concourt:placeholder-version"
+    result = await training.training_status(training.Reviewer("founder", uuid.uuid4(), True))
+    names = {item["name"]: item for item in result["items"]}
+    assert names["concourt split"]["count"] == 1
+    assert names["concourt pairs ready"]["count"] == 1
+    for source in training.OFFICIAL_ZA_CASE_SOURCES:
+        assert {f"{source} judgments stored", f"{source} split", f"{source} excluded", f"{source} pairs ready"} <= names.keys()
 
 
 @pytest.mark.asyncio

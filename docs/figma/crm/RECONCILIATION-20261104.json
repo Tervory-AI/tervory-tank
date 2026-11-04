@@ -1,0 +1,123 @@
+{
+  "pr": 436,
+  "branch": "codex/crm-design",
+  "source_head": "314bf2737c49a69c651412c9b339a196225a8f01",
+  "main_snapshot": "fa34a9f0d9e8323358ebb47c82ba5e9f2eed9fab",
+  "main_tree": "4386c2b113c157ecb4f7b93779e2efbade34df47",
+  "canonical_inputs": {
+    "docs/figma/crm/SPEC.md": "1ba728bf7e6e11e1c8cf02507ed36889e9bda1f9",
+    "docs/figma/case-studies/SPEC.md": "e80ed53eb86346028747ed2ecd967f8682068843",
+    "docs/figma/MCP-MENU-20261103.md": "ed139ca3d9e5b9e471e79ebe47fff25bb95777a0",
+    "docs/figma/crm/evidence/2026-11-03-corrections/REGISTER.md": "5439bdd4143785494b6078b1ffd045c70a5162c2",
+    "docs/figma/DASHBOARDS-W4.md": "888f269aa58044c52215ea36ed60da5ffbb6c568"
+  },
+  "main_crm_prefix_sha256": "e26f72cfcadb0c9d86da4a38a7334073e23585841f3692cb41cbe1f9f9d99053",
+  "case_spec_sha256": "ecb8fe2aa5c948df139fb370cdeb78a14289e695f0f83e68ff68d890f513eb6b",
+  "archived_payloads": {
+    "PR-436-HISTORY-20261103.md": "5440f5760aee2afb467df6de72f31ed0f5cdc51c6b1b21ef47587cfed6de0150",
+    "../case-studies/PR-436-REVISION3-HISTORY.md": "2576c47fbffe077ced6fd5dc4be01c0cb9b272789976b133b563946812870fbb"
+  },
+  "evidence": [
+    {
+      "path": "evidence/2026-11-03-fix4/180-8387.png",
+      "sha256": "4105fe8ec73c274c00519e852f102f98719a59b09fdc36a711255412c758d8b1",
+      "source_git_blob": "771b94124c97ff2758c30603994a227fe88930d9",
+      "width": 241,
+      "height": 900
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/310-36136.png",
+      "sha256": "d708cee25346b4ed05403ce492ca80c3e1d9a97892a2e7e928130e933b45cfc3",
+      "source_git_blob": "28c22dce2087080fb789b02826826f6ba96424d7",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/310-36821.png",
+      "sha256": "6118fa6775f8d1e00a2c1a796728c8699eb6cf45e51b96a8428c8e449ac967b8",
+      "source_git_blob": "ea4da873f02ec0d7ae984e98b2c9fdb55befb0d2",
+      "width": 375,
+      "height": 812
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/94-417.png",
+      "sha256": "c43449100ca198db64cdccd8d9008f59435918a5ed7d7f81e21dd54d63622914",
+      "source_git_blob": "b2107cc90c58f8102b652631715e2d6e35ba3cce",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/94-682.png",
+      "sha256": "8dfa9d6e36160b9f96310be4c7b400a3c44a6fbc15499a1c12d605ed32252728",
+      "source_git_blob": "6d37ae235b4980e36934e0c8886e25e87e053bb9",
+      "width": 375,
+      "height": 812
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/98-9050.png",
+      "sha256": "714ed95cb7aab4cc0c0a8a18f0fd38caf988fee362b30ed70f172b3352d82fab",
+      "source_git_blob": "31073fe317b055a3f84fb3d0e96a74ab9ae0a31b",
+      "width": 375,
+      "height": 812
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/98-9181.png",
+      "sha256": "428b8a9f2528b64ecf8bc94520149fb5a8c369918d0171561963bdd3312a2bb1",
+      "source_git_blob": "38c2dde3e97109ba7b76c9acc7457b2b172a19b8",
+      "width": 375,
+      "height": 812
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/README.md",
+      "sha256": "dd6bc7cbec69b78383dbce93b33ef57579d1fc119507732578acd0e6536d5423",
+      "source_git_blob": "134954e166e552093ffe73f24af99b1ffb5c5aa9"
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/changed-nodes.csv",
+      "sha256": "69f4406abe47adc7d92b0be29150450c5d8a0c9f648bc875f9d2bab9b481a829",
+      "source_git_blob": "d90c1cabd48e09ff5a2ff1f877fe4b52dd63b9f2"
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/created-nodes.csv",
+      "sha256": "cea5c09eb8aaca06fdd8cebcda66e700f850860fb891105b19b27a7403794b5a",
+      "source_git_blob": "e34ff7d85e7870789ef6775cb1d773b8b7bfbe28"
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/final-checks.json",
+      "sha256": "a9ceabe456f52c4f83ddc180701dcd57184bcf0cd2b43b0f9e1f161b7c593669",
+      "source_git_blob": "0b677ec2b04fee68b3752faadbc52dcd599cd58f"
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/new-words.json",
+      "sha256": "f54753d1d7f1718f68d4bedbc83e83a6a0cb982699377cee8ad285e4bd3ab7cc",
+      "source_git_blob": "f2dcc6108b0f80c7ef4db2094340fdd5877f8388"
+    },
+    {
+      "path": "evidence/2026-11-03-fix4/spacing-exceptions.json",
+      "sha256": "aaefa6ef6da04751620368df12d548851c1ceb7ddde58f48f7e00ad5c0cfde26",
+      "source_git_blob": "b0f5605d1b744efc82be28c050ce7b1412baef58"
+    },
+    {
+      "path": "evidence/case-study-accents.png",
+      "sha256": "cdc0417b1de13a058cc2336f51bff5da6b02fb7787c62deace5d05caf42858c5",
+      "source_git_blob": "122bdd8f60d39bfdd582e5a0e09ad46e36f20100",
+      "width": 1036,
+      "height": 344
+    },
+    {
+      "path": "evidence/case-study-tiger-filled.png",
+      "sha256": "afe1fab7f02128cfba15a0cbe76189788fadc2a2479ab09d53352370d6cfb361",
+      "source_git_blob": "20c15c89bb02ac7e274d2f0eeeca653d6c49982d",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "path": "evidence/crm-leads-desktop.png",
+      "sha256": "4221730ba6c91b30e28466bf7adfd560980984d07cd8129b7b79137b033658c4",
+      "source_git_blob": "03a7ab88dd4e12cf5744d44bcc8d5ec2fd9b3e7f",
+      "width": 1440,
+      "height": 900
+    }
+  ],
+  "main_crm_prefix_bytes": 54435
+}

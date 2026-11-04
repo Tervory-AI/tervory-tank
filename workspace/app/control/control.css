@@ -1,7 +1,7 @@
 /* Scoped to this route: the client dashboard still uses dashboard.css unchanged. */
 .app-shell:has(.control-panel) { display: block; min-height: 100vh; background: #f4f6fa; }
 .app-shell:has(.control-panel) > :not(.shell-main) { display: none; }
-.app-shell:has(.control-panel) .shell-main { margin: 0 !important; padding: 0 !important; width: 100%; }
+.app-shell:has(.control-panel) .shell-main { margin: 0 !important; padding: 0 !important; width: 100%; max-width: none; }
 .app-shell:has(.control-panel) .shell-main > main { max-width: none !important; width: 100%; margin: 0 !important; padding: 0 !important; }
 .control-panel { color-scheme: light; background: #f4f6fa; color: #001840; min-height: 100vh; padding: 24px 32px 32px; display: flex; flex-direction: column; gap: 18px; font: 400 13px/normal var(--font-inter), sans-serif; }
 .control-panel * { box-sizing: border-box; }
@@ -24,7 +24,7 @@
 .control-label { font-size: 13px; color: #3d4a66; }
 .control-number, .control-value, .control-needs-count { font-family: var(--font-mono), monospace; font-variant-numeric: tabular-nums; }
 .control-value { font-size: 26px; white-space: nowrap; }
-.control-metric-sub { display: flex; gap: 8px; align-items: center; width: 100%; color: #3d4a66; font-size: 12px; white-space: nowrap; }
+.control-metric-sub { display: flex; gap: 8px; align-items: center; width: 100%; color: #3d4a66; font-size: 12px; white-space: normal; flex-wrap: wrap; }
 .control-trend { margin-left: auto; }
 .control-spark, .control-spark svg { display: block; width: 120px; height: 32px; flex-shrink: 0; }
 .control-head { display: flex; align-items: flex-start; width: 100%; }

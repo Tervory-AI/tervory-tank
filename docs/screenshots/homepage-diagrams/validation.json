@@ -1,0 +1,38 @@
+{
+  "result": "PASS",
+  "widths": [
+    320,
+    375,
+    390,
+    430,
+    768,
+    1440
+  ],
+  "images": 22,
+  "engineStages": 5,
+  "rigStates": 4,
+  "switches": 4,
+  "receiptRows": 4,
+  "csv": "PASS",
+  "pdf": "PASS",
+  "forms": "saved + failed",
+  "javascriptErrors": [],
+  "screenshotDirectory": "docs/screenshots/homepage-diagrams/browser",
+  "rigToggleRows": {
+    "result": "PASS",
+    "regressionWidths": [
+      320,
+      375,
+      430
+    ],
+    "continuousSweep": {
+      "minimum": 320,
+      "maximum": 430,
+      "widthsChecked": 111
+    },
+    "minimumTextSize": 14,
+    "optionalTagsVisible": 4,
+    "previous375LayoutRejected": true,
+    "copyChanged": false
+  }
+}

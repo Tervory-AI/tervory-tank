@@ -8,8 +8,21 @@ import { mootCanonicalRedirectUrl, productHostRewritePath, publicReturnUrl } fro
 // The squad consoles (/base, /tiger, /market-lab, /tisan, /radix, /skala, /tank) need sign-in.
 // Founder console /admin/autumbra stays private.
 const isPublic = createRouteMatcher([
+  // MCP authenticates its own bearer credentials; OAuth public protocol endpoints.
+  "/mcp",
+  "/oauth/token",
+  "/oauth/register",
+  "/oauth/revoke",
+  "/.well-known/oauth-protected-resource",
+  "/.well-known/oauth-protected-resource/mcp",
+  "/.well-known/oauth-authorization-server",
   // CLI corridor authenticates bearer PATs in Tank, never Clerk cookies.
   "/v1/command(.*)",
+  // Public visitor bot authenticates its own origin-bound embed key, including OPTIONS.
+  "/v1/bot/messages",
+  // Meta webhooks authenticate their raw-body signature in Tank.
+  "/v1/bot/whatsapp",
+  "/v1/bot/widget/(config|message|handover|poll)",
   // Self-hosted CLI release files (static, public/cli). SHA256SUMS has no dot, so the
   // matcher below does not skip it; list the release paths explicitly.
   "/cli/install.sh",

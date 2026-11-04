@@ -19,7 +19,7 @@ from .client_settings import ClientAutumbraSettings
 from .enforce_apply import apply_from_payload, approve_pending, undo_from_payload
 from .fixture_edge import DEFAULT_CONTROL, FixtureEdgeControl
 from .never_block import ActionCap, may_block_ip
-from .speed_budgets import stamp_budget, utc_now
+from .speed_budgets import stamp_budget, summarize_budgets, utc_now
 from .tenant_queue import push_receipt_to_founder_console
 from .threat_payload import ThreatAction, ThreatPayload, ThreatSeverity, accept_threat_payload
 
@@ -116,6 +116,7 @@ class ThreatPayloadQueue:
             pass
 
     def write_receipt(self, receipt: dict[str, Any]) -> Path:
+        summarize_budgets(receipt)
         if "timestamp" not in receipt:
             receipt["timestamp"] = utc_now()
         rid = str(receipt.get("id") or uuid.uuid4())
@@ -243,6 +244,7 @@ def watch_enqueue_fixture_attack(
     reason: str = "fixture attacking address",
     tenant_id: str | None = None,
     advisory: dict[str, Any] | None = None,
+    source_data: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Watch side: rules-first check on dirty log, then enqueue ThreatPayload only.
 
@@ -275,12 +277,14 @@ def watch_enqueue_fixture_attack(
         "confidence": adv["confidence"],
         "cve_ids": adv["cve_ids"],
         "queued_at": utc_now(),
+        "source_data": source_data or {},
     }
     if tenant_id:
         payload_raw["tenant_id"] = tenant_id
     if adv.get("advisory_url"):
         payload_raw["advisory_url"] = adv["advisory_url"]
     payload = accept_threat_payload(payload_raw)
+    payload = payload.model_copy(update={"watch_decision_seconds": time.perf_counter() - t0})
     item_id = queue.put(payload)
     receipt = {
         "product": "Autumbra",
@@ -485,24 +489,60 @@ def enforce_drain_once(
         return None
     _item_id, payload = taken
     edge = control or DEFAULT_CONTROL
-    cap = action_cap or ActionCap()
+    cap = action_cap or ActionCap(data_dir=data_dir or queue.root)
 
     transit = _queue_transit_seconds(payload)
 
+    from .cloudflare_edge import CloudflareEdgeError
+
+    def retry_edge_failure(error: CloudflareEdgeError) -> None:
+        owned_undo = getattr(error, "retry_undo", None)
+        if owned_undo:
+            queue.put(ThreatPayload.model_validate({**payload.model_dump(), **owned_undo,
+                                                   "action": ThreatAction.undo_shield}))
+        else:
+            queue.put(payload)
+
+    def record_edge_failure(error: CloudflareEdgeError) -> None:
+        failure = {"id": str(uuid.uuid4()), "tenant_id": settings.tenant_id,
+                   "timestamp": utc_now(), "product": "Autumbra", "role": "Enforce",
+                   "action": payload.action.value, "control": "cloudflare", "applied": False,
+                   "outcome": "edge_unconfirmed", "edge_state": "unconfirmed",
+                   "note": "Edge outcome could not be confirmed. Inspect the owned rule before retrying.",
+                   "undo_retry_queued": bool(getattr(error, "retry_undo", None)),
+                   "edge_requests": list(getattr(edge, "measurements", [])),
+                   **settings.receipt_stamp()}
+        stamp_budget(failure, stage="edge_attempt", seconds=time.perf_counter() - t_drain)
+        if transit is not None:
+            stamp_budget(failure, stage="queue_transit", seconds=transit)
+        queue.write_receipt(failure)
+
     # Undo / approve doors — ThreatPayload only.
     if payload.action is ThreatAction.undo_shield:
-        receipt = undo_from_payload(payload, control=edge, settings=settings, data_dir=data_dir)
+        try:
+            receipt = undo_from_payload(payload, control=edge, settings=settings, data_dir=data_dir)
+        except CloudflareEdgeError as error:
+            retry_edge_failure(error)
+            record_edge_failure(error)
+            raise
         if transit is not None:
             stamp_budget(receipt, stage="queue_transit", seconds=transit)
-        stamp_budget(receipt, stage="event_to_shield_e2e", seconds=time.perf_counter() - t_drain + (transit or 0))
+        stamp_budget(receipt, stage="event_to_undo_e2e", seconds=time.perf_counter() - t_drain + (transit or 0))
         queue.write_receipt(receipt)
         return receipt
 
     if payload.action is ThreatAction.approve_shield:
-        receipt = approve_pending(payload, control=edge, settings=settings, data_dir=data_dir)
+        try:
+            receipt = approve_pending(payload, control=edge, settings=settings, data_dir=data_dir)
+        except CloudflareEdgeError as error:
+            retry_edge_failure(error)
+            record_edge_failure(error)
+            raise
         if transit is not None:
             stamp_budget(receipt, stage="queue_transit", seconds=transit)
-        stamp_budget(receipt, stage="event_to_shield_e2e", seconds=time.perf_counter() - t_drain + (transit or 0))
+        shield = (receipt.get("budgets") or {}).get("event_to_shield_e2e")
+        if shield is not None:
+            stamp_budget(receipt, stage="event_to_shield_e2e", seconds=shield["seconds"] + (transit or 0))
         queue.write_receipt(receipt)
         if on_act_email and receipt.get("applied"):
             try:
@@ -530,18 +570,30 @@ def enforce_drain_once(
         queue.write_receipt(receipt)
         return receipt
 
-    receipt = apply_from_payload(
-        payload,
-        settings=settings,
-        control=edge,
-        source_credits=source_credits,
-        data_dir=data_dir,
-    )
+    try:
+        receipt = apply_from_payload(
+            payload,
+            settings=settings,
+            control=edge,
+            source_credits=source_credits,
+            data_dir=data_dir,
+        )
+    except CloudflareEdgeError as error:
+        if getattr(error, "retry_undo", None):
+            retry_edge_failure(error)
+        record_edge_failure(error)
+        raise
     if transit is not None:
         stamp_budget(receipt, stage="queue_transit", seconds=transit)
-    # E2E: queue transit + drain work (event→shield across the pipe).
-    e2e = time.perf_counter() - t_drain + (transit or 0.0)
-    stamp_budget(receipt, stage="event_to_shield_e2e", seconds=e2e)
+    watch_seconds = payload.watch_decision_seconds
+    receipt["timing_origin"] = "watch_decision" if watch_seconds is not None else "queue"
+    decision = (receipt.get("budgets") or {}).get("event_to_decision")
+    if decision is not None and watch_seconds is not None:
+        stamp_budget(receipt, stage="event_to_decision", seconds=decision["seconds"] + watch_seconds)
+    # Actual confirmed-write timing, including Watch decision and queue transit; never health wait.
+    shield = (receipt.get("budgets") or {}).get("event_to_shield_e2e")
+    if shield is not None:
+        stamp_budget(receipt, stage="event_to_shield_e2e", seconds=shield["seconds"] + (transit or 0) + (watch_seconds or 0))
     queue.write_receipt(receipt)
     if on_act_email and receipt.get("applied"):
         try:

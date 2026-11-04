@@ -167,3 +167,39 @@ def test_a_cancel_re_raises_the_interrupt_even_when_the_child_ignores_sigint(tmp
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
     assert time.monotonic() - t0 < 20
+
+
+def test_shards_cover_every_collected_file_exactly_once_and_stay_balanced():
+    suite = _suite()
+    counts = {f"tests/test_{i:03d}.py": (i * 7) % 23 + 1 for i in range(200)}
+    shards = [suite.split_files(counts, index, 3) for index in (1, 2, 3)]
+    assert sorted(f for shard in shards for f in shard) == sorted(counts)
+    assert shards == [suite.split_files(dict(reversed(counts.items())), index, 3) for index in (1, 2, 3)]
+    loads = [sum(counts[f] for f in shard) for shard in shards]
+    assert max(loads) - min(loads) <= max(counts.values())
+
+
+def test_ci_runs_ten_shards_and_unsharded_runs_everything(monkeypatch):
+    suite = _suite()
+    job = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]["tank"]
+    assert job["strategy"]["matrix"]["shard"] == list(range(1, 11)) and job["strategy"]["fail-fast"] is False
+    step = next(s for s in job["steps"] if s.get("name") == "Full offline test suite")
+    assert step["env"]["SUITE_SHARDS"] == len(job["strategy"]["matrix"]["shard"])
+    monkeypatch.delenv("SUITE_SHARDS", raising=False)
+    monkeypatch.delenv("SUITE_SHARD", raising=False)
+    assert suite.shard_of() == (1, 1)
+    monkeypatch.setenv("SUITE_SHARDS", "10")
+    monkeypatch.setenv("SUITE_SHARD", "11")
+    with pytest.raises(SystemExit):
+        suite.shard_of()
+
+
+@pytest.mark.parametrize("count", [1, 2, 3, 6, 10])
+def test_each_alone_group_runs_on_exactly_one_shard(count):
+    suite = _suite()
+    owners = {p: [i for i in range(1, count + 1) if p in suite.alone_for(i, count)] for p in suite.ALONE}
+    assert all(len(shards) == 1 for shards in owners.values()), owners
+    if count >= len(suite.ALONE):
+        assert len({shards[0] for shards in owners.values()}) == len(suite.ALONE)
+    if count in (6, 10):
+        assert owners == {"tests/tiger_g5": [1], "tests/zenas_regulation_alerts": [2]}

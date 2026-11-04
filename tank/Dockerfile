@@ -17,6 +17,8 @@ RUN --mount=type=secret,id=proxy_ca \
 COPY *.py schema.sql cl100k_base.tiktoken cl100k_base.LICENSE ./
 COPY fonts ./fonts
 COPY skills ./skills
+COPY training_jobs ./training_jobs
+COPY plugin_packages ./plugin_packages
 RUN useradd -m tank && chown -R tank /app
 # Baked at image build. Coolify passes SOURCE_COMMIT. A local build can pass GIT_SHA.
 ARG SOURCE_COMMIT=

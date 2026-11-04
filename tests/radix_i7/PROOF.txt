@@ -1,0 +1,34 @@
+Radix I7 verification — codex/radix-w4, stacked on #634
+All fixtures use placeholder values. No external HTTP, model, live scan or deployment.
+
+Focused report and existing presentation selection (recorded .test-data/i7-corridor-final.txt):
+Result:
+13 passed, 3 warnings in 20.09s
+
+After replacing live-page evidence links with persisted observation links:
+python -m pytest -q tests/test_radix_report.py -k every_finding
+1 passed, 8 deselected, 3 warnings in 1.49s
+
+Workspace TypeScript: workspace/node_modules/.bin/tsc --noEmit
+Exit 0. Node syntax check: node --check tests/radix_i7/workspace.cjs, exit 0.
+
+Room import: existing tested image codex-radix-w3:i2 (cfb936ca413f), final agents/radix mounted read-only at /source, sys.path /source first, --network none --memory 256m.
+PASS: final room source imports and report OpenAPI in tested I2 runtime, network none
+
+A redundant full dependency rebuild was cancelled during apt installation to avoid host disk contention. This check validates the final room code in the existing tested runtime; it is not a claim of a newly completed image build.
+
+Secrets:
+..                                                                       [100%]
+2 passed in 17.56s
+
+CI exact lint (also run immediately before push):
+ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+All checks passed!
+Additional changed room files Ruff E9,F: All checks passed!
+git diff --check: exit 0.
+
+Combined regression:
+TMPDIR=$PWD/.test-data/tmp RADIX_OSV_REAL=$PWD/.test-data/osv.sqlite RADIX_PASSIVE_TEST_DATABASE_URL=postgresql://placeholder@127.0.0.1:56483/radix_passive_test RADIX_I8_TEST_DATABASE_URL=postgresql://placeholder@127.0.0.1:56483/radix_passive_test POOL_SCHEMA_DATABASE_URL=postgresql://placeholder@127.0.0.1:56483/postgres TENANT_BUS_REDIS_URL=redis://127.0.0.1:56484/0 DATABASE_URL=postgresql://placeholder@127.0.0.1:56483/postgres LITELLM_MASTER_KEY=placeholder TANK_API_KEY=placeholder PYTHONPATH=agents/_chassis /workspace/codex-radix-r4-py312/bin/python -m pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 tests/test_radix_*.py tests/test_rx1_scans.py tests/test_rx4_compliance.py tests/test_command_radix*.py tests/test_bucket1_radix.py tests/test_skala_radix_region_evals.py agents/radix/tests/ tests/tenant_bus/ tests/radix_i8/ tests/radix_r6/ tests/radix_i2/ tests/test_deploy_changed.py tests/test_command_repo_tools.py tests/test_backup_deploy_persistence.py tests/test_command_1b_workspace.py
+577 passed, 256 warnings, 437 subtests passed in 777.86s (0:12:57)
+The final evidence-link change was covered by the additional targeted check above.
+The disposable loopback Postgres had fsync/synchronous_commit/full_page_writes disabled during this run to reduce fixture schema disk contention. No shared or production database was changed.

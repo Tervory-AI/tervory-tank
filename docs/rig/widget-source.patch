@@ -1,3 +1,36 @@
+diff --git a/scripts/package-widget.mjs b/scripts/package-widget.mjs
+index 2d55af4..851cff0 100644
+--- a/scripts/package-widget.mjs
++++ b/scripts/package-widget.mjs
+@@ -4 +4 @@ import { createHash } from "node:crypto";
+-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
++import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+@@ -18,0 +19,3 @@ writeFileSync(resolve(target, "manifest.json"), JSON.stringify({ file, integrity
++for (const previous of readdirSync(target)) {
++  if (/^tervory-rig\.[a-f0-9]{64}\.umd\.js$/.test(previous) && previous !== file) unlinkSync(resolve(target, previous));
++}
+diff --git a/tests/cart.test.ts b/tests/cart.test.ts
+new file mode 100644
+index 0000000..111b829
+--- /dev/null
++++ b/tests/cart.test.ts
+@@ -0,0 +1,16 @@
++import { expect, it } from "vitest";
++import { lineProjection, orderProjection, renderCart, type CartView } from "../widget/src/ui/cart";
++import { neutral } from "../widget/src/theme/themes";
++import { renderView, type View } from "../widget/src/ui/render";
++const line = lineProjection({ id: "placeholder-line", product_id: "placeholder-sku", title: "placeholder product", quantity: 2, price: "12.00", currency: "USD", kind: "stock", delivery: { min_days: 2, max_days: 3 }, source: { name: "placeholder-private-source", url: "https://placeholder-private.example", cost: "9.00" } });
++const view = (screen: CartView["screen"]): CartView => ({ store: "placeholder store", screen, lines: [line], product: line, order: null, busy: false, now: Date.parse("2026-11-03T12:00:00Z") });
++it("empty cart uses no fixture products", () => { const state = view("cart"); state.lines = []; expect(renderCart(state)).toContain("Your cart is empty"); expect(renderCart(state)).not.toContain("placeholder product"); });
++it("added state uses server quantity and price", () => expect(renderCart(view("added"))).toContain("Quantity: 2 · Cart total: $24.00"));
++it("price change requires review", () => { const state = view("changed"); state.lines = [{ ...line, price: "13.00", previous: { price: "12.00", delivery: line.delivery } }]; expect(renderCart(state)).toContain("Price changed: $12.00 → $13.00."); });
++it("unavailable choice disables checkout", () => { const state = view("unavailable"); state.lines = [{ ...line, unavailable: true }]; expect(renderCart(state)).toMatch(/data-action="cart-handoff"[^>]* disabled/); });
++it("expired copy confirms server cancellation", () => expect(renderCart(view("rechecking"))).toContain("The unpaid store order was cancelled."));
++it.each([false, true])("paid/late order: %s", late => { const state = view("paid"); state.order = orderProjection({ id: "placeholder-checkout", state: "placed", expires_at: "2026-11-03T12:05:00Z", payment_confirmed: true, late_payment: late, total: "24.00", currency: "USD", number: "placeholder-order", lines: [line] }); expect(renderCart(state)).toContain(late ? "Payment received after the window" : "Payment confirmed"); expect(renderCart(state)).toContain("Total paid: $24.00"); });
++it("time left comes from server expires_at", () => { const state = view("return"); state.order = orderProjection({ id: "placeholder-checkout", state: "pending", expires_at: "2026-11-03T12:02:00Z" }); expect(renderCart(state)).toContain("02:00"); state.now += 31000; expect(renderCart(state)).toContain("01:29"); });
++it("checkout unavailable uses approved copy", () => expect(renderCart(view("error"))).toContain("The 5-minute window has not started."));
++it("supplier fields never enter state", () => { expect(JSON.stringify(line)).not.toMatch(/private|source|cost|https:/); });
++it("quote output remains independent", () => { const state = { theme: neutral, screen: "home", query: "", results: [], selectedId: null, product: null, setups: [], activeTier: null, graph: null, expanded: [], swap: null, askQuestion: "", askAnswer: null, askCites: "", linkUrl: "", linkRequestId: null, linkError: null, quote: null, message: null, customizedTiers: [] } as View; expect(renderCart(view("search"))).toBe(""); expect(renderView(state)).not.toContain("cart-"); });
 diff --git a/tests/custom-nation-privacy-slot.test.ts b/tests/custom-nation-privacy-slot.test.ts
 new file mode 100644
 index 0000000..ace3d8b
@@ -83,21 +116,25 @@ index f457783..873f6f4 100644
 -    await expect(page.getByText("SAMPLE DATA").first()).toBeVisible();
 +    await expect(page.getByText("SAMPLE DATA")).toHaveCount(0);
 diff --git a/widget/src/api/client.ts b/widget/src/api/client.ts
-index b60cdc0..0695614 100644
+index b60cdc0..e6aaa50 100644
 --- a/widget/src/api/client.ts
 +++ b/widget/src/api/client.ts
 @@ -6,0 +7 @@ import type {
 +  PrivacyNotice,
-@@ -46,0 +48,5 @@ export class RigClient {
+@@ -46,0 +48,9 @@ export class RigClient {
++  async cart(operation: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
++    return this.request(`/v1/rig/cart/${operation}`, { method: "POST", body: JSON.stringify(data) });
++  }
++
 +  async privacyNotice(): Promise<PrivacyNotice | null> {
 +    if (this.usesMock) return null;
 +    return (await this.request<{ notice: PrivacyNotice | null }>("/v1/rig/privacy-notice")).notice;
 +  }
 +
-@@ -102 +108 @@ export class RigClient {
+@@ -102 +112 @@ export class RigClient {
 -      body: JSON.stringify({ url: body.url, note: body.note, ...(body.contact ? { contact: body.contact } : {}) }),
 +      body: JSON.stringify({ url: body.url, note: body.note, ...(body.notice_version ? { notice_version: body.notice_version } : {}), ...(body.contact ? { contact: body.contact } : {}) }),
-@@ -109,0 +116 @@ export class RigClient {
+@@ -109,0 +120 @@ export class RigClient {
 +      ...(body.notice_version ? { notice_version: body.notice_version } : {}),
 diff --git a/widget/src/api/types.ts b/widget/src/api/types.ts
 index 346ca9f..d688271 100644
@@ -111,20 +148,62 @@ index 346ca9f..d688271 100644
 @@ -89,0 +93 @@ export type QuoteRequest = {
 +  notice_version?: string;
 diff --git a/widget/src/element.ts b/widget/src/element.ts
-index f6deaf4..8f0b658 100644
+index f6deaf4..aa548a2 100644
 --- a/widget/src/element.ts
 +++ b/widget/src/element.ts
-@@ -5 +5 @@ import { RigError } from "./api/types";
+@@ -0,0 +1,2 @@
++import { CartController } from "./ui/cart-controller";
++import { cartStyles } from "./ui/cart";
+@@ -5 +7 @@ import { RigError } from "./api/types";
 -import type { Contact, GraphResponse, Product, RequestAck, Setup } from "./api/types";
 +import type { Contact, PrivacyNotice, GraphResponse, Product, RequestAck, Setup } from "./api/types";
-@@ -27,0 +28,2 @@ export class TervoryRig extends HTMLElement {
+@@ -24 +26 @@ export class TervoryRig extends HTMLElement {
+-    return ["api-base", "rig-key", "theme", "fonts"];
++    return ["api-base", "rig-key", "theme", "fonts", "kiosk-id"];
+@@ -26,0 +29,5 @@ export class TervoryRig extends HTMLElement {
++  private threeActive = false;
++  private threeGeneration = 0;
++  private threeDispose: (() => void) | null = null;
++  private threeEntitled = false;
++  private cartController: CartController | null = null;
+@@ -27,0 +35,2 @@ export class TervoryRig extends HTMLElement {
 +  private notice: PrivacyNotice | null = null;
 +  private noticeReady = false;
-@@ -120,0 +123,2 @@ export class TervoryRig extends HTMLElement {
+@@ -91 +100 @@ export class TervoryRig extends HTMLElement {
+-    style.textContent = styles;
++    style.textContent = styles + cartStyles;
+@@ -96,0 +106,4 @@ export class TervoryRig extends HTMLElement {
++    shadow.addEventListener("change", event => {
++      const input = event.target;
++      if (input instanceof HTMLInputElement && input.dataset.cartQuantity) void this.cartController?.quantity(input.dataset.cartQuantity, Number(input.value));
++    });
+@@ -108,0 +122,2 @@ export class TervoryRig extends HTMLElement {
++    this.cartController?.stop();
++    this.stopThree();
+@@ -112,0 +128 @@ export class TervoryRig extends HTMLElement {
++    this.stopThree();
+@@ -119,0 +136,2 @@ export class TervoryRig extends HTMLElement {
++    this.stopThree();
++    this.threeEntitled = false;
+@@ -120,0 +139,2 @@ export class TervoryRig extends HTMLElement {
 +    this.notice = null;
 +    this.noticeReady = false;
-@@ -124,0 +129,16 @@ export class TervoryRig extends HTMLElement {
+@@ -124,0 +145,30 @@ export class TervoryRig extends HTMLElement {
++    const generation = this.threeGeneration;
++    void fetch((apiBase?.trim() || "").replace(/\/$/, "") + "/v1/rig/3d/capabilities", {
++      credentials: "omit", cache: "no-store", headers: { "X-Rig-Key": this.getAttribute("rig-key") || "" },
++    }).then(async response => {
++      if (!response.ok) return;
++      const capabilities = await response.json();
++      if (generation !== this.threeGeneration) return;
++      this.threeEntitled = capabilities.rig_3d === true;
++      this.render();
++    }).catch(() => { /* An unavailable entitlement never enables 3D. */ });
 +    this.refreshNotice();
++    this.cartController?.stop();
++    const cartClient = this.client;
++    this.cartController = new CartController((operation, data) => cartClient.cart(operation, data), () => this.render(), `rig-cart:${this.getAttribute("rig-key") || ""}`);
++    void this.cartController.start();
 +  }
 +
 +  private refreshNotice(): void {
@@ -140,29 +219,96 @@ index f6deaf4..8f0b658 100644
 +      this.message = this.errorText(error);
 +      this.render();
 +    });
-@@ -168,0 +189,2 @@ export class TervoryRig extends HTMLElement {
+@@ -168,0 +219,2 @@ export class TervoryRig extends HTMLElement {
 +      notice: this.notice,
 +      noticeReady: this.noticeReady,
-@@ -801,0 +824 @@ export class TervoryRig extends HTMLElement {
+@@ -196 +248 @@ export class TervoryRig extends HTMLElement {
+-    if (!this.root) return;
++    if (!this.root || this.threeActive) return;
+@@ -203 +255,10 @@ export class TervoryRig extends HTMLElement {
+-    this.root.innerHTML = renderView(this.view());
++    this.root.innerHTML = this.cartController?.render() || renderView(this.view());
++    if (this.threeEntitled && this.product && this.setups.length && !this.quote) {
++      const actions = document.createElement("div"); actions.className = "rig-three-entry";
++      for (const [action, label] of [["open-three", "Open 3D"], ["open-kiosk", "Open terminal"]]) {
++        if (action === "open-kiosk" && !/^[0-9a-f-]{36}$/.test(this.getAttribute("kiosk-id") || "")) continue;
++        const button = document.createElement("button"); button.type = "button"; button.className = "btn";
++        button.dataset.action = action; button.textContent = label; actions.append(button);
++      }
++      this.root.append(actions);
++    }
+@@ -257,0 +319 @@ export class TervoryRig extends HTMLElement {
++    this.stopThree();
+@@ -395,0 +458,30 @@ export class TervoryRig extends HTMLElement {
++  private stopThree(): void {
++    ++this.threeGeneration; this.threeDispose?.(); this.threeDispose = null; this.threeActive = false;
++  }
++
++  private async openThree(kiosk: boolean): Promise<void> {
++    const setup = this.setups.find(s => s.tier === this.activeTier) ?? this.setups[0];
++    if (!this.root || !this.product || !setup || !this.threeEntitled) return;
++    this.stopThree(); this.threeActive = true;
++    const generation = this.threeGeneration, base = (this.getAttribute("api-base") || "").trim().replace(/\/$/, "");
++    const host = document.createElement("div"); this.root.replaceChildren(host);
++    const back = () => { this.stopThree(); this.render(); };
++    try {
++      const url = new URL(base + "/3d/widget-entry.js", location.href).href;
++      const entry = await import(/* @vite-ignore */ url);
++      if (generation !== this.threeGeneration || !this.isConnected) return;
++      const dispose = await entry.mount(host, base, this.getAttribute("rig-key") || "", {
++        product_id: this.product.id, tier: setup.tier,
++        choices: Object.fromEntries(setup.parts.filter(part => part.product.id !== this.product!.id).map(part => [part.role, part.product.id])),
++      }, kiosk ? this.getAttribute("kiosk-id") : null, {
++        storeName: this.currentTheme().id === "custom-nation" ? "Custom Nation" : this.currentTheme().copy.mark,
++        productName: this.product.name, finePrint: this.currentTheme().copy.finePrint, back,
++        menu: () => this.dispatchEvent(new CustomEvent("rig-menu", { bubbles: true, composed: true })),
++        quote: () => { back(); this.openQuoteSetup(setup.tier); },
++      });
++      if (generation !== this.threeGeneration || !this.isConnected) dispose(); else this.threeDispose = dispose;
++    } catch {
++      if (generation === this.threeGeneration) { back(); this.message = "The 3D view could not load. Please use the product photos."; this.render(); }
++    }
++  }
++
+@@ -400,0 +493,6 @@ export class TervoryRig extends HTMLElement {
++    if (this.cartController?.enabled && action.dataset.action?.startsWith("cart-")) {
++      event.preventDefault(); void this.cartController.action(action.dataset.action.slice(5), action.dataset.id); return;
++    }
++    if (this.cartController?.enabled && ["complete", "quote-product", "pick-graph"].includes(action.dataset.action || "")) {
++      event.preventDefault(); void this.cartController.preview(action.dataset.id || ""); return;
++    }
+@@ -403,0 +502,2 @@ export class TervoryRig extends HTMLElement {
++      case "open-three": case "open-kiosk":
++        event.preventDefault(); void this.openThree(action.dataset.action === "open-kiosk"); break;
+@@ -451,0 +552 @@ export class TervoryRig extends HTMLElement {
++    if (this.threeActive) return;
+@@ -470,0 +572 @@ export class TervoryRig extends HTMLElement {
++    if (this.threeActive) return;
+@@ -500,0 +603,4 @@ export class TervoryRig extends HTMLElement {
++    if (this.threeActive) {
++      if (event instanceof KeyboardEvent && event.key === "Escape") { this.stopThree(); this.render(); }
++      return;
++    }
+@@ -801,0 +908 @@ export class TervoryRig extends HTMLElement {
 +    this.refreshNotice();
-@@ -820,0 +844 @@ export class TervoryRig extends HTMLElement {
+@@ -820,0 +928 @@ export class TervoryRig extends HTMLElement {
 +    this.refreshNotice();
-@@ -837 +861 @@ export class TervoryRig extends HTMLElement {
+@@ -837 +945 @@ export class TervoryRig extends HTMLElement {
 -    if (!this.quote || !this.quoteTarget || this.quote.pending || this.quote.requestId) return;
 +    if (!this.noticeReady || !this.quote || !this.quoteTarget || this.quote.pending || this.quote.requestId) return;
-@@ -853,2 +877,2 @@ export class TervoryRig extends HTMLElement {
+@@ -853,2 +961,2 @@ export class TervoryRig extends HTMLElement {
 -          ? await this.client.quote({ contact, product_id: target.productId })
 -          : await this.client.quote({ contact, setup });
 +          ? await this.client.quote({ contact, notice_version: this.notice?.version, product_id: target.productId })
 +          : await this.client.quote({ contact, notice_version: this.notice?.version, setup });
-@@ -868,0 +893 @@ export class TervoryRig extends HTMLElement {
+@@ -868,0 +977 @@ export class TervoryRig extends HTMLElement {
 +      if (error instanceof RigError && error.code === "notice_changed") this.refreshNotice();
-@@ -893,0 +919 @@ export class TervoryRig extends HTMLElement {
+@@ -893,0 +1003 @@ export class TervoryRig extends HTMLElement {
 +    if (!this.noticeReady) return;
-@@ -926 +952 @@ export class TervoryRig extends HTMLElement {
+@@ -926 +1036 @@ export class TervoryRig extends HTMLElement {
 -      const response = await this.client.linkQuote({ url: this.linkUrl.trim(), note: "", contact });
 +      const response = await this.client.linkQuote({ notice_version: this.notice?.version, url: this.linkUrl.trim(), note: "", contact });
-@@ -929,0 +956 @@ export class TervoryRig extends HTMLElement {
+@@ -929,0 +1040 @@ export class TervoryRig extends HTMLElement {
 +      if (error instanceof RigError && error.code === "notice_changed") this.refreshNotice();
 diff --git a/widget/src/mock/unavailable.ts b/widget/src/mock/unavailable.ts
 index e551a60..c4eba52 100644
@@ -198,6 +344,131 @@ index 14e516d..13c9e97 100644
 +    finePrint: "One indicative total per setup. The shop confirms stock and the final quotation.",
 @@ -332 +329,0 @@ export const neutral: Theme = {
 -    sampleLabel: "SAMPLE DATA",
+diff --git a/widget/src/three/README.md b/widget/src/three/README.md
+index 0f43eeb..b15c383 100644
+--- a/widget/src/three/README.md
++++ b/widget/src/three/README.md
+@@ -3,2 +3,3 @@
+-Frames 06–07 are not approved yet. This companion is a plain test page, not
+-replacement UI for frames 01–05. The base ES/UMD bundles have no 3D imports.
++Frames 06–07 are approved by the founder’s implementation instruction (PR #671).
++The retailer widget loads widget-entry.js on an entitled shopper’s explicit action.
++The engineering index remains a separate test page; the renderer is never in the base ES/UMD bundles.
+diff --git a/widget/src/three/build.mjs b/widget/src/three/build.mjs
+index 096bc43..8f6343d 100644
+--- a/widget/src/three/build.mjs
++++ b/widget/src/three/build.mjs
+@@ -20 +20 @@ await build({ configFile: false, root, base: "/3d/", build: {
+-  outDir: output, emptyOutDir: true, rollupOptions: { input: root + "index.html" },
++  outDir: output, emptyOutDir: true, rollupOptions: { preserveEntrySignatures: "strict", input: { index: root + "index.html", "widget-entry": root + "widget-entry.ts" }, output: { entryFileNames: "[name].js" } },
+diff --git a/widget/src/three/checks.test.mjs b/widget/src/three/checks.test.mjs
+index d581d59..0f1a9a7 100644
+--- a/widget/src/three/checks.test.mjs
++++ b/widget/src/three/checks.test.mjs
+@@ -13 +13 @@ test("base ES and UMD widget bundles contain no 3D runtime and stay below 150 KB
+-    assert.doesNotMatch(bytes.toString(), /WebGLRenderer|GLTFLoader|MeshoptDecoder|rig_3d/);
++    assert.doesNotMatch(bytes.toString(), /WebGLRenderer|GLTFLoader|MeshoptDecoder/);
+diff --git a/widget/src/three/frame.ts b/widget/src/three/frame.ts
+new file mode 100644
+index 0000000..599dc1e
+--- /dev/null
++++ b/widget/src/three/frame.ts
+@@ -0,0 +1,95 @@
++/** Approved 06/07 layout. Product imagery and names are always API supplied. */
++export type ViewerContext = {
++  storeName?: string; productName?: string; finePrint?: string;
++  back?: () => void; menu?: () => void; quote?: () => void;
++};
++
++export function element<K extends keyof HTMLElementTagNameMap>(tag: K, text = ""): HTMLElementTagNameMap[K] {
++  const n = document.createElement(tag); n.textContent = text; return n;
++}
++
++export function createFrame(host: HTMLElement, kiosk: boolean, context: ViewerContext = {}) {
++  host.replaceChildren();
++  const root = element("section"); root.className = "rig-3d" + (kiosk ? " kiosk" : "");
++  root.setAttribute("aria-label", "3D product view"); host.append(root);
++  const style = element("style"); style.textContent = frameStyles; root.append(style);
++  const header = element("header"); header.className = "rig-3d-header";
++  header.append(element("strong", context.storeName || ""));
++  const nav = element("nav"); nav.setAttribute("aria-label", "Rig");
++  nav.append(element("span", "Rig"));
++  const menu = element("button"); menu.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor" stroke-width="3"/></svg>'; menu.type = "button"; menu.className = "menu";
++  menu.setAttribute("aria-label", "Open Rig menu"); menu.addEventListener("click", () => context.menu?.());
++  // Host navigation is reused, never invent public links to private admin routes.
++  menu.hidden = !context.menu; nav.append(menu); header.append(nav); root.append(header);
++  const body = element("div"); body.className = "rig-3d-body"; root.append(body);
++  body.append(element("h1", kiosk ? "Dealership terminal" : "3D product view"));
++  const subtitle = element("h2", "Explore this setup"); body.append(subtitle);
++  const layout = element("div"); layout.className = "rig-3d-layout"; body.append(layout);
++  const visual = element("div"); visual.className = "rig-3d-visual"; layout.append(visual);
++  const viewport = element("div"); viewport.className = "rig-3d-viewport"; visual.append(viewport);
++  const canvas = element("canvas"); canvas.tabIndex = 0;
++  canvas.setAttribute("aria-label", "Rotate with left and right arrows. Zoom with plus and minus."); viewport.append(canvas);
++  const placeholder = element("div"); placeholder.className = "rig-3d-placeholder";
++  const stateText = element("p"); stateText.setAttribute("role", "status"); placeholder.append(stateText); viewport.append(placeholder);
++  const spacer = element("div"); spacer.className = "rig-3d-spacer"; spacer.setAttribute("aria-hidden", "true"); visual.append(spacer);
++  const controls = element("div"); controls.className = "controls"; visual.append(controls);
++  for (const text of ["Rotate left", "Rotate right", "Zoom in", "Zoom out", "Exploded view", "Back to setups"]) {
++    const button = element("button", text); button.type = "button"; button.disabled = true; controls.append(button);
++  }
++  const status = element("p"); status.className = "status"; status.hidden = true; status.setAttribute("role", "status"); visual.append(status);
++  const side = element("aside"); side.className = "rig-3d-side"; layout.append(side);
++  const summary = element("div"); summary.className = "rig-3d-summary";
++  summary.append(element("h2", "Your setup"));
++  const product = element("strong", context.productName || ""); summary.append(product);
++  const parts = element("div"); parts.className = "parts"; summary.append(parts);
++  const swaps = element("div"); swaps.className = "swaps"; summary.append(swaps);
++  const total = element("h2", "Indicative total: —"); summary.append(total);
++  const fine = element("p", context.finePrint || ""); fine.className = "fine"; fine.hidden = !fine.textContent; summary.append(fine);
++  const request = element("button", "Request a quote"); request.type = "button"; request.className = "quote-button"; summary.append(request);
++  side.append(summary);
++  const contact = element("div"); contact.className = "contact"; contact.hidden = true; side.append(contact);
++  function message(value: string) { status.textContent = value; status.hidden = !value; }
++  function state(value: "loading" | "ready" | "error" | "photos" | "empty", photo = "") {
++    root.dataset.state = value; canvas.hidden = value !== "ready"; placeholder.hidden = value === "ready";
++    stateText.textContent = value === "loading" ? "Loading product view…" : value === "empty" ? "Choose a product to explore in 3D."
++      : value === "error" ? "The 3D view could not load. Please use the product photos." : "Photos are available for this product.";
++    placeholder.querySelectorAll("img,button,.skeleton").forEach(n => n.remove());
++    if (value === "loading") for (let i = 0; i < 3; i++) { const n = element("div"); n.className = "skeleton"; placeholder.append(n); }
++    if (photo && ["error", "photos"].includes(value)) {
++      const image = element("img"); image.src = photo; image.alt = "Product photo"; placeholder.append(image);
++    }
++    if (["empty", "error"].includes(value)) {
++      const back = element("button", "Back to setups"); back.type = "button"; back.className = "quote-button";
++      back.addEventListener("click", () => context.back?.()); placeholder.append(back);
++    }
++    controls.querySelectorAll("button").forEach(n => { n.disabled = value !== "ready"; });
++    request.disabled = value !== "ready";
++  }
++  return { root, canvas, controls, status, total, swaps, side, summary, contact, parts, product, subtitle, request, viewport,
++    context, state, message };
++}
++
++export const frameStyles = `
++.rig-3d{--rig-card:#fff;--rig-3d-canvas:#f2efe7;box-sizing:border-box;width:100%;margin:0;color:#242722;background:var(--rig-3d-canvas);font:14px/24px Inter,Arial,sans-serif}
++.rig-3d *{box-sizing:border-box}.rig-3d [hidden]{display:none!important}.rig-3d h1,.rig-3d h2,.rig-3d p{margin:0}
++.rig-3d h1{font:600 36px/44px Inter,Arial,sans-serif;height:24px}.rig-3d h2{font:600 20px/24px Inter,Arial,sans-serif}
++.rig-3d-header{display:flex;align-items:center;gap:16px;padding:32px;background:#fff}.rig-3d-header>strong{flex:1;min-width:0;font-size:24px;font-weight:600}
++.rig-3d-header nav{width:160px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:64px;color:#001840;font-size:20px}
++.rig-3d-header .menu{width:44px;min-height:44px;height:44px;padding:0;border:0;font:24px/1 Inter,Arial,sans-serif}
++.rig-3d-body{display:flex;flex-direction:column;gap:24px;padding:48px}.rig-3d-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;align-items:start;gap:24px}
++.rig-3d-visual{display:flex;flex-direction:column;gap:16px;min-width:0}.rig-3d-viewport{height:300px;background:#fff;border:1px solid #d5d0c3;border-radius:8px;overflow:hidden;position:relative}
++.rig-3d canvas{display:block;width:100%;height:100%;touch-action:none}.rig-3d-placeholder{padding:24px;display:flex;flex-direction:column;gap:16px;height:100%;overflow:auto}.rig-3d-placeholder>p{font-size:20px;font-weight:600}
++.rig-3d-placeholder img{max-width:100%;object-fit:contain;min-height:0}.rig-3d .skeleton{background:#e8e4da;min-height:48px}.rig-3d-spacer{height:24px}
++.rig-3d .controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 8px}.rig-3d button{font:600 14px/24px Inter,Arial,sans-serif;color:#001840;background:#fff;border:1px solid #001840;border-radius:8px;min-width:0;min-height:48px;padding:11px 16px;cursor:pointer}
++.rig-3d button:disabled{color:#242722;background:#e8e4da;cursor:not-allowed;opacity:1}.rig-3d button:focus-visible,.rig-3d input:focus-visible,.rig-3d select:focus-visible,.rig-3d canvas:focus-visible{outline:3px solid #001840;outline-offset:3px}
++.rig-3d .quote-button{background:#001840;color:#fff;border:0}.rig-3d .quote-button:disabled{background:#e8e4da;color:#242722}
++.rig-3d-side{background:#fff;border-radius:8px;padding:24px;min-width:0}.rig-3d-summary,.rig-3d .contact,.rig-3d .contact form,.rig-3d .parts,.rig-3d .swaps{display:flex;flex-direction:column;gap:16px}
++.rig-3d-summary>strong{font-size:16px;font-weight:600}.rig-3d .fine,.rig-3d .contact-help{color:#686b60;font:14px/24px Inter,Arial,sans-serif}.rig-3d .status{color:#242722;font:14px/24px Inter,Arial,sans-serif}.rig-3d .status:empty{display:none}
++.rig-3d .field{border:1px solid #8b919a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:8px;height:88px;color:#3d4a66;font:14px/24px Inter,Arial,sans-serif}
++.rig-3d input{border:0;background:#fff;color:#001840;font:14px/24px Inter,Arial,sans-serif;width:100%;min-width:0;padding:0;min-height:24px}
++.rig-3d .swaps select{width:100%;min-height:48px;background:#fff;color:#001840;border:1px solid #8b919a;border-radius:8px;font:14px/24px Inter,Arial,sans-serif;padding:8px}
++.rig-3d.kiosk{min-height:100vh}.rig-3d.kiosk button{min-height:64px;font-size:16px}.rig-3d.kiosk .menu{min-height:44px}.rig-3d.kiosk .rig-3d-viewport{height:320px}
++.rig-3d:fullscreen{overflow:auto;max-width:none;width:100%;height:100%}.rig-3d .terminal-actions{display:flex;flex-direction:column;gap:16px;margin-top:16px}
++@media(max-width:700px){.rig-3d-header{padding:16px}.rig-3d-header>strong{font-size:20px}.rig-3d-header nav{width:120px}.rig-3d-body{padding:16px}.rig-3d h1{font-size:28px;line-height:36px}.rig-3d-layout{grid-template-columns:minmax(0,1fr)}.rig-3d-side{padding:16px}}
++@media(prefers-reduced-motion:reduce){.rig-3d *{scroll-behavior:auto!important}}
++`;
 diff --git a/widget/src/three/index.html b/widget/src/three/index.html
 index 113c0f1..108b511 100644
 --- a/widget/src/three/index.html
@@ -205,15 +476,423 @@ index 113c0f1..108b511 100644
 @@ -4 +4 @@
 -<body><main><h1>3D product view</h1><p>Sample models. Design review page.</p>
 +<body><main><h1>3D product view</h1>
+diff --git a/widget/src/three/loader.ts b/widget/src/three/loader.ts
+index d3096cb..f453092 100644
+--- a/widget/src/three/loader.ts
++++ b/widget/src/three/loader.ts
+@@ -2,0 +3 @@ import { ThreeClient } from "./client";
++import { createFrame, type ViewerContext } from "./frame";
+@@ -6 +7,4 @@ export async function openThreeD(host: HTMLElement, client: ThreeClient, build:
+-                                 kioskId: string | null = null): Promise<() => void> {
++                                 kioskId: string | null = null, context: ViewerContext = {}): Promise<() => void> {
++  const ui = createFrame(host, kioskId !== null, context);
++  ui.state("loading");
++  try {
+@@ -9 +13 @@ export async function openThreeD(host: HTMLElement, client: ThreeClient, build:
+-    host.textContent = "Photos are available for this product.";
++    ui.state("photos");
+@@ -14,8 +18 @@ export async function openThreeD(host: HTMLElement, client: ThreeClient, build:
+-    host.replaceChildren();
+-    if (assembly.photo) {
+-      const photo = document.createElement("img");
+-      photo.src = assembly.photo;
+-      photo.alt = "Product photo";
+-      photo.style.maxWidth = "100%";
+-      host.append(photo);
+-    } else host.textContent = "This product is shown in photos.";
++    ui.state("photos", assembly.photo);
+@@ -25,0 +23 @@ export async function openThreeD(host: HTMLElement, client: ThreeClient, build:
++  if (!assembly.models.length || assembly.valid_until <= Date.now() / 1000) { ui.state("photos", assembly.photo); return () => {}; }
+@@ -27 +25,2 @@ export async function openThreeD(host: HTMLElement, client: ThreeClient, build:
+-  return mountViewer(host, client, assembly, build, kioskId);
++  return await mountViewer(host, client, assembly, build, kioskId, context);
++  } catch { ui.state("error"); return () => {}; }
 diff --git a/widget/src/three/viewer.ts b/widget/src/three/viewer.ts
-index 9625631..573a4de 100644
+index 9625631..12e5f19 100644
 --- a/widget/src/three/viewer.ts
 +++ b/widget/src/three/viewer.ts
-@@ -26 +26 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+@@ -6,4 +6 @@ import { ModelCache } from "./cache";
+-
+-function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = ""): HTMLElementTagNameMap[K] {
+-  const element = document.createElement(tag); element.textContent = text; return element;
+-}
++import { createFrame, element as node, type ViewerContext } from "./frame";
+@@ -12 +9 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-                                  initialRequest: BuildRequest, kioskId: string | null): Promise<() => void> {
++                                  initialRequest: BuildRequest, kioskId: string | null, context: ViewerContext = {}): Promise<() => void> {
+@@ -15,28 +12,4 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-  host.replaceChildren();
+-  const root = node("section"); root.className = "rig-3d";
+-  root.setAttribute("aria-label", "3D product view"); host.append(root);
+-  const style = node("style"); style.textContent = `
+-    .rig-3d {box-sizing:border-box;font:16px/1.5 var(--rig-font-body, system-ui,sans-serif);color:var(--rig-ink, #001840);max-width:1400px;margin:auto}
+-    .rig-3d *{box-sizing:border-box}.rig-3d button,.rig-3d input,.rig-3d select{font:inherit;min-height:48px;padding:10px;border:1px solid var(--rig-line, #B8BFD0);border-radius:var(--rig-radius, 4px);background:var(--rig-card, white);color:var(--rig-ink, #001840)}
+-    .rig-3d button:focus-visible,.rig-3d input:focus-visible,.rig-3d select:focus-visible,.rig-3d canvas:focus-visible{outline:3px solid var(--rig-accent, #001840);outline-offset:3px}
+-    .rig-3d canvas{display:block;width:100%;height:min(60vh,650px);touch-action:none;border:1px solid var(--rig-line, #B8BFD0);border-radius:6px}
+-    .rig-3d .controls{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.rig-3d form{display:flex;gap:12px;flex-wrap:wrap}.rig-3d label{display:flex;flex-direction:column;gap:4px;max-width:100%}
+-    .rig-3d input{max-width:100%}.rig-3d .quote-button{background:var(--rig-accent, #E80008);color:var(--rig-on-accent, white);border:0}.rig-3d .status{min-height:1.5em}
+-    .rig-3d.kiosk{max-width:none;height:100vh;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 360px;grid-template-rows:auto auto auto auto auto 1fr auto;gap:12px;background:var(--rig-card, white)}
 -    .rig-3d.kiosk h2{grid-column:1/-1;grid-row:1;margin:0}.rig-3d.kiosk .sample{grid-column:1/-1;grid-row:2;margin:0}
-+    .rig-3d.kiosk h2{grid-column:1/-1;grid-row:1;margin:0}
-@@ -36 +35,0 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    .rig-3d.kiosk canvas{grid-column:1;grid-row:3/8;height:100%;min-height:0}
+-    .rig-3d.kiosk .controls{grid-column:2;grid-row:3;margin:0}.rig-3d.kiosk .total{grid-column:2;grid-row:4;margin:0}
+-    .rig-3d.kiosk .swaps{grid-row:5}.rig-3d.kiosk .status{grid-column:2;grid-row:6}.rig-3d.kiosk form{grid-column:2;grid-row:7;flex-direction:column}
+-    .rig-3d.kiosk button{min-height:64px;min-width:64px;font-size:20px}
+-    @media(max-width:500px){.rig-3d canvas{height:340px}.rig-3d form,.rig-3d label,.rig-3d input{width:100%}}
+-    @media(prefers-reduced-motion:reduce){.rig-3d *{scroll-behavior:auto!important}}
+-  `; root.append(style);
+-  if (kiosk) root.classList.add("kiosk");
+-  root.append(node("h2", "Explore this setup"));
 -  if (initial.sample) { const sample = node("p", "SAMPLE DATA"); sample.className = "sample"; root.append(sample); }
+-  const canvas = node("canvas"); canvas.tabIndex = 0;
+-  canvas.setAttribute("aria-label", "Rotate with left and right arrows. Zoom with plus and minus."); root.append(canvas);
+-  const controls = node("div"); controls.className = "controls"; root.append(controls);
+-  const status = node("p"); status.className = "status"; status.setAttribute("role", "status");
+-  const total = node("p"); total.className = "total"; const swaps = node("div"); swaps.className = "controls swaps";
+-  root.append(total, swaps, status);
++  const ui = createFrame(host, kiosk, context);
++  const { root, canvas, controls, total, swaps } = ui;
++  const setStatus = (text: string) => ui.message(text);
++  ui.state("loading");
+@@ -49 +22,3 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-  let inactivity = 0, touched = false;
++  let inactivity = 0, touched = false, connected = navigator.onLine;
++  let noticeVersion: string | undefined, noticeReady = false;
++  let contactMethod: "phone" | "email" = "phone";
+@@ -52 +27 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    const element = node("button", text); element.type = "button";
++    const element = (parent === controls ? Array.from(parent.querySelectorAll("button")).find(b => b.textContent === text) : null) || node("button", text); element.type = "button";
+@@ -60,0 +36 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
++  button("Back to setups", () => { dispose(); context.back?.(); });
+@@ -65,2 +41,34 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-  for (const [text, input] of [["Your name", name], ["Your email", email], ["Your phone", phone]] as const) {
+-    const label = node("label", text); label.append(input); form.append(label);
++  const nameLabel = node("label", "Your name"); nameLabel.className = "field"; nameLabel.append(name);
++  const emailLabel = node("label", "Your email"); emailLabel.className = "field"; emailLabel.append(email);
++  const phoneLabel = node("label", "Your phone"); phoneLabel.className = "field"; phoneLabel.append(phone);
++  const help = node("p", "Enter a phone number or email for your quote."); help.className = "contact-help";
++  const quoteStatus = node("strong"); quoteStatus.hidden = true; quoteStatus.setAttribute("role", "status");
++  const privacy = node("p"); privacy.className = "contact-help"; privacy.hidden = true;
++  const send = node("button", "Request a quote"); send.className = "quote-button"; send.type = "submit";
++  form.append(nameLabel, phoneLabel, emailLabel, help, privacy, quoteStatus, send);
++  const contactHeading = node("h2", "Request a quote"); ui.contact.append(contactHeading, form);
++  const alternate = button("Email", () => method(contactMethod === "phone" ? "email" : "phone"), ui.contact);
++  const savedReset = button("Start again", () => { void reset(); }, ui.contact); savedReset.className = "quote-button"; savedReset.hidden = true;
++  button("Start again", () => { void reset(); }, ui.contact);
++  const result = node("p"); result.setAttribute("role", "status"); result.style.fontWeight = "600"; result.hidden = true; ui.contact.prepend(result);
++  function method(value: "phone" | "email") {
++    contactMethod = value; phoneLabel.hidden = value !== "phone"; emailLabel.hidden = value !== "email";
++    phone.required = value === "phone"; email.required = value === "email";
++    phone.value = email.value = ""; alternate.textContent = value === "phone" ? "Email" : "Phone";
++  }
++  method("phone");
++  async function contactNotice() {
++    noticeReady = false; send.disabled = true; const version = generation;
++    try {
++      const value = await client.request<{ notice: { text: string; url: string; version: string } | null }>("/privacy-notice");
++      if (stopped || generation !== version) return;
++      noticeVersion = value.notice?.version; privacy.replaceChildren(); privacy.hidden = !value.notice;
++      if (value.notice) {
++        // The server validates the retailer-owned HTTPS policy URL.
++        const url = new URL(value.notice.url);
++        if (url.protocol !== "https:" || url.username || url.password) throw new Error("Invalid notice");
++        const link = node("a", value.notice.text); link.href = url.href; link.target = "_blank"; link.rel = "noopener noreferrer";
++        privacy.append(link);
++      }
++      noticeReady = true; send.disabled = !connected;
++    } catch { if (!stopped) setStatus("The quote could not be confirmed. Reconnect and try again."); }
+@@ -68 +76,5 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-  const send = node("button", "Request a quote"); send.className = "quote-button"; send.type = "submit"; form.append(send); root.append(form);
++  ui.request.addEventListener("click", () => {
++    if (context.quote && !kiosk) { context.quote(); return; }
++    ui.summary.hidden = true; ui.contact.hidden = false; result.hidden = savedReset.hidden = quoteStatus.hidden = true; contactHeading.hidden = form.hidden = alternate.hidden = false;
++    name.focus(); void contactNotice();
++  }, options);
+@@ -70,3 +82,3 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    event.preventDefault(); if (send.disabled) return;
+-    if (!email.value.trim() && !phone.value.trim()) { status.textContent = "Enter a phone number or email for your quote."; return; }
+-    send.disabled = true; const version = generation;
++    event.preventDefault(); if (send.disabled || !connected || !noticeReady || assembly.valid_until <= Date.now() / 1000) return;
++    if (!email.value.trim() && !phone.value.trim()) { setStatus("Enter a phone number or email for your quote."); return; }
++    send.disabled = true; quoteStatus.hidden = false; quoteStatus.textContent = "Loading…"; const version = generation;
+@@ -75 +87 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-        assembly: request, name: name.value, email: email.value, phone: phone.value,
++        assembly: request, name: name.value, email: contactMethod === "email" ? email.value : "", phone: contactMethod === "phone" ? phone.value : "", notice_version: noticeVersion,
+@@ -78,2 +90,3 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-      if (!ack.request_id) throw new Error("The quote was not confirmed. Please try again.");
+-      status.textContent = ack.delivery === "sent" ? "Your quote request was sent to the retailer." : "Your quote request was saved. Delivery to the retailer is pending.";
++      if (typeof ack.request_id !== "string" || !ack.request_id) throw new Error("The quote was not confirmed. Please try again.");
++      result.hidden = savedReset.hidden = false; contactHeading.hidden = form.hidden = alternate.hidden = true;
++      result.textContent = ack.delivery === "sent" ? "Your quote request was sent to the retailer." : "Your quote request was saved. Delivery to the retailer is pending.";
+@@ -81,2 +94,2 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    } catch { if (!stopped && version === generation) status.textContent = "The quote could not be confirmed. Reconnect and try again."; }
+-    finally { if (!stopped) send.disabled = false; }
++    } catch { if (!stopped && version === generation) { quoteStatus.hidden = false; quoteStatus.textContent = "The quote could not be confirmed. Reconnect and try again."; } }
++    finally { if (!stopped && version === generation) send.disabled = !connected || !noticeReady; }
+@@ -85,0 +99 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
++    if (!next.available || !next.models.length || next.valid_until <= Date.now() / 1000) throw new Error("No approved model");
+@@ -87 +101 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    status.textContent = "Loading product view…";
++    ui.state("loading"); setStatus("Loading product view…");
+@@ -101 +115 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    stage = created; assembly = next; request = structuredClone(selection); stage.explode(exploded);
++    stage = created; ui.state("ready"); assembly = next; request = structuredClone(selection); stage.explode(exploded);
+@@ -106 +120,8 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    swaps.replaceChildren();
++    swaps.replaceChildren(); ui.parts.replaceChildren();
++    for (const model of next.models.filter(m => m.role !== "centre")) {
++      const name = next.options[model.role]?.find(item => item.id === model.product_id)?.name || model.role;
++      ui.parts.append(node("p", name));
++    }
++    if (Object.keys(next.options).length) button("Swap", () => {
++      swaps.querySelectorAll("label").forEach(label => { label.hidden = !label.hidden; });
++    }, swaps);
+@@ -108 +129 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-      const label = node("label", "Swap " + role); const select = node("select");
++      const label = node("label", "Swap " + role); label.hidden = true; const select = node("select");
+@@ -120 +141 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-        } catch { status.textContent = "That part could not be loaded. Reconnect and try again."; }
++        } catch { if (!stopped && version <= generation) { stage?.dispose(); stage = null; ui.state("error", assembly.photo); setStatus("That part could not be loaded. Reconnect and try again."); } }
+@@ -125,2 +146,2 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    try { await cache.put({ assembly: next, request: selection, bytes: payloads }); status.textContent = ""; }
+-    catch { status.textContent = "Offline storage is unavailable. Keep this terminal connected."; }
++    try { await cache.put({ assembly: next, request: selection, bytes: payloads }); setStatus(""); }
++    catch { setStatus("Offline storage is unavailable. Keep this terminal connected."); }
+@@ -131 +152,2 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    form.reset(); stage?.attract(true); status.textContent = "Touch the product to explore a setup.";
++    ++generation; form.reset(); ui.summary.hidden = false; ui.contact.hidden = true;
++    ui.subtitle.textContent = "Touch the product to explore a setup."; stage?.attract(true); setStatus("");
+@@ -134 +156 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    touched = true;
++    touched = true; ui.subtitle.textContent = "Explore this setup";
+@@ -149,2 +171,2 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    button("Full screen", () => { root.requestFullscreen().catch(() => { status.textContent = "Full screen is unavailable in this browser."; }); });
+-    button("Start again", () => { void reset(); });
++    button("Full screen", () => { root.requestFullscreen().catch(() => { setStatus("Full screen is unavailable in this browser."); }); }, ui.summary);
++    button("Start again", () => { void reset(); }, ui.summary);
+@@ -153 +175,3 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    ++generation; stage?.attract(false); form.reset(); request = structuredClone(initialRequest);
++    ++generation; stage?.attract(false); form.reset(); method("phone");
++    ui.summary.hidden = false; ui.contact.hidden = true; privacy.replaceChildren(); noticeVersion = undefined; noticeReady = false;
++    request = structuredClone(initialRequest);
+@@ -160 +184 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    } catch { stage?.dispose(); stage = null; status.textContent = "Connect this terminal to start again."; }
++    } catch { stage?.dispose(); stage = null; ui.state("photos", assembly.photo); setStatus("Connect this terminal to start again."); }
+@@ -168 +192,3 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-      if (!capabilities.rig_3d) { await cache.clear(); dispose(); host.textContent = "Photos are available for this product."; return; }
++      if (!connected) setStatus("");
++      connected = true; send.disabled = !noticeReady;
++      if (!capabilities.rig_3d) { await cache.clear(); dispose(); ui.state("photos", assembly.photo); return; }
+@@ -177 +203 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-        if (!next.available) { await cache.clear(); dispose(); host.textContent = "This setup is now shown in photos."; return; }
++        if (!next.available) { await cache.clear(); dispose(); ui.state("photos", assembly.photo); return; }
+@@ -180,0 +207 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
++      connected = false; send.disabled = true;
+@@ -182,3 +209,3 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-        ++generation; stage?.dispose(); stage = null; form.reset();
+-        status.textContent = "Reconnect to check that this setup is still available.";
+-      } else status.textContent = "Connection lost. This approved view is available briefly; quotes need a connection.";
++        ++generation; stage?.dispose(); stage = null; form.reset(); ui.state("photos", assembly.photo); ui.contact.hidden = true; ui.summary.hidden = false;
++        setStatus("Reconnect to check that this setup is still available.");
++      } else { if (stage) ui.state("ready"); setStatus("Connection lost. This approved view is available briefly; quotes need a connection."); }
+@@ -186,0 +214,5 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
++  window.addEventListener("offline", () => {
++    connected = false; send.disabled = true;
++    setStatus("Connection lost. This approved view is available briefly; quotes need a connection.");
++  }, options);
++  window.addEventListener("online", () => { void poll(); }, options);
+@@ -193 +225 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-  catch { dispose(); host.textContent = "The 3D view could not load. Please use the product photos."; }
++  catch { dispose(); ui.state("error", initial.photo); }
+diff --git a/widget/src/three/widget-entry.ts b/widget/src/three/widget-entry.ts
+new file mode 100644
+index 0000000..17fb8d4
+--- /dev/null
++++ b/widget/src/three/widget-entry.ts
+@@ -0,0 +1,8 @@
++import { openThreeD } from "./loader";
++import { ThreeClient } from "./client";
++import type { BuildRequest } from "./types";
++import type { ViewerContext } from "./frame";
++export function mount(host: HTMLElement, base: string, key: string, build: BuildRequest,
++                      kiosk: string | null, context: ViewerContext) {
++  return openThreeD(host, new ThreeClient(base, key), build, kiosk, context);
++}
+diff --git a/widget/src/ui/cart-controller.ts b/widget/src/ui/cart-controller.ts
+new file mode 100644
+index 0000000..f10e610
+--- /dev/null
++++ b/widget/src/ui/cart-controller.ts
+@@ -0,0 +1,89 @@
++import { lineProjection, orderProjection, renderCart, type CartView } from "./cart";
++type Request = (operation: string, data: Record<string, unknown>) => Promise<Record<string, unknown>>;
++export class CartController {
++  enabled = false;
++  view: CartView = { store: "", screen: "search", lines: [], product: null, order: null, busy: false, now: 0 };
++  private session = "";
++  private timer = 0;
++  private polling = false;
++  private generation = 0;
++  constructor(private request: Request, private changed: () => void, private storageKey: string) {}
++  async start(): Promise<void> {
++    const generation = this.generation;
++    try {
++      const result = await this.request("session", {});
++      if (generation !== this.generation) return;
++      if (result.mode !== "cart" || typeof result.session !== "string") return;
++      this.enabled = true; this.view.store = typeof result.store_name === "string" ? result.store_name : "";
++      try { this.session = sessionStorage.getItem(this.storageKey) || result.session; sessionStorage.setItem(this.storageKey, this.session); } catch { this.session = result.session; }
++      await this.read();
++      if (generation !== this.generation) return;
++      this.timer = window.setInterval(() => { this.view.now = Date.now(); if (this.view.order && !this.view.order.payment_confirmed) void this.poll(); }, 1000);
++    } catch { /* Quote stores have no cart session; their rendering stays unchanged. */ }
++  }
++  stop(): void { window.clearInterval(this.timer); this.generation++; }
++  render(): string { return this.enabled ? renderCart(this.view) : ""; }
++  private call(operation: string, data: Record<string, unknown> = {}): Promise<Record<string, unknown>> { return this.request(operation, { session: this.session, ...data }); }
++  private lines(result: Record<string, unknown>): void { this.view.lines = Array.isArray(result.lines) ? result.lines.map(value => lineProjection(value)) : []; }
++  async read(): Promise<void> {
++    const result = await this.call("view"); this.lines(result);
++    if (typeof result.checkout_id === "string") { this.view.order = orderProjection(await this.call("order", { checkout_id: result.checkout_id })); await this.poll(); }
++    this.changed();
++  }
++  async preview(id: string): Promise<void> {
++    const generation = ++this.generation; this.view.busy = true;
++    try { const result = await this.call("view", { product_id: id }); if (generation !== this.generation) return; this.lines(result); this.view.product = lineProjection(result.product as Record<string, unknown>); this.view.screen = "product"; }
++    catch { if (generation === this.generation) this.view.screen = "error"; }
++    finally { if (generation === this.generation) { this.view.busy = false; this.changed(); } }
++  }
++  async poll(): Promise<void> {
++    if (!this.view.order || this.polling) return;
++    this.polling = true;
++    try {
++      this.view.order = orderProjection(await this.call("order", { checkout_id: this.view.order.id }));
++      if (this.view.order.payment_confirmed) this.view.screen = "paid";
++      else if (this.view.order.state === "expired") {
++        this.view.screen = "rechecking"; this.changed();
++        const result = await this.call("view", { recheck: true }); this.lines(result);
++        this.view.screen = result.recheck_state === "changed" ? "changed" : result.recheck_state === "unavailable" ? "unavailable" : "unchanged"; this.view.order = null;
++      } else if (["pending", "cancel_unknown"].includes(this.view.order.state) && this.view.screen !== "cart") this.view.screen = "return";
++      this.changed();
++    } catch { /* Retain the server's last verified state; never assert payment or cancellation locally. */ }
++    finally { this.polling = false; }
++  }
++  async quantity(id: string, quantity: number): Promise<void> {
++    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100 || this.view.busy) return;
++    const line = this.view.lines.find(value => value.id === id); if (!line) return;
++    await this.run(async () => {
++      this.lines(await this.call("add", { line_id: id, product_id: line.product_id, quantity, back_order: line.kind === "back_order" }));
++    });
++  }
++  private async run(work: () => Promise<void>): Promise<void> {
++    if (this.view.busy) return;
++    this.view.busy = true; this.changed();
++    try { await work(); } catch { this.view.screen = "error"; } finally { this.view.busy = false; this.changed(); }
++  }
++  async action(action: string, id = ""): Promise<void> {
++    if (!this.enabled) return;
++    if (action === "shop" || action === "handoff" || action === "view") { this.view.screen = action === "shop" ? "search" : action === "handoff" ? "handoff" : "cart"; this.changed(); return; }
++    const popup = action === "checkout" && !this.view.busy ? window.open("about:blank", "_blank") : null;
++    if (popup) popup.opener = null;
++    await this.run(async () => {
++      if (action === "add" && this.view.product) {
++        const product = this.view.product;
++        this.lines(await this.call("add", { product_id: product.product_id, quantity: 1, back_order: product.kind === "back_order" }));
++        this.view.product = this.view.lines.find(line => line.product_id === product.product_id) || null; this.view.screen = "added";
++      } else if (action === "remove") { this.lines(await this.call("remove", { line_id: id })); this.view.screen = "cart"; }
++      else if (action === "backorder") {
++        const line = this.view.lines.find(value => value.id === id); if (!line) return;
++        this.lines(await this.call("add", { line_id: id, product_id: line.product_id, quantity: line.quantity, back_order: true }));
++        this.view.screen = this.view.lines.some(value => value.unavailable) ? "unavailable" : "cart";
++      } else if (action === "checkout") {
++        const result = orderProjection(await this.call("checkout")); this.view.order = { ...result, lines: this.view.lines };
++        if (!result.checkout_url || result.state !== "pending") { this.view.screen = "error"; popup?.close(); return; }
++        this.view.screen = "return"; if (popup) popup.location.replace(result.checkout_url); else window.location.assign(result.checkout_url);
++      }
++    });
++    if (this.view.screen === "error") popup?.close();
++  }
++}
+diff --git a/widget/src/ui/cart.ts b/widget/src/ui/cart.ts
+new file mode 100644
+index 0000000..7e15dcf
+--- /dev/null
++++ b/widget/src/ui/cart.ts
+@@ -0,0 +1,75 @@
++/** Approved Rig cart copy and public-only wire projections. No quote-store changes. */
++export type CartLine = { id: string; product_id: string; title: string; quantity: number; price: string; currency: string; kind: string; delivery: { min_days?: number; max_days?: number; ship_days?: number; eta?: string; status?: string }; unavailable?: boolean; previous?: { price: string; delivery: CartLine["delivery"] } };
++export type CartOrder = { id: string; state: string; expires_at: string; checkout_url?: string; payment_confirmed?: boolean; late_payment?: boolean; number?: string; total?: string; currency?: string; lines: CartLine[] };
++export type CartScreen = "search" | "product" | "added" | "cart" | "handoff" | "return" | "rechecking" | "changed" | "unchanged" | "unavailable" | "paid" | "error";
++export type CartView = { store: string; screen: CartScreen; lines: CartLine[]; product: CartLine | null; order: CartOrder | null; busy: boolean; now: number };
++const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
++export const price = (v: string | number, currency: string) => new Intl.NumberFormat("en-US", { style: "currency", currency }).format(Number(v));
++const total = (lines: CartLine[]) => lines.reduce((sum, line) => sum + Math.round(Number(line.price) * 100) * line.quantity, 0) / 100;
++function projectedDelivery(raw: Record<string, unknown>): CartLine["delivery"] {
++  return Object.fromEntries(Object.entries(raw).filter(([k, v]) => ["min_days", "max_days", "ship_days"].includes(k) ? typeof v === "number" && Number.isFinite(v) : ["eta", "status"].includes(k) && typeof v === "string"));
++}
++export function lineProjection(raw: Record<string, unknown>): CartLine {
++  const delivery = projectedDelivery((raw.delivery || {}) as Record<string, unknown>);
++  const line: CartLine = { id: String(raw.id), product_id: String(raw.product_id), title: String(raw.title), quantity: Number(raw.quantity), price: String(raw.price), currency: String(raw.currency), kind: String(raw.kind), delivery };
++  if (raw.unavailable === true) line.unavailable = true;
++  if (raw.previous && typeof raw.previous === "object") { const previous = raw.previous as Record<string, unknown>; line.previous = { price: String(previous.price), delivery: projectedDelivery((previous.delivery || {}) as Record<string, unknown>) }; }
++  return line;
++}
++export function orderProjection(raw: Record<string, unknown>): CartOrder {
++  const order: CartOrder = { id: String(raw.id), state: String(raw.state), expires_at: String(raw.expires_at), lines: Array.isArray(raw.lines) ? raw.lines.map(line => lineProjection(line)) : [] };
++  for (const key of ["number", "total", "currency"] as const) if (typeof raw[key] === "string") order[key] = raw[key];
++  if (typeof raw.checkout_url === "string") { const url = new URL(raw.checkout_url); if (url.protocol === "https:" && !url.username && !url.password) order.checkout_url = url.href; }
++  order.payment_confirmed = raw.payment_confirmed === true;
++  order.late_payment = raw.late_payment === true;
++  return order;
++}
++export function deliveryText(line: CartLine): string {
++  if (line.unavailable) return "No longer available. Back order it or remove it.";
++  if (line.kind === "back_order") return "Back order · Delivery date not confirmed";
++  return deliveryRange(line.delivery);
++}
++function deliveryRange(value: CartLine["delivery"]): string {
++  if (value.min_days !== undefined && value.max_days !== undefined) return `Delivery: ${value.min_days}–${value.max_days} business days`;
++  if (value.ship_days !== undefined) return `Delivery: ${value.ship_days} business days`;
++  return value.eta ? `Delivery: ${value.eta}` : "";
++}
++const button = (label: string, action: string, secondary = false, disabled = false, id = "") => `<button type="button" class="cart-btn${secondary ? " cart-secondary" : ""}" data-action="cart-${action}" data-id="${esc(id)}"${disabled ? " disabled" : ""}>${esc(label)}</button>`;
++const notice = (title: string, text: string) => `<div class="cart-notice" role="status"><strong>${esc(title)}</strong>${text ? `<p>${esc(text)}</p>` : ""}</div>`;
++function lineCard(line: CartLine, editable = false, paid = false, busy = false): string {
++  let body = `<div class="cart-product"><h2>${esc(line.title)}</h2><p class="cart-code">${esc(line.product_id)}</p>`;
++  if (!paid) body += `<p class="cart-price">${esc(price(line.price, line.currency))}</p>`;
++  if (line.previous) body += `<div class="cart-change">${line.previous.price !== line.price ? `<p>Price changed: ${esc(price(line.previous.price, line.currency))} → ${esc(price(line.price, line.currency))}.</p>` : ""}${JSON.stringify(line.previous.delivery) !== JSON.stringify(line.delivery) ? `<p>Delivery changed: ${esc(deliveryRange(line.previous.delivery).replace("Delivery: ", "").replace(" business days", ""))} → ${esc(deliveryRange(line.delivery).replace("Delivery: ", ""))}.</p>` : ""}</div>`;
++  if (paid) body += `<p class="cart-line-total">${line.quantity} × ${esc(price(line.price, line.currency))} each<br>Line total: ${esc(price(Number(line.price) * line.quantity, line.currency))}</p>`;
++  body += `<p>${esc(deliveryText(line))}</p></div>`;
++  if (editable) body += `<div class="cart-details"><label class="cart-quantity">Quantity<input type="number" min="1" max="100" step="1" value="${line.quantity}" id="cart-quantity-${esc(line.id)}" data-cart-quantity="${esc(line.id)}"${busy ? " disabled" : ""}></label><p class="cart-line-total">Line total: ${esc(price(Number(line.price) * line.quantity, line.currency))}</p><div class="cart-actions">${line.unavailable ? button("Back order", "backorder", false, busy, line.id) : ""}${button(line.unavailable ? "Remove item" : "Remove", "remove", true, busy, line.id)}</div></div>`;
++  return `<article class="cart-card${editable ? " cart-line" : ""}" data-line="${esc(line.id)}">${body}</article>`;
++}
++export function renderCart(view: CartView): string {
++  const { screen, lines, product, order, busy } = view;
++  if (screen === "search") return "";
++  const heading = screen === "product" ? "FIND A PRODUCT" : screen === "added" ? "ITEM ADDED TO CART" : screen === "handoff" ? "GOING TO STORE CHECKOUT" : screen === "return" || screen === "error" ? "STORE CHECKOUT" : screen === "paid" ? "ORDER RECEIVED" : "YOUR CART";
++  let body: string;
++  if (screen === "product" && product) body = `${lineCard(product)}${product.kind === "back_order" ? notice("", "No delivery date is available. You can back order this item or remove it.") : ""}<div class="cart-actions">${button(product.kind === "back_order" ? "Back order" : "Add to cart", "add", false, busy)}${product.kind === "back_order" ? button("Remove item", "shop", true) : ""}</div>`;
++  else if (screen === "added" && product) body = `${notice("Item added", "The item is in the Rig cart on this store’s site.")}${lineCard(product)}<p>Quantity: ${product.quantity} · Cart total: ${esc(price(total(lines), product.currency))}</p><div class="cart-actions">${button("View cart", "view")}${button("Keep shopping", "shop", true)}</div>`;
++  else if (screen === "handoff") body = `<div class="cart-card cart-window"><h2>PAYMENT WINDOW</h2><p class="cart-duration">5 minutes</p><p>You’re going to ${esc(view.store)}’s own checkout. The 5-minute window starts there. This store’s shop platform takes payment; Rig never does.</p><p>When the window ends, prices and stock must be checked again before checkout can continue.</p><div class="cart-actions">${button("Continue to store checkout", "checkout", false, busy)}${button("Back to cart", "view", true)}</div></div>`;
++  else if (screen === "error") body = `<div class="cart-card cart-window"><h2>This store’s checkout is unavailable</h2><strong>Your cart is saved</strong><p>We could not open this store’s checkout. You can try again or return to your cart.</p><p>Prices and stock will be checked again before the next checkout. The 5-minute window has not started.</p><div class="cart-actions">${button("Try again", "checkout", false, busy)}${button("Back to cart", "view", true)}</div></div>`;
++  else if (screen === "return" && order) {
++    const seconds = Math.max(0, Math.ceil((Date.parse(order.expires_at) - view.now) / 1000));
++    body = `${notice("Checkout was not completed", "No completed payment has been confirmed by the store. Your cart is still here.")}<div class="cart-card cart-timer"><h2>TIME LEFT</h2><p class="cart-duration" data-cart-timer>${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}</p></div><p>If this payment window ends, we’ll check prices and stock again before you continue.</p><div class="cart-actions">${button("Return to store checkout", "checkout")}${button("View cart", "view", true)}</div>`;
++  } else if (screen === "paid" && order) {
++    const back = order.lines.filter(line => line.kind === "back_order").map(line => line.title).join(", ");
++    const text = order.late_payment ? `${view.store} received your payment after the 5-minute window ended. Your order is going through.${back ? ` Your ${back} remains back ordered.` : ""}` : `Payment was received by ${view.store}.${back ? ` Your ${back} is back ordered; its delivery date is not confirmed.` : ""}`;
++    body = `${notice(order.late_payment ? "Payment received after the window" : "Payment confirmed", text)}<div class="cart-card cart-paid"><h2>ORDER #${esc(order.number || order.id)}</h2><p class="cart-paid-total">Total paid: ${esc(price(order.total || total(order.lines), order.currency || order.lines[0]?.currency || "USD"))}</p>${order.lines.map(line => lineCard(line, false, true)).join("")}</div><div class="cart-actions">${button("Keep shopping", "shop")}</div>`;
++  } else if (!lines.length) body = `${notice("Your cart is empty", "Add an item to this store’s cart to get started.")}<div class="cart-actions">${button("Keep shopping", "shop")}</div>`;
++  else {
++    const notices: Partial<Record<CartScreen, [string, string]>> = { rechecking: ["Your 5-minute window ended", "The unpaid store order was cancelled. We’re checking current prices and stock before checkout can continue."], changed: ["Prices and delivery updated", "Review the changes below before continuing to this store’s checkout. A new 5-minute payment window starts when checkout begins again."], unchanged: ["Prices and stock are unchanged", "Your cart is ready. A new 5-minute payment window starts at this store’s checkout."], unavailable: ["An item is no longer available", "Choose Back order or Remove item below before continuing."] };
++    const message = notices[screen];
++    body = `${message ? notice(...message) : ""}<div class="cart-layout"><div class="cart-lines">${lines.map(line => lineCard(line, true, false, busy || screen === "rechecking" || Boolean(order))).join("")}</div><aside class="cart-card cart-summary"><h2>SUMMARY</h2><p class="cart-price">Total: ${esc(price(total(lines), lines[0].currency))}</p><p>${screen === "unavailable" ? "Choose back order or remove item before checkout." : `${lines.length} lines · ${lines.reduce((n, line) => n + line.quantity, 0)} items`}</p>${button(screen === "rechecking" ? "Checking prices and stock…" : screen === "unavailable" ? "Choose back order or remove item" : screen === "cart" ? "Checkout" : "Continue to store checkout", "handoff", false, busy || screen === "rechecking" || screen === "unavailable")}<p>Payment is completed at this store’s own checkout. Rig never takes payment.</p></aside></div>`;
++  }
++  return `<div class="rig-cart"><header><strong>${esc(view.store)}</strong><span>Rig</span></header><h1 tabindex="-1">${heading}</h1>${body}</div>`;
++}
++
++export const cartStyles = `
++.rig-cart{box-sizing:border-box;display:flex;flex-direction:column;gap:24px;width:100%;max-width:1200px;padding:40px 48px 48px;margin:auto;color:var(--rig-ink,#1c1e21);font:14px/20px var(--rig-font-body,'Source Sans 3',sans-serif)}.rig-cart *{box-sizing:border-box}.rig-cart header{display:flex;gap:12px;align-items:start;font-size:12px;line-height:17px}.rig-cart header strong{flex:1}.rig-cart header span{width:60px;text-align:right;font-size:11px;line-height:15px;color:var(--rig-muted,#5c6370)}.rig-cart h1{font:600 56px/62px var(--rig-font-heading,Newsreader,serif);margin:0;overflow-wrap:anywhere}.rig-cart h2{font:600 28px/39px var(--rig-font-heading,Newsreader,serif);margin:0}.rig-cart p{margin:0;overflow-wrap:anywhere}.cart-card{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:18px;border:1px solid var(--rig-line,#d5d8de);border-radius:var(--rig-radius,10px);background:var(--rig-card,#fff);min-width:0}.cart-code{font-size:13px;line-height:18px;color:var(--rig-muted,#5c6370)}.rig-cart .cart-price{font:600 30px/42px var(--rig-font-heading,Newsreader,serif)}.cart-actions{display:flex;gap:16px;flex-wrap:wrap}.rig-cart .cart-btn{display:flex;align-items:center;justify-content:center;min-height:48px;min-width:150px;padding:0 22px;border:2px solid var(--rig-accent,#1d4e89);border-radius:var(--rig-radius,10px);background:var(--rig-accent,#1d4e89);color:var(--rig-on-accent,#fff);font:600 13px/18px var(--rig-font-body,'Source Sans 3',sans-serif);cursor:pointer}.rig-cart .cart-secondary{background:var(--rig-card,#fff);border:1px solid var(--rig-ink,#1c1e21);color:var(--rig-ink,#1c1e21)}.rig-cart button:disabled{background:var(--rig-canvas,#f4f5f7);border-color:var(--rig-line,#d5d8de);color:var(--rig-ink,#1c1e21);opacity:1;cursor:wait}.cart-btn:focus-visible,.cart-quantity:focus-within{outline:2px solid var(--rig-accent,#1d4e89);outline-offset:3px}.cart-notice{display:flex;flex-direction:column;gap:8px;border:1px solid var(--rig-line,#d5d8de);border-radius:var(--rig-radius,10px);background:var(--rig-card,#fff);padding:16px}.cart-notice strong{font:600 20px/22px var(--rig-font-heading)}.cart-notice p{color:var(--rig-muted,#5c6370)}.cart-layout{display:grid;grid-template-columns:minmax(0,760fr) minmax(0,320fr);gap:24px;align-items:start}.cart-lines{display:flex;flex-direction:column;gap:16px}.cart-line{padding:16px;gap:12px}.cart-product{display:flex;flex-direction:column;gap:10px}.cart-details{display:flex;flex-direction:column;gap:8px}.cart-line-total{font-size:18px;line-height:25px;font-weight:600}.cart-quantity{display:flex;flex-direction:column;gap:7px;font-size:12px;line-height:17px}.cart-quantity input{box-sizing:border-box;width:100%;height:44px;min-height:44px;padding:10px 12px;border:1px solid var(--rig-field-border,#8b919a);border-radius:var(--rig-radius,10px);background:var(--rig-card,#fff);color:var(--rig-ink,#1c1e21);font:400 14px/20px var(--rig-font-body)}.cart-quantity input:focus{outline:0}.cart-summary{padding:20px;gap:16px}.cart-summary .cart-btn{width:100%;min-width:0}.cart-summary>p:last-child{font-size:13px;line-height:18px;color:var(--rig-muted,#5c6370)}.cart-change{font-weight:600}.cart-window{padding:24px;gap:16px}.cart-window>p{font-size:16px;line-height:22px}.cart-window>p:last-of-type{font-size:14px;line-height:20px;color:var(--rig-muted,#5c6370)}.rig-cart .cart-duration{font:600 48px/53px var(--rig-font-heading)}.cart-window>h2{font-size:26px;line-height:29px}.cart-window .cart-actions>*{flex:1}.cart-paid{padding:16px;gap:16px}.rig-cart .cart-paid-total{font:600 30px/33px var(--rig-font-heading)}.cart-timer{padding:20px;gap:16px}.cart-timer h2{font-size:26px;line-height:29px}.cart-paid .cart-card{padding:18px}.cart-paid>h2{font-size:26px;line-height:29px}@media(max-width:700px){.rig-cart{padding:24px 16px 16px}.rig-cart h1{font-size:34px;line-height:37px}.cart-layout{display:flex;flex-direction:column;gap:24px}.cart-lines,.cart-summary{width:100%}.cart-actions{flex-direction:column;gap:16px}.rig-cart .cart-btn{width:100%;min-width:0}.cart-window{padding:16px}.cart-window .cart-actions{gap:12px}}
++`;
 diff --git a/widget/src/ui/render.ts b/widget/src/ui/render.ts
 index f466d03..629095a 100644
 --- a/widget/src/ui/render.ts

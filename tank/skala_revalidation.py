@@ -116,8 +116,9 @@ async def record(tank: Any, result: dict, by: str | None = None) -> dict:
             )
             state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2",
                                         job["skill_id"], job["version"])
-            # Passing a new model never approves or restores a demoted version.
-            new_state = "staging" if state == "approved" and not gate else state
+            # A rejected swap keeps both the serving model and its skill approval.
+            # Manual evaluations retain their existing demotion behavior.
+            new_state = state
             await conn.execute(
                 """UPDATE tank.skills SET last_eval_score=$3,last_eval_at=now(),state=$4,
                 models_validated=models_validated || $5::jsonb,updated_at=now()
@@ -127,6 +128,10 @@ async def record(tank: Any, result: dict, by: str | None = None) -> dict:
             await conn.execute(
                 "UPDATE tank.skill_revalidations SET completed_at=now(),eval_id=$3,error=$4 WHERE id=$1 AND tenant_id=$2",
                 job["id"], PLATFORM_TENANT, eval_id, None if gate else "eval_gate_failed",
+            )
+            await conn.execute(
+                "SELECT tank.finish_policy_swap($1,$2,$3)",
+                job["task_type"], job["policy_tenant_id"], job.get("swap_id"),
             )
     result.update(state=new_state, gate="passed" if gate else "failed", model=job["model"])
     return result

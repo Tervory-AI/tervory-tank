@@ -24,6 +24,137 @@ CREATE TABLE IF NOT EXISTS agent_radix.business_sources (
     CHECK (catalogue->>'id' IS NOT NULL AND catalogue->>'id' = source_id)
 );
 
+-- I8: durable tenant/domain/event deduplication beside passive scan runs.
+CREATE TABLE IF NOT EXISTS agent_radix.regulation_runs (
+ tenant_id uuid NOT NULL, domain text NOT NULL, event_id uuid NOT NULL,
+ scan_id uuid NOT NULL, facts jsonb NOT NULL,
+ settled boolean NOT NULL DEFAULT false,
+ next_attempt timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY (tenant_id,domain,event_id),
+ UNIQUE (tenant_id,scan_id)
+);
+-- Join the existing tenant RLS rollout; never enable it independently.
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.regulation_runs ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.regulation_runs FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.regulation_runs'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.regulation_runs FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.regulation_runs'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.regulation_runs AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
+-- R6: only hashes of complete page observations, never saved page bodies.
+CREATE TABLE IF NOT EXISTS agent_radix.page_hashes (
+ tenant_id uuid NOT NULL, scan_id uuid NOT NULL, domain text NOT NULL,
+ url text NOT NULL, sha256 text NOT NULL CHECK (sha256 ~ '^[a-f0-9]{64}$'),
+ PRIMARY KEY (tenant_id,scan_id,url)
+);
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.page_hashes ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.page_hashes FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.page_hashes'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.page_hashes FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.page_hashes'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.page_hashes AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
+-- I2: mode is persisted beside runs and shares their existing tenant policies.
+ALTER TABLE IF EXISTS agent_radix.passive_scans ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT false;
+
+
+CREATE TABLE IF NOT EXISTS agent_radix.active_consents (
+ tenant_id uuid NOT NULL, id uuid NOT NULL, domain text NOT NULL,
+ consent_text text NOT NULL CHECK(length(consent_text) BETWEEN 1 AND 16000),
+ granted_by text NOT NULL, granted_at timestamptz NOT NULL DEFAULT now(),
+ withdrawn_by text, withdrawn_at timestamptz,
+ PRIMARY KEY(tenant_id,id)
+);
+ALTER TABLE IF EXISTS agent_radix.passive_scans ADD COLUMN IF NOT EXISTS active_consent_id uuid;
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.active_consents ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.active_consents FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.active_consents'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.active_consents FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.active_consents'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.active_consents AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
+ALTER TABLE IF EXISTS agent_radix.passive_scans ADD COLUMN IF NOT EXISTS infra boolean NOT NULL DEFAULT false;
+
+
+CREATE TABLE IF NOT EXISTS agent_radix.weekly_domains (
+ tenant_id uuid NOT NULL, domain text NOT NULL, challenge text NOT NULL,
+ own boolean NOT NULL DEFAULT false, consent_id uuid, enabled boolean NOT NULL DEFAULT true,
+ next_run timestamptz NOT NULL DEFAULT now()+interval '7 days',
+ PRIMARY KEY(tenant_id,domain)
+);
+CREATE TABLE IF NOT EXISTS agent_radix.weekly_runs (
+ tenant_id uuid NOT NULL, domain text NOT NULL, period timestamptz NOT NULL,
+ kind text NOT NULL CHECK(kind IN ('passive','infra')), scan_id uuid NOT NULL,
+ PRIMARY KEY(tenant_id,domain,period,kind), UNIQUE(tenant_id,scan_id)
+);
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.weekly_domains ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.weekly_domains FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.weekly_domains'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.weekly_domains FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.weekly_domains'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.weekly_domains AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.weekly_runs ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.weekly_runs FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.weekly_runs'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.weekly_runs FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.weekly_runs'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.weekly_runs AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_radix.memory_records (
     id uuid PRIMARY KEY,

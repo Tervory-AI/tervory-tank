@@ -1,5 +1,6 @@
 name: cli
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'cli/**'
@@ -21,7 +22,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: cli-${{ github.event.pull_request.number }}
+  group: cli-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   fake-tank:
@@ -40,7 +41,7 @@ jobs:
         # a CHANGELOG entry. A base branch without cli/ has nothing to compare against.
         # Inputs reach the script only as environment variables.
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           git fetch --no-tags --depth=1 origin "refs/heads/$BASE_REF"
           sh .github/scripts/cli_version_guard.sh FETCH_HEAD
@@ -48,6 +49,22 @@ jobs:
         working-directory: cli
       - run: node --check bin/tervory.mjs && node --check src/client.mjs
         working-directory: cli
+      - name: Prepare the local code-command sandbox
+        run: |
+          if ! command -v bwrap >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y bubblewrap
+          fi
+          # Ubuntu hosted runners restrict unprivileged user namespaces through
+          # AppArmor. This disposable job needs them for Bubblewrap's isolation;
+          # never fall back to running an approved command outside the sandbox.
+          if test -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --unshare-all --die-with-parent --new-session \
+            --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib \
+            --symlink usr/lib64 /lib64 --proc /proc --dev /dev --tmpfs /tmp \
+            /bin/sh -c 'echo sandbox-ok'
       - run: npm test
         working-directory: cli
       - run: npm pack --dry-run
@@ -120,3 +137,82 @@ jobs:
           docker run --rm node:22-slim sh -c 'echo "image: $(tar --version | head -1); $(gzip --version | head -1); npm $(npm -v)"'
           test "$bad" = 0
           test -s "$RUNNER_TEMP/cli-image/install.sh" && test -s "$RUNNER_TEMP/cli-image/latest.json"
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - name: Prepare the existing release tests and macOS sandbox
+        run: |
+          brew list gnu-tar >/dev/null 2>&1 || brew install gnu-tar
+          brew list coreutils >/dev/null 2>&1 || brew install coreutils
+          brew list wget >/dev/null 2>&1 || brew install wget
+          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+          echo "$(brew --prefix gnu-tar)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+          test -x /usr/bin/sandbox-exec
+          mkdir -p "$RUNNER_TEMP/cli-w3-tests"
+          echo "TMPDIR=$RUNNER_TEMP/cli-w3-tests" >> "$GITHUB_ENV"
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: cli
+      - name: Validate the Seatbelt profile on the macOS runner
+        run: |
+          node --input-type=module -e 'import {seatbeltProfile} from "./cli/src/seatbelt.mjs"; import {writeFile} from "node:fs/promises"; await writeFile(process.env.RUNNER_TEMP + "/cli-w3.sb", await seatbeltProfile(process.cwd()));'
+          /usr/bin/sandbox-exec -f "$RUNNER_TEMP/cli-w3.sb" /usr/bin/true
+      - name: CLI tests including outside-write, secret-read and network confinement
+        # The same code-mode suite runs in the Ubuntu job. It requires echo's
+        # exit 0 and uses a reachable host listener as the network control.
+        run: |
+          export PATH="$(brew --prefix gnu-tar)/libexec/gnubin:$(brew --prefix coreutils)/libexec/gnubin:$(brew --prefix openssl@3)/bin:/usr/bin:/bin:$PATH"
+          npm test
+        working-directory: cli
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - name: Prepare GNU archive tools and consistent Git fixtures
+        run: |
+          mkdir -p "$RUNNER_TEMP/cli-w4-tests"
+          echo "TMPDIR=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
+          echo "TEMP=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
+          echo "TMP=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
+          echo 'C:\Program Files\Git\usr\bin' >> "$GITHUB_PATH"
+          git config --global core.autocrlf false
+          git config --global core.symlinks true
+          # Checkout happened before the Git configuration above; restore LF blobs.
+          git checkout-index --force --all
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: cli
+      - name: Full CLI suite, including Windows command refusal
+        run: npm test
+        working-directory: cli
+      - name: Build Windows archives twice and compare bytes
+        run: |
+          node cli/scripts/build-release.mjs --platforms win32-x64-msvc,win32-arm64-msvc --out "$RUNNER_TEMP/cli-a"
+          node cli/scripts/build-release.mjs --platforms win32-x64-msvc,win32-arm64-msvc --out "$RUNNER_TEMP/cli-b"
+          diff -r "$RUNNER_TEMP/cli-a" "$RUNNER_TEMP/cli-b"
+      - name: Run the built Windows x64 launcher
+        shell: pwsh
+        run: |
+          $version = node -p 'require("./cli/package.json").version'
+          & "$env:SystemRoot/System32/tar.exe" -xzf "$env:RUNNER_TEMP/cli-a/releases/$version/tervory-cli-$version-win32-x64-msvc.tar.gz" -C "$env:RUNNER_TEMP"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item "$env:RUNNER_TEMP/tervory-cli-$version" "$env:RUNNER_TEMP/$version"
+          $env:TERVORY_NO_UPDATE_CHECK = '1'
+          & "$env:RUNNER_TEMP/$version/tervory.cmd" version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -44,9 +44,9 @@ class Sandbox:
         self.qd = self.name + '-qd'
         self.url = ''
 
-    def sql(self, sql: str) -> str:
+    def sql(self, sql: str, database: str = 'postgres') -> str:
         return command('docker', 'exec', '-i', self.pg, 'psql', '-XAt',
-                       '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres',
+                       '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', database,
                        data=sql.encode()).decode().strip()
 
     def request(self, method, path, **kwargs):
@@ -96,10 +96,10 @@ def sandbox():
         command('docker', 'network', 'rm', box.name)
 
 
-def newest(rows, prefix):
+def newest(rows, prefix, *, require_identity=False):
     """Completion manifests only; one newest SQL dump and one per collection."""
     selected = {}
-    pattern = re.compile(r'^\d{4}-\d{2}-\d{2}/\d{6}-[a-f0-9]{32}/(database\.dump\.age|qdrant/([A-Za-z0-9][A-Za-z0-9_.-]*)\.snapshot\.age)/manifest\.json$')
+    pattern = re.compile(r'^\d{4}-\d{2}-\d{2}/\d{6}-[a-f0-9]{32}/((?:identity/)?database\.dump\.age|qdrant/([A-Za-z0-9][A-Za-z0-9_.-]*)\.snapshot\.age)/manifest\.json$')
     for row in rows:
         key = row['key']
         if not key.startswith(prefix):
@@ -111,8 +111,10 @@ def newest(rows, prefix):
             selected[label] = max(selected.get(label, ''), name)
     if 'database.dump.age' not in selected:
         raise RuntimeError('No completed encrypted Postgres backup found')
-    if len(selected) < 2:
+    if not any(label.startswith('qdrant/') for label in selected):
         raise RuntimeError('No completed encrypted Qdrant backups found')
+    if require_identity and 'identity/database.dump.age' not in selected:
+        raise RuntimeError('No completed encrypted identity backup found')
     return selected
 
 
@@ -174,9 +176,11 @@ def rls(box, folder):
     return failures
 
 
-async def drill(region, identity, *, check_rls=False, store=None):
+async def drill(region, identity, *, check_rls=False, store=None, include_identity=False):
     if os.environ.get('TANK_REGION') != region:
         raise RuntimeError('TANK_REGION must match --region on the owning regional box')
+    if include_identity and region != 'za':
+        raise RuntimeError('Identity restore runs on ZA only')
     owner = 'zenas' if region == 'za' else 'uploads'
     owned = store is None
     store = Storage(owner) if owned else store
@@ -185,7 +189,9 @@ async def drill(region, identity, *, check_rls=False, store=None):
             raise RuntimeError('Storage owner/region mismatch')
         public = region == 'za'
         prefix = store._prefix(PLATFORM_TENANT, 'backups', public=public)
-        selected = newest(await store.objects(PLATFORM_TENANT, 'backups', public=public), prefix)
+        selected = newest(await store.objects(PLATFORM_TENANT, 'backups', public=public), prefix, require_identity=include_identity)
+        if region != 'za' and 'identity/database.dump.age' in selected:
+            raise RuntimeError('Identity archive outside ZA refused')
         with tempfile.TemporaryDirectory(prefix='restore-drill-') as directory:
             folder = Path(directory)
             for index, name in enumerate(selected.values()):
@@ -197,11 +203,15 @@ async def drill(region, identity, *, check_rls=False, store=None):
                     plain = folder / f'{index}.plain'
                     decrypt(folder / f'{index}.age', plain, identity)
                     try:
-                        if label == 'database.dump.age':
+                        if label in {'database.dump.age', 'identity/database.dump.age'}:
+                            database = 'postgres'
+                            if label.startswith('identity/'):
+                                box.sql('CREATE DATABASE identity_restore')
+                                database = 'identity_restore'
                             command('docker', 'cp', str(plain), box.pg + ':/tmp/restore.dump')
                             command('docker', 'exec', box.pg, 'pg_restore', '--exit-on-error',
                                     '--no-owner', '--no-privileges', '-U', 'postgres',
-                                    '-d', 'postgres', '/tmp/restore.dump')
+                                    '-d', database, '/tmp/restore.dump')
                         else:
                             collection = label.removeprefix('qdrant/').removesuffix('.snapshot.age')
                             with plain.open('rb') as snapshot:
@@ -209,6 +219,11 @@ async def drill(region, identity, *, check_rls=False, store=None):
                                             files={'snapshot': ('restore.snapshot', snapshot, 'application/octet-stream')})
                     finally:
                         plain.unlink(missing_ok=True)
+                identity_tables = None
+                if 'identity/database.dump.age' in selected:
+                    identity_tables = int(box.sql("SELECT count(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema')", 'identity_restore'))
+                    if identity_tables == 0:
+                        raise RuntimeError('Restored identity database has no tables')
                 tables = counts(box)
                 points = {}
                 for label in selected:
@@ -219,7 +234,9 @@ async def drill(region, identity, *, check_rls=False, store=None):
                 failures = rls(box, folder) if check_rls else []
                 return {'region': region, 'archives': selected, 'restore_seconds': elapsed,
                         'tenant_table_rows': tables, 'collection_points': points,
-                        'rls_requested': check_rls, 'rls_failures': failures}
+                        'rls_requested': check_rls, 'rls_failures': failures,
+                        'identity_database_restored': identity_tables is not None,
+                        'identity_table_count': identity_tables}
     finally:
         if owned:
             await store.close()
@@ -230,9 +247,10 @@ def main():
     parser.add_argument('--region', required=True, choices=['us-east', 'za'])
     parser.add_argument('--identity-file', required=True, type=Path)
     parser.add_argument('--rls', action='store_true')
+    parser.add_argument('--identity', action='store_true', help='Require the ZA identity archive')
     args = parser.parse_args()
     try:
-        result = asyncio.run(drill(args.region, args.identity_file, check_rls=args.rls))
+        result = asyncio.run(drill(args.region, args.identity_file, check_rls=args.rls, include_identity=args.identity))
         print(json.dumps(result, sort_keys=True))
         return int(bool(result['rls_failures']))
     except Exception as exc:

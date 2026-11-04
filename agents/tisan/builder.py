@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import logging
 import os
 import re
 import tempfile
@@ -250,9 +251,14 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
                                     if name in {"home", "contact", "privacy"}]}, project)
             (project / "content").mkdir(exist_ok=True)
             (project / "content/site.json").write_text(json.dumps({"schema": "tisan.content/1", **plan}, ensure_ascii=False, indent=2) + "\n")
-            checks, detail = await scaffold.run_checks(project)
+            checks, detail = await scaffold.run_checks(project, tenant_id=tenant, tank=tank)
             if detail or not checks or not all(c["ok"] for c in checks):
-                return {"ok": False, "checks": checks, "detail": detail}
+                failed = scaffold._manifest(brief, files=scaffold.project_files(project), checks=checks,
+                                            detail=detail, archive="", build=number)
+                (folder / f"{number}.json").write_text(json.dumps(failed, indent=2) + "\n")
+                rows = scaffold._quality_results(checks)
+                return {"ok": False, "slug": brief["slug"], "build": number, "checks": checks, "detail": detail,
+                        **({"results": rows} if rows else {})}
             env_dts = project / "next-env.d.ts"
             if env_dts.is_file():
                 env_dts.write_text(env_dts.read_text().replace('/// <reference path="./.next/types/routes.d.ts" />\n', "", 1))
@@ -266,9 +272,37 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
 
 
 async def handle(ctx: Any) -> dict:
-    result = await execute(ctx.input, str(ctx.tenant_id), tank=ctx.tank)
+    failure = None
+    try:
+        result = await execute(ctx.input, str(ctx.tenant_id), tank=ctx.tank)
+        try:
+            from agents.tisan import repo_scan
+        except ModuleNotFoundError:
+            import repo_scan
+        result = await repo_scan.attach(result, str(ctx.tenant_id))
+    except Exception as exc:
+        # An execution failure is measured too; never persist exception messages.
+        failure = exc
+        result = {"ok": False, "detail": type(exc).__name__}
+    claim = {"build": result.get("build"),
+             "ok": result.get("ok") is True, "checks": result.get("checks", [])}
+    for key in ("slug", "detail", "refused"):
+        if key in result:
+            claim[key] = result[key]
+    evidence = [str(ctx.job_id)]
+    if result.get("archive"):
+        evidence.append(Path(result["archive"]).name)
+    try:
+        saved = await ctx.memory.remember(str(ctx.tenant_id), json.dumps(claim, ensure_ascii=False),
+            "build", "job:" + str(ctx.job_id), evidence=evidence, confidence=1.0)
+        result["memory_id"] = saved["id"]
+    except Exception as exc:
+        logging.getLogger("agent").warning("build memory failed (%s)", type(exc).__name__)
+    if failure is not None:
+        raise failure
     if result.get("ok") is True:
         import hashlib
+
         from chassis.events import publish
         await publish(str(ctx.tenant_id), "tisan.build.ready", str(ctx.job_id), {
             "job_id": str(ctx.job_id), "site_id": hashlib.sha256(result["slug"].encode()).hexdigest()})

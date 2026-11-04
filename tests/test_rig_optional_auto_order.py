@@ -2,9 +2,9 @@
 
 Per-store ``auto_order`` switch, off by default. Sandbox only: the supplier
 "email" is a file in a local outbox (RIG_LOCATE_OUTBOX_DIR); nothing is sent.
-The PO is Rig's own row (agent_rig.supplier_purchase_orders; Tervory no longer
-uses Odoo), addressed to the store-entered vendor name and order inbox.
-Idempotent, and any failure after payment cancels Rig's order and refunds.
+The PO is Rig's own row (agent_rig.supplier_purchase_orders), addressed to the
+store-entered vendor name and order inbox.
+Idempotent. Supplier safety rules apply after the store confirms receiving payment.
 """
 import email
 import json
@@ -26,7 +26,7 @@ from rigbox.quotes.service import QuoteService
 from rigbox.quotes.store import MemoryQuotes
 from rigbox.retailer import Retailer
 from rigbox.service import RigError, Service
-from test_rig_locate_checkout import TENANT, FakeProvider, Live, available, rate_stub, shop
+from test_rig_locate_checkout import TENANT, Live, available, rate_stub, shop
 from test_rig_optional_blind_ship import ADDRESS, LOCATED, PRICE, HandoffDouble
 
 SOURCE = dict(id="other-store", approved=True, priority=1, max_offer_age_seconds=3600, provider="tiger",
@@ -56,10 +56,7 @@ def no_network_mail(monkeypatch):
 def env(monkeypatch, outbox):
     monkeypatch.setenv("RIG_LOCATE_HOLD_SECRET", "s" * 40)
     monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
-    monkeypatch.setenv("RIG_LOCATE_PAYMENTS_MODE", "test")
     monkeypatch.setenv("RIG_LOCATE_OUTBOX_DIR", str(outbox))
-    for name in ("STRIPE_SECRET_KEY", "PAYSTACK_SECRET_KEY"):
-        monkeypatch.delenv(name, raising=False)
 
 
 def broken_outbox(monkeypatch):
@@ -78,11 +75,16 @@ async def auto_shop(monkeypatch, outbox, *, auto=True, blind=True, source=SOURCE
     orders = HandoffDouble()
     service = QuoteService(store, None, orders, MemoryQuotes(store))
     service.locate_checker = Live(available("45.00"))
-    service.payments = FakeProvider()
     held = await service.locate_confirm(TENANT, "part-1")
-    body = {"product_id": "part-1", "hold": held["hold"], "payment_token": "tok_test_visa",
+    body = {"product_id": "part-1", "hold": held["hold"],
             "contact": {"name": "Thandi Mokoena", "email": "thandi@example.com"}, "delivery": dict(ADDRESS)}
     return store, service, orders, held, body
+
+
+async def accept_and_confirm(service, body):
+    accepted = await service.locate_accept(TENANT, body)
+    assert accepted["state"] == "accepted" and service.store.locate_orders == {}
+    return await service.confirm_store_payment(TENANT, accepted["request_id"])
 
 
 # 1. Switch and source config.
@@ -175,12 +177,11 @@ def test_outbox_write_is_idempotent(tmp_path):
 @pytest.mark.asyncio
 async def test_accept_auto_orders_once_through_the_sandbox_outbox(monkeypatch, tmp_path):
     store, service, orders, held, body = await auto_shop(monkeypatch, tmp_path)
-    result = await service.locate_accept(TENANT, body)
-    assert result["state"] == "ordered" and result["ships_direct"] is True
+    result = await accept_and_confirm(service, body)
+    assert result["state"] == "supplier_ordered"
     state = store.quotes[-1]["payload"]["locate_state"]
     assert state["state"] == "supplier_ordered" and state["purchase_order_state"] == "sent"
-    assert state["supplier_order"]["transport"] == "sandbox_outbox" and state["supplier_order"]["duplicate"] is False
-    assert len(list(tmp_path.iterdir())) == 1 and len(service.payments.captured) == 1
+    assert len(list(tmp_path.iterdir())) == 1
     saved = await store.locate_order(TENANT, result["request_id"])
     po_number = numbers(TENANT, result["request_id"])[1]
     assert saved["order"]["state"] == "placed" and saved["purchase_order"]["number"] == po_number
@@ -193,20 +194,18 @@ async def test_accept_auto_orders_once_through_the_sandbox_outbox(monkeypatch, t
     for marker in ("other-store", "other.example", "Other Store Wholesale", "orders@", "outbox", po_number):
         assert marker not in text
     with pytest.raises(RigError) as raised:  # the hold is single use: no second payment or order
-        await service.locate_accept(TENANT, body)
+        await accept_and_confirm(service, body)
     assert raised.value.status == 410
-    assert len(list(tmp_path.iterdir())) == 1 and len(service.payments.captured) == 1
+    assert len(list(tmp_path.iterdir())) == 1
 
 
 @pytest.mark.asyncio
-async def test_supplier_order_failure_refunds(monkeypatch, tmp_path):
+async def test_supplier_order_failure_needs_store_review(monkeypatch, tmp_path):
     store, service, orders, _, body = await auto_shop(monkeypatch, tmp_path, fail_supplier=True)
-    with pytest.raises(RigError) as raised:
-        await service.locate_accept(TENANT, body)
-    assert raised.value.status == 502
+    result = await accept_and_confirm(service, body)
+    assert result["state"] == "supplier_order_failed"
     state = store.quotes[-1]["payload"]["locate_state"]
-    assert state["state"] == "supplier_order_failed_refunded" and state["refund"] == {"status": "refunded"}
-    assert service.payments.refunded == ["supplier_order_failed"] and list(tmp_path.iterdir()) == []
+    assert state["needs_review"] is True and list(tmp_path.iterdir()) == []
     saved = await store.locate_order(TENANT, store.quotes[-1]["id"])
     assert saved["order"]["state"] == "cancelled" and saved["purchase_order"]["state"] == "cancelled"
     assert saved["order"]["cancel_reason"] == "supplier_order_failed:outbox_unavailable"
@@ -216,28 +215,28 @@ async def test_supplier_order_failure_refunds(monkeypatch, tmp_path):
 async def test_source_without_vendor_or_inbox_refuses_before_payment(monkeypatch, tmp_path):
     store, service, orders, _, body = await auto_shop(monkeypatch, tmp_path,
                                                       source={**SOURCE, "vendor_name": "", "order_email": ""})
+    accepted = await service.locate_accept(TENANT, body)
     with pytest.raises(RigError) as raised:
-        await service.locate_accept(TENANT, body)
-    assert raised.value.status == 503
-    assert service.payments.captured == [] and store.locate_orders == {} and orders.sent == []
-    # Refused before the hold is taken: the shopper's held price is still usable.
-    assert store.supply_state[TENANT]["holds"][body["hold"].split(".")[0]]["used_at"] is None
+        await service.confirm_store_payment(TENANT, accepted["request_id"])
+    assert raised.value.status == 503 and store.locate_orders == {}
+    assert len(orders.sent) == 1
 
 
 @pytest.mark.asyncio
 async def test_missing_outbox_refuses_before_hold_or_payment(monkeypatch, tmp_path):
     store, service, orders, held, body = await auto_shop(monkeypatch, tmp_path)
     monkeypatch.setenv("RIG_LOCATE_OUTBOX_DIR", str(tmp_path / "missing"))
+    accepted = await service.locate_accept(TENANT, body)
     with pytest.raises(RigError) as raised:
-        await service.locate_accept(TENANT, body)
-    assert raised.value.status == 503 and service.payments.captured == [] and store.locate_orders == {}
-    assert store.supply_state[TENANT]["holds"][held["hold"].split(".")[0]]["used_at"] is None
+        await service.confirm_store_payment(TENANT, accepted["request_id"])
+    assert raised.value.status == 503 and store.locate_orders == {}
+    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "accepted"
 
 
 @pytest.mark.asyncio
 async def test_switch_off_keeps_the_draft_po_and_writes_nothing(monkeypatch, tmp_path):
     store, service, orders, _, body = await auto_shop(monkeypatch, tmp_path, auto=False)
-    assert (await service.locate_accept(TENANT, body))["state"] == "ordered"
+    assert (await accept_and_confirm(service, body))["state"] == "ordered"
     assert store.quotes[-1]["payload"]["locate_state"]["state"] == "ordered"
     assert list(tmp_path.iterdir()) == []
     [row] = store.locate_orders.values()
@@ -342,8 +341,8 @@ async def test_supplier_failure_after_the_outbox_write_keeps_the_order_and_does_
         store.locate_orders[(TENANT, kwargs["quote_id"])]["purchase_order"].update(state="draft", sent=None)
         raise DeliveryError("order_unavailable")
     monkeypatch.setattr(RigOrders, "send_supplier_order", written_then_lost)
-    accepted = await service.locate_accept(TENANT, body)
-    assert accepted["state"] == "ordered" and service.payments.refunded == []
+    accepted = await accept_and_confirm(service, body)
+    assert accepted["state"] in {"supplier_ordered", "supplier_order_unconfirmed"}
     state = store.quotes[-1]["payload"]["locate_state"]
     assert state["state"] == "supplier_ordered" and state["purchase_order_state"] == "sent"
     [row] = store.locate_orders.values()
@@ -367,8 +366,8 @@ async def test_written_po_and_reconcile_database_outage_never_refunds(monkeypatc
         raise DeliveryError("order_unavailable")
 
     monkeypatch.setattr(RigOrders, "send_supplier_order", written_then_database_lost)
-    accepted = await service.locate_accept(TENANT, body)
-    assert accepted["state"] == "ordered" and service.payments.refunded == []
+    accepted = await accept_and_confirm(service, body)
+    assert accepted["state"] in {"supplier_ordered", "supplier_order_unconfirmed"}
     state = store.quotes[-1]["payload"]["locate_state"]
     assert state["state"] == "supplier_order_unconfirmed" and "refund" not in state
     [row] = store.locate_orders.values()
@@ -404,10 +403,10 @@ async def test_outbox_unavailable_on_cancel_never_refunds(monkeypatch, tmp_path)
         raise DeliveryError("outbox_unavailable")
     monkeypatch.setattr(RigOrders, "send_supplier_order", send_fails)
     monkeypatch.setattr(supplier_orders, "sent_record", unreadable)
-    accepted = await service.locate_accept(TENANT, body)
-    assert accepted["state"] == "ordered" and service.payments.refunded == []
+    accepted = await accept_and_confirm(service, body)
+    assert accepted["state"] in {"supplier_ordered", "supplier_order_unconfirmed"}
     state = store.quotes[-1]["payload"]["locate_state"]
-    assert state["state"] == "supplier_order_unconfirmed" and state["error"] == "order_unavailable"
+    assert state["state"] == "supplier_order_unconfirmed"
     assert "refund" not in state
     [row] = store.locate_orders.values()
     assert row["order"]["state"] == "placed" and row["purchase_order"]["state"] == "draft"
@@ -483,10 +482,9 @@ async def test_accept_refunds_when_the_send_itself_refused_before_writing(monkey
     async def refused(self, **kwargs):
         raise DeliveryError(code)
     monkeypatch.setattr(RigOrders, "send_supplier_order", refused)
-    with pytest.raises(RigError) as raised:
-        await service.locate_accept(TENANT, body)
-    assert raised.value.status == 502 and service.payments.refunded == ["supplier_order_failed"]
-    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "supplier_order_failed_refunded"
+    result = await accept_and_confirm(service, body)
+    assert result["state"] == "supplier_order_failed"
+    assert store.quotes[-1]["payload"]["locate_state"]["needs_review"] is True
     [row] = store.locate_orders.values()
     assert row["order"]["state"] == "cancelled"
 

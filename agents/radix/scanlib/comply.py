@@ -24,15 +24,15 @@ _HOST = re.compile(
     r"^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$"
 )
 _PRIVACY_TEXT = re.compile(
-    r"\b(?:privacy(?:\s+(?:policy|notice))?|popia|protection of personal information)\b",
+    r"\b(?:privacy(?:\s+(?:policy|notice))?|popia|ccpa|cpra|protection of personal information)\b",
     re.IGNORECASE,
 )
 _PRIVACY_HREF = re.compile(
-    r"(?:privacy(?:[-_](?:policy|notice))?|popia|data[-_]protection)",
+    r"(?:privacy(?:[-_](?:policy|notice))?|popia|ccpa|cpra|data[-_]protection)",
     re.IGNORECASE,
 )
 _NOTICE_PAGE = re.compile(
-    r"\b(?:privacy(?:\s+(?:policy|notice))?|popia(?:\s+notice)?|protection of personal information)\b",
+    r"\b(?:privacy(?:\s+(?:policy|notice))?|popia(?:\s+notice)?|ccpa(?:\s+notice)?|cpra(?:\s+notice)?|protection of personal information)\b",
     re.IGNORECASE,
 )
 _COOKIE = re.compile(r"\bcookies?\b", re.IGNORECASE)

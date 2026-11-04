@@ -55,7 +55,7 @@ export function NeedsYou({ skills, models, checks }: { skills: number; models: C
     {total === 0 ? <p className="control-empty">Nothing needs you.</p> : <div id="control-needs-rows" className="control-needs-rows">
       {skills > 0 && <div className="control-decision">
         <a className="control-decision-copy" href={sourceLink("skills")}><span className="control-number">{skills}</span> skills passed their tests</a>
-        <ApproveAllReady className="control-button primary" onApproved={async () => { router.refresh(); }} />
+        <ApproveAllReady label="Approve all" className="control-button primary" onApproved={async () => { router.refresh(); }} />
       </div>}
       {visible.map(row => <div className="control-decision" key={row.taskType}>
         <a className="control-decision-copy" href={sourceLink("models", { task: row.taskType })}>Cheaper model proven for {row.taskLabel} · saves <span className="control-number">${count(Math.round(row.monthlySaving))}</span>/mo</a>

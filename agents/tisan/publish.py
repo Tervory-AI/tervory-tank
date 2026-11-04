@@ -4,15 +4,15 @@ from __future__ import annotations
 import asyncio
 import base64
 import hmac
+import hashlib
 import json
 import os
-import re
 import tarfile
 import uuid
 from pathlib import Path, PurePosixPath
 
 import httpx
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 MAX_BYTES = 24 * 1024 * 1024
@@ -42,6 +42,11 @@ def stored_build(root: Path, tenant: str, slug: str, number: int) -> dict:
             or not manifest.get('checks') or any(c.get('ok') is not True for c in manifest['checks'])
             or manifest.get('detail')):
         raise ValueError('stored build did not pass')
+    try:
+        from agents.tisan import repo_scan
+    except ModuleNotFoundError:
+        import repo_scan
+    repo_scan.receipt(manifest, tenant, hashlib.sha256(archive_path.read_bytes()).hexdigest())
     with tarfile.open(archive_path, 'r:gz') as archive:
         for member in archive:
             path = PurePosixPath(member.name)
@@ -148,6 +153,26 @@ class Publisher:
 
 
 def mount(app, core):
+    @app.get('/publish/latest')
+    async def latest(tenant_id: uuid.UUID, slug: str = Query(pattern=r'^[a-z0-9-]{1,100}$'),
+                     x_tank_key: str = Header(default='')):
+        expected = os.environ.get('TANK_KEY', '')
+        if not expected or not x_tank_key or not hmac.compare_digest(x_tank_key.encode(), expected.encode()):
+            raise HTTPException(404, 'not found')
+        journal = core.Journal(Path(os.environ.get('DATA_DIR', '/data')) / 'promotion.sqlite3')
+        with journal.connect() as db:
+            row = db.execute("SELECT details FROM operations WHERE tenant=? AND site=? "
+                             "AND action='publish' AND result='succeeded' "
+                             "ORDER BY updated_at DESC,rowid DESC LIMIT 1", (str(tenant_id), slug)).fetchone()
+        if row is None:
+            return {'status': 'unavailable'}
+        details = json.loads(row['details'])
+        number = details.get('expected', '').removeprefix('build:')
+        if not number.isdigit() or int(number) < 1:
+            raise HTTPException(503, 'not found')
+        return {'status': 'succeeded', 'build': int(number), 'commit': core.commit(details['commit']),
+                'url': core.origin(details['url'])}
+
     async def call(body, key, actor, action):
         expected = os.environ.get('TANK_KEY', '')
         founders = {p.strip() for p in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if p.strip()}

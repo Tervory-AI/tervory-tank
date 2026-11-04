@@ -1,0 +1,28 @@
+Approve this device in your browser (placeholder-worker, za):
+  https://auth-za.tervory.com/device?user_code=1234-5678
+Confirm the page shows code 1234-5678.
+Signed in on za. Credential saved in the OS keychain; it refreshes automatically.
+Thread placeholder-thread
+> Update file.txt.
+Receipt pending
+Receipt pending
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-old
++new
+
+Apply [y/N] y
+Updated file.txt.
+Receipt pending
+> /undo
+Undo [y/N] y
+> List plugins.
+Receipt pending
+{"tool":"plugins.list","arguments":{}}
+List plugins
+Confirm [y/N] y
+[done] plugins: Plugins listed
+GitHub is installed.
+Receipt pending
+> /exit

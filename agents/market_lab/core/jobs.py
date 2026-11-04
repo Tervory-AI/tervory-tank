@@ -223,24 +223,14 @@ async def perform_opportunities(
                 targets=spec.get("response_targets"),
             ),
         )
-    if found:
-        writeup = "; ".join(
-            f"{item['rank']}. {item['area']} / {item['segment']} / {item['product']}" for item in found
-        )
-    else:
-        writeup = "No product gap this month."
-    await _call(
-        ledger.save_report,
-        {
-            "id": str(uuid.uuid4()),
-            "tenant_id": tenant_id,
-            "made_at": clock,
-            "question": "Where is demand outrunning supply?",
-            "answer": writeup,
-            "citations": [],
-        },
-    )
-    if memory is not None:
+    from core.brief_sources import claims as brief_claims
+    writeup, citations = await brief_claims(ledger, tenant_id, spec["bindings"], scored["ranked"], now=clock)
+    from core.briefs import save as save_brief
+    await save_brief(ledger, {
+        "id": str(uuid.uuid4()), "tenant_id": tenant_id, "made_at": clock,
+        "question": "Where is demand outrunning supply?", "answer": writeup, "citations": citations,
+    }, now=clock)
+    if memory is not None and writeup:
         await memory.remember(tenant_id, writeup, "report", "schedule:opportunities")
     return {
         "top_area": scored["top_area"],
@@ -321,7 +311,8 @@ async def perform_research(
     clock = _clock(now)
     payload: dict[str, Any] = {"question": question}
     if passages is not None:
-        payload["passages"] = passages
+        from core.evidence import gated_facts
+        payload["passages"] = await gated_facts(ledger, tenant_id, passages, now=clock)
     if model_text is not None:
         payload["model_text"] = model_text
     answer = research_answer(payload)

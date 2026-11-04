@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY agents/_chassis/chassis /app/chassis
 COPY ops/live_check.mjs ops/live_check_banned.txt /app/ops/
 COPY agents/tisan/scaffold.py /app/scaffold.py
+COPY agents/tisan/repo_scan.py /app/repo_scan.py
+COPY agents/tisan/pipeline.py /app/pipeline.py
 COPY agents/tisan/figma.py /app/figma.py
 COPY agents/tisan/gold_sources.py /app/gold_sources.py
 COPY agents/tisan/review_store.py /app/review_store.py
@@ -16,6 +18,11 @@ COPY agents/tisan/templates /app/templates
 # Node is for the scaffold checks. Dependencies are cached here so a run needs no network.
 # Node 22 LTS, pinned to an exact patch. The hashes come from
 # https://nodejs.org/dist/v22.23.4/SHASUMS256.txt; the build fails if the tarball does not match.
+# AGPL-3.0 k6; upstream release checksums, verified before extraction.
+# https://github.com/grafana/k6/releases/download/v1.8.2/k6-v1.8.2-checksums.txt
+ARG K6_VERSION=1.8.2
+ARG K6_SHA_AMD64=37620781d35406ebf402397a6c5cf4adb62d175cb052ff45325ae0b860527063
+ARG K6_SHA_ARM64=8b4e55024ffc8ed7ed4caabca054dfb5bafe16e7ee4235de57d01bf58d69e0d7
 ARG NODE_VERSION=22.23.4
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
@@ -29,6 +36,15 @@ RUN apt-get update \
     && echo "${node_sha256}  /tmp/node.tar.xz" | sha256sum -c - \
     && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
     && rm /tmp/node.tar.xz \
+    && case "$arch" in \
+         x86_64) k6_arch=amd64; k6_sha="${K6_SHA_AMD64}" ;; \
+         aarch64) k6_arch=arm64; k6_sha="${K6_SHA_ARM64}" ;; \
+       esac \
+    && curl -fsSL "https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-linux-${k6_arch}.tar.gz" -o /tmp/k6.tar.gz \
+    && echo "${k6_sha}  /tmp/k6.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/k6.tar.gz -C /usr/local/bin --strip-components=1 "k6-v${K6_VERSION}-linux-${k6_arch}/k6" \
+    && chmod 755 /usr/local/bin/k6 \
+    && rm /tmp/k6.tar.gz \
     && apt-get purge -y curl xz-utils \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* \
@@ -55,6 +71,7 @@ ENV AGENT_NAME=tisan \
     TISAN_NPM_CACHE=/opt/npm-cache \
     TISAN_NPM_OFFLINE=1 \
     NEXT_TELEMETRY_DISABLED=1 \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/tisan-browser
 EXPOSE 8000
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

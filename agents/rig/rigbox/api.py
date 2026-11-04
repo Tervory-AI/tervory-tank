@@ -53,6 +53,9 @@ class LinkIn(BaseModel):
 
 class QuoteIn(BaseModel):
     model_config = {"extra": "forbid"}
+    title: str | None = Field(default=None, max_length=200)
+    request: str | None = Field(default=None, max_length=2000)
+    quantity: int | None = Field(default=None, ge=1, le=100000)
     setup: dict[str, Any] | None = None
     product_id: str | None = None
     contact: dict[str, Any] = Field(default_factory=dict)
@@ -212,7 +215,6 @@ class LocateAcceptIn(BaseModel):
     model_config = {"extra": "forbid"}
     product_id: str = Field(min_length=1, max_length=200)
     hold: str = Field(min_length=1, max_length=200)
-    payment_token: str = Field(min_length=1, max_length=200)
     contact: dict[str, Any] = Field(default_factory=dict)
     notice_version: str | None = Field(default=None, max_length=64)
     # Blind ship only: where the other store ships the parcel.
@@ -229,27 +231,13 @@ async def locate_confirm(request: Request, payload: LocateIn) -> Response:
 
 @router.post("/locate/accept")
 async def locate_accept(request: Request, payload: LocateAcceptIn) -> Response:
-    """Backend Accept: test-mode payment, then a sandbox-only order. No UI."""
+    """Accept a held quote and hand it to the store. No order or UI."""
     await _auth(request)
     service = _service(request)
     if not hasattr(service, "locate_accept"):
         raise RigError("unavailable", "Ordering from other stores is not available.", 503)
     body = await service.locate_accept(_tenant(request), payload.model_dump())
     return _ok(request, body)
-
-
-@router.post("/locate/payments/webhook")
-async def locate_payment_webhook(request: Request) -> Response:
-    """Payment provider webhook. HMAC signature, no shopper key. Test mode only."""
-    service = _service(request)
-    if not hasattr(service, "payment_webhook"):
-        raise RigError("unavailable", "Payments are not available.", 503)
-    from rigbox.payments import SIGNATURE_HEADER, WEBHOOK_MAX_BYTES
-    body = await request.body()
-    if len(body) > WEBHOOK_MAX_BYTES:
-        raise RigError("signature", "The webhook could not be verified.", 400)
-    result = await service.payment_webhook(body, request.headers.get(SIGNATURE_HEADER) or "")
-    return _ok(request, result)
 
 
 @router.post("/search-events")

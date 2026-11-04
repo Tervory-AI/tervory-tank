@@ -42,6 +42,10 @@ async def hermes(
                 headers={"X-Tank-Key": key, "X-Tervory-Admin": actor},
             )
         if response.status_code >= 400:
+            if response.status_code in (403, 409):
+                detail = response.json().get("detail")
+                if isinstance(detail, dict) and detail.get("result") in {"disabled", "missing", "refused"}:
+                    raise HTTPException(response.status_code, {"result": detail["result"], "published_row": None})
             if response.status_code == 422:
                 detail = response.json().get("detail")
                 if isinstance(detail, list):
@@ -65,6 +69,12 @@ async def record(id: uuid.UUID, actor: Reviewer = Depends(require_reviewer)):
     if not actor.founder:
         raise HTTPException(404, "not found")
     return await hermes("GET", "/founder/records/" + str(id), actor.user)
+
+
+@router.post("/withdraw/{id}", dependencies=[Depends(require_admin)])
+async def withdraw_record(id: uuid.UUID, request: Request, x_tervory_admin: str = Header(default="")):
+    return await hermes("POST", "/founder/records/" + str(id) + "/withdraw", x_tervory_admin,
+                        body=await request.json())
 
 
 @router.api_route("/{operation}", methods=["GET", "POST"], dependencies=[Depends(require_admin)])
