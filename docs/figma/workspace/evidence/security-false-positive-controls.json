@@ -1,0 +1,26 @@
+{
+  "scanner": "gitleaks 8.30.1",
+  "finding": "generic-api-key in session-ledger.json:2",
+  "classification": "Public Figma design identifier, not a credential",
+  "exception_scope": "Exact value AND exact file; inherited rules remain enabled",
+  "controls": [
+    {
+      "case": "exact-public-id-and-file",
+      "exit_code": 0,
+      "findings": 0,
+      "passed": true
+    },
+    {
+      "case": "same-id-different-file",
+      "exit_code": 1,
+      "findings": 1,
+      "passed": true
+    },
+    {
+      "case": "different-id-same-file",
+      "exit_code": 1,
+      "findings": 1,
+      "passed": true
+    }
+  ]
+}

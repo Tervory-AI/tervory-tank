@@ -8,3 +8,12 @@ useDefault = true
 description = "Claude-reviewed exact Clerk publishable CI dummy; not a credential"
 regexTarget = "secret"
 regexes = ['''^pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==$''']
+
+# Public Figma design identifier from the founder-provided URL; not an access token.
+# Both the exact value AND this exact evidence file must match.
+[[allowlists]]
+description = "Public Figma design identifier in Workspace session metadata only"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^ZnphBOJU6657tohGLD3IzS$''']
+paths = ['''^docs/figma/workspace/evidence/session-ledger\.json$''']
