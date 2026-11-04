@@ -8,7 +8,7 @@
       if (base.protocol !== 'https:' && base.hostname !== 'localhost') throw new Error('https_required');
       if (!/^rk_pub_[A-Za-z0-9_-]+$/.test(options.key)) throw new Error('publishable_key_required');
       const prefix = base.href.replace(/\/$/, '') + '/v1/rig';
-      let destroyed = false, blobURL, session, selected, busy = false;
+      let destroyed = false, blobURL, session = options.cartSession, selected, busy = false;
       const abort = new AbortController();
       const request = async (path, data, blob = false) => {
         const response = await fetch(prefix + path, {
@@ -33,7 +33,7 @@
       const button = (text, action) => { const node = element('button', text); node.type = 'button'; node.addEventListener('click', action); return node; };
       const style = element('style');
       // Shared CRM/Rig button tokens, adapted to an independent shadow-DOM embed.
-      style.textContent = ':host{display:block;color:var(--cs-color-text,#001840);font:14px Inter,sans-serif}*{box-sizing:border-box}[hidden]{display:none!important}nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px}button{font:600 13px Inter,sans-serif;min-height:48px;max-width:100%;padding:8px 24px;border:1px solid var(--cs-color-border,#B8BFD0);border-radius:var(--cs-radius-8,8px);background:var(--cs-color-surface,#fff);color:inherit;cursor:pointer}button.primary{background:var(--cs-color-text,#001840);color:var(--cs-color-inverse,#fff);min-width:160px}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible{outline:2px solid #001840;outline-offset:2px}.viewport{position:relative;border:1px solid var(--crm-input-border,#848da3);border-radius:8px;background:#fff;padding:16px}video{display:block;width:100%;max-height:504px;object-fit:contain}aside,section,footer{border:1px solid var(--crm-input-border,#848da3);border-radius:8px;padding:16px;background:#fff;margin-top:16px}aside{position:absolute;bottom:16px;left:16px;right:16px}aside:empty{display:none}h2{font-size:24px;font-weight:600}h3{font-size:16px}img{max-width:160px}input[type=range]{width:100%}article+article{border-top:1px solid #B8BFD0;margin-top:16px;padding-top:16px}';
+      style.textContent = ':host{display:block;color:var(--cs-color-text,#001840);font:14px Inter,sans-serif}*{box-sizing:border-box}[hidden]{display:none!important}nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px}button{font:600 13px Inter,sans-serif;min-height:48px;max-width:100%;padding:8px 24px;border:1px solid var(--cs-color-border,#B8BFD0);border-radius:var(--cs-radius-8,8px);background:var(--cs-color-surface,#fff);color:inherit;cursor:pointer}button.primary{background:var(--cs-color-text,#001840);color:var(--cs-color-inverse,#fff);min-width:160px}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible{outline:2px solid #001840;outline-offset:2px}.viewport{position:relative;border:1px solid var(--crm-input-border,#848da3);border-radius:8px;background:#fff;padding:16px}video{display:block;width:100%;max-height:504px;object-fit:contain}aside,section,footer{border:1px solid var(--crm-input-border,#848da3);border-radius:8px;padding:16px;background:#fff;margin-top:16px}aside{position:absolute;bottom:16px;left:16px;right:16px}aside:empty{display:none}h2{font-size:24px;font-weight:600}h3{font-size:16px}img{max-width:160px}input[type=range]{width:100%;accent-color:var(--cs-color-text,#001840)}article+article{border-top:1px solid #B8BFD0;margin-top:16px;padding-top:16px}';
       const heading = element('h2', labels.watch);
       const nav = element('nav');
       const viewport = element('div'); viewport.className = 'viewport';
@@ -65,8 +65,9 @@
           if (destroyed || selected !== product.id) return;
           const name = element('h3', value.name || product.name);
           const price = element('p', product.price.amount + ' ' + product.price.currency);
-          const picture = element('img');
-          try { const source = new URL(product.image); if (source.protocol === 'https:') picture.src = source.href; } catch (_) {}
+          const picture = element('img'); picture.hidden = true;
+          picture.addEventListener('error', () => { picture.hidden = true; });
+          try { const source = new URL(product.image); if (source.protocol === 'https:') { picture.src = source.href; picture.hidden = false; } } catch (_) {}
           picture.alt = product.name;
           const attributes = element('p', Object.entries(value.attributes || {}).filter(([, val]) => ['string', 'number'].includes(typeof val)).map(([key, val]) => `${key.replaceAll('_', ' ')}: ${val}`).join(' · '));
           const add = button(labels.add, async () => {
@@ -120,6 +121,7 @@
         video.addEventListener('timeupdate', update); video.addEventListener('seeked', update); video.addEventListener('loadedmetadata', update); update(); setStatus('ready');
       } catch (_) { setStatus('videoError'); }
       return {
+        getSession() { return session; },
         async checkout() { if (!session) throw new Error('cart_empty'); return request('/cart/checkout', {session}); },
         destroy() { destroyed = true; abort.abort(); video.pause(); video.removeAttribute('src'); video.load(); if (blobURL) URL.revokeObjectURL(blobURL); root.replaceChildren(); }
       };

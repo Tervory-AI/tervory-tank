@@ -27,7 +27,7 @@ be87b92e.
 
 Load `/v1/rig/video-shop/widget.js` from the Rig host, then call
 `VideoShop.mount(element, {rigBase: 'https://rig-host.example', key: publishableKey,
-videoId, storeCartUrl, labels: {add: 'Add to cart'}})`.
+videoId, storeCartUrl, cartSession, labels: {add: 'Add to cart'}})`.
 The key must be a Rig publishable key restricted to the store's origin. Never
 embed an admin key. The player fetches authenticated media as a local blob and
 revokes it on `destroy()`. Approved moments alone reach the browser. Seeks update
@@ -47,3 +47,8 @@ uses its existing database, keys and cart settings. Persist `DATA_DIR/video-shop
 Admin GET `/admin/videos` lists recent videos; GET `/admin/videos/{id}/media`
 allows private draft playback during review. See `docs/acceptance/video_shop.md`
 for limits and the offline acceptance recipe.
+
+Pass the host’s existing Rig `cartSession` so video products join the same cart.
+If omitted, the embed creates a Rig shopper session on the first add. The host
+can read it with `getSession()` and persist it using the existing store-scoped
+cart session policy. `checkout()` uses that same session.
