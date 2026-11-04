@@ -17,7 +17,6 @@ def validate() -> dict:
     canonical = (here / "SPEC.md").read_bytes()
     prefix = canonical[:manifest["main_crm_prefix_bytes"]]
     assert hashlib.sha256(prefix).hexdigest() == manifest["main_crm_prefix_sha256"]
-    assert hashlib.sha1(b"blob " + str(len(prefix)).encode() + b"\0" + prefix).hexdigest() == manifest["canonical_inputs"]["docs/figma/crm/SPEC.md"]
     case = (here.parent / "case-studies/SPEC.md").read_bytes()
     assert hashlib.sha256(case).hexdigest() == manifest["case_spec_sha256"]
     for path, digest in manifest["archived_payloads"].items():

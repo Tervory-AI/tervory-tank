@@ -58,4 +58,6 @@ Run `python3 docs/figma/crm/validate_pr436_evidence.py`. It checks exact canonic
 
 Original screenshot files and evidence records remain byte-identical to the PR head; README.md gains a dated provenance note only. Focused results are recorded in VALIDATION-20261104.json. No full local application suite is run for this documentation-only reconciliation. Final-head hosted CI is the result of record; its actual result is reported in the PR/chat rather than copying old green checks.
 
+Hosted CI on reconciliation head c4bed027 flagged the public Figma document identifier in the preserved final-checks.json as a generic API key. The exact historical finding is recorded in .gitleaksignore, following the repository's existing Figma-identifier fingerprint convention; no value, path or rule exemption is added. The identifier is the one in the founder-supplied design URL and grants no access. A redundant SHA-1 Git-blob check was removed from the validator; canonical text integrity remains checked with SHA-256.
+
 One remaining design acceptance item: founder visual acceptance of the explicitly pending CRM correction/address-wording proposals. This does not block completing the requested documentation conflict resolution. No approval is inferred from CI or screenshots.
