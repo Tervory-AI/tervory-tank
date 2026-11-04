@@ -12,8 +12,8 @@ Transformers.js (Apache-2.0); Orama (Apache-2.0) stores vectors in workspace-pri
 local extension storage. Dependencies and transitive versions are locked. No
 external executable, Python installation or vector server is required.
 
-Only trusted local file workspaces are indexed. Remote hosts run this workspace
-extension where their filesystem lives; virtual workspaces are unsupported.
+Only trusted `file:` workspace folders are indexed by the workspace extension
+host. Virtual workspaces are unsupported.
 JS/TS uses the TypeScript AST, Python uses definition boundaries, other languages
 use bounded text chunks (the chunker also accepts document-symbol spans). Large
 files, binary files, symlinks, generated directories, secret paths and recognizable
@@ -57,6 +57,8 @@ Test host: stock VSCodium 1.143.17232, downloaded and SHA-256 verified by
 `scripts/electron.mjs`, launched through pinned `@vscode/test-electron`.
 `npm run test:electron` uses an isolated profile and fixture. Linux needs Xvfb
 (`xvfb-run -a npm run test:electron`); Windows/macOS use the same runner directly.
+Set `TERVORY_EDITOR_CACHE` to an external scratch directory for local integration
+tests so downloaded editor binaries stay outside the source checkout.
 
 ## Performance gate
 

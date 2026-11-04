@@ -4,7 +4,7 @@
   "publisher": "tervory",
   "version": "0.1.0",
   "private": true,
-  "description": "Local project indexing and retrieval",
+  "description": "[Local project indexing and retrieval]",
   "license": "Apache-2.0",
   "engines": {
     "vscode": "^1.95.0"
@@ -39,7 +39,8 @@
     "test": "npm run build && node --test dist/test/core.test.js",
     "model": "node scripts/model.mjs",
     "test:electron": "npm run build && node scripts/electron.mjs",
-    "benchmark": "npm run build && node dist/test/benchmark.js"
+    "benchmark": "npm run build && node dist/test/benchmark.js",
+    "vscode:prepublish": "npm run model && npm run build"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.2",
