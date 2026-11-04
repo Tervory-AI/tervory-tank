@@ -1,6 +1,6 @@
 # base.scrape_site
 
-## 1.3.1
+## 1.4.0
 - Bound email-token matching and prevent restarting inside an oversized token.
   A large unbroken HTML text run cannot monopolize the scraper; valid contacts on
   later pages still survive, and joined HTML retains the existing 400 KB cap.

@@ -7,10 +7,11 @@ merged history and executable code, not the presence or absence of other PRs.
 
 A real long-page failure was found in the older wiring suite: the unbounded
 email regex could exceed 180 seconds on a 400 KB unbroken token. Added candidate
-`base.scrape_site/1.3.1` and bounded the shared evidence matcher. Existing approved
+`base.scrape_site/1.4.0` and bounded the shared evidence matcher. Existing approved
 packages stay unchanged. Five large-page cases check retained later-page contacts,
 source/date, the HTML cap and a deadline; original eight candidate eval cases and
-must-refuse checks remain intact. Normal Skala approval is still required.
+must-refuse checks remain intact. Normal Skala approval is still required. The broader Skala guard caught the
+initial patch number; the code change is correctly packaged as minor 1.4.0.
 The historical 1.2.0 HTML-cap fixture now uses whitespace-separated filler to test
 its original cap contract without invoking the separately covered legacy regex bug.
 
@@ -25,6 +26,8 @@ rule, target, severity, exception or scanner requirement is changed. The first
 scans timed out at 900 seconds and are not counted as passes. Local scanner
 processes now have a 3600-second wall budget on the shared host; hosted GitHub CI
 keeps its 900-second budget. A complete clean report remains mandatory.
+The local scanner runs as the checkout user so its baseline checkout cannot
+restore root-owned source files. No security policy changes.
 Claude can use this section at the top of the PR.
 
 ## Shipped surface and offline coverage
@@ -61,17 +64,21 @@ Claude can use this section at the top of the PR.
 ## Offline verification
 
 - Final complete Base, command/token, earlier wiring and 55-row acceptance run:
-  **783 passed, zero skips**, 16 existing warnings, 555.20 seconds. External
+  **783 passed, zero skips**, 16 existing warnings, 1065.73 seconds, after the minor-version correction. External
   sockets/models are blocked; real PostgreSQL is disposable and loopback-only.
   Worker responses are scripted fixtures; browser cases execute real Base code.
 - The sheet has **55 founder rows and 55 corresponding fixture cases**, plus the
   exact one-row/one-case and command/settings validation check.
+- Correct minor-version packaging, patch policy, large pages and sheet guard:
+  **80 passed**.
 - Focused large-page/cap checks: **13 passed**. Flat-image correction: **16 passed**.
 - Security-policy focused rerun: **59 passed and 34 subtests passed**. Earlier
   complete security suite: **64 passed and 56 subtests passed**.
 - A concurrent final run stopped on local HTTP/browser timeouts (479 passed);
   the complete serial rerun above passed the same paths without changes to their
   assertions. Initial Semgrep wall timeouts are not passes.
+- The shared precheck also selects Tisan smoke cases: its existing pinned k6
+  executable must be on PATH, as prepared by the CI workflow. No case is skipped.
 - Security precheck remains mandatory before every push, without any
   gitleaks/Semgrep exception. CI and push results will be recorded after completion. The first job-cap attempt
   used an environment variable unsupported by the pinned CLI; it was corrected to

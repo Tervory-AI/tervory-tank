@@ -1,4 +1,4 @@
-"""base.scrape_site 1.3.1 — Pass 2b. Fetch home + contact/about pages; extract contacts and text.
+"""base.scrape_site 1.4.0 — Pass 2b. Fetch home + contact/about pages; extract contacts and text.
 
 Same as 1.1.0, and also returns the raw HTML of those pages, joined and capped at 400 KB.
 When the home page cannot be read by a plain fetch (slow, JavaScript-built, a self-clearing check),

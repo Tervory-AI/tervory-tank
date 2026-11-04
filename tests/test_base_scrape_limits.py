@@ -10,7 +10,7 @@ from base_evidence import observe, observations
 from test_b3b_base_wiring import ABOUT, SITE, Ctx, Site
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = ROOT / 'tank/skills/base.scrape_site/1.3.1'
+PACKAGE = ROOT / 'tank/skills/base.scrape_site/1.4.0'
 CASES = json.loads((PACKAGE / 'evals/large_pages.json').read_text())
 
 
@@ -47,6 +47,8 @@ def test_large_page_keeps_own_contacts_and_later_page(case):
 
 
 def test_candidate_preserves_existing_evals_and_approved_package():
+    from skala_patch import release
+    assert release(PACKAGE.name)[2] == 0, 'Code changes require a minor release'
     assert (PACKAGE / 'evals/cases.jsonl').read_bytes() == (PACKAGE.with_name('1.3.0') / 'evals/cases.jsonl').read_bytes()
     cases = [json.loads(line) for line in (PACKAGE / 'evals/cases.jsonl').read_text().splitlines()]
     assert len(cases) >= 5 and any(case.get('must_refuse') for case in cases)
