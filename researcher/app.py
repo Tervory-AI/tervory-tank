@@ -141,6 +141,9 @@ def create_app():
                     })
                 response.raise_for_status()
                 routed = response.json()
+                if 'paid_run_id' in routed:
+                    from researcher.paid_transport import result
+                    routed = await result(client, key(), str(run.request.tenant_id), routed)
             receipt = {k: routed[k] for k in ("ledger_id", "tokens_in", "tokens_out")}
             receipt["cost_usd"] = routed.get("cost_usd")
             UUID(receipt["ledger_id"])

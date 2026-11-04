@@ -99,6 +99,9 @@ class Tank:
             result = response.json()
             if not isinstance(result, dict):
                 raise ValueError("Invalid response")
+            if 'paid_run_id' in result:
+                from chassis.tank import paid_result
+                result = await paid_result(self.http, 'http://tank:8000', key, str((body or {})['tenant_id']), result)
             return result
         except (httpx.HTTPError, ValueError):
             raise RuntimeError("Tank did not accept the request.") from None

@@ -215,7 +215,9 @@ class SkillClient:
                 headers=self._headers(),
                 timeout=300,
             )
-            return await self._read(response)
+            from chassis.tank import paid_result
+            value = await self._read(response)
+            return await paid_result(self._http, self._base, self._api_key, tenant_id, value)
 
         reliability = None
         reliability_lock = asyncio.Lock()

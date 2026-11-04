@@ -43,9 +43,10 @@ async def research_if_promoted(tenant_id: str, question: str) -> dict[str, Any] 
         if status.status_code != 200:
             raise RuntimeError(f"research status unavailable ({status.status_code})")
         response = await client.post(base + "/v1/research", json=body, headers=headers)
-        if response.status_code != 200:
+        if response.status_code not in {200, 202}:
             raise RuntimeError(f"research failed ({response.status_code})")
-    result = response.json()
+        from chassis.tank import paid_result
+        result = await paid_result(client, base, key, tenant_id, response.json())
     if not isinstance(result, dict) or not result.get("sources") or not result.get("receipt"):
         raise RuntimeError("research receipt is incomplete")
     return {"answer": result["content"], "citations": result["sources"],

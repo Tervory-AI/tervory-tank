@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt -r ghost-requirements.txt \
     && mkdir -p /data && chown agent:agent /data
 # Same unmodified SMTP sender Tiger uses; no Rig product code is invoked.
 COPY rig/rigbox/reserve.py /app/agents/rig/rigbox/reserve.py
+COPY _chassis/chassis /app/chassis
 COPY ghost /app/ghost
 USER agent
 ENV AGENT_NAME=ghost DATA_DIR=/data PYTHONUNBUFFERED=1
