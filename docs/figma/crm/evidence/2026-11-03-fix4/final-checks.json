@@ -1,0 +1,110 @@
+{
+  "fileKey": "ZnphBOJU6657tohGLD3IzS",
+  "pageId": "93:2",
+  "status": "Changed after approval, awaiting founder",
+  "counts": {
+    "menuItems": 1657,
+    "recordCardsAndPanels": 203,
+    "outlinedFields": 5738,
+    "invoiceHeaderRows": 56
+  },
+  "problems": {
+    "darkSurfaces": [],
+    "shortMenuTargets": [],
+    "recordCorners": [],
+    "inputBorders": [],
+    "redNonDelete": [],
+    "headerFit": [],
+    "spacing": [
+      {
+        "id": "98:8607",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8639",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8671",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8703",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8735",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8767",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8802",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8858",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8911",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8946",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:8990",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:9052",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:9111",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "98:9158",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "310:35545",
+        "property": "paddingBottom",
+        "value": 104
+      },
+      {
+        "id": "310:35726",
+        "property": "paddingBottom",
+        "value": 104
+      }
+    ]
+  },
+  "fonts": [
+    "Inter Semi Bold",
+    "Inter Regular",
+    "Jost Light"
+  ],
+  "contrast": {
+    "white": 3.322823713730639,
+    "tint": 3.0711359106092724
+  }
+}

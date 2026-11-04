@@ -1257,6 +1257,35 @@ export async function setCommandSquad(userId: string, tenantId: string, agent: s
   });
 }
 
+// Client-roster startup only: keep request-time squad behavior unchanged. A
+// single deadline covers both fetch and JSON, even if upstream ignores abort.
+export const CLIENT_STARTUP_LIMITS = { requestMs: 1500 };
+async function startupSquadRequest<T>(userId: string, tenantId: string, path: string, init: RequestInit): Promise<T> {
+  return boundedFetch(new URL(`/v1/command/squads${path}`, TANK_URL), {
+    ...init, cache: "no-store",
+    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY,
+      ...commandSquadHeaders(userId, tenantId) },
+  }, CLIENT_STARTUP_LIMITS.requestMs, async response => {
+    // Never consume an error body (or put it in an exception/log).
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => undefined);
+      throw new Error("Client startup squad request failed");
+    }
+    return await response.json() as T;
+  });
+}
+export async function readStartupCommandSquads(userId: string, tenantId: string) {
+  const [grants, log] = await Promise.all([
+    startupSquadRequest<CommandSquadGrant[]>(userId, tenantId, "", { method: "GET" }),
+    startupSquadRequest<CommandSquadChange[]>(userId, tenantId, "/log", { method: "GET" }),
+  ]);
+  return { grants, log };
+}
+export async function setStartupCommandSquad(userId: string, tenantId: string, agent: string) {
+  return startupSquadRequest<{ agent: string; enabled: boolean; changed: boolean }>(
+    userId, tenantId, `/${encodeURIComponent(agent)}`, { method: "PUT", body: JSON.stringify({ enabled: true }) });
+}
+
 // ---- COMMAND-1: same-box conversations; caller identity is server-owned. ----
 export class CommandRequestError extends Error {
   status: number;
@@ -1313,7 +1342,12 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
 /** Lane A derives this catalogue from the founder-controlled tenant_squad list. */
 export async function commandTools(identity: { tenantId: string; userId: string }): Promise<string[]> {
   const result: unknown = await (await commandRequest(identity, "tools")).json();
-  if (!Array.isArray(result) || !result.every(tool => typeof tool === "string" && /^[a-z_]+\.[a-z_]+$/.test(tool))) throw new Error("Tool access could not be loaded.");
+  if (!Array.isArray(result) || !result.every(tool => {
+    if (typeof tool !== "string") return false;
+    const segments = tool.split(".");
+    return segments.length >= 2 && segments.every(segment => segment.length > 0
+      && !/[^a-z_]/.test(segment) && !["__proto__", "prototype", "constructor"].includes(segment));
+  })) throw new Error("Tool access could not be loaded.");
   return result;
 }
 
