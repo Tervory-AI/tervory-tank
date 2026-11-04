@@ -4,7 +4,7 @@ Approved commands run on Windows and on hosts without Bubblewrap or Seatbelt, wi
 
 # Changelog
 
-## 0.6.0 — 2026-11-04
+## 0.7.0 — 2026-11-04
 
 - Trigger sign-in is the only sign-in in the US and ZA, using the existing native device flow.
 - Setup generates app IDs and links organisations to existing Tank tenants; identities use raw subjects, not email.
