@@ -52,7 +52,8 @@ ELSEWHERE = ["tests/ci_security", "tests/test_live_check.py"]
 # rig-forge.yml: forge-image runs the first seven inside the forge image, then the containers
 # file against that image. test_rig_forge_pipeline.py and test_rig_forge_containers.py skip
 # themselves outside that job.
-# tenant-rls.yml: the other 21 files its isolation job runs stay in the main suite. Its paths
+# tenant-rls.yml: test_tenant_rls.py and the other 21 files its isolation job runs stay in the
+# main suite, so tenant isolation keeps blocking merges through ci-ok (founder, 3 Nov). Its paths
 # filter does not list them (or the tests/ helpers they import), so a PR changing only them
 # would test them nowhere.
 SIDE_WORKFLOW = {
@@ -64,7 +65,6 @@ SIDE_WORKFLOW = {
     "tests/test_rig_forge_relay.py": "rig-forge.yml: forge-image",
     "tests/test_rig_forge_job_state.py": "rig-forge.yml: forge-image",
     "tests/test_rig_forge_containers.py": "rig-forge.yml: forge-image",
-    "tests/test_tenant_rls.py": "tenant-rls.yml: isolation",
     "tests/autumbra_a2/test_compose_probe.py": "tenant-rls.yml: autumbra-isolation",
 }
 # Provider keys and tokens must never reach the suite, even if a runner has them set.
