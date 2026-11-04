@@ -6,6 +6,7 @@ export type WatchTurn = { role: string; text: string };
 
 export type WatchRecord = {
   matchId: string;
+  verificationStatus?: "unverified";
   published: boolean;
   title: string;
   fairnessReading: string;
