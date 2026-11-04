@@ -36,9 +36,8 @@ set -euo pipefail
 exec docker run --rm --label tervory.test=1 --name "${folder}-semgrep-\$\$" \\
   --volume "$root:$root" --volume "$TMPDIR:$TMPDIR" --workdir "\$PWD" \\
   --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env "GIT_CONFIG_VALUE_0=$root" \\
-  --env SEMGREP_JOBS="${SEMGREP_JOBS:-2}" \\
   --entrypoint semgrep \\
-  semgrep/semgrep:1.182.1@sha256:c8f333ab0ad103d2bcd3b55cbeabcfc556bfeaa7446ba18594a4320f3807ffc9 "\$@"
+  semgrep/semgrep:1.182.1@sha256:c8f333ab0ad103d2bcd3b55cbeabcfc556bfeaa7446ba18594a4320f3807ffc9 "\$@" --jobs "${SEMGREP_JOBS:-2}"
 SH
 chmod +x "$bin/semgrep"
 export PATH="$bin:$PATH" GITHUB_WORKSPACE="$root" RUNNER_TEMP="$TMPDIR"

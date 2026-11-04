@@ -19,7 +19,8 @@ with TMPDIR inside this checkout, default ancestor discovery found host skills.
 The child now uses the explicit image SKILLS_DIR, including when absent. No
 runtime skill selection changed. Initial baseline: 503 passed, this one failed.
 The local security precheck now bounds Semgrep jobs (default 2), passed into
-the same pinned container, to avoid oversubscribing the shared test host. No
+the same pinned container via its supported --jobs option, to avoid
+oversubscribing the shared test host. No
 rule, target, severity, exception or scanner requirement is changed. The first
 scans timed out at 900 seconds and are not counted as passes. Local scanner
 processes now have a 3600-second wall budget on the shared host; hosted GitHub CI
@@ -59,11 +60,19 @@ Claude can use this section at the top of the PR.
 
 ## Offline verification
 
-- Full Base + command/token + 50-row acceptance run: **672 passed**, no skips,
-  61 existing warnings, 350.68 seconds. Models/external sockets blocked; real
-  PostgreSQL is disposable and loopback-only. Worker responses are recorded.
-- Flat-image fixture after correction: **16 passed**.
-- Later catalogue HTTP/receipt and public-source candidate assertions receive a
-  focused acceptance rerun before the sheet push.
-- Security precheck is mandatory before each push; the initial timed-out Semgrep
-  run is not a pass. No gitleaks/Semgrep exception or skipped scan is used.
+- Final complete Base, command/token, earlier wiring and 55-row acceptance run:
+  **783 passed, zero skips**, 16 existing warnings, 555.20 seconds. External
+  sockets/models are blocked; real PostgreSQL is disposable and loopback-only.
+  Worker responses are scripted fixtures; browser cases execute real Base code.
+- The sheet has **55 founder rows and 55 corresponding fixture cases**, plus the
+  exact one-row/one-case and command/settings validation check.
+- Focused large-page/cap checks: **13 passed**. Flat-image correction: **16 passed**.
+- Security-policy focused rerun: **59 passed and 34 subtests passed**. Earlier
+  complete security suite: **64 passed and 56 subtests passed**.
+- A concurrent final run stopped on local HTTP/browser timeouts (479 passed);
+  the complete serial rerun above passed the same paths without changes to their
+  assertions. Initial Semgrep wall timeouts are not passes.
+- Security precheck remains mandatory before every push, without any
+  gitleaks/Semgrep exception. CI and push results will be recorded after completion. The first job-cap attempt
+  used an environment variable unsupported by the pinned CLI; it was corrected to
+  its explicit --jobs option before the final precheck.

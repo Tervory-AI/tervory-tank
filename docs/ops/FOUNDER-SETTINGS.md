@@ -9,6 +9,9 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 **Market Lab** (free keys): FRED_API_KEY, EIA_API_KEY, CENSUS_API_KEY, LEGISCAN_API_KEY, NOAA_TOKEN, USPTO_API_KEY
 **Market Lab email:** MARKET_LAB_SMTP_HOST, MARKET_LAB_SMTP_PORT, MARKET_LAB_SMTP_USER, MARKET_LAB_SMTP_PASSWORD, MARKET_LAB_SMTP_FROM, MARKET_LAB_SMTP_ALERT_ADDRESSES
 
+**Base:** BASE_REFERENCE_FILE_URL (optional founder-approved, dated public HTTPS official reference file when the legacy source is blocked).
+**Base company-data trial:** CONTEXT_DEV_API_KEY, CONTEXT_DEV_MAX_CREDITS (existing optional trial only; no new account or paid service is required for ordinary Base checks).
+
 **Zenas US:** CONGRESS_GOV_API_KEY, LEGISCAN_API_KEY (the same key as Market Lab)
 **Zenas email:** ZENAS_SMTP_HOST, ZENAS_SMTP_PORT, ZENAS_SMTP_USER, ZENAS_SMTP_PASSWORD, ZENAS_SMTP_FROM, ZENAS_SMTP_ALERT_ADDRESSES
 
