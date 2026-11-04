@@ -193,3 +193,11 @@ or deployment are performed by this PR.
 
 Protocol references: [R2 S3 API](https://developers.cloudflare.com/r2/api/s3/api/)
 and [AWS Signature V4](https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html).
+
+`hf.jobs.training` defaults to Ask. `--submit` also waits for the founder's
+`platform.paid_step.approve` card in `/chats` before reserving/submitting work.
+Use `/paid-step hf.jobs.training auto` for unattended submissions. The existing
+global paid pause overrides both modes. The approval binds the repository,
+snapshot day, runtime/cost bound and training-script digest. A cancelled, expired
+or interrupted request is never replayed. Hardware quotes and bill reconciliation
+do not submit paid work and do not need paid permission.

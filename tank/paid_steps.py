@@ -36,6 +36,7 @@ FIXED = {
     'vendor.perplexity.fetch_url': 'Research bundle: provider page fetches',
     'hf.jobs.photogrammetry': 'Hugging Face photogrammetry job',
     'hf.jobs.trellis2': 'Hugging Face TRELLIS job',
+    'hf.jobs.training': 'Hugging Face LoRA training job',
 }
 
 
@@ -158,12 +159,21 @@ async def heartbeat(tank=None):
 
 def current() -> Run:
     value = CURRENT.get()
+    if value is not None and value.task is not None and (
+        value.task.done() or value.task.get_loop() is not asyncio.get_running_loop()
+    ):
+        value = None
     if value is None:
         value = Run(task=asyncio.current_task())
         CURRENT.set(value)
         RUNS[value.task] = value
         run = value
         def completed(task):
+            # Runner teardown can stop the loop before an async cleanup starts.
+            # Remove ownership synchronously, including entirely free/Auto runs.
+            RUNS.pop(task, None)
+            if not run.saved:
+                return
             status = 500 if task.cancelled() or task.exception() is not None else 200
             cleanup = asyncio.create_task(finish_run(run, status))
             cleanup.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
@@ -364,8 +374,8 @@ async def card_waiting(card_id, tenant, *, source=None):
     with tenant_scope(None, administrative=True):
         async with (source or runtime().admin_pool()).acquire() as conn:
             return await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM tank.paid_runs
-                WHERE source_tenant_id=$1 AND source_card_id=$2 AND region=$3
-                AND status IN ('waiting','running') AND tank.paid_worker_alive(server_id))''', tenant, card_id, runtime().box_region())
+                WHERE source_tenant_id=$1 AND source_card_id=$2
+                AND status IN ('waiting','running') AND tank.paid_worker_alive(server_id))''', tenant, card_id)
 
 
 @asynccontextmanager
@@ -659,7 +669,13 @@ def install(app, tank):
     async def stop():
         if worker:
             worker.cancel()
-        tasks = [task for task in RUNS if task is not asyncio.current_task()]
+        loop = asyncio.get_running_loop()
+        tasks = []
+        for task in list(RUNS):
+            if task.done() or task.get_loop().is_closed():
+                RUNS.pop(task, None)
+            elif task is not asyncio.current_task() and task.get_loop() is loop:
+                tasks.append(task)
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, *([worker] if worker else []), return_exceptions=True)

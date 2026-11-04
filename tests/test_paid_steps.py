@@ -432,3 +432,29 @@ async def test_workspace_card_can_wait_on_platform_owned_eval(boundary, monkeypa
             if not task.done():
                 task.cancel()
         await asyncio.gather(*list(paid.LIVE), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_manual_hf_training_uses_same_ask_inbox_and_global_pause(boundary):  # noqa: F811
+    from jobs.train.run import paid_step
+    b = boundary
+    calls = []
+    async def submit():
+        async with b.pool.acquire() as conn:
+            async with paid_step(conn, {'repo':'offline/model','minutes':10,'script_sha256':'0'*64}):
+                calls.append(True)
+    work = asyncio.create_task(submit())
+    try:
+        row = await waiting(b)
+        assert row['step_id'] == 'hf.jobs.training' and calls == []
+        await paid.decide(row['id'], 'founder-fixture')
+        await asyncio.wait_for(work, 3)
+        assert calls == [True]
+        await b.pool.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,'hf.jobs.training','auto','fixture')", paid.PLATFORM_TENANT)
+        await b.pool.execute("INSERT INTO tank.controls(tenant_id,name,value,updated_by) VALUES($1,'paid_paused',true,'fixture')", paid.PLATFORM_TENANT)
+        with pytest.raises(ValueError, match='paused'):
+            await submit()
+        assert calls == [True]
+    finally:
+        work.cancel()
+        await asyncio.gather(work, return_exceptions=True)

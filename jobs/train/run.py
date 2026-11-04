@@ -5,8 +5,10 @@ No production DB credential is ever sent to a GPU job. Run this on the US box.
 from __future__ import annotations
 import argparse
 import asyncio
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from contextlib import asynccontextmanager
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,6 +16,58 @@ import re
 import uuid
 
 PLATFORM = uuid.UUID('00000000-0000-0000-0000-000000000001')
+
+
+async def refuse_paid(conn):
+    if await conn.fetchval("SELECT value FROM tank.controls WHERE tenant_id=$1 AND name='paid_paused'", PLATFORM):
+        raise ValueError('Paid work is paused')
+
+
+@asynccontextmanager
+async def paid_step(conn, payload):
+    """The manual CLI uses the same founder inbox without importing Tank's server."""
+    await refuse_paid(conn)
+    async def mode():
+        value = await conn.fetchval("SELECT mode FROM tank.paid_step_settings WHERE tenant_id=$1 AND step_id='hf.jobs.training'", PLATFORM)
+        if value not in {None, 'ask', 'auto'}:
+            raise ValueError('Paid setting unavailable')
+        return value or 'ask'
+    if await mode() == 'auto':
+        await refuse_paid(conn)
+        yield
+        return
+    run, approval = uuid.uuid4(), uuid.uuid4()
+    fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+    async with conn.transaction():
+        await conn.execute('INSERT INTO tank.paid_step_workers(tenant_id,id) VALUES($1,$2)', PLATFORM, run)
+        await conn.execute("INSERT INTO tank.paid_runs(tenant_id,id,region,server_id,status) VALUES($1,$2,'us-east',$2,'waiting')", PLATFORM, run)
+        await conn.execute("""INSERT INTO tank.paid_step_approvals(tenant_id,id,run_id,step_id,request_hash,task_type,expires_at)
+            VALUES($1,$2,$3,'hf.jobs.training',$4,'training.lora',now()+interval '24 hours')""", PLATFORM, approval, run, fingerprint)
+    complete = False
+    print('Waiting for founder approval: hf.jobs.training', flush=True)
+    try:
+        while True:
+            await refuse_paid(conn)
+            row = await conn.fetchrow('SELECT status,expires_at,request_hash FROM tank.paid_step_approvals WHERE tenant_id=$1 AND id=$2', PLATFORM, approval)
+            if row is None or row['status'] not in {'waiting','approved'} or row['expires_at'] <= datetime.now(UTC) or row['request_hash'] != fingerprint:
+                raise ValueError('Training approval unavailable')
+            if row['status'] == 'approved' or await mode() == 'auto':
+                async with conn.transaction():
+                    claimed = await conn.fetchval("""UPDATE tank.paid_step_approvals SET status='claimed',claimed_at=now()
+                        WHERE tenant_id=$1 AND id=$2 AND status IN ('waiting','approved') AND expires_at>now() RETURNING id""", PLATFORM, approval)
+                    if not claimed:
+                        raise ValueError('Training approval consumed')
+                    await conn.execute("UPDATE tank.paid_runs SET status='running' WHERE tenant_id=$1 AND id=$2", PLATFORM, run)
+                break
+            await conn.execute('UPDATE tank.paid_step_workers SET heartbeat=now() WHERE tenant_id=$1 AND id=$2', PLATFORM, run)
+            await asyncio.sleep(1)
+        await refuse_paid(conn)
+        yield
+        complete = True
+    finally:
+        await conn.execute("UPDATE tank.paid_runs SET status=$3,response_status=$4,finished_at=now() WHERE tenant_id=$1 AND id=$2",
+                           PLATFORM, run, 'completed' if complete else 'interrupted', 200 if complete else None)
+        await conn.execute("UPDATE tank.paid_step_approvals SET status='interrupted' WHERE tenant_id=$1 AND id=$2 AND status IN ('waiting','approved')", PLATFORM, approval)
 
 
 def estimate(rate: Decimal, minutes: int, cap: Decimal) -> Decimal:
@@ -105,20 +159,27 @@ async def run(args) -> None:
                 raise ValueError('Reconcile the previous training job before submitting another')
             repo = f'{org}/tervory-squad-{uuid.uuid4().hex}'
             pending = f'pending-{uuid.uuid4().hex}'
-            # Autocommit the reservation before contacting HF. An uncertain submit
-            # must remain blocking, even after an exception or process crash.
-            await conn.execute('INSERT INTO tank.training_jobs(id,tenant_id,region,model_repo,estimated_usd) VALUES ($1,$2,$3,$4,$5)',
-                               pending, PLATFORM, 'us-east', repo, amount)
-            api.create_repo(repo_id=repo, private=True, repo_type='model')
-            if api.model_info(repo).private is not True:
-                raise ValueError('Output repository must be private')
-            job = api.run_uv_job(str(Path(__file__).with_name('train.py')), namespace=org,
-                                flavor='a10g-small', timeout=args.minutes * 60,
-                                env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo},
-                                secrets={'HF_TOKEN': os.environ['HF_TOKEN']})
-            await conn.execute('UPDATE tank.training_jobs SET id=$1 WHERE id=$2 AND tenant_id=$3', job.id, pending, PLATFORM)
-            await link_snapshot_batches(conn, job.id, repo, args.day)
-            print(f'Training job: {job.id}')
+            script = Path(__file__).with_name('train.py')
+            payload = {'namespace':org, 'repo':repo, 'day':args.day, 'minutes':args.minutes,
+                       'estimated_usd':str(amount), 'script_sha256':hashlib.sha256(script.read_bytes()).hexdigest()}
+            async with paid_step(conn, payload):
+                if hashlib.sha256(script.read_bytes()).hexdigest() != payload['script_sha256']:
+                    raise ValueError('Training script changed while waiting')
+                # Autocommit the reservation before contacting HF. An uncertain submit
+                # must remain blocking, even after an exception or process crash.
+                await conn.execute('INSERT INTO tank.training_jobs(id,tenant_id,region,model_repo,estimated_usd) VALUES ($1,$2,$3,$4,$5)',
+                                   pending, PLATFORM, 'us-east', repo, amount)
+                api.create_repo(repo_id=repo, private=True, repo_type='model')
+                if api.model_info(repo).private is not True:
+                    raise ValueError('Output repository must be private')
+                await refuse_paid(conn)
+                job = api.run_uv_job(str(Path(__file__).with_name('train.py')), namespace=org,
+                                    flavor='a10g-small', timeout=args.minutes * 60,
+                                    env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo},
+                                    secrets={'HF_TOKEN': os.environ['HF_TOKEN']})
+                await conn.execute('UPDATE tank.training_jobs SET id=$1 WHERE id=$2 AND tenant_id=$3', job.id, pending, PLATFORM)
+                await link_snapshot_batches(conn, job.id, repo, args.day)
+                print(f'Training job: {job.id}')
         finally:
             await conn.execute('SELECT pg_advisory_unlock(871228)')
     finally:

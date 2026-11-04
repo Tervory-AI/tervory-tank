@@ -105,6 +105,9 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
     monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **kw: api))
     import asyncpg
     conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]), close=AsyncMock())
+    async def scalar(sql, *args):
+        return 'auto' if 'paid_step_settings' in sql else False
+    conn.fetchval.side_effect = scalar  # Explicit fixture authorization for the fake HF submit.
     monkeypatch.setattr(asyncpg, 'connect', AsyncMock(return_value=conn))
     args = SimpleNamespace(receipt=None, minutes=120, submit=submit, day='2026-10-20')
     if cap == '1':

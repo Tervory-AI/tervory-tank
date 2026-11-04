@@ -24,7 +24,7 @@ Runtime changes are separately pushed on `codex/platform-w4-paid-runtime` at `8c
 | [tank/controls.py:84](../../tank/controls.py#L84) | Gate Brave/Places immediately before the metered HTTP dispatch; retain the global pause. |
 | [tank/main.py:1247](../../tank/main.py#L1247) | Model/LLM/batch dispatch gates; caller and post-wait policy/home checks; detached shadows; pool-free provider-batch claims; Base trial wait bound. |
 | [tank/moa.py:174](../../tank/moa.py#L174) | Exclude Ask waits from active execution budgets without sharing sibling seat allowances. |
-| [tank/paid_steps.py:187](../../tank/paid_steps.py#L187) | Default Ask/Auto, input-bound approvals, founder tools/inbox, one-use claims, wait-aware budgets, saved HTTP results and interrupted-run leases. |
+| [tank/paid_steps.py:197](../../tank/paid_steps.py#L197) | Default Ask/Auto, input-bound approvals, founder tools/inbox, one-use claims, wait-aware budgets, saved HTTP results and interrupted-run leases. |
 | [tank/priority_queue.py:258](../../tank/priority_queue.py#L258) | Durable worker claims and short tenant-owned SQL checkouts while a run waits. |
 | [tank/research.py:155](../../tank/research.py#L155) | Gate native research web/fetch bundles and model dispatch; preserve authenticated room ownership. |
 | [tank/rig_forge_routes.py:104](../../tank/rig_forge_routes.py#L104) | Gate HF work before the immutable once-only claim and charged receipt. |
@@ -55,15 +55,13 @@ Runtime changes are separately pushed on `codex/platform-w4-paid-runtime` at `8c
 | [tests/test_zenas_z8b.py:341](../../tests/test_zenas_z8b.py#L341) | Explicitly authorize synthetic fixture models/paid tools while retaining existing routing, accounting and lifecycle assertions. |
 | [workers/paid_transport.py:1](../../workers/paid_transport.py#L1) | Poll only the original validated Tank origin; ignore returned URLs. |
 | [workers/task/__main__.py:58](../../workers/task/__main__.py#L58) | Keep the original worker request alive through its saved response. |
-
 | [tests/test_ledger_sql_param.py:40](../../tests/test_ledger_sql_param.py#L40) | Explicit fixture Auto mode and isolated runtime; retain literal SQL/tenant assertions. |
-
 | [tests/test_rig_cart_admin.py:3](../../tests/test_rig_cart_admin.py#L3) | Import its own Rig package explicitly so collection does not depend on another test module. |
-
 | [tests/test_rig_landing_overflow.py:40](../../tests/test_rig_landing_overflow.py#L40) | Disable CSS motion throughout frozen-clock/font-ready captures; keep exact screenshot equality. |
-
 | [tests/test_tank_semantic_cache.py:310](../../tests/test_tank_semantic_cache.py#L310) | Authorize its synthetic batch alias before the existing cache/batch receipt proof. |
-
 | [tests/tiger_brain/test_tg3.py:105](../../tests/tiger_brain/test_tg3.py#L105) | Use its explicit fake runtime for the authorized model transport proof. |
+| [jobs/train/run.py:27](../../jobs/train/run.py#L27) | Gate the existing manual HF training submission through the same Ask/Auto settings and founder inbox; bind script/budget parameters and recheck the global pause before GPU submission. |
+| [jobs/train/README.md:197](../../jobs/train/README.md#L197) | Document training approval, cancellation and quote/reconciliation behavior. |
+| [tests/test_grad1_hf_training.py:108](../../tests/test_grad1_hf_training.py#L108) | Explicitly authorize the fake HF launcher transport; retain secret/budget assertions. |
 
 Missing settings/waiting frames and operational limits: [Wave 4 handoff](WAVE4.md#item-8-founder-askauto-for-every-paid-step).
