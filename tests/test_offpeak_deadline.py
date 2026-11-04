@@ -55,6 +55,18 @@ def test_dst_and_special_dates_are_local_price_data():
     assert plan["dispatch_at"] == "2026-11-05T08:00:00+00:00"
 
 
+@pytest.mark.parametrize("stamp,expected", [
+    ("2026-11-01T08:45:00+00:00", "2026-11-01T09:00:00+00:00"),
+    ("2026-11-01T09:15:00+00:00", "2026-11-01T09:15:00+00:00"),
+])
+def test_both_occurrences_of_a_fall_back_price_window(stamp, expected):
+    at = datetime.fromisoformat(stamp)
+    info = {"offpeak": {"timezone": "America/Los_Angeles", "charge_multiplier": .5,
+                        "windows": [{"days": [6], "start": "01:00", "end": "01:30"}]}}
+    plan = offpeak_schedule.select(info, at, at + timedelta(hours=2))
+    assert plan["dispatch_at"] == expected and plan["charge_multiplier"] == .5
+
+
 @pytest.mark.parametrize("deadline", [NOW, NOW + timedelta(seconds=119), NOW.replace(tzinfo=None)])
 def test_invalid_or_unachievable_deadline_refuses(deadline):
     with pytest.raises(ValueError):

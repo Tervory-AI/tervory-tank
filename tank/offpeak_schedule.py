@@ -40,18 +40,19 @@ def select(info: dict, at: datetime, deadline: datetime, *, batch_discount=None)
                        if day.isoformat() in settings.get("dates", []) else
                        [w for w in settings["windows"] if day.weekday() in w["days"]])
             for window in windows:
-                def boundary(value):
+                def boundary(value, fold):
                     hour, minute = map(int, value.split(":"))
                     if hour == 24 and minute == 0:
-                        return datetime.combine(day + timedelta(days=1), time(), zone)
-                    return datetime.combine(day, time(hour, minute), zone)
-                start = boundary(window["start"]).astimezone(timezone.utc)
-                end = boundary(window["end"]).astimezone(timezone.utc)
-                if end <= start:
+                        return datetime.combine(day + timedelta(days=1), time(), zone).replace(fold=fold)
+                    return datetime.combine(day, time(hour, minute), zone).replace(fold=fold)
+                if window["start"] >= window["end"]:
                     raise ValueError("Invalid off-peak window")
-                start = max(at, start)
-                if start < end and start + duration <= deadline:
-                    candidates.append((discount, start + duration, start, "foreground"))
+                for fold in (0, 1):
+                    start = boundary(window["start"], fold).astimezone(timezone.utc)
+                    end = boundary(window["end"], fold).astimezone(timezone.utc)
+                    start = max(at, start)
+                    if start < end and start + duration <= deadline:
+                        candidates.append((discount, start + duration, start, "foreground"))
     charge, _, start, mode = min(candidates)
     return {"dispatch_at": start.isoformat(), "deadline": deadline.isoformat(),
             "mode": mode, "charge_multiplier": float(charge)}
