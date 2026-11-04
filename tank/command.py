@@ -125,6 +125,8 @@ def allowed_tools(actor: Actor) -> list[str]:
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     voice_tools = TOOLS["trigger"] + ["rig.quote.confirm_payment"] if actor.tenant_admin and not actor.founder else []
     client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
+    if actor.tenant_admin or actor.founder:
+        client_tools = [*client_tools, "paid_steps.approve"]
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
                    if (tool != "radix.deploy.override" or actor.founder) and (tool not in {"radix.infra.scan", "radix.active.scan", "radix.active.consent", "radix.active.consent.withdraw"} or actor.founder or actor.tenant_admin) and ((tool != "rig.quote.confirm_payment" and not tool.startswith("market_lab.alerts."))
@@ -168,6 +170,7 @@ class Turn(Body):
 
 class CardAction(Body):
     action: Literal["confirm", "cancel"]
+    reason: str | None = Field(default=None, min_length=1, max_length=1000)
 
 
 class SquadAccess(Body):
@@ -249,6 +252,8 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
         "saved_usd": float(baseline) - cost if not pending and cost is not None else None,
         "cost_status": "price not set" if ledger.get("cost_status") == "not_set" else "pending" if cost is None else "recorded",
         "baseline_status": "baseline pending" if pending else "recorded",
+        **({"paid_step_id": ledger["paid_step_id"], "paid_step_mode": ledger.get("paid_step_mode"),
+            "paid_step_approval_id": str(ledger["paid_step_approval_id"])} if ledger.get("paid_step_approval_id") else {}),
     }
 
 
@@ -261,7 +266,7 @@ MODEL_NAME_KEYS = frozenset({"model", "baseline_model", "auto_model", "requested
 CUSTOMER_RECEIPT_KEYS = frozenset({
     "step_id", "ledger_id", "tokens_in", "tokens_out", "cost_usd", "baseline_cost_usd", "saved_usd",
     "cost_status", "baseline_status", "auto_cost_usd", "auto_cost_status", "auto_priced_at",
-    "auto_cost_label", "auto_cost_basis",
+    "auto_cost_label", "auto_cost_basis", "paid_step_id", "paid_step_mode", "paid_step_approval_id",
 })
 CUSTOMER_STEP_DROP = frozenset({"auto_comparison", "requested_model", "model"})
 CUSTOMER_MESSAGE_KEYS = frozenset({"message_id", "role", "content", "attachments", "repeatable"})
@@ -405,6 +410,7 @@ async def list_threads(q: str = Query(default="", max_length=200), actor: Actor 
 
 @router.get("/threads/{thread_id}")
 async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> dict:
+    await __import__("paid_steps").sync_cards(thread_id, actor)
     async with db().acquire() as conn:
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
@@ -576,8 +582,11 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
             raise deferred_error
         if answer is None:
             async with asyncio.timeout(150):
-                answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token,
-                                          **({"priority": priority} if priority is not None else {}))
+                import paid_steps
+                with paid_steps.run_scope(paid_steps.Run(actor.tenant_id, uuid.UUID(turn_id),
+                        paid_steps.fingerprint([messages, model]), actor.user_id, thread_id)):
+                    answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token,
+                                              **({"priority": priority} if priority is not None else {}))
         from priority_queue import QueuedResponse
         if isinstance(answer, QueuedResponse):
             async with editing(thread_id, actor) as (conn, row, state):
@@ -622,6 +631,8 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
             await event(conn, row, "done", {"message_id": turn_id})
             if state["active_turn"] == turn_id:
                 state["active_turn"] = None
+    except __import__("paid_steps").ApprovalRequired as pause:
+        await __import__("paid_steps").suspend_turn(pause, thread_id, actor, turn_id, messages, model, priority)
     except (Exception, asyncio.CancelledError) as exc:
         # Never return raw provider exceptions, URLs, headers or prompts.
         if not isinstance(exc, (HTTPException, asyncio.CancelledError)):
@@ -755,10 +766,15 @@ async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depen
         )
     if thread_id is None:
         raise HTTPException(404, "Card not found")
+    paid_card = await __import__("paid_steps").resolve_card(thread_id, card_id, body, actor)
+    if paid_card is not None:
+        return paid_card
     action = None
     reconcile = False
     async with editing(thread_id, actor) as (conn, row, state):
         card = state["cards"][str(card_id)]
+        if card.get("paid_approval_id"):
+            return public_card(card)
         # Recover a crashed process without replaying an uncertain side effect.
         if card["status"] == "executing":
             started = datetime.fromisoformat(card["started_at"])
@@ -1889,7 +1905,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     return adapter.method, path, scope, {**args, **scope}
 
 
-async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any]:
+async def dispatch_action(action: PlannedAction, actor: Actor, *, paid_run_id=None) -> tuple[int, Any]:
     """In-process HTTP to Tank: existing route auth/validation remains in force.
 
     There is no socket fallback, redirect, direct room address or provider call.
@@ -1902,6 +1918,8 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
         from trigger_commands import confirmation
         confirmation(actor, action.tool, action.arguments)
     method, path, params, body = adapter_request(action, actor)
+    if action.tool == "market_lab.research" and paid_run_id is not None:
+        body = {**body, "paid_run_id": str(paid_run_id)}
     if action.tool in {"radix.infra.scan", "radix.active.scan", "radix.active.consent", "radix.active.consent.withdraw"}:
         from trigger_commands import confirmation
         confirmation(actor, action.tool, action.arguments)
@@ -2120,7 +2138,15 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
-                status, result = await dispatch_action(action, actor)
+                if action.tool == "market_lab.research":
+                    # Card identity is server-owned; the request cannot provide
+                    # an approval or select another card's paid run.
+                    status, result = await dispatch_action(action, actor, paid_run_id=uuid.UUID(card_id))
+                    detail = result.get("detail") if isinstance(result, dict) else None
+                    if status == 409 and isinstance(detail, dict) and detail.get("code") == "paid_step_approval_required":
+                        return await __import__("paid_steps").suspend_action(detail, thread_id, actor, card_id, action)
+                else:
+                    status, result = await dispatch_action(action, actor)
         ids = explicit_ledger_ids(result)
         async with editing(thread_id, actor) as (conn, row, state):
             card = state["cards"][card_id]

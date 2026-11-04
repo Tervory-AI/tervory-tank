@@ -42,7 +42,7 @@ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
         max_tokens = min(kwargs.get("max_tokens") or ceiling, ceiling)
         owner = job["policy_tenant_id"] or PLATFORM_TENANT
         target = job["model"]
-        receipt: dict = {}
+        receipt: dict = {"_paid_task_type": job["task_type"], "_paid_agent": pkg.agent, "_paid_skill": pkg.ref + "#preview"}
         started = time.perf_counter()
         cost, outcome, error = 0.0, "unverified", None
         try:
@@ -70,17 +70,19 @@ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
             outcome, error = "failed", "skill_revalidation_call_failed"
             raise RuntimeError("Model revalidation call failed") from None
         finally:
-            async with tank.pool().acquire() as conn:
-                await conn.execute(
-                    """INSERT INTO tank.ledger
-                    (tenant_id,region,agent,skill,task_type,rung,model,priority,tokens_in,tokens_out,
-                     cost_usd,latency_ms,cache_hit,outcome,error)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,'standard',$8,$9,$10,$11,false,$12,$13)""",
-                    PLATFORM_TENANT, tank.box_region(), pkg.agent, pkg.ref + "#preview",
-                    job["task_type"], 3 if tank.graduate.is_skill(target) else 1, target,
-                    receipt.get("tokens_in", 0), receipt.get("tokens_out", 0), cost,
-                    int((time.perf_counter() - started) * 1000), outcome, error,
-                )
+            if not receipt.get("_paid_ledger_id") and not receipt.get("_paid_waiting"):
+                async with tank.pool().acquire() as conn:
+                    await conn.execute(
+                        """INSERT INTO tank.ledger
+                        (tenant_id,region,agent,skill,task_type,rung,model,priority,tokens_in,tokens_out,
+                         cost_usd,latency_ms,cache_hit,outcome,error)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,'standard',$8,$9,$10,$11,false,$12,$13)""",
+                        PLATFORM_TENANT, tank.box_region(), pkg.agent, pkg.ref + "#preview",
+                        job["task_type"], 3 if tank.graduate.is_skill(target) else 1, target,
+                        receipt.get("tokens_in", 0), receipt.get("tokens_out", 0), cost,
+                        int((time.perf_counter() - started) * 1000), outcome, error,
+                    )
+
     ctx._model = model
     return ctx
 
@@ -171,7 +173,14 @@ async def drain(tank: Any, limit: int = 20) -> int:
                     if pkg.task_type != job["task_type"]:
                         raise ValueError("Package task type changed")
                     # The exact handler used by /v1/skala/{id}/{version}/evals.
-                    await tank.run_skill_evals(pkg.id, pkg.version)
+                    import paid_steps
+                    with paid_steps.run_scope(paid_steps.Run(PLATFORM_TENANT, job["id"],
+                            paid_steps.fingerprint([job["id"], job["policy"]]))), paid_steps.background_scope(job["task_type"] + ".revalidation"):
+                        await tank.run_skill_evals(pkg.id, pkg.version)
+                except __import__("paid_steps").ApprovalRequired:
+                    # Leave this committed job queued. The same job/run identity
+                    # observes approval on the next worker pass, without marking an eval failed.
+                    break
                 except Exception:
                     log.warning("Skala model revalidation unavailable for %s@%s", job["skill_id"], job["version"])
                     await record(tank, failed_result(tank, job))

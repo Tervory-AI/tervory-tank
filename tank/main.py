@@ -587,7 +587,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     for an agent key. Agent keys are taken from the environment only, compared
     as SHA-256 bytes. A removed TANK_KEY_* stops matching. The table is synced
     once; it is never used to authenticate. The raw key is never logged.
-    An agent key may call /health, /v1/route, and /v1/skala/{id}/run only.
+    Agent keys use explicit room corridors, plus their own paid-approval state.
+    They cannot change paid-step settings or approve an expense.
     """
     import hmac
 
@@ -666,7 +667,9 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     # Its own queued background calls only; route_job checks the caller.
     job_route = request.method == "GET" and path.startswith("/v1/route/jobs/") and path.count("/") == 4
     event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle"}
-    if path not in {"/health", "/v1/route"} and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
+    paid_status = request.method == "GET" and re.fullmatch(r"/v1/paid-steps/approvals/[0-9a-fA-F-]{36}", path)
+    paid_admit = matched == "base" and request.method == "POST" and path == "/v1/paid-steps/admit"
+    if path not in {"/health", "/v1/route"} and not paid_status and not paid_admit and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -682,6 +685,7 @@ class RouteRequest(BaseModel):
     complex_request: bool = False
     interactive: bool = True
     tenant_id: uuid.UUID
+    paid_run_id: uuid.UUID | None = None
     agent: str = "tier0"
     task_type: str = "tier0.answer"
     priority: Literal["urgent", "standard", "offpeak", "batch"] | None = None          # overrides the policy's priority if set
@@ -801,6 +805,9 @@ async def _startup() -> None:
         ddl = f.read()
     async with (_admin_pool or raw_pool).acquire() as conn:
         await conn.execute(ddl)
+        async with raw_pool.acquire() as tenant_conn:
+            paid_tenant_role = await tenant_conn.fetchval("SELECT current_user")
+        await __import__("paid_steps").bootstrap_access(conn, paid_tenant_role)
         own_model_promoted = await conn.fetchval(
             "SELECT EXISTS(SELECT 1 FROM tank.policy WHERE tenant_id IS NULL "
             "AND model=$1 AND promoted_at IS NOT NULL)",
@@ -817,10 +824,12 @@ async def _startup() -> None:
             "WHERE status IN ('queued','running') AND task_type <> 'base.enrich' "
             "AND NOT EXISTS(SELECT 1 FROM tank.offpeak_jobs j WHERE j.task_id=tank.tasks.id "
             "AND j.tenant_id=tank.tasks.tenant_id AND (j.status IN ('queued','dispatching','batch') "
-            "OR (j.command_context IS NOT NULL AND NOT j.notified)))"
+            "OR (j.command_context IS NOT NULL AND NOT j.notified))) "
+            "AND NOT EXISTS(SELECT 1 FROM tank.paid_step_approvals a WHERE a.tenant_id=tank.tasks.tenant_id "
+            "AND a.run_id=tank.tasks.id AND a.continuation IS NOT NULL AND a.resume_status <> 'completed')"
         )
     global _http, _packages
-    _http = httpx.AsyncClient(headers={"User-Agent": "Tervory/1.0 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]})
+    _http = __import__("paid_http").Client(headers={"User-Agent": "Tervory/1.0 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]})
     global _redis
     try:
         _redis = aioredis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
@@ -1238,7 +1247,63 @@ async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tupl
 
 
 @tenant_path("req")
-async def run_route(
+async def run_route(req: RouteRequest, task_id=None, caller=None, **kwargs):
+    import paid_steps
+    await _check_route_task(req, task_id)
+    foreign = home_region_refusal(call_home(req.home_region, box_region()), box_region())
+    if foreign:
+        raise HTTPException(403, foreign)
+    if kwargs.get("model_override") is not None:
+        if not override_allowed(req.task_type):
+            raise HTTPException(403, "Model override is not enabled for this task type")
+        if kwargs["model_override"] not in {row["name"] for row in await list_models()}:
+            raise HTTPException(422, "Model is not on the roster")
+    if MOA_SEAT_TASK.fullmatch(req.task_type) and kwargs.get("model_override") is None:
+        raise HTTPException(400, "A MoA seat requires a model override")
+    inherited = paid_steps.current.get()
+    if inherited is None:
+        run = paid_steps.Run(req.tenant_id, req.paid_run_id or task_id or uuid.uuid4(),
+                             paid_steps.fingerprint(req.model_dump(exclude={"paid_run_id"})))
+        with paid_steps.run_scope(run):
+            return await run_route(req.model_copy(update={"paid_run_id": run.run_id}),
+                                   task_id=task_id, caller=caller, **kwargs)
+    if inherited.tenant_id != req.tenant_id:
+        raise HTTPException(403, "Paid-step tenant does not match its run")
+    req = req.model_copy(update={"paid_run_id": inherited.run_id})
+    original = kwargs.get("_paid_policy") or await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+    policy = original
+    attempted = set()
+    while True:
+        async def invoke():
+            try:
+                answer = await _run_route(req, task_id=task_id, caller=caller, **{**kwargs, "_paid_policy": policy})
+                return {"queued": isinstance(answer, priority_queue.QueuedResponse), "answer": answer.model_dump(mode="json")}
+            except HTTPException as exc:
+                if isinstance(exc.detail, dict) and exc.detail.get("ledger_id"):
+                    return {"error": exc.detail, "status": exc.status_code}
+                raise
+        value = await paid_steps.checkpoint(paid_steps.fingerprint(["route", req.model_dump(exclude={"paid_run_id"}),
+                                             policy["model"], kwargs.get("model_override"), bool(kwargs.get("_offpeak_dispatch")), bool(kwargs.get("_defer_paid"))]), invoke)
+        if "error" not in value:
+            return (priority_queue.QueuedResponse if value["queued"] else RouteResponse).model_validate(value["answer"])
+        attempted.add(policy["model"])
+        if policy["model"].startswith("skill:") and policy.get("escalation_model"):
+            attempted.add(policy["escalation_model"])
+        # The gateway cannot spend on a different paid seat invisibly. Preserve
+        # the configured order, but admit each fallback only when reached.
+        if kwargs.get("model_override") is not None or kwargs.get("_offpeak_dispatch") or value["status"] != 502:
+            raise HTTPException(value["status"], value["error"])
+        names = original.get("fallbacks")
+        if names is None:
+            catalog = await __import__("routing_data").catalog(__import__("sys").modules[__name__])
+            names = catalog["chains"].get(original.get("escalation_model") if original["model"].startswith("skill:") else original["model"], [])
+        next_model = next((name for name in names if name not in attempted), None)
+        if next_model is None:
+            raise HTTPException(value["status"], value["error"])
+        policy = {**original, "model": next_model, "rung": 1}
+
+
+async def _run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
     caller: str | None = None,
@@ -1286,9 +1351,7 @@ async def run_route(
             raise HTTPException(status_code=403, detail="Model override is not enabled for this task type")
         if model_override not in {row["name"] for row in await list_models()}:
             raise HTTPException(status_code=422, detail="Model is not on the roster")
-    policy = await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
-    if _paid_policy is not None:
-        policy = _paid_policy
+    policy = _paid_policy if _paid_policy is not None else await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
     if model_override is not None:
         policy = {**policy, "model": model_override, "rung": 1, "candidate_model": None, "shadow_rate": 0}
     route_seat = req.task_type.partition("#moa.")[2] if seat else (
@@ -1412,20 +1475,22 @@ async def run_route(
     if blocked:
         raise HTTPException(403, blocked)
     await _check_route_task(req, task_id)
-    if priority == "offpeak" and not _offpeak_dispatch:
-        item = _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
-                              semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
-        return await priority_queue.enqueue(__import__("sys").modules[__name__], item,
-                                             caller=caller, task_id=task_id, model_override=model_override)
-    if _defer_paid and priority != "urgent" and not holds_identifier:
-        raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
-                             semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
     if _paid_limit is not None:
         prices = await _batch_price(model)
         if _call_upper(messages, max_tokens, prices) > _paid_limit:
             raise HTTPException(409, "Task cost cap prevents another call")
         generation = {**generation, "disable_fallbacks": True}
-    await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
+    paid_authorization = await __import__("paid_steps").model_admission(req.tenant_id, req.task_type, model, agent=req.agent)
+    if priority == "offpeak" and not _offpeak_dispatch:
+        item = _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
+                              semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
+        queued = await priority_queue.enqueue(__import__("sys").modules[__name__], item,
+                                             caller=caller, task_id=task_id, model_override=model_override)
+        await __import__("paid_steps").attach_receipt(queued.id, paid_authorization)
+        return queued
+    if _defer_paid and priority != "urgent" and not holds_identifier:
+        raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
+                             semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
     sent_at = priority_queue.now()
     if _offpeak_dispatch and not priority_queue.window_open(price_info.get("offpeak"), sent_at):
@@ -1435,6 +1500,7 @@ async def run_route(
             await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=$3
                 WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", _receipt_id, req.tenant_id, sent_at)
     started = time.perf_counter()
+    generation = {**generation, "disable_fallbacks": True}
     dispatched_settings = {"max_tokens": max_tokens, **generation}
     routing = await __import__("routing_data").dispatch(
         __import__("sys").modules[__name__], policy=policy, model=model,
@@ -1470,6 +1536,7 @@ async def run_route(
                 # Existing NOT NULL storage convention: not_set is never shown as zero spend.
                 "not_set" if exc.cost_usd is None else "set", sent_at,
             )
+        await __import__("paid_steps").attach_receipt(ledger_id, paid_authorization)
         raise HTTPException(502, {"ledger_id": str(ledger_id)}) from None
     except httpx.HTTPError as exc:
         # The gateway never answered. Still a call on the books, so the failure rate is honest.
@@ -1491,6 +1558,7 @@ async def run_route(
                 req.task_type, policy["rung"], model, priority, latency_ms, task_id, err, route_seat, json.dumps(escalation),
                 sent_at, _receipt_id, "not_set" if _receipt_id else "set",
             )
+        await __import__("paid_steps").attach_receipt(ledger_id, paid_authorization)
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": err}) from exc
     latency_ms = int((time.perf_counter() - started) * 1000)
 
@@ -1557,6 +1625,7 @@ async def run_route(
             sent_at, _receipt_id, cost_status, cache_read, cache_write,
         )
 
+    await __import__("paid_steps").attach_receipt(ledger_id, paid_authorization)
     if outcome == "failed":
         upstream: Any = "provider error" if holds_identifier else (data or r.text[:500])
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": upstream})
@@ -1604,6 +1673,60 @@ async def run_route(
 
 
 async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int, *, receipt: dict | None = None) -> tuple[str, float]:
+    import paid_steps
+    if is_build_only_model(model):
+        raise RuntimeError(BUILD_ONLY_REFUSAL)
+    cleaned = _plain_messages(messages)
+    if _contains_html(cleaned):
+        raise ValueError("HTML is not model input; supply extracted text")
+    _screen_mask(cleaned)
+    async def invoke():
+        meter = receipt if receipt is not None else {}
+        meter["_paid_waiting"] = True
+        approval = await paid_steps.background_admission(paid_steps.background_task.get(), model, [cleaned, max_tokens])
+        meter["_paid_waiting"] = False
+        meter.setdefault("model", model)
+        task = paid_steps.background_budget.get() or paid_steps.background_task.get().removesuffix(".shadow")
+        ceiling = 0.0
+        budgeted = approval and paid_steps.background_budget.get() is not None
+        if budgeted:
+            try:
+                ceiling = _call_upper(cleaned, max_tokens, await _batch_price(model))
+            except HTTPException as exc:
+                exc._paid_unspent = True
+                raise
+            await paid_steps.reserve_shadow(task, ceiling, _shadow_budget())
+        metered_id = await paid_steps.begin_model_receipt(approval, model,
+            meter.get("_paid_task_type", task + "#shadow"), box_region(),
+            agent=meter.get("_paid_agent", "shadow"), skill=meter.get("_paid_skill"))
+        if metered_id:
+            meter["_paid_ledger_id"] = str(metered_id)
+            if paid_steps.current.get():
+                paid_steps.current.get().paid_calls.add(str(metered_id))
+        successful = False
+        try:
+            answer, cost = await _llm_work(model, cleaned, max_tokens, receipt=meter)
+            successful = True
+        except Exception:
+            meter["_paid_unknown"] = bool(approval)
+            raise
+        finally:
+            if approval:
+                await paid_steps.finish_model_receipt(approval, metered_id, meter, successful=successful)
+                if budgeted:
+                    await paid_steps.settle_shadow(task, ceiling, meter.get("cost"))
+        return {"content": answer, "cost": cost, "receipt": meter,
+                "approval": paid_steps.metadata(approval) if approval else None}
+    value = await paid_steps.checkpoint(paid_steps.fingerprint(["shadow", model, cleaned, max_tokens]), invoke)
+    if receipt is not None and value["receipt"]:
+        receipt.update(value["receipt"])
+    if value["approval"] and paid_steps.current.get():
+        paid_steps.remember(paid_steps.current.get(), value["approval"])
+        paid_steps.current.get().paid_calls.add(value["receipt"]["_paid_ledger_id"])
+    return value["content"], value["cost"]
+
+
+async def _llm_work(model: str, messages: list[dict[str, str]], max_tokens: int, *, receipt: dict | None = None) -> tuple[str, float]:
     if is_build_only_model(model):
         # Shadow runs on live tenant traffic; a build-only model never sees it.
         raise RuntimeError(BUILD_ONLY_REFUSAL)
@@ -1611,13 +1734,12 @@ async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int, *, r
     if _contains_html(messages):
         raise ValueError("HTML is not model input; supply extracted text")
     _screen_mask(messages)
-    await __import__("controls").refuse_paid(path="_llm")
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
             f"{LITELLM_URL}/v1/chat/completions",
             headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
             json={"model": model, "messages": messages, "max_tokens": max_tokens,
-                  **({"disable_fallbacks": True} if receipt is not None else {})},
+                  "disable_fallbacks": True},
         )
     if r.status_code != 200:
         raise RuntimeError(f"{model}: {r.status_code} {r.text[:200]}")
@@ -1826,6 +1948,26 @@ async def _run_code_candidate(req: RouteRequest, cand: str, messages: list[dict[
 async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]], max_tokens: int,
                   ledger_id: uuid.UUID, primary: str, primary_cost: float, *,
                   routellm: tuple | None = None, cache_content: str | None = None) -> dict | None:
+    import paid_steps
+    root = paid_steps.Run(PLATFORM_TENANT, uuid.uuid5(ledger_id, "shadow"),
+                          paid_steps.fingerprint([str(ledger_id), policy, messages]))
+    try:
+        with paid_steps.run_scope(root), paid_steps.background_scope(req.task_type + ".shadow", req.task_type):
+            return await _shadow_work(req, policy, messages, max_tokens, ledger_id, primary, primary_cost,
+                                      routellm=routellm, cache_content=cache_content)
+    except __import__("paid_steps").ApprovalRequired as pause:
+        await __import__("paid_steps").save_background(pause, {
+            "kind": "shadow", "request": req.model_dump(mode="json"), "policy": policy,
+            "messages": messages, "max_tokens": max_tokens, "ledger_id": str(ledger_id),
+            "primary": primary, "primary_cost": primary_cost,
+            "routellm": [{"strong": routellm[0].strong, "weak": routellm[0].weak, "threshold": routellm[0].threshold}, routellm[1]] if routellm else None,
+            "cache_content": cache_content})
+        return None
+
+
+async def _shadow_work(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]], max_tokens: int,
+                  ledger_id: uuid.UUID, primary: str, primary_cost: float, *,
+                  routellm: tuple | None = None, cache_content: str | None = None) -> dict | None:
     """Run the candidate on the same input, score agreement with the primary, record both.
     The client already has the primary answer. Spend lands on the platform tenant.
     Code skills cost nothing and are not subject to the daily shadow budget."""
@@ -1863,7 +2005,8 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
             jp = await load_policy("tank.judge", PLATFORM_TENANT)
             jmsgs = [{"role": "system", "content": jp["system_prompt"]},
                      {"role": "user", "content": f"REQUEST:\n{messages[-1]['content'][:3000]}\n\nFIRST ANSWER:\n{primary[:4000]}\n\nSECOND ANSWER:\n{cand_content[:4000]}"}]
-            verdict, jcost = await _llm(jp["model"], jmsgs, jp["max_tokens_out"])
+            with __import__("paid_steps").background_scope("tank.judge.shadow"):
+                verdict, jcost = await _llm(jp["model"], jmsgs, jp["max_tokens_out"])
             cand_cost += jcost
             found = re.search(r"\d{1,3}", verdict)
             agreement, method = (min(100, int(found.group())) / 100 if found else None), "judge"
@@ -1875,7 +2018,7 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
             primary, primary_cost, primary_known, cand_content, max(cand_cost, receipt.get("cost") or 0),
             receipt, agreement, method, fields)
         return
-    async with pool().acquire() as conn:
+    async with __import__("paid_steps").connection(req.tenant_id) as conn:
         await conn.execute(
             """
             INSERT INTO tank.shadow (ledger_id, tenant_id, task_type, primary_model, candidate_model, primary_content,
@@ -1885,21 +2028,24 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
             ledger_id, req.tenant_id, req.task_type, policy["model"], cand, primary[:20000],
             (cand_content or "")[:20000], cand_cost, primary_cost, agreement, method, json.dumps(fields),
         )
-        # Paid R&D stays on platform. Zero-cost code evidence remains tenant-owned.
-        shadow_ledger = await conn.fetchval(
-            """
-            INSERT INTO tank.ledger (tenant_id, region, agent, task_type, rung, model, priority, tokens_in, tokens_out,
-                                     cost_usd, latency_ms, cache_hit, outcome)
-            VALUES ($1,$2,'tank',$3,$4,$5,'batch',0,0,$6,0,false,$7) RETURNING id
-            """,
-            req.tenant_id if code else PLATFORM_TENANT, DEFAULT_REGION, f"{req.task_type}#shadow", 3 if code else 1, cand, cand_cost,
-            "delivered" if cand_content is not None else "failed",
-        )
-        if code:
-            await conn.execute("INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content) VALUES($1,$2,$3,$4::jsonb,$5)",
-                shadow_ledger, req.tenant_id, req.task_type+"#shadow", json.dumps(_storage_mask(_plain_messages(messages))),
-                _storage_mask(cand_content or "")[:20000])
-        await _add_spend(conn, req.task_type, cand_cost)
+    # Per-model calls already have durable platform receipts, including an
+    # incomplete comparison waiting on its judge. Keep zero-cost code evidence.
+    paid_calls = __import__("paid_steps").current.get().paid_calls
+    if code or not paid_calls:
+        cost_owner = req.tenant_id if code else PLATFORM_TENANT
+        async with __import__("paid_steps").connection(cost_owner) as conn:
+            shadow_ledger = await conn.fetchval(
+                """INSERT INTO tank.ledger (tenant_id,region,agent,task_type,rung,model,priority,tokens_in,tokens_out,
+                     cost_usd,latency_ms,cache_hit,outcome)
+                VALUES($1,$2,'tank',$3,$4,$5,'batch',0,0,$6,0,false,$7) RETURNING id""",
+                cost_owner, DEFAULT_REGION, f"{req.task_type}#shadow", 3 if code else 1, cand,
+                0 if paid_calls else cand_cost, "delivered" if cand_content is not None else "failed")
+            if code:
+                await conn.execute("INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content) VALUES($1,$2,$3,$4::jsonb,$5)",
+                    shadow_ledger, req.tenant_id, req.task_type+"#shadow", json.dumps(_storage_mask(_plain_messages(messages))),
+                    _storage_mask(cand_content or "")[:20000])
+            if not paid_calls:
+                await _add_spend(conn, req.task_type, cand_cost)
     if not cache:
         await _move_task(req.task_type)
     return {"agreement": agreement, "method": method, "evaluation_cost_usd": cand_cost}
@@ -2231,9 +2377,8 @@ async def _screen_model(name: str, task_type: str, cases: list[tuple[Any, list[d
             continue
         if not await _shadow_budget_open(task_type):
             break
-        content, cost = await _llm(name, messages, max_tokens)
-        async with pool().acquire() as conn:
-            await _add_spend(conn, task_type, cost)
+        with __import__("paid_steps").background_scope(task_type + ".screen", task_type):
+            content, cost = await _llm(name, messages, max_tokens)
         scores.append(graduate.score_pair(expected, content, tolerance=tolerance))
     return sum(scores) / len(scores) if scores else None
 
@@ -2710,6 +2855,7 @@ async def route_job(job_id: uuid.UUID, tenant_id: uuid.UUID, caller: str | None 
 # ---------- provider batches (independent of the task queue worker) ----------
 
 class _DeferredRoute(Exception):
+    _paid_unspent = True
     def __init__(self, req, policy, messages, max_tokens, generation, escalation, cache_snapshot=None):
         self.req, self.policy = req, policy
         self.messages, self.max_tokens = messages, max_tokens
@@ -2718,6 +2864,7 @@ class _DeferredRoute(Exception):
 
 
 class BatchRequest(BaseModel):
+    paid_run_id: uuid.UUID | None = None
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     requests: list[RouteRequest] = Field(min_length=1, max_length=1000)
 
@@ -2771,13 +2918,15 @@ async def _batch_gateway(method: str, path: str, *, model: str | None = None, **
 @app.post("/v1/route/batch")
 @tenant_path("body")
 async def route_batch(body: BatchRequest, caller: str | None = Depends(require_key)) -> dict[str, Any]:
+    if body.paid_run_id:
+        body = body.model_copy(update={"id":body.paid_run_id})
     tenant = body.requests[0].tenant_id
     task = body.requests[0].task_type
     if any(r.tenant_id != tenant or r.task_type != task for r in body.requests):
         raise HTTPException(422, "A batch has one tenant and one task type")
     if "#moa." in task or override_allowed(task):
         raise HTTPException(422, "This task requires the foreground route")
-    fingerprint = hashlib.sha256(json.dumps(body.model_dump(mode="json", exclude={"id"}), sort_keys=True).encode()).hexdigest()
+    fingerprint = hashlib.sha256(json.dumps(body.model_dump(mode="json", exclude={"id", "paid_run_id"}), sort_keys=True).encode()).hexdigest()
     async with pool().acquire() as conn:
         existing = await conn.fetchrow("SELECT id,request_hash FROM tank.batches WHERE id=$1 AND tenant_id=$2", body.id, tenant)
     if existing:
@@ -2796,8 +2945,12 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
         if caller:
             req = req.model_copy(update={"agent": caller})
         try:
-            result = await run_route(req, caller=caller, _defer_paid=eligible,
-                                     _paid_limit=float(policy["max_cost_usd"]))
+            import paid_steps
+            context = paid_steps.Run(tenant,uuid.uuid5(body.id,str(position)),
+                paid_steps.fingerprint(req.model_dump(exclude={"paid_run_id"})),root_run_id=body.id)
+            with paid_steps.run_scope(context):
+                result = await run_route(req, caller=caller, _defer_paid=eligible,
+                                         _paid_limit=float(policy["max_cost_usd"]))
             local.append({**result.model_dump(mode="json"), "position": position, "item_id": str(uuid.uuid5(body.id, str(position)))})
         except _DeferredRoute as item:
             item.position = position
@@ -2976,6 +3129,10 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
             json.dumps(_storage_mask(_plain_messages([m.model_dump() for m in req.messages]))), _storage_mask(content)[:20000])
         await conn.execute("""UPDATE tank.batch_items SET status='completed',ledger_id=$4,reserved_usd=$5
             WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"], req.tenant_id, item["item_id"], ledger_id, actual)
+    if authorization := snapshot.get("paid_authorization"):
+        import paid_steps
+        with paid_steps.run_scope(paid_steps.Run(req.tenant_id,uuid.UUID(authorization["run_id"]),authorization["request_hash"])):
+            await paid_steps.attach_receipt(ledger_id,authorization)
     semantic_cache.schedule_batch(__import__("sys").modules[__name__], req, snapshot, ledger_id, content, float(actual))
 
 
@@ -2984,7 +3141,6 @@ async def _process_batch(conn: Any, batch: Any) -> None:
     if batch["status"] == "queued":
         # Lock holder marks the submission boundary before contacting a provider.
         # A crash here is visibly uncertain; it must not silently buy the work twice.
-        await conn.execute("UPDATE tank.batches SET status='submitting',submitted_at=now() WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
         lines = []
         for item in items:
             if item["ledger_id"] is not None:
@@ -2997,8 +3153,16 @@ async def _process_batch(conn: Any, batch: Any) -> None:
             blocked = model_call_refusal(json.dumps(snapshot["messages"]), batch["model"], box=box_region(), tenant_id=str(req.tenant_id))
             if blocked:
                 raise ValueError("provider_not_allowed")
+            import paid_steps
+            authorization = await paid_steps.batch_admission(req,batch["model"],item["item_id"])
+            if authorization:
+                snapshot["paid_authorization"] = {key:str(authorization[key]) for key in
+                    ("id","run_id","request_hash","step_id","authorization_mode")}
+                await conn.execute("""UPDATE tank.batch_items SET policy=$4::jsonb
+                    WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"],req.tenant_id,item["item_id"],json.dumps(snapshot,default=str))
             lines.append(json.dumps({"custom_id": str(item["item_id"]), "method": "POST", "url": "/v1/chat/completions",
                 "body": {"model": prices["native"], "messages": snapshot["messages"], "max_tokens": snapshot["max_tokens"], **snapshot["generation"]}}))
+        await conn.execute("UPDATE tank.batches SET status='submitting',submitted_at=now() WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
         await conn.execute("""UPDATE tank.offpeak_jobs SET sent_at=now() WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"])
         await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=now()
             WHERE offpeak_job_id=$1 AND tenant_id=$2 AND outcome='queued'""", batch["id"], batch["tenant_id"])
@@ -3059,6 +3223,9 @@ async def process_batches_once() -> None:
                     else:
                         async with pool().acquire(autocommit=True) as tenant_conn:
                             await _process_batch(tenant_conn, batch)
+            except __import__("paid_steps").ApprovalRequired:
+                # The durable approval remains pending; this batch is still queued.
+                continue
             except (httpx.HTTPError, ValueError, KeyError):
                 # Poll failures are retriable; submission ambiguity is surfaced
                 # on the next pass, with no second provider submission.
@@ -3073,6 +3240,7 @@ async def _batch_loop() -> None:
             await priority_queue.process_once(__import__("sys").modules[__name__])
             await process_batches_once()
             await priority_queue.notify_commands(__import__("sys").modules[__name__])
+            await __import__("paid_steps").recover(__import__("sys").modules[__name__])
         except Exception:
             log.warning("Batch maintenance failed; retrying")
         await asyncio.sleep(10)
@@ -3092,14 +3260,22 @@ def task_dict(row: asyncpg.Record, ledger: asyncpg.Record | None = None) -> dict
 @tenant_path("req")
 async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
     async with pool().acquire() as conn:
-        await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1", task_id)
+        await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1 AND tenant_id=$2", task_id, req.tenant_id)
     try:
         res = await run_route(req, task_id=task_id)
+        if isinstance(res,priority_queue.QueuedResponse):
+            async with pool().acquire() as conn:
+                await conn.execute("UPDATE tank.tasks SET status='queued',ledger_id=$3 WHERE id=$1 AND tenant_id=$2",task_id,req.tenant_id,res.ledger_id)
+            return
         async with pool().acquire() as conn:
             await conn.execute(
-                "UPDATE tank.tasks SET status='done', result=$2, ledger_id=$3, finished_at=now() WHERE id=$1",
-                task_id, res.content, res.ledger_id,
+                "UPDATE tank.tasks SET status='done', result=$2, ledger_id=$3, finished_at=now() WHERE id=$1 AND tenant_id=$4",
+                task_id, res.content, res.ledger_id, req.tenant_id,
             )
+    except __import__("paid_steps").ApprovalRequired as pause:
+        await __import__("paid_steps").save_background(pause,{"kind":"tank.task","task_id":str(task_id),"request":req.model_dump(mode="json")})
+        async with pool().acquire() as conn:
+            await conn.execute("UPDATE tank.tasks SET status='queued',error=NULL WHERE id=$1 AND tenant_id=$2",task_id,req.tenant_id)
     except Exception as exc:  # noqa: BLE001 — anything that stops a task is recorded on the task
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
         if isinstance(detail, dict):
@@ -3109,8 +3285,8 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
             ledger_id = None
         async with pool().acquire() as conn:
             await conn.execute(
-                "UPDATE tank.tasks SET status='failed', error=$2, ledger_id=$3, finished_at=now() WHERE id=$1",
-                task_id, str(detail), uuid.UUID(ledger_id) if ledger_id else None,
+                "UPDATE tank.tasks SET status='failed', error=$2, ledger_id=$3, finished_at=now() WHERE id=$1 AND tenant_id=$4",
+                task_id, str(detail), uuid.UUID(ledger_id) if ledger_id else None, req.tenant_id,
             )
 
 
@@ -3472,6 +3648,7 @@ async def _pick_version(skill_id: str, preview: bool) -> str:
 
 class SkillRun(BaseModel):
     tenant_id: uuid.UUID
+    paid_run_id: uuid.UUID | None = None
     input: dict[str, Any]
     version: str | None = None      # default: the approved version
     preview: bool = False           # owner testing: allows candidate/staging; labelled in the ledger
@@ -4803,6 +4980,9 @@ app.include_router(memory_router)
 
 # B3: process committed model changes through the existing skill-eval handler.
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
+
+app.include_router(__import__("paid_steps").build_router())
+app.add_middleware(__import__("paid_steps").ApprovalMiddleware)
 
 # Bind only accepted endpoint arguments after existing authentication dependencies.
 bind_tenant_endpoints(app)

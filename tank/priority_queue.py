@@ -30,6 +30,7 @@ def worker_lock():
 
 class WindowClosed(Exception):
     """The clock crossed a window boundary during preflight; nothing was sent."""
+    _paid_unspent = True
 
 
 class QueuedResponse(BaseModel):
@@ -160,6 +161,12 @@ async def _finish(tank, conn, job, result=None, *, error=None, uncertain=False):
     await conn.execute("""UPDATE tank.offpeak_jobs SET status=$3,result=$4::jsonb,error=$5,finished_at=now()
         WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], state,
         json.dumps(result, default=str) if result is not None else None, error)
+    if job.get('task_id'):
+        await conn.execute("""UPDATE tank.tasks SET status=$3,result=$4,error=$5,ledger_id=$6,finished_at=now()
+            WHERE id=$1 AND tenant_id=$2""",job['task_id'],job['tenant_id'],
+            'done' if state == 'completed' else 'failed',result.get('content') if result else None,error,
+            uuid.UUID(str(result.get('ledger_id',job['id']))) if result else job['id'])
+
     if error:
         await conn.execute("""UPDATE tank.ledger SET outcome=$3,error=$4
             WHERE id=$1 AND tenant_id=$2 AND outcome IN ('queued','sent')""",
@@ -211,7 +218,7 @@ async def _process(tank, conn, job):
             model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
             _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot=snapshot)
         await _finish(tank, conn, job, result.model_dump(mode='json'))
-    except WindowClosed:
+    except (WindowClosed, __import__("paid_steps").ApprovalRequired):
         await conn.execute("UPDATE tank.offpeak_jobs SET status='queued',sent_at=NULL WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])
     except Exception as exc:
         detail = exc.detail if isinstance(exc, HTTPException) else None

@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-import yaml
 import controls
+import yaml
 from base_public_http import BaseBlockResponse, PublicPageHTTP
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -173,6 +173,15 @@ def input_tokens(payload: dict) -> int:
 
 
 async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str, *, room: str = ROOM) -> dict:
+    import paid_steps
+    digest = paid_steps.fingerprint(body.model_dump())
+    run = paid_steps.Run(tenant, uuid.uuid5(task or tenant, digest), digest)
+    with paid_steps.run_scope(run):
+        return await paid_steps.checkpoint(paid_steps.fingerprint(["agent.chat", digest]),
+            lambda: _complete(tank, body, tenant, task, region, room=room))
+
+
+async def _complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str, *, room: str = ROOM) -> dict:
     room = room_text(room)
     task_type = f"agent.{room}.think"
     validate_chat(body)
@@ -186,7 +195,6 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
             json.dumps(body.model_dump(exclude_none=True), ensure_ascii=False), "za" if region == "za" else "us")
         if scope.get("criminal") or not scope.get("in_scope"):
             raise HTTPException(403, scope["reason"])
-    await controls.refuse_paid(task=task_type, path="agent.chat")
     policy = await tank.load_policy(task_type, tenant)
     model = policy["model"]
     if tank.graduate.router_cannot_serve(model):
@@ -227,6 +235,8 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     roster = await tank._roster_models()
     if baseline_cost(roster, model, 1, 1) is None:
         raise HTTPException(503, "The brain's policy model needs roster prices before it can be called.")
+    controls._task.set(task_type)
+    approval = await __import__("paid_steps").model_admission(tenant, task_type, model, agent=room, roster=roster)
     ledger_id = uuid.uuid4()
     started = time.perf_counter()
     outcome, error, cost = "failed", "Model gateway unavailable.", 0.0
@@ -300,6 +310,9 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
         "saving_usd": None if baseline_usd is None or cost is None else baseline_usd - cost,
         "tokens_in": tokens_in, "tokens_out": tokens_out, "latency_ms": latency, "outcome": outcome,
     }
+    if approval:
+        receipt["paid_step_id"] = approval["step_id"]
+        receipt["paid_step_mode"] = approval["authorization_mode"]
     async with tank.pool().acquire() as conn:
         async with conn.transaction():
             await conn.execute(LEDGER_SQL, ledger_id, tenant, region, policy["rung"], answered, policy["priority"],
@@ -313,6 +326,7 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
                 "INSERT INTO tank.agent_receipts (ledger_id,tenant_id,room,receipt) VALUES ($1,$2,$4,$3::jsonb)",
                 ledger_id, tenant, json.dumps(receipt), room,
             )
+    await __import__("paid_steps").attach_receipt(ledger_id, approval)
     if outcome != "delivered":
         raise HTTPException(502, {"message": error, "receipt": receipt})
     return {
