@@ -55,3 +55,13 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 2. Chat bot (**D2**): the client’s privacy notice and conversation-retention wording (decision 35). The shipped retention job removes expired conversations after 12 calendar months; agree the wording against that behavior before enabling capture. Save the actual notice and its version as tenant data fields `privacy_notice` and `notice_version` using the existing confirmed `trigger.bot.settings` tool. They are not environment settings. Without both, visitor lead/quote capture stays disabled; changed versions require a fresh notice before submission.
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
+
+## Rig store rooms (layout B)
+
+On the existing isolated enforce-lifecycle service only: RIG_COOLIFY_URL, RIG_COOLIFY_TOKEN, RIG_COOLIFY_PROJECT_UUID, RIG_COOLIFY_SERVER_UUID, RIG_COOLIFY_ENVIRONMENT, RIG_COOLIFY_GITHUB_APP_UUID. Use a dedicated Rig-only team/project/environment and the same server UUID as shared Rig. Token permissions: read, write and deploy (Coolify requires deploy for application DELETE); no root or read:sensitive. Do not reuse Autumbra’s token.
+
+On Tank and enforce-lifecycle only: RIG_LIFECYCLE_KEY. It must differ from AUTUMBRA_LIFECYCLE_KEY and all room keys.
+
+Per store application only: RIG_ROOM_DB_PASSWORD (unique URL-safe value), plus the existing names in the create receipt’s founder_fills. The lifecycle supplies RIG_ROOM_TENANT, RIG_ROOM_NAME, RIG_ROOM_DATA_VOLUME, RIG_ROOM_DB_VOLUME and RIG_ROOM_NETWORK; never edit these bindings. Existing R2 settings are needed for the retained bucket snapshot before destroy. See [Rig room operations](RIG-STORE-ROOMS.md).
+
+Existing per-room names used by the room template and retention step: TANK_KEY_RIG, RIG_RETAILER_KEY, RIG_TRUSTED_PROXY_CIDRS, RIG_WIDGET_PUBLISHABLE_KEY, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID_RIG, R2_SECRET_ACCESS_KEY_RIG. Store mail uses the existing SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD and SMTP_FROM names. These are names only; values belong in the owning application.
