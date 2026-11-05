@@ -107,23 +107,26 @@ async def research(ctx: JobContext) -> dict:
             return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
         if os.environ.get("DATABASE_URL"):
             from core.evidence import answer as cited_answer
-            from uuid import uuid4
-            from datetime import datetime, timezone
             async with _ledger(memory=ctx.memory) as ledger:
                 saved = await cited_answer(ledger, ctx.tenant_id, question, engine=case_plan()["engine"])
                 facts = saved.get("facts") or []
                 if facts:
-                    text = "\n".join(fact["text"] for fact in facts)
-                    citations = [{"claim": fact["text"], "url": fact["href"], "source": fact["name"]} for fact in facts]
-                    await ledger.save_report({"id": str(uuid4()), "tenant_id": ctx.tenant_id,
-                                              "made_at": datetime.now(timezone.utc), "question": question,
-                                              "answer": text, "citations": citations})
-                    return {"answer": text, "citations": citations, "cost_usd": 0}
+                    from core.research_records import save as save_research
+                    report = await save_research(ledger, ctx.tenant_id, question, saved)
+            if facts:
+                from core.research_records import remember
+                await remember(ctx.memory, report)
+                return {'answer': report['answer'], 'citations': report['citations'],
+                        'report_id': report['id'], 'receipts': report['receipts'], 'cost_usd': 0}
         from core.research_adapter import research_web
 
         result = await research_web(ctx.tenant_id, question)
-        if result is not None:
-            return result
+        if result is not None and result.get('facts'):
+            from core.research_records import save as save_research, remember
+            async with _ledger(memory=ctx.memory) as ledger:
+                report = await save_research(ledger, ctx.tenant_id, question, result)
+            await remember(ctx.memory, report)
+            return {**result, 'answer': report['answer'], 'citations': report['citations'], 'report_id': report['id']}
         return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
     async with _ledger(memory=ctx.memory) as ledger:
         answer = await perform_research(

@@ -528,8 +528,8 @@ class PostgresLedger:
     async def save_report(self, row: dict[str, Any]) -> None:
         await self.conn.execute(
             f"""
-            INSERT INTO {SCHEMA}.reports (id, tenant_id, made_at, question, answer, citations)
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+            INSERT INTO {SCHEMA}.reports (id, tenant_id, made_at, question, answer, citations, receipts)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
             """,
             uuid.UUID(str(row["id"])),
             uuid.UUID(str(row["tenant_id"])),
@@ -537,6 +537,7 @@ class PostgresLedger:
             row["question"],
             row["answer"],
             json.dumps(row["citations"]),
+            json.dumps(row.get("receipts", [])),
         )
 
     async def save_brief(self, report: dict, status: str, reason: str | None) -> None:
@@ -678,7 +679,7 @@ def _record(row: Any) -> dict[str, Any]:
     for key, value in list(data.items()):
         if hasattr(value, "hex") and key in {"id", "tenant_id"}:
             data[key] = str(value)
-        elif isinstance(value, str) and key in {"sources", "trend", "evidence", "citations"}:
+        elif isinstance(value, str) and key in {"sources", "trend", "evidence", "citations", "receipts"}:
             data[key] = json.loads(value)
     return data
 
