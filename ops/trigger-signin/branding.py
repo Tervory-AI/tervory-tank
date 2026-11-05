@@ -40,7 +40,8 @@ def configure_branding(api, bootstrap: Path, assets: Path, issuer: str):
     previous = previous if previous.get('issuer') == issuer else {}
     hashes = {}
     changed = False
-    current = api.request('GET', '/admin/v1/policies/label').get('policy', {})
+    # Updates and uploads modify the draft; active policy may still be the old one.
+    current = api.request('GET', '/admin/v1/policies/label/_preview').get('policy', {})
     if any(current.get(key) != value for key, value in LABEL.items()):
         api.request('PUT', '/admin/v1/policies/label', json={
             **{key: current[key] for key in ('warnColor', 'warnColorDark') if key in current}, **LABEL,
