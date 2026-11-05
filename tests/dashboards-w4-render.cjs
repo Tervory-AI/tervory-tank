@@ -51,7 +51,28 @@ Module._load=function(name,parent,main){
 const read=file=>baseline?execFileSync('git',['show',`981ac096:${path.relative(root,file)}`],{cwd:root,encoding:'utf8'}):fs.readFileSync(file,'utf8');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(module,file)=>module._compile(ts.transpileModule(read(file),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true,target:ts.ScriptTarget.ES2022}}).outputText,file);
 require.extensions['.css']=()=>{};
-const text=html=>html.replace(/<script[\s\S]*?<\/script>/g,'').replace(/<dialog[\s\S]*?<\/dialog>/g,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+// Extract assertion text with the standard HTML parser; never sanitize HTML by regex.
+const text=html=>execFileSync(process.env.PYTHON || 'python3',['-c',`
+from html.parser import HTMLParser
+import sys
+class VisibleText(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.hidden = 0
+        self.parts = []
+    def handle_starttag(self, tag, attrs):
+        if tag in {'script', 'dialog'}:
+            self.hidden += 1
+    def handle_endtag(self, tag):
+        if tag in {'script', 'dialog'} and self.hidden:
+            self.hidden -= 1
+    def handle_data(self, data):
+        if not self.hidden:
+            self.parts.append(data)
+p = VisibleText()
+p.feed(sys.stdin.read())
+print(' '.join(' '.join(p.parts).split()), end='')
+`],{input:html,encoding:'utf8'});
 const cssFiles=['globals.css','control/dashboard.css','control/control.css','dashboard.css','tank/proof/savings.css'];
 const css=cssFiles.map(file=>read(path.join(root,'workspace/app',file))).join('\n');
 const fonts=`@font-face{font-family:Inter;src:url('/fonts/Inter-latin.woff2');font-weight:100 900}@font-face{font-family:Jost;src:url('/fonts/Jost-300-latin.woff2');font-weight:300}@font-face{font-family:Mono;src:url('/fonts/JetBrainsMono-latin.woff2')}:root{--font-inter:Inter;--font-jost:Jost;--font-mono:Mono}html,body{margin:0}`;
