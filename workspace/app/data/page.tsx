@@ -228,7 +228,7 @@ export default function DataPage() {
               )}
             </Fragment>
           ))}
-          {records.length === 0 && <tr><td colSpan={9} style={{ color: "var(--muted)" }}>No records in this batch yet.</td></tr>}
+          {records.length === 0 && <tr><td colSpan={9} style={{ color: "var(--muted)" }}>No records in this batch yet. Upload a CSV to fill this list.</td></tr>}
         </tbody>
       </table>
       </div>

@@ -22,8 +22,11 @@ for (const word of banned) {
   if (home.includes(word)) throw new Error(`Homepage contains ${word}`);
 }
 const visible = home.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
-// Illustrated prices and receipts match the founder-approved Figma prototype.
-// They must never initiate a model, store action or payment.
+// Empty marketing receipts keep the shape without claiming measured client work.
+for (const sample of ["$1,284.50", "$312.40", "led_7f3a91", "4 calls · cost", "Ana</span>", "Sam</span>"]) {
+  if (visible.includes(sample)) throw new Error(`Fabricated receipt data in homepage: ${sample}`);
+}
+if (!visible.includes("Sign in and ask for work to fill your savings and receipts.")) throw new Error("Missing first action for savings and receipts");
 if (existsSync("out/sign-up.html")) throw new Error("Public sign-up page is still exported");
 
 const flat = home.replace(/\s+/g, " ");
@@ -86,9 +89,10 @@ for (let previous = ""; previous !== rig; ) {
   previous = rig;
   rig = rig.replace(/<script\b[\s\S]*?<\/script\s*>/gi, "");
 }
-for (const line of ["One item out of stock.", "Rig keeps the sale.", "Seven steps from a missing item to a saved sale.", "Built for the moment a sale would be lost.", "RCT-EXAMPLE"]) {
+for (const line of ["One item out of stock.", "Rig keeps the sale.", "Seven steps from a missing item to a saved sale.", "Built for the moment a sale would be lost.", "Connect your store in Rig to fill these results.", "Start a store search in Rig to fill this receipt."]) {
   if (!rig.includes(line)) throw new Error(`Rig page is missing approved copy: ${line}`);
 }
+if (rig.includes("RCT-EXAMPLE") || rig.includes("Logged ✓")) throw new Error("Rig claims a receipt before any store work");
 if (rig.includes("figma.com/api/mcp/asset")) throw new Error("Temporary Figma URL in Rig page");
 for (const match of rig.matchAll(/<img[^>]+src="([^"]+)"/g)) {
   for (const prefix of ["public", "out"]) {
