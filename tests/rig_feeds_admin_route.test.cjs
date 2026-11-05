@@ -12,7 +12,7 @@ function moduleFrom(relative, bindings, globals = {}) {
   vm.runInNewContext(compiled, { exports, require: name => {
     if (name === '@/lib/trigger-signin-fetch') return { signinFetch: (...args) => globals.fetch(...args) };
     assert(name in bindings, `Unexpected dependency ${name}`); return bindings[name];
-  }, process: { env: {} }, URL, Uint8Array, TextDecoder, Set, Error, ...globals });
+  }, process: { env: globals.env || {} }, URL, URLSearchParams, Headers, AbortSignal, AbortController, setTimeout, clearTimeout, Uint8Array, TextDecoder, Set, Error, console, ...globals });
   return exports;
 }
 
@@ -51,14 +51,16 @@ async function main() {
   const forwarded = [];
   const regionTransport = moduleFrom('workspace/app/api/zenas/tank.ts', {});
   const tankFetch = async (url, options) => {
+    if (String(url).includes('/v1/tenants/') && String(url).endsWith('/home')) return {ok:false,status:404,json:async()=>({detail:{code:'tenant_home_missing'}})};
+    url = String(url);
     forwarded.push({ url, options });
-    return { ok: true, json: async () => url.endsWith('/mapping')
+    return { ok: true, status: 200, json: async () => url.endsWith('/mapping')
       ? { preview_id: 'server-preview', fields: ['code'], columns: { sku: 'code' }, required: ['sku'] }
       : { saved: true } };
   };
   // Trigger sign-in adds its signed token inside signinFetch; offline, it passes straight to the fake.
   const tank = moduleFrom('workspace/lib/tank.ts', { '@/app/api/zenas/tank': regionTransport,
-    '@/lib/trigger-signin-fetch': { signinFetch: tankFetch } }, { fetch: tankFetch });
+    '@/lib/trigger-signin-fetch': { signinFetch: tankFetch } }, { env: { TANK_API_KEY: 'test-key' }, fetch: tankFetch });
   const actions = moduleFrom('workspace/app/rig/admin/actions.ts', {
     '@/lib/trigger-signin': { auth: async () => ({ userId: 'server-user', orgRole: role }) },
     '@/lib/tenant': { activeTenant: async () => active },
@@ -74,14 +76,14 @@ async function main() {
   role = 'org:admin';
   const data = { distributor: 'catalogue', currency: 'NZD', country: 'NZ', price_basis: 'cost' };
   const preview = await realRoute.POST(request({ operation: 'mapping', data }));
-  assert.equal(preview.body.ok, true);
+  assert.equal(preview.body.ok, true, JSON.stringify(preview.body));
   assert.equal(preview.body.mapping.preview_id, 'server-preview');
   assert(forwarded[0].url.endsWith('/v1/access/rig/admin/mapping'));
   assert.deepEqual(JSON.parse(forwarded[0].options.body), { data });
   assert.equal(forwarded[0].options.method, 'POST');
   assert.equal(forwarded[0].options.cache, 'no-store');
-  assert.equal(forwarded[0].options.headers['x-tervory-tenant'], 'server-tenant');
-  assert.equal(forwarded[0].options.headers['x-tervory-user'], 'server-user');
+  assert.equal(new Headers(forwarded[0].options.headers).get('x-tervory-tenant'), 'server-tenant');
+  assert.equal(new Headers(forwarded[0].options.headers).get('x-tervory-user'), 'server-user');
   for (const operation of ['confirm-mapping', 'import']) {
     const response = await realRoute.POST(request({ operation, data }));
     assert.equal(response.body.ok, true);

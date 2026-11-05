@@ -279,7 +279,12 @@ assert.equal(new URL(input.origin).hostname, '127.0.0.1');
         headers.set('x-trigger-signin-org', input.org);
       }
       const response = await fetch(url, {...init, headers});
-      assert(response.ok, `Offline Tank ${new URL(url).pathname}: ${response.status}`);
+      if (!response.ok) {
+        assert.equal(new URL(url).pathname, `/v1/tenants/${input.tenant}/home`);
+        assert.equal(init.method, 'GET');
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.clone().json(), {detail:{code:'tenant_home_missing'}});
+      }
       return response;
     },
     mocks: {

@@ -10,10 +10,14 @@ const { renderToStaticMarkup } = require(path.join(root, 'workspace/node_modules
 const original = Module._load;
 let founder = true, failRead = false, calls = [], organisationReads = 0;
 const tenant = '00000000-0000-0000-0000-000000000011';
+const {legacyHome} = require('./legacy_tenant_home.cjs');
+const homeLookups = [];
 const agents = ['base','tiger','market_lab','rig','tisan','radix','zenas'];
 const grants = agents.map(agent => ({agent,enabled:agent === 'base',enabled_by:agent==='base'?'founder-fixture':null,enabled_at:null}));
 const log = [{id:1,agent:'base',enabled:true,changed_by:'founder-fixture',changed_at:'2026-10-21T12:00:00Z'}];
 process.env.TANK_API_KEY = 'dummy-workspace-key';
+process.env.TANK_URL = 'http://tank.offline.invalid';
+process.env.TANK_REGION = 'us-east';
 Module._load = function(name,parent,isMain) {
   if (name === 'server-only') return {};
   if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
@@ -33,10 +37,14 @@ Module._load = function(name,parent,isMain) {
 };
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(module,filename)=>module._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true,target:ts.ScriptTarget.ES2022}}).outputText,filename);
 global.fetch = async(url,options)=>{
+  const home = legacyHome(url, options, {tenants:[tenant],key:'dummy-workspace-key',origin:process.env.TANK_URL,calls:homeLookups});
+  if(home)return home;
+  url=String(url);
+  const headers=new Headers(options.headers);
   calls.push({url,options});
-  assert.equal(options.headers['X-Tervory-Tenant'],tenant);
-  assert.equal(options.headers['X-Tervory-User'],'founder-fixture');
-  assert.equal(options.headers['x-tank-key'],'dummy-workspace-key');
+  assert.equal(headers.get('x-tervory-tenant'),tenant);
+  assert.equal(headers.get('x-tervory-user'),'founder-fixture');
+  assert.equal(headers.get('x-tank-key'),'dummy-workspace-key');
   if(options.method==='PUT')return {ok:true,json:async()=>({changed:true})};
   if(failRead)throw Error('private upstream failure');
   return {ok:true,json:async()=>url.endsWith('/log')?log:grants};
@@ -45,7 +53,7 @@ global.fetch = async(url,options)=>{
   const actions=require('../workspace/app/control/squad-actions.ts');
   founder=false;
   for(const call of [()=>actions.squadClients(0),()=>actions.squadState('org-fixture'),()=>actions.changeSquad('org-fixture','tiger',true)])await assert.rejects(call,/404/);
-  assert.equal(organisationReads,0);assert.equal(calls.length,0);
+  assert.equal(organisationReads,0);assert.equal(calls.length,0);assert.equal(homeLookups.length,0);
   founder=true;
   const clients=await actions.squadClients(0);assert.equal(clients.more,true);
   assert((await actions.squadClients(-1)).error);

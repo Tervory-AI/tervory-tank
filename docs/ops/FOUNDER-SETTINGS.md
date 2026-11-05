@@ -14,6 +14,10 @@ One Boston resource serves every country. Setup emails the founder a link to set
 
 **Shared email** (the morning report and default alerts): SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 
+**Tank morning report**: FOUNDER_REPORT_TO. Optional per-report overrides are FOUNDER_REPORT_SMTP_HOST, FOUNDER_REPORT_SMTP_PORT, FOUNDER_REPORT_SMTP_USER, FOUNDER_REPORT_SMTP_PASSWORD, FOUNDER_REPORT_SMTP_FROM; otherwise the shared SMTP names above are used. Each enabled Tank sends its region's digest at 07:00 America/Los_Angeles. TANK_GITHUB_READ_TOKEN supplies optional read-only Actions deployment history; unavailable or truncated history is labelled, never counted as a clean deployment.
+
+**Workspace tenant home routing**: TANK_URL and TANK_API_KEY name this Workspace's Tank. TANK_REGION is us-east or za. A connection to the other region uses TANK_URL_ZA with TANK_CONTENT_API_KEY_ZA, or TANK_URL_US with TANK_CONTENT_API_KEY_US. The content keys must be that region's full Workspace key; TANK_API_KEY_ZA and TANK_API_KEY_US remain restricted homes/feeds keys and cannot authorize private content. A ZA Workspace also needs the US content connection for the tenant directory. These names already exist in the runtime configuration; this source change does not set or rotate them. The founder assigns a new tenant's home through PUT /api/tenants/<tenant UUID>/home before first use; changing a recorded home requires a separate migration.
+
 **Market Lab** (free keys): FRED_API_KEY, EIA_API_KEY, CENSUS_API_KEY, LEGISCAN_API_KEY, NOAA_TOKEN, USPTO_API_KEY
 **Market Lab email:** MARKET_LAB_SMTP_HOST, MARKET_LAB_SMTP_PORT, MARKET_LAB_SMTP_USER, MARKET_LAB_SMTP_PASSWORD, MARKET_LAB_SMTP_FROM, MARKET_LAB_SMTP_ALERT_ADDRESSES
 

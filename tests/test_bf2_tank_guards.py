@@ -73,6 +73,9 @@ class _Conn:
         self.queries.append((sql, args))
         if "tank.controls" in sql:
             return False  # Fixture has paid work enabled.
+        if sql == "SELECT fingerprint FROM tank.roster_observations WHERE tenant_id=$1 AND region=$2":
+            assert args == (main.PLATFORM_TENANT, main.box_region())
+            return None  # No deployed roster baseline; no observation writes.
         raise AssertionError(f"unexpected scalar query: {sql}")
 
     async def execute(self, *args: object) -> str:

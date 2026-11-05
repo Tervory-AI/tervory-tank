@@ -57,6 +57,11 @@ async def database(monkeypatch):
     async with pool.acquire() as conn:
         await conn.execute('CREATE SCHEMA tank; CREATE TABLE tank.ledger(id uuid,tenant_id uuid); ALTER TABLE tank.ledger ENABLE ROW LEVEL SECURITY')
         await conn.execute(schema[schema.index('CREATE TABLE'):])
+        # The Platform home-region guard consults the real onboarding table,
+        # including for an otherwise unonboarded legacy command actor.
+        full_schema = (ROOT / 'tank/schema.sql').read_text()
+        tenants = full_schema.split('CREATE TABLE IF NOT EXISTS tank.tenants (', 1)[1].split(');', 1)[0]
+        await conn.execute('CREATE TABLE IF NOT EXISTS tank.tenants (' + tenants + ');')
     monkeypatch.setattr(p, 'db', lambda: pool)
     async def master(**kwargs):
         if master.paused:

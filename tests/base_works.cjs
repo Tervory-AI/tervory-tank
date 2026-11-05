@@ -6,6 +6,11 @@ const { createRequire } = require('node:module');
 const root = path.resolve(__dirname, '..');
 const workspaceRequire = createRequire(path.join(root, 'workspace/package.json'));
 const ts = workspaceRequire('typescript');
+const {legacyHome} = require('./legacy_tenant_home.cjs');
+const homeLookups = [];
+process.env.TANK_API_KEY = 'placeholder-workspace-key';
+process.env.TANK_URL = 'http://tank.offline.invalid';
+process.env.TANK_REGION = 'us-east';
 let tenant = 'tenant-a';
 let signedIn = true;
 let records = [];
@@ -48,6 +53,8 @@ const record = (id, changes = {}) => ({ id, task_id: null, batch: 'shared-name',
     '7': { checks: { phone_matches_site: true } } },
   status: 'done', confidence: 70, error: null, created_at: '2026-10-26T00:00:00Z', ...changes });
 global.fetch = async (input, init) => {
+  const home = legacyHome(input,init,{tenants:[tenant],key:'placeholder-workspace-key',origin:process.env.TANK_URL,calls:homeLookups});
+  if(home)return home;
   const url = new URL(input);
   const body = init?.body ? JSON.parse(init.body) : null;
   calls.push({ path: url.pathname, tenant: url.searchParams.get('tenant_id'), body });
@@ -164,9 +171,11 @@ global.fetch = async (input, init) => {
   assert.equal((await actions.uploadBaseCsv(data)).ok, false);
   assert.equal((await download.GET(downloadRequest('https://app.tervory.com/base/download?batch=shared-name'))).status, 401);
   assert.equal(calls.length, 0);
+  assert.equal(homeLookups.length, 0);
   signedIn = true;
   const queued = await actions.uploadBaseCsv(data);
   assert.equal(queued.ok, true);
+  assert(homeLookups.length > 0);
   assert.equal(queued.rows, 10);
   assert.equal(calls[0].body.tenant_id, 'tenant-a');
   assert.equal((await actions.baseBatchStatus(queued.batch)).result.pending, 10);

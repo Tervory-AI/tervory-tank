@@ -3,9 +3,9 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
         await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1 AND tenant_id=$2", task_id, req.tenant_id)
     try:
         res = await run_route(req, task_id=task_id)
-        if isinstance(res,priority_queue.QueuedResponse):
-            async with pool().acquire() as conn:
-                await conn.execute("UPDATE tank.tasks SET status='queued',ledger_id=$3 WHERE id=$1 AND tenant_id=$2",task_id,req.tenant_id,res.ledger_id)
+        if isinstance(res, priority_queue.QueuedResponse):
+            await __import__("workspace_board").queued_task(
+                __import__("sys").modules[__name__], task_id, req.tenant_id, res)
             return
         async with pool().acquire() as conn:
             await conn.execute(

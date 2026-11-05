@@ -110,6 +110,9 @@ class Store:
         return 'UPDATE 1'
 
     async def fetchval(self, sql, *args):
+        if sql == 'SELECT home_region FROM tank.tenants WHERE tenant_id=$1':
+            assert len(args) == 1 and isinstance(args[0], uuid.UUID)
+            return None
         if 'FROM tank.tenant_squad' in sql:
             return 1
         assert 'INSERT INTO tank.ledger' in sql and "3,'code',0,0,0" in sql
@@ -394,7 +397,7 @@ async def test_planned_mcp_action_finishes_as_a_visible_existing_card(runtime, s
     await connections.discover(runtime.actor, 'lab.vault', IDENT)
     turn_id = str(uuid.uuid4())
     state = {'messages': [], 'cards': {}, 'steps': {turn_id: {'step_id': turn_id}}, 'active_turn': turn_id}
-    conn = SimpleNamespace(fetch=runtime.store.fetch, execute=AsyncMock())
+    conn = SimpleNamespace(fetch=runtime.store.fetch, fetchval=runtime.store.fetchval, execute=AsyncMock())
 
     @asynccontextmanager
     async def editing(thread_id, actor):

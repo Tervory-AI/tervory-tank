@@ -45,7 +45,7 @@ async def test_product_tasks_start_and_cancel_in_original_order(monkeypatch):
                 await waiting.wait()
             finally:
                 events.append(('stop', name, tank))
-        return SimpleNamespace(refresh_loop=work, publish_loop=work)
+        return SimpleNamespace(refresh_loop=work, publish_loop=work, loop=work)
 
     monkeypatch.setattr(registry, 'import_module', module)
     tank = SimpleNamespace()
@@ -54,7 +54,9 @@ async def test_product_tasks_start_and_cancel_in_original_order(monkeypatch):
     await registry.shutdown_products(tank)
     assert [(event, name) for event, name, _ in events] == [
         ('start', 'trigger_bot'), ('start', 'trigger_publisher'),
-        ('stop', 'trigger_bot'), ('stop', 'trigger_publisher')]
+        ('start', 'morning_report'),
+        ('stop', 'trigger_bot'), ('stop', 'trigger_publisher'),
+        ('stop', 'morning_report')]
     assert all(owner is tank for _, _, owner in events)
     assert all(getattr(tank, hook.slot).cancelled() for hook in registry.PRODUCT_HOOKS)
 
