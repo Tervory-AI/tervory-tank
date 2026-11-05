@@ -105,6 +105,10 @@ def calibration(rows: list[dict], tenant_id: str) -> dict:
                 "feed": feed,
                 "horizon_seconds": horizon,
                 "count": len(values),
+                "mean_confidence": sum(p for p, _ in values) / len(values),
+                "realised_rate": sum(y for _, y in values) / len(values),
+                "hits": sum(y for _, y in values),
+                "misses": sum(1 - y for _, y in values),
                 "brier_score": sum((p - y) ** 2 for p, y in values) / len(values),
                 "bins": [
                     {

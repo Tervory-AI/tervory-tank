@@ -15,6 +15,7 @@ from feeds.keys import key_name_for
 class Read(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tenant_id: UUID
+    report_id: UUID | None = None
 
 
 def build_router(*, key_ok, ledger_context, engine):
@@ -39,6 +40,12 @@ def build_router(*, key_ok, ledger_context, engine):
                     "SELECT id,created_at FROM agent_market_lab.warnings WHERE tenant_id=$1 ORDER BY created_at DESC,id LIMIT 50", body.tenant_id)}
                 return {**result, "warnings": [{**w, "created_at": dates[w["id"]]} for w in result["warnings"]]}
             if operation == "briefs":
+                if body.report_id is not None:
+                    from core.brief_detail import detail
+                    report = await detail(ledger, tenant, str(body.report_id), engine=engine)
+                    if report is None:
+                        raise HTTPException(404, "Not found")
+                    return {"briefs": [report]}
                 return {"briefs": await ledger.briefs_for(tenant)}
             if operation == "patterns":
                 from core.jobs import load_engine

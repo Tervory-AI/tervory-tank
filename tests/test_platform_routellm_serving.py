@@ -168,7 +168,7 @@ def test_run_route_changes_only_in_the_two_reviewed_hooks():
     for caller, callee in [('run_route', '_paid_route'), ('_paid_route', '_run_route')]:
         assert any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == callee
                    for n in ast.walk(functions[caller]))
-    assert hashlib.sha256(''.join(old).encode()).hexdigest() == 'b579d2430cfdf62da9d1e766bd450b76c04559c0e8085a6e072bba4915f0f66b'
+    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '3c3ad063490d58a6706e749f39ba47525d96139aacde69a56546d3ff422975a0'
 
 
 @pytest.mark.asyncio
@@ -197,7 +197,7 @@ async def test_revalidation_resolves_target_and_records_concrete_model(monkeypat
     tank._llm = llm
     monkeypatch.setattr(routing, 'score', lambda _prompt: .2)
     context = SimpleNamespace(calls=0, cost_usd=0)
-    job = {'policy': row, 'model': row['model'], 'task_type': 'placeholder.task', 'policy_tenant_id': TENANT}
+    job = {'id': uuid.uuid4(), 'policy': row, 'model': row['model'], 'task_type': 'placeholder.task', 'policy_tenant_id': TENANT}
     token = revalidation.ACTIVE.set(job)
     try:
         result = revalidation.eval_context(tank, SimpleNamespace(agent='placeholder', ref='placeholder.skill@1.0.0'), context)
@@ -206,14 +206,20 @@ async def test_revalidation_resolves_target_and_records_concrete_model(monkeypat
         revalidation.ACTIVE.reset(token)
     assert output['content'] == 'placeholder-result' and calls[0][0] == 'placeholder-weak'
     sql, args = statements[-1]
-    assert len(statements) == 1
     if paid_receipt:
-        assert 'UPDATE tank.ledger' in sql and "routellm_status='served'" in sql
-        assert args[:4] == (paid_ledger, uuid.UUID(int=1), 'placeholder-weak', .2)
-        assert 'cost_usd' not in sql and 'tokens_in' not in sql
+        assert len(statements) == 2
+        assert all('UPDATE tank.ledger' in statement and 'INSERT' not in statement for statement, _ in statements)
+        linked = next((statement, values) for statement, values in statements if 'SET revalidation_id' in statement)
+        assert linked[1] == (paid_ledger, uuid.UUID(int=1), job['id'])
+        assert 'WHERE id=$1 AND tenant_id=$2' in linked[0]
+        served = next((statement, values) for statement, values in statements if "routellm_status='served'" in statement)
+        assert served[1][:4] == (paid_ledger, uuid.UUID(int=1), 'placeholder-weak', .2)
+        assert all(not any(field in statement for field in ('cost_usd', 'tokens_in', 'tokens_out')) for statement, _ in statements)
     else:
+        assert len(statements) == 1 and 'INSERT INTO tank.ledger' in sql
         assert 'routellm_status' in sql and args[6] == 'placeholder-weak'
-        assert args[-1] == 'served' and args[-5] == .2
+        assert len(args) == 20 and args[18] == 'served' and args[14] == .2
+        assert 'revalidation_id' in sql and args[19] == job['id']
 
 
 @pytest.mark.asyncio

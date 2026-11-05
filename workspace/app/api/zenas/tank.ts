@@ -9,7 +9,7 @@ export function homeRegion(): Region {
   return process.env.TANK_REGION === "za" ? "za" : "us-east";
 }
 
-/** Every Zenas call names this server's home. A blank value is filled in, never dropped. */
+/** Every Zenas call names its destination's home. Explicit homes still face Tank's checks. */
 function withHome(path: string, init: RequestInit, home: Region = homeRegion(), force = false): { path: string; init: RequestInit } {
   const split = path.indexOf("?");
   const pathname = split === -1 ? path : path.slice(0, split);
@@ -35,22 +35,28 @@ function withHome(path: string, init: RequestInit, home: Region = homeRegion(), 
 }
 
 export async function zenas(path: string, init: RequestInit = {}): Promise<Response> {
-  const call = withHome(path, init);
-  return fetch(`${TANK_URL}/v1/zenas/${call.path}`, {
-    ...call.init,
-    headers: {
-      "content-type": "application/json",
-      "x-tank-key": TANK_API_KEY,
-      ...(call.init.headers ?? {}),
-    },
-    cache: "no-store",
+  const {tenantDestination, requestTenant, isRedirect, RedirectError} = await import("@/lib/tank");
+  const tenant = requestTenant("/v1/zenas/" + path, init);
+  const target = tenant ? await tenantDestination(tenant) : {url: TANK_URL, key: TANK_API_KEY, home: null};
+  const call = withHome(path, init, target.home ?? homeRegion());
+  const headers = new Headers(call.init.headers);
+  if (!headers.has("content-type")) headers.set("content-type", "application/json");
+  headers.set("x-tank-key", target.key);
+  const response = await fetch(new URL("/v1/zenas/" + call.path, target.url), {
+    ...call.init, headers, cache: "no-store", redirect: "manual",
   });
+  if (isRedirect(response)) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new RedirectError(response.status);
+  }
+  return response;
 }
 
 /**
  * The Tank that owns a region. This server's own Tank for its own region.
  * The other region's Tank only through its public HTTPS address and its own
- * Workspace key (TANK_URL_ZA + TANK_API_KEY_ZA, or TANK_URL_US + TANK_API_KEY_US).
+ * restricted homes/feeds key (TANK_URL_ZA + TANK_API_KEY_ZA, or TANK_URL_US + TANK_API_KEY_US).
+ * Private content instead uses the separate full content keys in lib/tank.ts.
  * Null when that region is not connected here.
  */
 export function regionTank(region: Region): { url: string; key: string } | null {

@@ -63,7 +63,7 @@ from command_stream import StreamFailure, TokenSink, completion as stream_comple
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 import batch_providers
 import prompt_cache
@@ -688,6 +688,7 @@ class Message(BaseModel):
 
 
 class RouteRequest(BaseModel):
+    deadline: AwareDatetime | None = None
     complex_request: bool = False
     interactive: bool = True
     tenant_id: uuid.UUID
@@ -758,6 +759,7 @@ class TaskCreate(BaseModel):
 
 
 class Feedback(BaseModel):
+    verdict: Literal["useful", "not_useful", "wrong"] | None = None
     tenant_id: uuid.UUID
     feedback: Literal["accepted", "rejected"]
     note: str | None = Field(default=None, max_length=1000)
@@ -966,6 +968,7 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
         if problem:
             raise HTTPException(409, problem)
     await __import__("routing_data").validate_fallbacks(__import__("sys").modules[__name__], body.model, body.fallbacks)
+    await __import__("roster_validation").before_policy_change(__import__("sys").modules[__name__])
     async with pool().acquire() as conn:
         async with conn.transaction():
             await conn.execute(
@@ -1537,7 +1540,7 @@ async def _run_route(
                              semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
     sent_at = priority_queue.now()
-    if _offpeak_dispatch and not priority_queue.window_open(price_info.get("offpeak"), sent_at):
+    if _offpeak_dispatch and not priority_queue.dispatch_ready(req, price_info, sent_at):
         raise priority_queue.WindowClosed()
     if _receipt_id is not None:
         async with pool().acquire() as conn:
@@ -2263,6 +2266,7 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
 
 async def _move_task(task_type: str, *, by: str = "tank", automatic: bool = True) -> graduate.Move | None:
     """Promote a proven candidate, or roll back a promotion that slipped in its first 7 days."""
+    await __import__("roster_validation").before_policy_change(__import__("sys").modules[__name__])
     async with pool().acquire() as conn:
         async with conn.transaction():
             row = await conn.fetchrow(_POLICY_MOVE + " FOR UPDATE", task_type)
@@ -2863,7 +2867,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if caller:
         body = body.model_copy(update={"agent": caller})
-    foreign = home_region_refusal(call_home(body.home_region, box_region()), box_region())
+    foreign = home_region_refusal(await __import__("tenant_regions").resolve_home(__import__("sys").modules[__name__], body.tenant_id, body.home_region), box_region())
     if foreign:
         raise HTTPException(403, foreign)
     if "#moa." in body.task_type:
@@ -2978,6 +2982,7 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
         raise HTTPException(422, "A batch has one tenant and one task type")
     if "#moa." in task or override_allowed(task):
         raise HTTPException(422, "This task requires the foreground route")
+    await __import__("tenant_regions").check_batch_home(__import__("sys").modules[__name__], body.requests)
     fingerprint = hashlib.sha256(json.dumps(body.model_dump(mode="json", exclude={"id", "paid_run_id"}), sort_keys=True).encode()).hexdigest()
     async with pool().acquire() as conn:
         existing = await conn.fetchrow("SELECT id,request_hash FROM tank.batches WHERE id=$1 AND tenant_id=$2", body.id, tenant)
@@ -3315,9 +3320,9 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
         await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1 AND tenant_id=$2", task_id, req.tenant_id)
     try:
         res = await run_route(req, task_id=task_id)
-        if isinstance(res,priority_queue.QueuedResponse):
-            async with pool().acquire() as conn:
-                await conn.execute("UPDATE tank.tasks SET status='queued',ledger_id=$3 WHERE id=$1 AND tenant_id=$2",task_id,req.tenant_id,res.ledger_id)
+        if isinstance(res, priority_queue.QueuedResponse):
+            await __import__("workspace_board").queued_task(
+                __import__("sys").modules[__name__], task_id, req.tenant_id, res)
             return
         async with pool().acquire() as conn:
             await conn.execute(
@@ -3348,7 +3353,7 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
 @tenant_path("body")
 async def create_task(body: TaskCreate) -> dict[str, Any]:
     box = box_region()
-    home = call_home(body.home_region, box)
+    home = await __import__("tenant_regions").resolve_home(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
@@ -3724,7 +3729,7 @@ async def run_one_skill(
     caller: str | None = Depends(require_key),
 ) -> dict[str, Any]:
     box = box_region()
-    home = call_home(body.home_region, box)
+    home = await __import__("tenant_regions").resolve_home(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
@@ -3853,6 +3858,9 @@ _ZENAS_PATH = re.compile(
     r"|^matters/[0-9a-fA-F-]{36}/release$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
+    r"|^street-law/sessions$"
+    r"|^street-law/sessions/[0-9a-fA-F-]{36}(/(questions|volunteers))?$"
+    r"|^street-law/sessions/[0-9a-fA-F-]{36}/questions/[0-9a-fA-F-]{36}(/(answer|assign|handover|release))?$"
     r"|^regulations/(watches|changes)$"
     r"|^regulations/watches/[0-9a-fA-F-]{36}$"
     r"|^moot/hearing-sources$|^moot/hearings$"
@@ -4032,6 +4040,27 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     headers: dict[str, str] = {}
     if path.startswith("regulations/"):
         headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
+    if path.strip().strip("/").startswith("street-law/"):
+        if box != "za":
+            raise HTTPException(403, "needs the South Africa region")
+        # Only the existing Workspace service may attest the human actor.
+        # Founder status is derived here, never accepted from an incoming flag.
+        import hmac
+        supplied_key = request.headers.get("x-tank-key", "")
+        workspace_key = os.environ.get("TANK_API_KEY", "")
+        actor = request.headers.get("x-street-law-actor", "")
+        tenant = request.headers.get("x-street-law-tenant", "")
+        if (not workspace_key or not actor or len(actor) > 200
+                or not hmac.compare_digest(supplied_key.encode(), workspace_key.encode())):
+            raise HTTPException(404, "not_found")
+        try:
+            uuid.UUID(tenant)
+        except ValueError:
+            raise HTTPException(404, "not_found") from None
+        founder = __import__("admin").founder_allowed(supplied_key, actor)
+        headers.update({"X-Tank-Key": os.environ.get("TANK_KEY_ZENAS", ""),
+            "X-Street-Law-Actor": actor, "X-Street-Law-Tenant": tenant,
+            "X-Street-Law-Founder": "1" if founder else "0"})
     if path == "moot/hearing-sources" or path == "moot/hearings" or path.startswith("moot/hearings/"):
         # Only the Workspace service can attest Trigger sign-in-derived actor/tenant identity.
         # Discard caller-supplied founder flags; Tank derives that capability.
@@ -4082,15 +4111,17 @@ async def zenas_proxy(path: str, request: Request) -> Response:
 async def ledger_feedback(ledger_id: uuid.UUID, body: Feedback) -> dict[str, Any]:
     """A person's verdict on one answer. The tenant_id in the body must match the row,
     so one tenant can never rate — or even discover — another tenant's calls."""
+    if body.verdict is not None and body.feedback != ("accepted" if body.verdict == "useful" else "rejected"):
+        raise HTTPException(422, "Feedback and verdict do not agree.")
     async with pool().acquire() as conn:
         updated = await conn.fetchval(
             """
             UPDATE tank.ledger
-            SET feedback=$3, feedback_note=$4, feedback_at=now(), feedback_by=$5
+            SET feedback=$3, feedback_note=$4, feedback_at=now(), feedback_by=$5, feedback_kind=$6
             WHERE id=$1 AND tenant_id=$2 AND outcome='delivered'
             RETURNING id
             """,
-            ledger_id, body.tenant_id, body.feedback, body.note, body.by,
+            ledger_id, body.tenant_id, body.feedback, body.note, body.by, body.verdict,
         )
     if updated is None:
         raise HTTPException(status_code=404, detail="no delivered call with that id for this tenant")
@@ -4101,11 +4132,11 @@ async def ledger_feedback(ledger_id: uuid.UUID, body: Feedback) -> dict[str, Any
             INSERT INTO tank.evals (task_type, input, expected, tolerance, source, tenant_id, ledger_id, verdict, note)
             SELECT t.task_type, t.messages, jsonb_build_object('text', t.content), 'semantic', 'tester_feedback',
                    t.tenant_id, t.ledger_id, $2, $3
-            FROM tank.transcripts t WHERE t.ledger_id = $1
+            FROM tank.transcripts t WHERE t.ledger_id = $1 AND t.tenant_id = $4
             ON CONFLICT (ledger_id) WHERE ledger_id IS NOT NULL
             DO UPDATE SET verdict = EXCLUDED.verdict, note = EXCLUDED.note
             """,
-            ledger_id, body.feedback, body.note,
+            ledger_id, body.feedback, body.note, body.tenant_id,
         )
     async with pool().acquire() as conn:
         async with conn.transaction():
@@ -5002,6 +5033,11 @@ from memory_routes import router as memory_router  # noqa: F401 -- compatibility
 
 app.include_router(__import__("paid_steps").build_router())
 app.add_middleware(__import__("paid_steps").ApprovalMiddleware)
+# Window agents: reuse the existing authenticated command corridor.
+__import__("window_agents").install(app, __import__("sys").modules[__name__])
+
+# Window completion uses the existing code ladder and personal-token identity.
+app.include_router(__import__('window_complete').router)
 
 # Bind only accepted endpoint arguments after existing authentication dependencies.
 bind_tenant_endpoints(app)

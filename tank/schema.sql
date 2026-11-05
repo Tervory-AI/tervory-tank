@@ -3130,6 +3130,94 @@ CREATE TABLE IF NOT EXISTS tank.rig_rooms (
 -- END worker
 -- BEGIN platform (new blocks for platform go here)
 ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
+
+-- Home is assigned at onboarding; changing it requires a separate data migration.
+CREATE TABLE IF NOT EXISTS tank.tenants (
+    tenant_id uuid PRIMARY KEY,
+    home_region text NOT NULL CHECK (home_region IN ('us-east','za')),
+    onboarded_by text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS feedback_kind text
+    CHECK (feedback_kind IN ('useful','not_useful','wrong'));
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS revalidation_id uuid;
+CREATE TABLE IF NOT EXISTS tank.roster_observations (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL CHECK (region IN ('us-east','za')),
+    fingerprint text NOT NULL CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
+    observed_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,region)
+);
+CREATE TABLE IF NOT EXISTS tank.platform_releases (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    region text NOT NULL CHECK (region IN ('us-east','za')),
+    sha text NOT NULL CHECK (sha ~ '^[0-9a-f]{40}$'),
+    observed_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS platform_releases_region
+    ON tank.platform_releases(tenant_id,region,observed_at DESC);
+CREATE TABLE IF NOT EXISTS tank.founder_morning_reports (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    region text NOT NULL CHECK (region IN ('us-east','za')),
+    report_day date NOT NULL,
+    report jsonb NOT NULL,
+    status text NOT NULL CHECK (status IN ('sending','sent','uncertain')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id,region,report_day)
+);
+-- Join an existing tenant-RLS rollout; never enable it on legacy tables.
+DO $$
+DECLARE relation text;
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        FOREACH relation IN ARRAY ARRAY['tenants','roster_observations','platform_releases','founder_morning_reports']
+        LOOP
+            EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',relation);
+            EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',relation);
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=format('tank.%I',relation)::regclass AND polname='tenant_access') THEN
+                EXECUTE format('CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC
+                    USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)
+                    WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',relation);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=format('tank.%I',relation)::regclass AND polname='tenant_boundary') THEN
+                EXECUTE format('CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC
+                    USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)
+                    WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',relation);
+            END IF;
+        END LOOP;
+    END IF;
+END;
+$$;
+
+-- An onboarding assignment must never silently move an existing tenant.
+CREATE OR REPLACE FUNCTION tank.tenant_has_data(wanted uuid) RETURNS boolean
+LANGUAGE plpgsql AS $$
+DECLARE relation record; has_row boolean;
+BEGIN
+    FOR relation IN
+        SELECT n.nspname,c.relname,a.atttypid='uuid'::regtype AS is_uuid
+        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        JOIN pg_attribute a ON a.attrelid=c.oid
+        WHERE c.relkind IN ('r','p') AND a.attname='tenant_id' AND NOT a.attisdropped
+        AND a.atttypid IN ('uuid'::regtype,'text'::regtype,'varchar'::regtype)
+        AND n.nspname NOT LIKE 'pg_%' AND n.nspname <> 'information_schema'
+        AND c.oid <> 'tank.tenants'::regclass
+    LOOP
+        IF relation.is_uuid THEN
+            EXECUTE format('SELECT EXISTS(SELECT 1 FROM %I.%I WHERE tenant_id=$1)',
+                           relation.nspname,relation.relname) INTO has_row USING wanted;
+        ELSE
+            EXECUTE format('SELECT EXISTS(SELECT 1 FROM %I.%I WHERE tenant_id=$1)',
+                           relation.nspname,relation.relname) INTO has_row USING wanted::text;
+        END IF;
+        IF has_row THEN RETURN true; END IF;
+    END LOOP;
+    RETURN false;
+END;
+$$;
+
 -- Paid ladder steps: tenant preferences default to Ask, independent of master stop.
 CREATE TABLE IF NOT EXISTS tank.paid_steps (
     step_id text PRIMARY KEY,

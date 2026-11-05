@@ -15,7 +15,7 @@ def adapters(command):
         'market_lab.feeds': command.Adapter('GET', '/v1/market-lab/reads/feeds', command.MarketLabReadArgs, 'market_lab.feeds'),
         'market_lab.patterns': command.Adapter('GET', '/v1/market-lab/reads/patterns', command.MarketLabReadArgs, 'market_lab.patterns'),
         'market_lab.gate': command.Adapter('GET', '/v1/market-lab/reads/gate', command.MarketLabReadArgs, 'market_lab.gate'),
-        'market_lab.briefs': command.Adapter('GET', '/v1/market-lab/reads/briefs', command.MarketLabReadArgs, 'market_lab.briefs'),
+        'market_lab.briefs': command.Adapter('GET', '/v1/market-lab/reads/briefs', command.MarketLabBriefArgs, 'market_lab.briefs'),
         'market_lab.alerts.email': command.Adapter('POST', '/v1/market-lab/alerts/email', command.EmptyArgs, 'market_lab.alerts.email'),
         'market_lab.alerts.webhook': command.Adapter('POST', '/v1/market-lab/alerts/webhook', command.MarketLabWebhookArgs, 'market_lab.alerts.webhook'),
         'market_lab.alerts.off': command.Adapter('POST', '/v1/market-lab/alerts/off', command.EmptyArgs, 'market_lab.alerts.off'),

@@ -1495,6 +1495,9 @@ class MarketLabReadArgs(Body):
     limit: int = Field(default=20, ge=1, le=100)
     page: int = Field(default=0, ge=0, le=10000)
 
+class MarketLabBriefArgs(MarketLabReadArgs):
+    report_id: uuid.UUID | None = None
+
 
 class MarketLabWebhookArgs(Body):
     url: str = Field(min_length=1, max_length=2000)
@@ -1698,6 +1701,10 @@ async def authorized_actor(actor: Actor, conn: Any = None, *, include_mcp: bool 
     if conn is None:
         async with db().acquire() as connection:
             return await authorized_actor(actor, connection, include_mcp=include_mcp)
+    from main import box_region
+    home = await conn.fetchval("SELECT home_region FROM tank.tenants WHERE tenant_id=$1", actor.tenant_id)
+    if home is not None and home != box_region():
+        raise HTTPException(403, "This conversation must stay on its home box")
     if not actor.founder:
         rows = await conn.fetch("SELECT agent FROM tank.tenant_squad WHERE tenant_id=$1", actor.tenant_id)
         actor = replace(actor, squads=frozenset(row["agent"] for row in rows) & SQUADS)

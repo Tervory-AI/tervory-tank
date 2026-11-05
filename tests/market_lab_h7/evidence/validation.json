@@ -1,0 +1,58 @@
+{
+  "scope": "local offline fixtures; no hosted CI or deployed acceptance claim",
+  "acceptance_rows": 47,
+  "h7_sql_asgi": {
+    "passed": 2
+  },
+  "loader_and_render": {
+    "passed": 1,
+    "node_cases": 4
+  },
+  "typescript_no_emit": "passed",
+  "exact_ci_lint": "All checks passed!",
+  "browser_prior": {
+    "passed": 1,
+    "seconds": 118.4,
+    "widths": [
+      1440,
+      375
+    ],
+    "states_per_page": 4
+  },
+  "acceptance_latest": {
+    "passed": 3,
+    "failed": 1,
+    "failed_row": "R47",
+    "failure_stage": "Next fixture compiling before browser assertions"
+  },
+  "precheck": {
+    "passed": false,
+    "blocking_test": "tests/room_brains/test_rooms.py::test_seal_exact_networks_and_partial_optional_group[none-radix-browser-gateway]",
+    "error": "ops/seal-check.sh subprocess timed out after 30 seconds"
+  },
+  "semgrep": {
+    "local": "disabled by founder; no own scan running",
+    "CI": "normal PR comparison still required"
+  },
+  "pushed": true,
+  "captured_at": "2026-11-04T19:01:42.799595+00:00",
+  "published_head_at_capture": "717da4f3aaa08ac6183ee70b1d9ed68b6c758bab",
+  "hosted_prior": {
+    "run": 41890503967,
+    "result": "failure",
+    "passed": [
+      "workspace",
+      "command-acceptance",
+      "lint",
+      "savings-page",
+      "nine Python shards"
+    ],
+    "python_failure": "test_all_agent_schema_files_use_one_generator",
+    "fix": "history table moved before generated memory suffix",
+    "exact_fix_test": "1 passed in 34.61s",
+    "security_comparison_base": null,
+    "gitleaks_h7_commit_findings": 0,
+    "semgrep_h7_added_line_findings": 0,
+    "osv_h7_changed_manifests": 0
+  }
+}

@@ -3,6 +3,7 @@ from trigger_signin_fakes import set_founders
 import json
 import secrets
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import uuid
 
 import httpx
@@ -17,6 +18,13 @@ from test_moa import policy
 import main
 
 database = _database
+
+
+@pytest.fixture(autouse=True)
+def legacy_tenant_home(monkeypatch):
+    """The MoA fixtures exercise existing tenants without an onboarding record."""
+    import tenant_regions
+    monkeypatch.setattr(tenant_regions, "recorded_home", AsyncMock(return_value=None))
 
 
 @pytest.fixture(autouse=True)

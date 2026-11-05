@@ -29,10 +29,12 @@ def obj(raw):
     return json.loads(raw) if isinstance(raw, str) else raw
 
 
-async def room(operation: str, tenant) -> dict:
+async def room(operation: str, tenant, *, report_id: UUID | None = None) -> dict:
     from ghost_routes import call_room
     response = await call_room("POST", "market_lab", "/market/ml3/" + operation,
-                               body={"tenant_id": str(tenant)})
+                               body={"tenant_id": str(tenant), **({"report_id": str(report_id)} if report_id else {})})
+    if response.status_code == 404:
+        raise HTTPException(404, "Not found")
     if response.status_code != 200:
         raise HTTPException(503, "Market Lab is not connected")
     return response.json()
@@ -50,12 +52,14 @@ def records(operation: str, data: dict) -> list[dict]:
         # waits for Figma rather than creating labels or a new chart here.
         return [{"name": " / ".join(str(row[k]) for k in ("kind", "feed", "horizon_seconds")),
                  "count": row["count"], "bins": row["bins"], "brier_score": row["brier_score"],
-                 "kind": row["kind"], "feed": row["feed"], "horizon_seconds": row["horizon_seconds"]}
+                 "kind": row["kind"], "feed": row["feed"], "horizon_seconds": row["horizon_seconds"],
+                 **{key: row.get(key) for key in ("mean_confidence", "realised_rate", "hits", "misses")}}
                 for row in data.get("curves", [])]
     if operation == "briefs":
         return [{"name": row["question"], "summary": row["answer"],
                  "status": " / ".join(d["channel"] + ":" + d["status"] for d in row["deliveries"]),
-                 "deliveries": row["deliveries"], "report_id": row["id"], "citations": row["citations"]}
+                 "deliveries": row["deliveries"], "report_id": row["id"], "citations": row["citations"],
+                 **{key: row[key] for key in ("made_at", "sources", "signals", "history") if key in row}}
                 for row in data.get("briefs", [])]
     if operation == "patterns":
         return [{"name": row["claim"]["pair_id"], "status": row["tier"],
@@ -273,12 +277,14 @@ def build_router(tank):
 
     @router.get("/v1/market-lab/reads/{operation}")
     @tenant_path("actor")
-    async def read(operation: str, actor=Depends(command.identity), limit: int = Query(default=20, ge=1, le=100), page: int = Query(default=0, ge=0, le=10000)):
+    async def read(operation: str, actor=Depends(command.identity), limit: int = Query(default=20, ge=1, le=100), page: int = Query(default=0, ge=0, le=10000), report_id: UUID | None = None):
         from main import pool, box_region
         if operation not in READS:
             raise HTTPException(404, "Not found")
         command.require_tool(actor, "market_lab." + operation)
-        data = await room(operation, actor.tenant_id)
+        if report_id is not None and operation != "briefs":
+            raise HTTPException(422, "The action arguments are invalid")
+        data = await room(operation, actor.tenant_id, report_id=report_id) if report_id else await room(operation, actor.tenant_id)
         rows = records(operation, data)
         ledger_id = await pool().fetchval("INSERT INTO tank.ledger(tenant_id,region,agent,task_type,rung,model,cost_usd,tokens_in,tokens_out) VALUES($1,$2,'market_lab',$3,3,'code',0,0,0) RETURNING id", actor.tenant_id, box_region(), "market_lab." + operation)
         return JSONResponse(jsonable_encoder({"records": rows[page * limit:(page + 1) * limit], "total": len(rows), "ledger_id": str(ledger_id), "cost_usd": 0}), headers={"Cache-Control": "private, no-store"})

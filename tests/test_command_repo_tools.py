@@ -107,9 +107,13 @@ async def http_api(runtime, monkeypatch, github):
         assert "tank.tenant_squad" in sql
         return [{"agent": squad} for squad in command.SQUADS]
 
+    async def fetchval(sql, *args):
+        assert "tank.tenants" in sql and args[0] in {TENANT, OTHER}
+        return None  # Existing repository-read fixtures have no home record.
+
     @asynccontextmanager
     async def acquire():
-        yield SimpleNamespace(fetch=fetch)
+        yield SimpleNamespace(fetch=fetch, fetchval=fetchval)
 
     monkeypatch.setattr(command, "db", lambda: SimpleNamespace(acquire=acquire))
     app = runtime.app = FastAPI()

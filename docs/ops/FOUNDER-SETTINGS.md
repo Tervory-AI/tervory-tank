@@ -14,6 +14,10 @@ One Boston resource serves every country. Setup emails the founder a link to set
 
 **Shared email** (the morning report and default alerts): SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 
+**Tank morning report**: FOUNDER_REPORT_TO. Optional per-report overrides are FOUNDER_REPORT_SMTP_HOST, FOUNDER_REPORT_SMTP_PORT, FOUNDER_REPORT_SMTP_USER, FOUNDER_REPORT_SMTP_PASSWORD, FOUNDER_REPORT_SMTP_FROM; otherwise the shared SMTP names above are used. Each enabled Tank sends its region's digest at 07:00 America/Los_Angeles. TANK_GITHUB_READ_TOKEN supplies optional read-only Actions deployment history; unavailable or truncated history is labelled, never counted as a clean deployment.
+
+**Workspace tenant home routing**: TANK_URL and TANK_API_KEY name this Workspace's Tank. TANK_REGION is us-east or za. A connection to the other region uses TANK_URL_ZA with TANK_CONTENT_API_KEY_ZA, or TANK_URL_US with TANK_CONTENT_API_KEY_US. The content keys must be that region's full Workspace key; TANK_API_KEY_ZA and TANK_API_KEY_US remain restricted homes/feeds keys and cannot authorize private content. A ZA Workspace also needs the US content connection for the tenant directory. These names already exist in the runtime configuration; this source change does not set or rotate them. The founder assigns a new tenant's home through PUT /api/tenants/<tenant UUID>/home before first use; changing a recorded home requires a separate migration.
+
 **Market Lab** (free keys): FRED_API_KEY, EIA_API_KEY, CENSUS_API_KEY, LEGISCAN_API_KEY, NOAA_TOKEN, USPTO_API_KEY
 **Market Lab email:** MARKET_LAB_SMTP_HOST, MARKET_LAB_SMTP_PORT, MARKET_LAB_SMTP_USER, MARKET_LAB_SMTP_PASSWORD, MARKET_LAB_SMTP_FROM, MARKET_LAB_SMTP_ALERT_ADDRESSES
 
@@ -43,6 +47,8 @@ One Boston resource serves every country. Setup emails the founder a link to set
 - Email: AUTUMBRA_SMTP_HOST, AUTUMBRA_SMTP_PORT, AUTUMBRA_SMTP_USER, AUTUMBRA_SMTP_PASSWORD, AUTUMBRA_SMTP_FROM
 - One Enforce per client (#622; on the enforce-lifecycle service only, never on Watch): AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN (read and write, no deploy), AUTUMBRA_COOLIFY_PROJECT_UUID, AUTUMBRA_COOLIFY_SERVER_UUID, AUTUMBRA_COOLIFY_ENVIRONMENT, AUTUMBRA_COOLIFY_GITHUB_APP_UUID, AUTUMBRA_LIFECYCLE_KEY (on Tank and enforce-lifecycle only)
 - Code-fix PRs: GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED
+
+**Radix own-repository scan** (on Tank): TANK_GITHUB_READ_TOKEN, read access to Tervory-AI/tervory-tank for verifying the current main commit.
 
 **Radix** (#651, breach watch): HIBP_API_KEY, only if Have I Been Pwned's domain search is free for your domains.
 
@@ -77,6 +83,8 @@ Public project/client IDs, native founder subjects and organisation links are pr
 5. Google Cloud: the project with Business Profile API access (it produces TRIGGER_GOOGLE_OAUTH_*).
 6. GitHub repository secrets (not Coolify): CLI_RELEASE_SIGNING_KEY, CLI_RELEASE_SIGNING_PUBLIC_KEY. Only needed to sign CLI releases.
 
+7. Radix deploy gate in GitHub (not Coolify): repository variable RADIX_DEPLOY_TENANT_ID is the founder workspace id; repository secret TANK_API_KEY reuses the existing Tank service key. No new key is created.
+
 ## D. Wording only you can write (legal text)
 
 1. Radix: the client consent text a tenant admin agrees to before an active scan of their domain (#651).
@@ -104,6 +112,19 @@ APNs/FCM dead-token responses remove registrations; temporary/provider-auth fail
 do not. Expired/revoked mobile sessions do not receive pushes. Sign-out revokes the
 mobile session and deletes its registrations via `DELETE /api/mobile/session`.
 
+
+**Street Law (ZA):** ZENAS_REVIEW is the existing room-wide review setting; Street Law still requires human review while pre-launch even when that setting is off. No Street Law key or bypass switch is added.
+
+## WINDOW-AGENTS (user settings; no new Coolify variables)
+
+`credential_name` selects a GitHub token saved by the user in their own existing
+Tank vault. `repo` selects their GitHub repository. `enabled` is the user's
+per-repository PR review webhook opt-in. The window gives them the callback URL
+and a generated webhook secret for GitHub's webhook form; the secret stays sealed
+in their vault. The founder never collects users' GitHub tokens in chat.
+
+The worker continues to use the existing Tank worker key, pause, region, resource
+limits and code directory. There is no new model provider or paid route setting.
 
 ## Paid ladder decisions (tenant settings; no Coolify value)
 

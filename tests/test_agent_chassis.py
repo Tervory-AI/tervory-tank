@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
@@ -33,6 +34,13 @@ from chassis.worker import (  # noqa: E402
     run_with_timeout,
     schedule_is_due,
 )
+
+
+@pytest.fixture(autouse=True)
+def legacy_tenant_home(monkeypatch):
+    """These database-free chassis fixtures predate founder home onboarding."""
+    import tenant_regions
+    monkeypatch.setattr(tenant_regions, "recorded_home", AsyncMock(return_value=None))
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:y@localhost/z")
 os.environ.setdefault("LITELLM_MASTER_KEY", "test")
