@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import tempfile
 from uuid import UUID, uuid5
 from urllib.parse import urlsplit
 
@@ -172,6 +173,48 @@ async def run(rows, tenant, batch, checkpoint, client, *, sleep=asyncio.sleep, r
 
 async def main(args):
     rows = load_input(Path(args.input))
+    tenant, batch = str(UUID(args.tenant)), str(UUID(args.batch))
+    ordered = plan(rows, tenant)
+    if getattr(args, 'smallest_state', False) and ordered:
+        rows = [row for row in ordered if row['state'] == ordered[0]['state']]
+        ordered = plan(rows, tenant)
+    if getattr(args, 'dry_run', False):
+        result = {'dry_run': True, 'records': len(ordered), 'states': dict(Counter(row['state'] for row in ordered)),
+                  'product_pages': sum(len(row['product_urls']) for row in ordered),
+                  'discovery_sites': sum(bool(row['website']) and not row['product_urls'] for row in ordered),
+                  'missing_sources': sum(not row['website'] and not row['product_urls'] for row in ordered),
+                  'settings': [] if os.environ.get('TIGER_BATCH_URL', '').strip() else ['TIGER_BATCH_URL']}
+        if getattr(args, 'responses', None):
+            recorded = json.loads(Path(args.responses).read_text())
+            async def replay(request):
+                if not recorded:
+                    raise ValueError('No recorded response for this request')
+                expected = recorded.pop(0)
+                if request.method != expected['method'] or request.url.raw_path.decode() != expected['path']:
+                    raise ValueError('Recorded request does not match')
+                if request.method == 'POST' and json.loads(request.content) != expected['body']:
+                    raise ValueError('Recorded request body does not match')
+                return httpx.Response(expected['status'], json=expected['json'])
+            async def no_wait(_):
+                pass
+            # Dry-run replay never opens the operator's real checkpoint or
+            # writes observed prices into live receipts.
+            with tempfile.TemporaryDirectory(prefix='tiger-dry-') as folder:
+                async with httpx.AsyncClient(base_url='https://placeholder.invalid', transport=httpx.MockTransport(replay)) as client:
+                    receipts = await run(rows, tenant, batch, Path(folder)/'checkpoint', client,
+                                         sleep=no_wait, retry_failed=args.retry_failed)
+                    resumed = await run(rows, tenant, batch, Path(folder)/'checkpoint', client, sleep=no_wait)
+                    if resumed != receipts or recorded:
+                        raise ValueError('Recorded replay or resume is incomplete')
+            result.update(replayed=len(receipts), resume_verified=True)
+        print(json.dumps(result, sort_keys=True))
+        return result
+    if not os.environ.get('TIGER_BATCH_URL', '').strip():
+        result = {'status': 'not_configured', 'settings': ['TIGER_BATCH_URL']}
+        print(json.dumps(result))
+        return result
+    if getattr(args, 'responses', None):
+        raise ValueError('Recorded responses require dry-run')
     async with httpx.AsyncClient(base_url=os.environ['TIGER_BATCH_URL'], follow_redirects=False, timeout=60) as client:
         receipts = await run(rows, str(UUID(args.tenant)), str(UUID(args.batch)), args.checkpoint, client,
                              retry_failed=args.retry_failed)
@@ -195,6 +238,9 @@ if __name__ == '__main__':
     for name in ('input', 'tenant', 'batch', 'checkpoint', 'receipts'):
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--retry-failed', action='store_true')
+    parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--responses', help='Local recorded HTTP responses for offline dry-run replay')
+    parser.add_argument('--smallest-state', action='store_true')
     try:
         asyncio.run(main(parser.parse_args()))
     except Exception:

@@ -16,6 +16,8 @@ import httpx
 from fastapi import Header, HTTPException, Query
 from gold_sources import candidates
 from pydantic import BaseModel, Field
+from starlette.responses import JSONResponse
+from readiness import capabilities, problems
 
 from alert_email import deliver_pending
 from rig_watch import RigWatches, TankRig, check_now, CatalogueDiscovery, DiscoveryGate
@@ -40,7 +42,7 @@ from watch import (
 AGENT = os.environ.get("AGENT_NAME", "tiger")
 TIGER_URL = os.environ.get("TIGER_URL", "http://tiger:3000")
 HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
-INTERVAL_S = float(os.environ.get("DOMAIN_INTERVAL_S", "10"))
+INTERVAL_S = float(os.environ.get("DOMAIN_INTERVAL_S") or "10") if 'DOMAIN_INTERVAL_S' not in problems() else 10
 ROBOTS_UA = "Tervory/1.0 (+https://tervory.com)"
 
 log = logging.getLogger("agent")
@@ -49,6 +51,8 @@ _limiter = DomainLimiter(INTERVAL_S)
 
 async def ping(ctx: JobContext) -> dict:
     result: dict = {"pong": True, "agent": ctx.agent}
+    if ctx.input.get('dry_run') is True:
+        return {**result, 'dry_run': True, 'would_remember': bool(ctx.input.get('heartbeat'))}
     if ctx.input.get("heartbeat"):
         try:
             saved = await ctx.memory.remember(
@@ -209,6 +213,8 @@ async def check(ctx: JobContext) -> dict:
 
 async def dispatch(ctx: JobContext) -> dict:
     store = PgStore(app.state.pool, SCHEMA)
+    if getattr(ctx, 'input', {}).get('dry_run') is True:
+        return await dry_dispatch(store, TankRig(app.state.http), ctx.tenant_id, datetime.now(timezone.utc))
     try:
         await RigWatches(store).deliver(ctx.tenant_id, TankRig(app.state.http))
     except (httpx.HTTPError, ValueError):
@@ -221,8 +227,19 @@ async def dispatch(ctx: JobContext) -> dict:
 async def rig_discover(ctx: JobContext) -> dict:
     if str(ctx.tenant_id) != HEARTBEAT_TENANT:
         return {"tenants": 0}
-    count = await RigWatches(PgStore(app.state.pool, SCHEMA)).discover(TankRig(app.state.http))
+    count = await RigWatches(PgStore(app.state.pool, SCHEMA)).discover(TankRig(app.state.http), dry_run=ctx.input.get('dry_run') is True)
     return {"tenants": count}
+
+
+async def dry_dispatch(store, client, tenant, now):
+    # Read source eligibility, due watches and pending mail without syncing,
+    # claiming, enqueueing, delivering or acknowledging anything.
+    store.initialize_reads = False
+    products = await client.products(tenant)
+    result = await dispatch_tenant(store, tenant, now, dry_run=True)
+    result['rig_products'] = len(products)
+    result['email'] = await deliver_pending(store, tenant, dry_run=True, clock=lambda: now)
+    return result
 
 
 async def competitor_match(ctx: JobContext) -> dict:
@@ -337,12 +354,29 @@ app = create_app(
 )
 
 
-_tiger_inner = app.router.lifespan_context
+_tiger_chassis = app.router.lifespan_context
+
+
+@asynccontextmanager
+async def _configured_lifespan(instance):
+    instance.state.configuration_problems = problems()
+    if instance.state.configuration_problems:
+        log.warning('Tiger is waiting for settings: %s', ', '.join(instance.state.configuration_problems))
+        yield
+        return
+    async with _tiger_chassis(instance):
+        yield
+
+
+_tiger_inner = _configured_lifespan
 
 
 @asynccontextmanager
 async def _tiger_lifespan(instance):
     async with _tiger_inner(instance):
+        if getattr(instance.state, 'configuration_problems', []):
+            yield
+            return
         # Room DDL runs as the room owner, even when administrative reads use
         # a separate BYPASSRLS pool. Install it before the room serves traffic.
         pool = getattr(instance.state.pool, 'raw', instance.state.pool)
@@ -352,6 +386,24 @@ async def _tiger_lifespan(instance):
 
 
 app.router.lifespan_context = _tiger_lifespan
+
+
+@app.middleware('http')
+async def configuration_guard(request, call_next):
+    unavailable = getattr(app.state, 'configuration_problems', [])
+    if unavailable:
+        return JSONResponse({'ok': False, 'agent': AGENT, 'status': 'not_configured',
+                             'settings': unavailable}, status_code=503)
+    if request.url.path == '/health':
+        response = await call_next(request)
+        # Keep the chassis database check; optional settings disable only their
+        # own capability and remain visible to operators by name.
+        if response.status_code == 200:
+            return JSONResponse({'ok': True, 'agent': AGENT, 'missing_settings': capabilities()})
+        return response
+    if request.url.path.startswith('/storage/') and capabilities()['storage']:
+        return JSONResponse({'status': 'not_configured', 'settings': capabilities()['storage']}, status_code=503)
+    return await call_next(request)
 
 
 class WatchIn(BaseModel):

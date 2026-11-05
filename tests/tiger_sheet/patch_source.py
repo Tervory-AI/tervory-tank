@@ -14,7 +14,14 @@ def source(name):
     commit = (project/'vendor/tervory-tank/SOURCE').read_text().strip()
     original = subprocess.check_output(['git', '-C', os.environ['TANK_SOURCE_DIR'],
                                        'show', commit + ':' + name], text=True).splitlines(True)
-    patch = (project/'tank-patches/finish.patch').read_text().splitlines(True)
+    for path in [project/'tank-patches/finish.patch', *sorted((project/'tank-patches').glob('gate4-*.patch'))]:
+        patch = path.read_text().splitlines(True)
+        if '+++ b/' + name + '\n' in patch:
+            original = apply(name, original, patch).splitlines(True)
+    return ''.join(original)
+
+
+def apply(name, original, patch):
     start = patch.index('+++ b/' + name + '\n') + 1
     end = next((i for i in range(start, len(patch)) if patch[i].startswith('--- a/')), len(patch))
     output, cursor, i = [], 0, start

@@ -1,0 +1,165 @@
+# Tank base commit: 7174469d3454c1493f3c852109b930e1d02f0b7a
+--- a/workspace/app/prices/chart.tsx
++++ b/workspace/app/prices/chart.tsx
+@@ -4,7 +4,17 @@
+ 
+ export function PriceChart({ points }: { points: Point[] }) {
+   if (points.length === 0) {
+-    return <p className="empty">No prices yet. The first check has not come in.</p>;
++    return <div className="chart-wrap" data-empty="true">
++      <svg viewBox="0 0 640 168" role="img" aria-label="Price history" className="chart">
++        <title>Price history</title>
++        <line x1="56" y1="16" x2="56" y2="140" />
++        <line x1="56" y1="140" x2="628" y2="140" />
++        <text x="48" y="82" textAnchor="end">—</text>
++        <text x="56" y="160">—</text>
++      </svg>
++      <p className="empty">No prices yet. The first check has not come in.</p>
++      <p className="hint">The first price shows up after the next check.</p>
++    </div>;
+   }
+ 
+   const width = 640;
+--- a/workspace/app/prices/page.tsx
++++ b/workspace/app/prices/page.tsx
+@@ -84,7 +84,7 @@
+       </form>
+ 
+       <h2>Watches</h2>
+-      {watches.length === 0 && !loadError && <p className="empty">Nothing is being watched yet. Add a page above.</p>}
++      {watches.length === 0 && !loadError && <div><p className="empty">Nothing is being watched yet. Add a page above.</p><PriceChart points={[]} /></div>}
+       {watches.map((watch) => {
+         const row = history.get(watch.url);
+         const observations = row?.observations ?? [];
+@@ -124,7 +124,7 @@
+ 
+       <h2>Alerts</h2>
+       <p className="hint">A price move past the threshold, or a change in stock.</p>
+-      {alerts.length === 0 && !loadError && <p className="empty">No alerts yet.</p>}
++      {alerts.length === 0 && !loadError && <div><p className="empty">No alerts yet.</p><p className="hint">Add a page to watch. Tervory checks the price on a schedule and keeps the history here.</p></div>}
+       {alerts.length > 0 && (
+         <table>
+           <thead>
+--- a/workspace/app/tiger/parts.tsx
++++ b/workspace/app/tiger/parts.tsx
+@@ -20,12 +20,12 @@
+ }
+ 
+ export function SimpleTable({ heads, rows, empty, priceCol, className = "" }: { heads: string[]; rows: ReactNode[][]; empty: string; priceCol?: number; className?: string }) {
+-  if (rows.length === 0) return empty ? <p className="fine">{empty}</p> : null;
+   return (
+     <div className={`table-wrap ${className}`}>
+       <table>
+         <thead><tr>{heads.map((head) => <th key={head}>{head}</th>)}</tr></thead>
+         <tbody>
++          {rows.length === 0 ? <tr data-empty="true">{heads.map((head, index) => <td key={index}>—</td>)}</tr> : null}
+           {rows.map((row, index) => (
+             <tr key={index}>
+               {row.map((cell, cellIndex) => <td key={cellIndex} className={cellIndex === priceCol ? "price" : cellIndex === 0 && priceCol === undefined ? "name" : ""}>{cell}</td>)}
+@@ -33,6 +33,7 @@
+           ))}
+         </tbody>
+       </table>
++      {rows.length === 0 && empty ? <p className="fine">{empty}</p> : null}
+     </div>
+   );
+ }
+--- a/workspace/app/tiger/view.tsx
++++ b/workspace/app/tiger/view.tsx
+@@ -149,7 +149,7 @@
+             <p className="intro">The latest 40 check attempts from your watched pages.</p>
+             <SimpleTable heads={["When", "Product", "Price", "Stock", "Status"]}
+               rows={data.reads.map((row) => [row.when, <ProductIdentifier key="product" name={row.product} url={row.url} />, row.price, row.stock, row.reason ? `Not checked — ${row.reason}` : "Read"])}
+-              empty="No readings yet." priceCol={2} />
++              empty="Add a product" priceCol={2} />
+           </section>
+         ) : null}
+ 
+@@ -168,15 +168,15 @@
+   return (
+     <>
+       <section className="counts" aria-label="Counts">
+-        <article className="count"><b>{data.watchedCount}</b><strong>{data.watchedCount === 1 ? "Watched product" : "Watched products"}</strong><p className="fine">Product pages Tiger checks.</p></article>
+-        <article className="count"><b>{data.changesToday}</b><strong>{data.changesToday === 1 ? "Change today" : "Changes today"}</strong><p className="fine">Confirmed changes since midnight UTC.</p></article>
++        <article className="count"><b>{data.watchedCount}</b><strong>{data.watchedCount === 1 ? "Watched product" : "Watched products"}</strong><p className="fine">{data.watchedCount === 0 ? "Add a product" : "Product pages Tiger checks."}</p></article>
++        <article className="count"><b>{data.changesToday}</b><strong>{data.changesToday === 1 ? "Change today" : "Changes today"}</strong><p className="fine">{data.watchedCount === 0 ? "Add a product" : "Confirmed changes since midnight UTC."}</p></article>
+       </section>
+       <section className="block">
+         <div className="title-row">
+           <h2>Latest reads</h2>
+         </div>
+         <p className="intro">The latest check for each watched product.</p>
+-        {data.products.length === 0 ? <p className="empty">No products watched yet.</p> : (
++        {data.products.length === 0 ? <div><p className="empty">No products watched yet.</p><p className="fine">Add a product</p></div> : (
+         <ul className="cards">
+           {data.products.map((row) => (
+             <li key={row.id}>
+@@ -222,7 +222,7 @@
+           <h2>Recent alerts</h2>
+         </div>
+         <p className="intro">Recent confirmed price and stock changes.</p>
+-        {recent.length === 0 ? <p className="empty">No alerts yet.</p> : (
++        {recent.length === 0 ? <div><p className="empty">No alerts yet.</p><p className="fine">Add a product</p></div> : (
+         <ul className="cards">
+           {recent.map((row) => (
+             <li key={row.id}>
+@@ -264,7 +264,7 @@
+         <h2>Alerts</h2>
+       </div>
+       <p className="intro">Confirmed changes from completed product checks.</p>
+-      {rows.length === 0 ? <p className="empty">No alerts yet.</p> : null}
++      {rows.length === 0 ? <div><p className="empty">No alerts yet.</p><p className="fine">Add a product</p></div> : null}
+       <div className="filters">
+         {(["All", "Price", "Stock"] as const).map((item) => (
+           <button key={item} type="button" className={kind === item ? "chip on" : "chip"} onClick={() => setKind(item)}>{item}</button>
+@@ -288,7 +288,7 @@
+         </table>
+       </div>
+       <div className="table-foot">
+-        <span>{listed.length} {listed.length === 1 ? "alert" : "alerts"}{example ? " · Example" : ""}</span>
++        <span>{listed.length} {listed.length === 1 ? "alert" : "alerts"}</span>
+       </div>
+       <article className="note-card">
+         <h3>How alerts work</h3>
+@@ -306,7 +306,7 @@
+         <h2>Watch list</h2>
+       </div>
+       <p className="intro">Your watched pages, check intervals and alert preferences.</p>
+-      {rows.length === 0 ? <p className="empty">No products watched yet.</p> : null}
++      {rows.length === 0 ? <div><p className="empty">No products watched yet.</p><p className="fine">Add a product</p></div> : null}
+       <div className="table-wrap">
+         <table>
+           <thead><tr><th>Product</th><th>Page</th><th>How often</th><th>Alert me on</th><th>Last attempt</th><th>Status</th><th /></tr></thead>
+--- a/workspace/app/tiger/position-views.tsx
++++ b/workspace/app/tiger/position-views.tsx
+@@ -61,6 +61,7 @@
+ function PricePosition({ rows }: { rows: PositionRow[] | null }) {
+   return <>
+     <p className="intro">Your products against confirmed matches on the competitor sites you saved.</p>
++    {rows?.length === 0 ? <p className="fine"><a href="/rig">Add a product</a></p> : null}
+     {rows ? <>
+       <SimpleTable className="position-table desktop-comparison" heads={["Product", "Your price", "Matched competitor pages", "Cheapest", "Your rank", "Difference"]} empty="" rows={rows.map(row => [
+         <div key="product" className="position-product"><strong>{row.name}</strong><span className="fine">{row.sku}</span></div>,
+@@ -116,7 +117,7 @@
+ 
+ function Matches({ rows, onChange }: { rows: TigerMatch[] | null; onChange: (match: TigerMatch) => void }) {
+   if (rows === null) return null;
+-  if (!rows.length) return <p className="empty comparison-empty">No matches to review.</p>;
++  if (!rows.length) return <div><p className="empty comparison-empty">No matches to review.</p><p className="fine">Tiger Plugins → Source links</p></div>;
+   // The approved review frame describes brand/part-number suggestions only.
+   rows = rows.filter(row => row.method === "brand_mpn");
+   if (!rows.length) return null;
+@@ -159,11 +160,11 @@
+     {rows === null ? null : !rows.length ? <p className="empty comparison-empty">No saved sites.</p> : <>
+       <SimpleTable className="sites-table desktop-comparison" heads={["Saved site", "Pages checked", "Matches found", "Last checked", "Check status"]} empty="" rows={rows.map(row => [
+         <div key="site" className="saved-site"><PageLink row={{ url: row.url, store: `${row.label} ↗` }} /><span className="fine">{row.host}</span></div>,
+-        row.pages, row.matches, <SiteTime key="time" row={row} />, <SiteStatus key="status" row={row} />,
++        row.pages ?? "—", row.matches ?? "—", <SiteTime key="time" row={row} />, <SiteStatus key="status" row={row} />,
+       ])} />
+       <ul className="cards mobile-comparison sites-cards">{rows.map(row => <li key={row.id}>
+         <PageLink row={{ url: row.url, store: `${row.label} ↗` }} /><p className="fine">{row.host}</p>
+-        <dl className="site-counts"><div><dt>Pages checked</dt><dd>{row.pages}</dd></div><div><dt>Matches found</dt><dd>{row.matches}</dd></div></dl>
++        <dl className="site-counts"><div><dt>Pages checked</dt><dd>{row.pages ?? "—"}</dd></div><div><dt>Matches found</dt><dd>{row.matches ?? "—"}</dd></div></dl>
+         <p className="site-time"><SiteTime row={row} mobile /></p><SiteStatus row={row} />
+       </li>)}</ul>
+       <Note title="What these counts cover">{SITES_NOTE}</Note>

@@ -190,8 +190,10 @@ class RigWatches:
         self.watches = watches
         self.pool, self.schema = watches.pool, watches.schema
 
-    async def discover(self, client: TankRig) -> int:
+    async def discover(self, client: TankRig, *, dry_run: bool = False) -> int:
         tenants = await client.tenants()
+        if dry_run:
+            return len(tenants)
         async with self.pool.acquire() as conn:
             await ensure_tables(conn, self.schema)
             await conn.executemany(SQL_ENSURE_DISPATCH.format(schema=self.schema), [(UUID(t),) for t in tenants])

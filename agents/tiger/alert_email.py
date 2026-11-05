@@ -133,12 +133,18 @@ def letter_for(alert: dict) -> dict[str, str] | None:
 
 
 async def deliver_pending(
-    store: Any, tenant_id: str, *, transport=None, recipient=None, clock=None, namespace="tiger"
+    store: Any, tenant_id: str, *, transport=None, recipient=None, clock=None, namespace="tiger", dry_run=False
 ) -> dict:
     """Retry definite rejections; never repeat an accepted/uncertain SMTP send."""
     if namespace not in {"tiger", "zenas", "market_lab"}:
         raise MailConfigurationError("mail_not_configured")
     clock = clock or (lambda: datetime.now(timezone.utc))
+    if dry_run:
+        from readiness import missing
+        return {'dry_run': True, 'sent': 0,
+                'pending': len((await store.pending_mail(tenant_id, clock()))[:3]),
+                'settings': missing(*(namespace.upper() + suffix for suffix in
+                                      ('_SMTP_HOST', '_SMTP_FROM', '_SMTP_ALERT_ADDRESSES')))}
     if transport is None:
         try:
             transport, recipient = configuration(tenant_id, prefix=namespace.upper())

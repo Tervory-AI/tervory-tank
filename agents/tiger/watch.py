@@ -651,6 +651,7 @@ class PgStore(PgPlaybooks, PgAlerts):
     def __init__(self, pool: Any, schema: str = SCHEMA) -> None:
         self.pool = pool
         self.schema = schema
+        self.initialize_reads = True
 
     def _sql(self, statement: str) -> str:
         return statement.format(schema=self.schema)
@@ -681,7 +682,8 @@ class PgStore(PgPlaybooks, PgAlerts):
 
     async def list_watches(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
-            await ensure_tables(conn, self.schema)
+            if self.initialize_reads:
+                await ensure_tables(conn, self.schema)
             rows = await conn.fetch(self._sql(SQL_LIST_WATCHES), uuid.UUID(str(tenant_id)))
         return [_watch_out(row) for row in rows]
 
@@ -760,7 +762,8 @@ class PgStore(PgPlaybooks, PgAlerts):
 
     async def latest_observation(self, tenant_id: str, url: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
-            await ensure_tables(conn, self.schema)
+            if self.initialize_reads:
+                await ensure_tables(conn, self.schema)
             row = await conn.fetchrow(self._sql(SQL_LATEST_OBS), uuid.UUID(str(tenant_id)), url)
         return _obs_out(row) if row else None
 
@@ -806,7 +809,8 @@ class PgStore(PgPlaybooks, PgAlerts):
 
     async def pending_mail(self, tenant_id: str, now: datetime) -> list[str]:
         async with self.pool.acquire() as conn:
-            await ensure_tables(conn, self.schema)
+            if self.initialize_reads:
+                await ensure_tables(conn, self.schema)
             rows = await conn.fetch(self._sql("""
                 SELECT alert_id FROM {schema}.alert_mail
                 WHERE tenant_id = $1 AND status = 'pending' AND next_attempt_at <= $2
@@ -1327,7 +1331,7 @@ async def _run_check(
     }
 
 
-async def dispatch_tenant(store: Any, tenant_id: str, now: datetime) -> dict[str, Any]:
+async def dispatch_tenant(store: Any, tenant_id: str, now: datetime, *, dry_run: bool = False) -> dict[str, Any]:
     queued: list[str] = []
     for watch in await store.enabled_watches(tenant_id):
         last = await store.latest_observation(tenant_id, watch["url"])
@@ -1336,6 +1340,8 @@ async def dispatch_tenant(store: Any, tenant_id: str, now: datetime) -> dict[str
             continue
         if await store.check_open(tenant_id, watch["url"]):
             continue
-        if await store.enqueue_check(tenant_id, watch["url"]):
+        if dry_run or await store.enqueue_check(tenant_id, watch["url"]):
             queued.append(watch["url"])
+    if dry_run:
+        return {'dry_run': True, 'would_queue': queued, 'queued': []}
     return {"queued": queued}

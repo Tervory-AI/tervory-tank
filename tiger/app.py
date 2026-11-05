@@ -31,8 +31,8 @@ from pydantic import BaseModel, Field
 from ocr import ocr_png
 from pool import SessionKeyError, idle_expired, render_block, route_continues, session_file
 
-MAX_PAGES = int(os.environ.get("TIGER_MAX_PAGES", "4"))
-DATA_DIR = os.environ.get("DATA_DIR", "/data")
+MAX_PAGES = int(os.environ.get("TIGER_MAX_PAGES") or "4")
+DATA_DIR = os.environ.get("DATA_DIR") or "/data"
 UA_SUFFIX = " TervoryTiger/0.1 (+https://tervory.com)"   # we say who we are
 CHALLENGE_MARKERS = (
     "cf-turnstile", "challenges.cloudflare.com", "cf-challenge", "challenge-platform", "g-recaptcha",
