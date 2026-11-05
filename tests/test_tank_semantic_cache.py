@@ -25,7 +25,12 @@ class EncoderStub:
 
 async def drain(b):
     while b.tank._background:
-        await asyncio.gather(*list(b.tank._background))
+        tasks = tuple(b.tank._background)
+        await asyncio.gather(*tasks)
+        # A completed task can remain until its scheduled discard callback runs.
+        # Explicitly retire the completed snapshot so gathering already-done tasks
+        # cannot spin without yielding the event loop to those callbacks.
+        b.tank._background.difference_update(tasks)
 
 
 @pytest_asyncio.fixture
