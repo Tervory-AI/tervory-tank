@@ -1,6 +1,6 @@
 # Everything the founder fills in, all at once (3 Nov 2026, 16:10 PT)
 
-This is the one list. Every name below is taken from `.env.example` on main or on an open PR branch; none is a guess. You type the values in Coolify, and Claude never sees them. Skip any name you have already filled. Flags marked "leave off" stay off until testing shows there is room.
+This is the one list. Every Coolify variable name below is taken from `.env.example` on main or on an open PR branch; none is a guess. You type the values in Coolify, and Claude never sees them. Skip any name you have already filled. Flags marked "leave off" stay off until testing shows there is room.
 
 ## A. Coolify settings, Boston (the main app unless noted)
 
@@ -8,6 +8,9 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 **Market Lab** (free keys): FRED_API_KEY, EIA_API_KEY, CENSUS_API_KEY, LEGISCAN_API_KEY, NOAA_TOKEN, USPTO_API_KEY
 **Market Lab email:** MARKET_LAB_SMTP_HOST, MARKET_LAB_SMTP_PORT, MARKET_LAB_SMTP_USER, MARKET_LAB_SMTP_PASSWORD, MARKET_LAB_SMTP_FROM, MARKET_LAB_SMTP_ALERT_ADDRESSES
+
+**Base:** BASE_REFERENCE_FILE_URL (optional founder-approved, dated public HTTPS official reference file when the legacy source is blocked).
+**Base company-data trial:** CONTEXT_DEV_API_KEY, CONTEXT_DEV_MAX_CREDITS (existing optional trial only; no new account or paid service is required for ordinary Base checks).
 
 **Tiger email:** TIGER_SMTP_HOST, TIGER_SMTP_PORT, TIGER_SMTP_USER, TIGER_SMTP_PASSWORD, TIGER_SMTP_FROM, TIGER_SMTP_ALERT_ADDRESSES (JSON mapping of tenant UUID to its own recipient; no default address).
 **Tiger private sources:** TANK_VAULT_KEY (Tank only), ACCESS_BROWSER_KEY_TIGER (Tank and the Tiger browser only). Keep existing values; never rotate them just to run the sheet.
@@ -67,6 +70,9 @@ Nothing else needs you before testing. Any name a later PR adds is added to this
 ## Paid ladder decisions (tenant settings; no Coolify value)
 
 `paid_step_settings.mode`: `ask` (default) or `auto`, stored separately for each tenant and exact `step_id`. The authenticated founder or tenant administrator can list steps at `GET /v1/command/paid-steps` and save one at `PUT /v1/command/paid-steps/{step_id}`. Workspace backend: `GET/PUT /settings/paid-steps/api`. These are database preferences, not new environment variables or paid-service keys. Pending approvals use existing /chats Confirm/Cancel cards. The platform control `paid_paused` (“Pause all paid work”) overrides every Auto setting and every prior approval. Settings screens await the Proposed paid-step frames in `codex/figma-w5`; see `docs/paid-steps/FRAMES.md`.
+## E. Existing Tank tool controls
+
+**Base Plugins:** base.vault (existing switch in `workspace/app/base/plugin-panel.ts`; off for the Plugins-off check, on for the API key, file, source link and MCP checks). Set this in Tank's existing tool controls.
 
 ## Rig store rooms (layout B)
 
