@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { OrganizationSwitcher } from "@clerk/nextjs";
+import { OrganisationSwitcher } from "../trigger-signin-provider";
 import { NAV } from "../trigger/copy";
 
 /** Reuse the shared menu destinations; no new Market Lab-specific menu claims. */
@@ -32,11 +32,7 @@ export function H7Shell({ children }: { children: React.ReactNode }) {
     <aside id="h7-menu" ref={panel} className={`h7-menu${open ? " open" : ""}`}>
       <div className="h7-identity"><img src="/market-lab/h7/desktop-wordmark.png" alt="Tervory" width="208" height="38" />
         <button className="h7-close" onClick={() => setOpen(false)}>Close</button>
-        <div className="h7-business"><span>Business</span><OrganizationSwitcher hidePersonal
-          afterSelectOrganizationUrl="/market-lab/briefs" appearance={{ elements: {
-            organizationSwitcherTrigger: { padding: 0, width: 28, minWidth: 28 },
-            organizationPreviewTextContainer: { display: "none" }, organizationPreviewAvatarBox: { display: "none" },
-          } }} /></div><p>Market Lab</p></div>
+        <div className="h7-business"><span>Business</span><OrganisationSwitcher /></div><p>Market Lab</p></div>
       <nav>{NAV.map(([title, links]) => <section key={title}><h2>{title}</h2>{links.map(([label, href]) => href
         ? <a key={label} href={href} onClick={() => setOpen(false)}>{label}</a>
         : <span key={label} aria-disabled="true">{label}</span>)}</section>)}
