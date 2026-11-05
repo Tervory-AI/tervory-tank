@@ -46,8 +46,10 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
                 assert statement
                 await owner.execute(statement.group())
             await owner.execute("ALTER TABLE tank.command_threads ADD COLUMN trigger_signin_issuer text NOT NULL DEFAULT ''")
-            # An installation that has rolled out RLS: mobile tables follow it.
-            await owner.execute("ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY")
+            # Install the actual platform policies on the isolated command tables,
+            # rather than enabling RLS without any policy (which denies every row).
+            platform_rls = (Path(__file__).parents[1] / "db/migrations/tenant_rls/tank.sql").read_text()
+            await owner.execute(platform_rls)
             migration = schema.split("-- BEGIN mobile\n", 1)[1].split("-- END mobile", 1)[0]
             await owner.execute(migration)
             await owner.execute(migration)
@@ -105,6 +107,8 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
             assert failure.value.status_code == 404
             async with store.acquire() as conn:
                 assert await conn.fetchval("SELECT count(*) FROM tank.mobile_devices WHERE tenant_id=$1", actor.tenant_id) == 0
+                assert await conn.fetchval("SELECT count(*) FROM tank.command_threads WHERE tenant_id=$1", actor.tenant_id) == 0
+                assert await conn.fetchval("SELECT count(*) FROM tank.command_attachments WHERE tenant_id=$1", actor.tenant_id) == 0
         delivered = []
         class FakePhone:
             async def deliver(self, platform, token, message):
