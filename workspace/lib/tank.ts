@@ -700,6 +700,54 @@ export type TigerWatch = {
   alert_stock?: boolean;
 };
 
+export type TigerMatch = {
+  site_label?: string;
+  id: string;
+  tenant_id: string;
+  sku: string;
+  url: string;
+  seen_on: string;
+  checked_at: string;
+  state: "suggested" | "rejected" | "confirmed";
+  method: string;
+  product?: { name: string | null; brand: string | null; mpn: string | null };
+  identifiers: {
+    own: { gtin?: string | null; brand?: string | null; mpn?: string | null };
+    seen: { gtins?: string[]; brand?: string | null; mpn?: string | null };
+  };
+};
+export type TigerPosition = {
+  sku: string;
+  name?: string | null;
+  own_price: string | number | null;
+  currency: string | null;
+  competitors: { url: string; price: string | number | null; currency: string | null; stock: string | null; checked_at: string | null }[];
+};
+
+export type TigerSiteCheck = { url: string; pages: number | null; matches: number; checked_at: string | null; status: "checked" | "human_check" | "robots" | null; skipped: number | null };
+
+export function listTigerMatches(actor: AccessIdentity): Promise<{ tenant_id: string; matches: TigerMatch[]; site_checks?: TigerSiteCheck[] }> {
+  return accessRequest(actor, "tiger/matches");
+}
+
+export function listTigerPosition(actor: AccessIdentity): Promise<{ tenant_id: string; products: TigerPosition[] }> {
+  return accessRequest(actor, "tiger/position");
+}
+
+/** A button click uses Tank's existing durable card confirmation and dispatch.
+ * No model planner runs; dispatch calls the same /access/tiger/match/{decision} route.
+ */
+export async function decideTigerMatch(actor: AccessIdentity, matchId: string, decision: "confirm" | "reject" | "undo"): Promise<TigerMatch> {
+  const post = async (path: string, body: unknown) => (await commandRequest(actor, path, { method: "POST", body: JSON.stringify(body) })).json();
+  const thread = await post("threads", { title: "Tiger" });
+  const card = await post(`threads/${encodeURIComponent(thread.thread_id)}/actions`, {
+    tool: `tiger.match.${decision}`, arguments: { match_id: matchId },
+  });
+  const result = await post(`cards/${encodeURIComponent(card.card_id)}`, { action: "confirm" });
+  if (result.status !== "confirmed" || result.result?.match?.id !== matchId || result.result.match.tenant_id !== actor.tenantId) throw new Error("Tiger decision was not confirmed");
+  return result.result.match as TigerMatch;
+}
+
 export type TigerObservation = {
   id: string;
   tenant_id: string;
