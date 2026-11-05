@@ -77,3 +77,5 @@ Containers without Traefik routers (57): `identity-backup-zhcgyuamty89bbv6wpn0tg
 | 20 | trigger-crm | frontend | https://crm.tervory.com |
 | 20 | trigger-crm | backend | https://crm.tervory.com/healthz,https://crm.tervory.com/api,https://crm.tervory.com/admin,https://crm.tervory.com/static |
 | 23 | Autumbra Enforce - tervory.com | — | none |
+
+Read-only settings confirmation: applications 1 (Boston main), 15 (ZA), and 20 (CRM) have raw-compose deployment disabled; application 12 (Rig) has it enabled. Installed ApplicationDeploymentJob bypasses generated applicationParser routing in raw mode. This explains why Rig has only its two source routers despite a saved UI domain.
