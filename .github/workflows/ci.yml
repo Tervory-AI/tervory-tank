@@ -219,7 +219,7 @@ jobs:
       - name: Prepare pinned k6 for offline Tisan smoke tests
         run: |
           python3 - <<'PYK6'
-          import hashlib, io, os, platform, re, tarfile, urllib.request
+          import hashlib, io, json, os, platform, re, tarfile, urllib.error, urllib.request
           from pathlib import Path
           source = Path("agents/tisan/Dockerfile").read_text()
           def pin(name, pattern):
@@ -232,8 +232,21 @@ jobs:
           expected = pin("K6_SHA_" + architecture.upper(), r"[a-f0-9]{64}")
           name = f"k6-v{version}-linux-{architecture}"
           url = f"https://github.com/grafana/k6/releases/download/v{version}/{name}.tar.gz"
-          with urllib.request.urlopen(url, timeout=60) as response:
-              archive = response.read(100_000_001)
+          try:
+              with urllib.request.urlopen(url, timeout=60) as response:
+                  archive = response.read(100_000_001)
+          except (urllib.error.URLError, TimeoutError):
+              # Same official release asset through GitHub's API, never a mirror.
+              api = f"https://api.github.com/repos/grafana/k6/releases/tags/v{version}"
+              with urllib.request.urlopen(api, timeout=60) as response:
+                  release = json.load(response)
+              asset = next(item for item in release["assets"] if item["name"] == name + ".tar.gz")
+              asset_url = asset["url"]
+              if not re.fullmatch(r"https://api\.github\.com/repos/grafana/k6/releases/assets/[0-9]+", asset_url):
+                  raise SystemExit("unexpected k6 release asset URL")
+              request = urllib.request.Request(asset_url, headers={"Accept": "application/octet-stream"})
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  archive = response.read(100_000_001)
           if len(archive) > 100_000_000 or hashlib.sha256(archive).hexdigest() != expected:
               raise SystemExit("k6 checksum mismatch")
           folder = Path(os.environ["RUNNER_TEMP"]) / "tisan-k6"
@@ -268,6 +281,16 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx --no-install playwright install chromium
+      - name: Prepare pinned Tiger acceptance browser dependencies
+        working-directory: tests/acceptance/tiger-browser
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx --no-install playwright install chromium
+      - name: Prepare pinned Trigger acceptance browser dependencies
+        run: |
+          npm ci --prefix tests/trigger_browser_tools --ignore-scripts --no-audit --no-fund
+          tests/trigger_browser_tools/node_modules/.bin/playwright install chromium
+          echo "TRIGGER_BROWSER_TOOLS=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules" >> "$GITHUB_ENV"
       - name: Prepare CLI acceptance fixtures
         run: |
           npm ci --prefix cli --ignore-scripts --no-audit --no-fund
@@ -313,6 +336,8 @@ jobs:
               await conn.close()
           asyncio.run(main())
           PY
+      - name: Install pinned Rig host-split test proxy
+        run: bash .github/scripts/install-rig-traefik.sh
       - name: Full offline test suite
         # The whole suite gates every PR again (it was cut to 3 files on 27 Oct, #351,
         # because it took 10-15 minutes serially and had not passed for three days).

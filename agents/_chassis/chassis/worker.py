@@ -265,8 +265,8 @@ async def job_loop(pool: Any, agent: str, handlers: dict[str, Handler], ctx_for:
                 with tenant_scope(job["tenant_id"]):
                     async with pool.acquire() as conn:
                         await run_claimed(conn, agent, job, handlers, ctx_for)
-        except Exception:  # noqa: BLE001
-            log_line(agent, "job tick failed", level="error")
+        except Exception as exc:  # noqa: BLE001 -- the loop must keep running; log the type only, never the message
+            log_line(agent, "job tick failed", level="error", error=type(exc).__name__)
         await asyncio.sleep(JOB_POLL_S)
 
 
@@ -275,6 +275,6 @@ async def schedule_loop(pool: Any, agent: str, job_timeouts: dict[str, int] | No
         try:
             async with pool.acquire() as conn:
                 await enqueue_due(conn, agent, job_timeouts=job_timeouts)
-        except Exception:  # noqa: BLE001
-            log_line(agent, "schedule tick failed", level="error")
+        except Exception as exc:  # noqa: BLE001 -- the loop must keep running; log the type only, never the message
+            log_line(agent, "schedule tick failed", level="error", error=type(exc).__name__)
         await asyncio.sleep(SCHEDULE_POLL_S)

@@ -448,9 +448,16 @@ class SecurityDownloadTests(unittest.TestCase):
 
     def downloads(self, recover):
         script = (ROOT / ".github/scripts/install-security-tools.sh").read_text()
-        commands = [shlex.split(line) for line in script.replace("\\\n", "").splitlines()
-                    if line.startswith("curl ")]
-        self.assertEqual(len(commands), 2)
+        lines = [line.strip().removeprefix("if ! ").removesuffix("; then")
+                 for line in script.replace("\\\n", "").splitlines()]
+        commands = [shlex.split(line) for line in lines if line.startswith("curl ")]
+        self.assertEqual(len(commands), 4)  # primary and same-asset API for each tool
+        api_urls = [value for command in commands for value in command
+                    if value.startswith("https://api.github.com/")]
+        self.assertEqual(api_urls, [
+            "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378332058",
+            "https://api.github.com/repos/google/osv-scanner/releases/assets/632251666",
+        ])
         attempts = []
         payload = b"local test download"
 
@@ -532,9 +539,15 @@ class ComparisonBaseTests(unittest.TestCase):
     def select(self, event=None, kind="pull_request"):
         return scan.event_comparison_base(kind, self.event if event is None else event)
 
+    def queue_ref(self, sha, parent, number=1):
+        ref = f"gh-readonly-queue/main/pr-{number}-{parent}"
+        self.git("update-ref", "refs/remotes/origin/" + ref, sha)
+        return "refs/heads/" + ref
+
     def group(self, **changes):
+        head_ref = self.queue_ref(self.head, self.base)
         return {"merge_group": {"base_ref": "refs/heads/main", "base_sha": self.base,
-                                "head_sha": self.head, **changes}}
+                                "head_sha": self.head, "head_ref": head_ref, **changes}}
 
     def test_stale_pr_base_resolves_to_actual_verified_main_parent(self):
         self.assertEqual(self.select(), self.base)
@@ -614,6 +627,110 @@ class ComparisonBaseTests(unittest.TestCase):
                         {"base_sha": self.pr}, {"base_sha": self.head}):
             with self.subTest(fields=sorted(changes)), self.assertRaises((ValueError, subprocess.CalledProcessError)):
                 self.select(self.group(**changes), "merge_group")
+
+    def chained_group(self, count=3):
+        head = self.head
+        ref = self.queue_ref(head, self.base)
+        base = self.base
+        for number in range(2, count + 1):
+            self.git("checkout", "-qb", f"queued-pr-{number}", self.base)
+            self.commit(f"queued-{number}.txt", "queued contribution")
+            pr = self.git("rev-parse", "HEAD")
+            self.git("checkout", "-q", head)
+            self.git("merge", "--no-ff", "--no-edit", pr)
+            base, head = head, self.git("rev-parse", "HEAD")
+            ref = self.queue_ref(head, base, number)
+        return {"merge_group": {"base_ref": "refs/heads/main", "base_sha": base,
+                                "head_sha": head, "head_ref": ref}}
+
+    def test_chained_queue_base_is_preserved_and_scans_only_latest_contribution(self):
+        event = self.chained_group()
+        base = event["merge_group"]["base_sha"]
+        self.assertEqual(self.select(event, "merge_group"), base)
+        self.assertEqual(self.git("diff", "--name-only", base, "HEAD"), "queued-3.txt")
+        for tool in ("gitleaks", "semgrep", "osv"):
+            with self.subTest(tool=tool):
+                code, status, scanner, _ = self.invoke(tool, event, "merge_group")
+                self.assertEqual(code, 1)
+                self.assertEqual(status["result"], "findings")
+                self.assertEqual(status["base"], base)
+                self.assertEqual(scanner.call_args.args[0], base)
+
+    def test_chained_queue_can_keep_an_earlier_declared_base(self):
+        event = self.chained_group()
+        event["merge_group"]["base_sha"] = self.head
+        self.assertEqual(self.select(event, "merge_group"), self.head)
+
+    def test_queue_base_remains_valid_when_main_advances_to_predecessor(self):
+        event = self.chained_group()
+        base = event["merge_group"]["base_sha"]
+        self.git("update-ref", "refs/remotes/origin/main", base)
+        self.assertEqual(self.select(event, "merge_group"), base)
+
+    def test_missing_speculative_predecessor_ref_fails_closed(self):
+        event = self.chained_group()
+        self.git("update-ref", "-d", f"refs/remotes/origin/gh-readonly-queue/main/pr-1-{self.base}")
+        with self.assertRaises(ValueError):
+            self.select(event, "merge_group")
+
+    def test_predecessor_queue_ref_must_encode_its_actual_first_parent(self):
+        event = self.chained_group()
+        self.git("update-ref", "-d", f"refs/remotes/origin/gh-readonly-queue/main/pr-1-{self.base}")
+        self.queue_ref(self.head, self.old)
+        with self.assertRaises(ValueError):
+            self.select(event, "merge_group")
+
+    def test_event_queue_ref_must_match_fetched_head_and_encoded_parent(self):
+        event = self.group()
+        for ref in ("refs/heads/ordinary", "refs/heads/gh-readonly-queue/other/pr-1-" + self.base,
+                    self.queue_ref(self.head, self.old, 9), self.queue_ref(self.pr, self.base, 8)):
+            with self.subTest(ref=ref), self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                self.select({"merge_group": {**event["merge_group"], "head_ref": ref}}, "merge_group")
+        self.git("update-ref", "-d", event["merge_group"]["head_ref"].replace("refs/heads/", "refs/remotes/origin/"))
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.select(event, "merge_group")
+
+    def test_ordinary_descendant_of_main_is_not_a_trusted_queue_base(self):
+        self.commit("ordinary.txt", "not a synthetic queue merge")
+        ordinary = self.git("rev-parse", "HEAD")
+        # Even a queue-shaped ref cannot turn a one-parent commit into a queue merge.
+        self.queue_ref(ordinary, self.head, 2)
+        self.git("checkout", "-qb", "next-pr", self.base)
+        self.commit("next.txt", "next contribution")
+        pr = self.git("rev-parse", "HEAD")
+        self.git("checkout", "-q", ordinary)
+        self.git("merge", "--no-ff", "--no-edit", pr)
+        head = self.git("rev-parse", "HEAD")
+        ref = self.queue_ref(head, ordinary, 3)
+        event = {"merge_group": {"base_ref": "refs/heads/main", "base_sha": ordinary,
+                                 "head_sha": head, "head_ref": ref}}
+        with self.assertRaises(ValueError):
+            self.select(event, "merge_group")
+
+    def test_main_on_second_parent_does_not_authenticate_unrelated_first_parent(self):
+        self.git("checkout", "--orphan", "unrelated")
+        self.git("rm", "-rf", ".")
+        self.commit("rogue.txt", "unrelated root")
+        rogue = self.git("rev-parse", "HEAD")
+        self.git("merge", "--allow-unrelated-histories", "--no-ff", "--no-edit", self.base)
+        head = self.git("rev-parse", "HEAD")
+        ref = self.queue_ref(head, rogue)
+        event = {"merge_group": {"base_ref": "refs/heads/main", "base_sha": rogue,
+                                 "head_sha": head, "head_ref": ref}}
+        with self.assertRaises(ValueError):
+            self.select(event, "merge_group")
+
+    def test_speculative_chain_rejects_base_reachable_only_via_pr_parent(self):
+        event = self.chained_group()
+        event["merge_group"]["base_sha"] = self.pr
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.select(event, "merge_group")
+
+    def test_missing_main_cannot_authenticate_a_queue_chain(self):
+        event = self.chained_group()
+        self.git("update-ref", "-d", "refs/remotes/origin/main")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.select(event, "merge_group")
 
     def test_legacy_main_push_preserves_before_after_range(self):
         self.git("update-ref", "refs/remotes/origin/main", self.head)

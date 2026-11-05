@@ -1,0 +1,1222 @@
+[
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:11870",
+    "frameName": "Rig Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:45832",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:11900",
+    "frameName": "Rig Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:45919",
+    "previousMainId": "180:8467",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:11930",
+    "frameName": "Rig Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:46007",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:11958",
+    "frameName": "Rig Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:46094",
+    "previousMainId": "180:8467",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:11986",
+    "frameName": "Rig Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:46183",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:12014",
+    "frameName": "Rig Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:46270",
+    "previousMainId": "180:8467",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:12042",
+    "frameName": "Rig Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:46359",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:12070",
+    "frameName": "Rig Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:46447",
+    "previousMainId": "180:8467",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:12098",
+    "frameName": "Rig Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:47228",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:12124",
+    "frameName": "Rig Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:47318",
+    "previousMainId": "180:8467",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:12150",
+    "frameName": "Rig Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:47406",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "231:12187",
+    "frameName": "Rig Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:47493",
+    "previousMainId": "180:8467",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12224",
+    "frameName": "Tisan Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:47581",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12254",
+    "frameName": "Tisan Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:47668",
+    "previousMainId": "180:8467",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12284",
+    "frameName": "Tisan Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:47756",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12312",
+    "frameName": "Tisan Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:47843",
+    "previousMainId": "180:8467",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12340",
+    "frameName": "Tisan Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:47931",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12368",
+    "frameName": "Tisan Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:48018",
+    "previousMainId": "180:8467",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12396",
+    "frameName": "Tisan Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:48107",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12424",
+    "frameName": "Tisan Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:48195",
+    "previousMainId": "180:8467",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12452",
+    "frameName": "Tisan Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:48286",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12478",
+    "frameName": "Tisan Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:48376",
+    "previousMainId": "180:8467",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12504",
+    "frameName": "Tisan Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+    "menuId": "465:48464",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "231:12541",
+    "frameName": "Tisan Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+    "menuId": "465:48551",
+    "previousMainId": "180:8467",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "513:40528",
+    "frameName": "J4 / ready / 1440 / Proposed",
+    "menuId": "513:40529",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "513:40686",
+    "frameName": "J4 / ready / 375 / Proposed",
+    "menuId": "513:40687",
+    "previousMainId": "180:8550",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "514:5990",
+    "frameName": "J4 / empty / 1440 / Proposed",
+    "menuId": "514:5991",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "514:6148",
+    "frameName": "J4 / empty / 375 / Proposed",
+    "menuId": "514:6149",
+    "previousMainId": "180:8550",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "514:18203",
+    "frameName": "J4 / missing / 1440 / Proposed",
+    "menuId": "514:18204",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "514:18361",
+    "frameName": "J4 / missing / 375 / Proposed",
+    "menuId": "514:18362",
+    "previousMainId": "180:8550",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "514:18586",
+    "frameName": "J4 / invalid / 1440 / Proposed",
+    "menuId": "514:18587",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "514:18744",
+    "frameName": "J4 / invalid / 375 / Proposed",
+    "menuId": "514:18745",
+    "previousMainId": "180:8550",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "514:18891",
+    "frameName": "J4 / loading / 1440 / Proposed",
+    "menuId": "514:18892",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "513:40527",
+    "product": "Tisan",
+    "frame": "514:19050",
+    "frameName": "J4 / loading / 375 / Proposed",
+    "menuId": "514:19051",
+    "previousMainId": "180:8550",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "468:26347",
+    "frameName": "Rig Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+    "menuId": "468:26351",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "468:26455",
+    "frameName": "Rig Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+    "menuId": "468:26459",
+    "previousMainId": "180:8467",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "468:27698",
+    "frameName": "Rig Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+    "menuId": "468:27702",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "468:27804",
+    "frameName": "Rig Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+    "menuId": "468:27808",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "468:27919",
+    "frameName": "Rig Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+    "menuId": "468:27923",
+    "previousMainId": "180:8467",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Rig",
+    "frame": "468:27953",
+    "frameName": "Rig Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+    "menuId": "468:27957",
+    "previousMainId": "180:8467",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "291:8053",
+    "frameName": "A07-choose \u00b7 Shop platform \u00b7 not connected \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:18492",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "291:8097",
+    "frameName": "A07-shopify \u00b7 Shopify \u00b7 enter credentials \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:18598",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "291:8151",
+    "frameName": "A07-woo \u00b7 WooCommerce \u00b7 enter credentials \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:18691",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "291:8213",
+    "frameName": "A07-big \u00b7 BigCommerce \u00b7 enter credentials \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:18784",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "291:8267",
+    "frameName": "A07-testing \u00b7 Shop platform \u00b7 testing \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:18877",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "291:8309",
+    "frameName": "A07-connected \u00b7 Shop platform \u00b7 connected \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:18970",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "291:8357",
+    "frameName": "A07-failed \u00b7 Shop platform \u00b7 connection failed \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:19063",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "291:8405",
+    "frameName": "A08 \u00b7 Orders \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:19156",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "291:8444",
+    "frameName": "A09 \u00b7 Store delivery time \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:19249",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "321:6304",
+    "frameName": "A08-late \u00b7 Order paid after window \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:19342",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "289:13919",
+    "product": "Rig",
+    "frame": "321:6382",
+    "frameName": "A07-choose-open \u00b7 Choose a platform \u00b7 open \u00b7 1440 \u00b7 Changed after approval, awaiting founder",
+    "menuId": "456:19435",
+    "previousMainId": "180:8387",
+    "mainId": "533:19231",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "256:9",
+    "product": "Tiger",
+    "frame": "256:10",
+    "frameName": "01 \u00b7 Price position \u00b7 1440 \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+    "menuId": "465:26693",
+    "previousMainId": "180:8387",
+    "mainId": "533:19787",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "256:9",
+    "product": "Tiger",
+    "frame": "256:283",
+    "frameName": "02 \u00b7 Matches to review \u00b7 1440 \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+    "menuId": "465:26776",
+    "previousMainId": "180:8387",
+    "mainId": "533:19787",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "256:9",
+    "product": "Tiger",
+    "frame": "256:471",
+    "frameName": "03 \u00b7 Competitor sites \u00b7 1440 \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+    "menuId": "465:26859",
+    "previousMainId": "180:8387",
+    "mainId": "533:19787",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "256:9",
+    "product": "Tiger",
+    "frame": "267:19232",
+    "frameName": "02 \u00b7 Matches to review \u00b7 1440 \u00b7 Empty \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+    "menuId": "465:26942",
+    "previousMainId": "180:8387",
+    "mainId": "533:19787",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "256:9",
+    "product": "Tiger",
+    "frame": "267:19424",
+    "frameName": "03 \u00b7 Competitor sites \u00b7 1440 \u00b7 Empty \u00b7 Approved 3 Nov \u00b7 Changed after approval, awaiting founder",
+    "menuId": "465:27025",
+    "previousMainId": "180:8387",
+    "mainId": "533:19787",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "468:26491",
+    "frameName": "Tisan Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+    "menuId": "468:26495",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "468:26599",
+    "frameName": "Tisan Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+    "menuId": "468:26603",
+    "previousMainId": "180:8467",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "468:27996",
+    "frameName": "Tisan Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+    "menuId": "468:28000",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "468:28102",
+    "frameName": "Tisan Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+    "menuId": "468:28106",
+    "previousMainId": "180:8387",
+    "mainId": "533:19517",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "468:28217",
+    "frameName": "Tisan Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+    "menuId": "468:28221",
+    "previousMainId": "180:8467",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "230:9",
+    "product": "Tisan",
+    "frame": "468:28251",
+    "frameName": "Tisan Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+    "menuId": "468:28255",
+    "previousMainId": "180:8467",
+    "mainId": "539:19711",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4045",
+    "frameName": "06 \u00b7 ready \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4050",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4101",
+    "frameName": "06 \u00b7 ready \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:4106",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4157",
+    "frameName": "06 \u00b7 rotated \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4162",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4213",
+    "frameName": "06 \u00b7 rotated \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:4218",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4269",
+    "frameName": "06 \u00b7 exploded \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4274",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4328",
+    "frameName": "06 \u00b7 exploded \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:4333",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4387",
+    "frameName": "06 \u00b7 anchors \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4392",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4447",
+    "frameName": "06 \u00b7 anchors \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:4452",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4507",
+    "frameName": "06 \u00b7 empty \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4512",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4551",
+    "frameName": "06 \u00b7 empty \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:4556",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4595",
+    "frameName": "06 \u00b7 loading \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4600",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4640",
+    "frameName": "06 \u00b7 loading \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:4645",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4685",
+    "frameName": "06 \u00b7 error \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4690",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4729",
+    "frameName": "06 \u00b7 error \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:4734",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4773",
+    "frameName": "06 \u00b7 photos \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4778",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4816",
+    "frameName": "06 \u00b7 photos \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:4821",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4859",
+    "frameName": "06 \u00b7 menu \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4864",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:4859",
+    "frameName": "06 \u00b7 menu \u00b7 1440 \u00b7 Proposed",
+    "menuId": "514:4915",
+    "previousMainId": "180:8467",
+    "mainId": "533:19273",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:5000",
+    "frameName": "06 \u00b7 menu \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:5005",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "514:5000",
+    "frameName": "06 \u00b7 menu \u00b7 375 \u00b7 Proposed",
+    "menuId": "514:5056",
+    "previousMainId": "180:8467",
+    "mainId": "533:19273",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:421",
+    "frameName": "07 \u00b7 attract \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:426",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:481",
+    "frameName": "07 \u00b7 attract \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:486",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:541",
+    "frameName": "07 \u00b7 attract-rotated \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:546",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:601",
+    "frameName": "07 \u00b7 attract-rotated \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:606",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:661",
+    "frameName": "07 \u00b7 attract-still \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:666",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:721",
+    "frameName": "07 \u00b7 attract-still \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:726",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:781",
+    "frameName": "07 \u00b7 ready \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:786",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:841",
+    "frameName": "07 \u00b7 ready \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:846",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:901",
+    "frameName": "07 \u00b7 rotated \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:906",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:961",
+    "frameName": "07 \u00b7 rotated \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:966",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1021",
+    "frameName": "07 \u00b7 exploded \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:1026",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1084",
+    "frameName": "07 \u00b7 exploded \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:1089",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1147",
+    "frameName": "07 \u00b7 anchors \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:1152",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1211",
+    "frameName": "07 \u00b7 anchors \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:1216",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1275",
+    "frameName": "07 \u00b7 phone \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:1280",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1347",
+    "frameName": "07 \u00b7 phone \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:1352",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1419",
+    "frameName": "07 \u00b7 email \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:1424",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1491",
+    "frameName": "07 \u00b7 email \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:1496",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1563",
+    "frameName": "07 \u00b7 sending \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:1568",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1636",
+    "frameName": "07 \u00b7 sending \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:1641",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1709",
+    "frameName": "07 \u00b7 saved \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:1714",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1770",
+    "frameName": "07 \u00b7 saved \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:1775",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1831",
+    "frameName": "07 \u00b7 empty \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:1836",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1879",
+    "frameName": "07 \u00b7 empty \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:1884",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1927",
+    "frameName": "07 \u00b7 loading \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:1932",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:1976",
+    "frameName": "07 \u00b7 loading \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:1981",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2025",
+    "frameName": "07 \u00b7 error \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:2030",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2073",
+    "frameName": "07 \u00b7 error \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:2078",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2121",
+    "frameName": "07 \u00b7 error-quote \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:2126",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2194",
+    "frameName": "07 \u00b7 error-quote \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:2199",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2267",
+    "frameName": "07 \u00b7 offline \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:2272",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2328",
+    "frameName": "07 \u00b7 offline \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:2333",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2389",
+    "frameName": "07 \u00b7 reset \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:2394",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2435",
+    "frameName": "07 \u00b7 reset \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:2440",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2481",
+    "frameName": "07 \u00b7 photos \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:2486",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2528",
+    "frameName": "07 \u00b7 photos \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:2533",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2575",
+    "frameName": "07 \u00b7 menu \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:2580",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2575",
+    "frameName": "07 \u00b7 menu \u00b7 1440 \u00b7 Proposed",
+    "menuId": "516:2635",
+    "previousMainId": "180:8467",
+    "mainId": "533:19273",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2720",
+    "frameName": "07 \u00b7 menu \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:2725",
+    "previousMainId": "180:8550",
+    "mainId": "539:19647",
+    "status": "Proposed"
+  },
+  {
+    "pageId": "514:3091",
+    "product": "Rig",
+    "frame": "516:2720",
+    "frameName": "07 \u00b7 menu \u00b7 375 \u00b7 Proposed",
+    "menuId": "516:2780",
+    "previousMainId": "180:8467",
+    "mainId": "533:19273",
+    "status": "Proposed"
+  }
+]

@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = Path(__file__).resolve().parent
@@ -143,9 +144,18 @@ async def _watch(store: Any, url: str, threshold: str, parts: tuple, clock: _Clo
     }
     if await store.get_watch(TENANT, url) is None:
         await store.create_watch(watch)
-    return await run_check(
-        store, TENANT, watch, "tiger", render, extract_html, ocr, fetch_text, DomainLimiter(0), now=clock,
-    )
+    async def event_catcher(tenant, event, reference, facts, **kwargs):
+        assert tenant == TENANT and event == "tiger.price.changed"
+        assert reference and facts["page_id"]
+        return True
+
+    # The scorer promises no network and measures local reader/alert code.
+    # Price changes now also publish an event after saving; capture that external
+    # boundary instead of constructing a real HTTP/TLS client inside the timer.
+    with patch("chassis.events.publish", event_catcher):
+        return await run_check(
+            store, TENANT, watch, "tiger", render, extract_html, ocr, fetch_text, DomainLimiter(0), now=clock,
+        )
 
 
 async def run_series(series: dict[str, Any], extract: Any | None = None) -> list[dict[str, Any]]:

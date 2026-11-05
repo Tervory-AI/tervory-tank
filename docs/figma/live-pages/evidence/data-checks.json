@@ -1,0 +1,30 @@
+[
+  {
+    "frameId": "604:9",
+    "width": 1440,
+    "height": 951,
+    "newProductWording": [],
+    "nativeBrowserWords": [
+      "Choose File",
+      "No file chosen"
+    ],
+    "pngSha256": {
+      "browser": "12449fcb2f48306f40daa0d1ff8482830e8ac578715d0e11ed0743493f1aa549",
+      "figma": "d6758ed6e4277c6d5bab19b0d92321f4f6708425d3384c930d02787b4d6a7adc"
+    }
+  },
+  {
+    "frameId": "606:9",
+    "width": 375,
+    "height": 1397,
+    "newProductWording": [],
+    "nativeBrowserWords": [
+      "Choose File",
+      "No file chosen"
+    ],
+    "pngSha256": {
+      "browser": "c3eea6b64c09d96aa5c267ef81b2093d09c996cb9fb3025caa17ae7529b04616",
+      "figma": "8fe9b28f2345aae34b39d644e1a80918ca52c4bef3a35823a57df58eb6e5e242"
+    }
+  }
+]

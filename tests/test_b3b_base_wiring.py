@@ -220,7 +220,7 @@ def test_scrape_1_2_0_returns_joined_html_capped_at_400_kb() -> None:
 
         huge_home = (
             "<html><body><a href='/about'>About</a> HOME-MARKER"
-            + ("x" * (HTML_CAP + 80))
+            + ("x " * ((HTML_CAP + 80) // 2))
             + "</body></html>"
         )
         huge_about = "<html><body>ABOUT-MARKER <a href='mailto:tail@acme.example'>mail</a></body></html>"

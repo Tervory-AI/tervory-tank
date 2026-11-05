@@ -1,0 +1,10 @@
+{
+  "name": "tervory-trigger-browser-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned offline Trigger browser harness dependencies",
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.64.1"
+  }
+}
