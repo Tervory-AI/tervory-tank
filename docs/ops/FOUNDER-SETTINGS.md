@@ -9,6 +9,10 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 **Market Lab** (free keys): FRED_API_KEY, EIA_API_KEY, CENSUS_API_KEY, LEGISCAN_API_KEY, NOAA_TOKEN, USPTO_API_KEY
 **Market Lab email:** MARKET_LAB_SMTP_HOST, MARKET_LAB_SMTP_PORT, MARKET_LAB_SMTP_USER, MARKET_LAB_SMTP_PASSWORD, MARKET_LAB_SMTP_FROM, MARKET_LAB_SMTP_ALERT_ADDRESSES
 
+**Tiger email:** TIGER_SMTP_HOST, TIGER_SMTP_PORT, TIGER_SMTP_USER, TIGER_SMTP_PASSWORD, TIGER_SMTP_FROM, TIGER_SMTP_ALERT_ADDRESSES (JSON mapping of tenant UUID to its own recipient; no default address).
+**Tiger private sources:** TANK_VAULT_KEY (Tank only), ACCESS_BROWSER_KEY_TIGER (Tank and the Tiger browser only). Keep existing values; never rotate them just to run the sheet.
+**Tiger check-now for Rig:** RIG_TIGER_CHECK_KEY (the existing dedicated Rig-to-Tiger check credential).
+
 **Zenas US:** CONGRESS_GOV_API_KEY, LEGISCAN_API_KEY (the same key as Market Lab)
 **Zenas review (each room):** ZENAS_REVIEW (default off; scope, identifier and citation checks remain on)
 **Zenas email:** ZENAS_SMTP_HOST, ZENAS_SMTP_PORT, ZENAS_SMTP_USER, ZENAS_SMTP_PASSWORD, ZENAS_SMTP_FROM, ZENAS_SMTP_ALERT_ADDRESSES

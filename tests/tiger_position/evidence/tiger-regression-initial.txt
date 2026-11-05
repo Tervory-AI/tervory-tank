@@ -1,0 +1,1581 @@
+/repo/.venv/lib/python3.12/site-packages/platformdirs/api.py:467: RuntimeDirWarning: XDG_RUNTIME_DIR is not set, falling back to /repo/.tmp/runtime-1000
+  return Path(self.user_runtime_dir)
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 14%]
+........................................................................ [ 28%]
+........F.F............................................................. [ 43%]
+........................................................................ [ 57%]
+............................................s........................... [ 71%]
+.F...F.....F.....EEE......E.E..........E........................EEE..E.E [ 86%]
+.....EE.EE.E..E.E.....................EE........EE...EEE.E............   [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-new_product] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-new_product]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-below_cost] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-below_cost]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-market_gap] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-market_gap]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_switch_off_prevents_email_and_preserves_other_tenant[postgres-False-new_product] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[postgres-False-new_product]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_switch_off_prevents_email_and_preserves_other_tenant[postgres-False-below_cost] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[postgres-False-below_cost]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_switch_off_prevents_email_and_preserves_other_tenant[postgres-False-market_gap] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[postgres-False-market_gap]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-new_product] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-new_product]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-below_cost] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-below_cost]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-market_gap] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-market_gap]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_listing_empty_baseline_reorder_failed_check_and_recovery[postgres] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_listing_empty_baseline_reorder_failed_check_and_recovery[postgres]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_cost_requires_own_matching_row_currency_and_transition[postgres] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_cost_requires_own_matching_row_currency_and_transition[postgres]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_microdata_third_product_sends_one_new_product_email[postgres-url] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_microdata_third_product_sends_one_new_product_email[postgres-url]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_microdata_third_product_sends_one_new_product_email[postgres-sku] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_microdata_third_product_sends_one_new_product_email[postgres-sku]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_microdata_third_product_sends_one_new_product_email[postgres-gtin] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_microdata_third_product_sends_one_new_product_email[postgres-gtin]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_microdata_third_product_sends_one_new_product_email[postgres-name_price] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_microdata_third_product_sends_one_new_product_email[postgres-name_price]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_below_cost_ten_against_fifteen_needs_no_stock[postgres] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_below_cost_ten_against_fifteen_needs_no_stock[postgres]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_market_gap_all_competitors_out_without_prices[postgres] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_market_gap_all_competitors_out_without_prices[postgres]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_watch_url_change_starts_new_baseline_and_peer_reading[postgres] _
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_watch_url_change_starts_new_baseline_and_peer_reading[postgres]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_market_gap_counts_muted_competitor_unknowns_own_stock_and_staleness[postgres] _
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_market_gap_counts_muted_competitor_unknowns_own_stock_and_staleness[postgres]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/tiger_g5/conftest.py:47: in store
+    return PgStore(request.getfixturevalue("database"))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_concurrent_checks_create_one_alert_and_state_rolls_back_with_mail _
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_concurrent_checks_create_one_alert_and_state_rolls_back_with_mail>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_migration_twice_preserves_switches_and_rejects_schema_injection _
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_migration_twice_preserves_switches_and_rejects_schema_injection>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_ ERROR at setup of test_private_cost_read_uses_same_tenant_sku_and_never_retail_price _
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_private_cost_read_uses_same_tenant_sku_and_never_retail_price>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_____ ERROR at setup of test_agent_job_to_existing_email_path[new_product] _____
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_agent_job_to_existing_email_path[new_product]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_____ ERROR at setup of test_agent_job_to_existing_email_path[below_cost] ______
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_agent_job_to_existing_email_path[below_cost]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+_____ ERROR at setup of test_agent_job_to_existing_email_path[market_gap] ______
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_agent_job_to_existing_email_path[market_gap]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+__ ERROR at setup of test_switches_create_patch_read_and_cross_tenant_refusal __
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+self = <Coroutine test_switches_create_patch_read_and_cross_tenant_refusal>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/tiger_g5/conftest.py:31: in database
+    await conn.execute((ROOT / "agents/rig/schema.sql").read_text())
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
+E   DETAIL:  Could not open extension control file "/repo/.venv/lib/python3.12/site-packages/pgserver/pginstall/share/postgresql/extension/pg_trgm.control": No such file or directory.
+E   HINT:  The extension must first be installed on the system where PostgreSQL is running.
+
+asyncpg/protocol/protocol.pyx:375: FeatureNotSupportedError
+=================================== FAILURES ===================================
+____ test_room_migration_and_nonowner_tank_admin_after_role_ownership[True] ____
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+database = <asyncpg.pool.Pool object at 0x72834ff4e140>, tables_first = True
+
+            await run_claimed(conn,'tiger',continuation,{'competitor_match':corridor.agent.competitor_match},
+                              lambda job:SimpleNamespace(tenant_id=str(TENANT),job_id=str(job['id']),input=json.loads(job['input'])))
+        assert corridor.agent._fetch_text.await_count == 2
+
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('tables_first',[True,False])
+    async def test_room_migration_and_nonowner_tank_admin_after_role_ownership(database,tables_first):
+        from chassis.roles import _ownership
+        async with database.acquire() as conn:
+            await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
+            await conn.execute('CREATE ROLE tiger_t1_admin NOLOGIN NOSUPERUSER BYPASSRLS')
+            try:
+                if not tables_first:
+                    await conn.execute('DROP TABLE agent_tiger.match_sightings,agent_tiger.match_runs,agent_tiger.matches,agent_tiger.discovery_limits')
+                await conn.execute('GRANT USAGE,CREATE ON SCHEMA agent_tiger TO agent_tiger')
+                await conn.execute(_ownership('agent_tiger'))
+                # Give the documented admin its existing Tank-owned migrations,
+                # without membership/CREATE/ownership in the room's schema.
+                schemas = ('tank','base','agent_tank','agent_base')
+                relations = await conn.fetch("""SELECT format('%I.%I',n.nspname,c.relname) AS qualified,c.relkind
+                    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                    WHERE n.nspname=ANY($1::text[]) AND c.relkind IN ('r','p','S')
+                    ORDER BY CASE WHEN c.relkind='S' THEN 1 ELSE 0 END""", list(schemas))
+                for relation in relations:
+                    kind = 'SEQUENCE' if relation['relkind'] == b'S' or relation['relkind'] == 'S' else 'TABLE'
+                    await conn.execute('ALTER '+kind+' '+relation['qualified']+' OWNER TO tiger_t1_admin')
+                for schema in schemas:
+                    await conn.execute('ALTER SCHEMA '+schema+' OWNER TO tiger_t1_admin')
+                functions = await conn.fetch("SELECT p.oid::regprocedure::text AS signature FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('tank','base','agent_tank','agent_base') AND p.prokind='f'")
+                for function in functions:
+                    await conn.execute('ALTER FUNCTION '+function['signature']+' OWNER TO tiger_t1_admin')
+                database_name = await conn.fetchval('SELECT current_database()')
+                await conn.execute('GRANT CREATE ON DATABASE '+database_name+' TO tiger_t1_admin')
+                async with conn.transaction():
+                    await conn.execute('SET LOCAL ROLE agent_tiger')
+                    await ensure_tables(conn,'agent_tiger')
+                    await ensure_tables(conn,'agent_tiger')
+                    assert not await conn.fetchval('SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user')
+                async with conn.transaction():
+                    await conn.execute('SET LOCAL ROLE tiger_t1_admin')
+                    assert not await conn.fetchval("SELECT has_schema_privilege(current_user,'agent_tiger','CREATE')")
+                    assert not await conn.fetchval("SELECT pg_has_role(current_user,'agent_tiger','MEMBER')")
+                    assert await conn.fetchval('SELECT rolbypassrls AND NOT rolsuper FROM pg_roles WHERE rolname=current_user')
+                    await conn.execute((ROOT/'tank/schema.sql').read_text())
+                    await conn.execute((ROOT/'tank/schema.sql').read_text())
+                # The ELSE branch must undo an earlier rollout, as in Tisan.
+                await conn.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
+                async with conn.transaction():
+                    await conn.execute('SET LOCAL ROLE agent_tiger')
+                    await ensure_tables(conn,'agent_tiger')
+                await conn.execute('ALTER TABLE tank.command_threads DISABLE ROW LEVEL SECURITY')
+                async with conn.transaction():
+                    await conn.execute('SET LOCAL ROLE agent_tiger')
+                    await ensure_tables(conn,'agent_tiger')
+                for table in ('matches','match_runs','match_sightings'):
+>                   assert not await conn.fetchval('SELECT relrowsecurity OR relforcerowsecurity FROM pg_class WHERE oid=$1::regclass','agent_tiger.'+table)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_tiger_competitors.py:854:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.DependentObjectsStillExistError: role "agent_tiger" cannot be dropped because some objects depend on it
+E   DETAIL:  4 objects in database tiger_t1_e0c33d76eadf435bb9d367cfc92b76e0
+
+asyncpg/protocol/protocol.pyx:375: DependentObjectsStillExistError
+___ test_room_migration_and_nonowner_tank_admin_after_role_ownership[False] ____
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+database = <asyncpg.pool.Pool object at 0x72834ff4f040>, tables_first = False
+
+            await run_claimed(conn,'tiger',continuation,{'competitor_match':corridor.agent.competitor_match},
+                              lambda job:SimpleNamespace(tenant_id=str(TENANT),job_id=str(job['id']),input=json.loads(job['input'])))
+        assert corridor.agent._fetch_text.await_count == 2
+
+
+>   @pytest.mark.asyncio
+            ^^^^^^^^^^^^^
+
+tests/test_tiger_competitors.py:803:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
+
+asyncpg/protocol/protocol.pyx:375: DuplicateObjectError
+_____ test_room_schema_concurrently_repeats_without_catalog_writes[False] ______
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+database = <asyncpg.pool.Pool object at 0x72834fc3ba00>
+postgres = namespace(get_uri=<function postgres.<locals>.<lambda> at 0x72835eb644a0>)
+enforced = False
+
+        monkeypatch.setattr(corridor.agent.app.state,'pool',SimpleNamespace(raw=corridor.pool))
+        async with corridor.agent.app.router.lifespan_context(corridor.agent.app):
+            assert await corridor.pool.fetchval("SELECT to_regclass('agent_tiger.match_runs') IS NOT NULL")
+
+
+    @pytest.mark.asyncio
+>   @pytest.mark.parametrize('enforced',[False,True])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_tiger_competitors.py:1057:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
+
+asyncpg/protocol/protocol.pyx:375: DuplicateObjectError
+______ test_room_schema_concurrently_repeats_without_catalog_writes[True] ______
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+database = <asyncpg.pool.Pool object at 0x72834fc3b400>
+postgres = namespace(get_uri=<function postgres.<locals>.<lambda> at 0x72835eb644a0>)
+enforced = True
+
+        monkeypatch.setattr(corridor.agent.app.state,'pool',SimpleNamespace(raw=corridor.pool))
+        async with corridor.agent.app.router.lifespan_context(corridor.agent.app):
+            assert await corridor.pool.fetchval("SELECT to_regclass('agent_tiger.match_runs') IS NOT NULL")
+
+
+    @pytest.mark.asyncio
+>   @pytest.mark.parametrize('enforced',[False,True])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_tiger_competitors.py:1057:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
+
+asyncpg/protocol/protocol.pyx:375: DuplicateObjectError
+____________ test_room_schema_repairs_only_missing_table_privileges ____________
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+
+database = <asyncpg.pool.Pool object at 0x72834fc3bb80>
+
+>   ???
+
+tests/test_tiger_competitors.py:1093:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.tmp/tank-python/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
+
+asyncpg/protocol/protocol.pyx:375: DuplicateObjectError
+=========================== short test summary info ============================
+FAILED tests/test_tiger_competitors.py::test_room_migration_and_nonowner_tank_admin_after_role_ownership[True]
+FAILED tests/test_tiger_competitors.py::test_room_migration_and_nonowner_tank_admin_after_role_ownership[False]
+FAILED tests/test_tiger_competitors.py::test_room_schema_concurrently_repeats_without_catalog_writes[False]
+FAILED tests/test_tiger_competitors.py::test_room_schema_concurrently_repeats_without_catalog_writes[True]
+FAILED tests/test_tiger_competitors.py::test_room_schema_repairs_only_missing_table_privileges
+ERROR tests/tiger_g5/test_alerts.py::test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-new_product]
+ERROR tests/tiger_g5/test_alerts.py::test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-below_cost]
+ERROR tests/tiger_g5/test_alerts.py::test_each_type_exact_email_and_no_repeat_for_two_tenants[postgres-market_gap]
+ERROR tests/tiger_g5/test_alerts.py::test_switch_off_prevents_email_and_preserves_other_tenant[postgres-False-new_product]
+ERROR tests/tiger_g5/test_alerts.py::test_switch_off_prevents_email_and_preserves_other_tenant[postgres-False-below_cost]
+ERROR tests/tiger_g5/test_alerts.py::test_switch_off_prevents_email_and_preserves_other_tenant[postgres-False-market_gap]
+ERROR tests/tiger_g5/test_alerts.py::test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-new_product]
+ERROR tests/tiger_g5/test_alerts.py::test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-below_cost]
+ERROR tests/tiger_g5/test_alerts.py::test_switch_off_prevents_email_and_preserves_other_tenant[postgres-True-market_gap]
+ERROR tests/tiger_g5/test_alerts.py::test_listing_empty_baseline_reorder_failed_check_and_recovery[postgres]
+ERROR tests/tiger_g5/test_alerts.py::test_cost_requires_own_matching_row_currency_and_transition[postgres]
+ERROR tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[postgres-url]
+ERROR tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[postgres-sku]
+ERROR tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[postgres-gtin]
+ERROR tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[postgres-name_price]
+ERROR tests/tiger_g5/test_review.py::test_below_cost_ten_against_fifteen_needs_no_stock[postgres]
+ERROR tests/tiger_g5/test_review.py::test_market_gap_all_competitors_out_without_prices[postgres]
+ERROR tests/tiger_g5/test_review.py::test_watch_url_change_starts_new_baseline_and_peer_reading[postgres]
+ERROR tests/tiger_g5/test_alerts.py::test_market_gap_counts_muted_competitor_unknowns_own_stock_and_staleness[postgres]
+ERROR tests/tiger_g5/test_alerts.py::test_concurrent_checks_create_one_alert_and_state_rolls_back_with_mail
+ERROR tests/tiger_g5/test_alerts.py::test_migration_twice_preserves_switches_and_rejects_schema_injection
+ERROR tests/tiger_g5/test_integration.py::test_private_cost_read_uses_same_tenant_sku_and_never_retail_price
+ERROR tests/tiger_g5/test_integration.py::test_agent_job_to_existing_email_path[new_product]
+ERROR tests/tiger_g5/test_integration.py::test_agent_job_to_existing_email_path[below_cost]
+ERROR tests/tiger_g5/test_integration.py::test_agent_job_to_existing_email_path[market_gap]
+ERROR tests/tiger_g5/test_integration.py::test_switches_create_patch_read_and_cross_tenant_refusal
+5 failed, 470 passed, 1 skipped, 50 warnings, 26 errors in 1118.37s (0:18:38)
