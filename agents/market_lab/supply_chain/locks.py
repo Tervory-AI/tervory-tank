@@ -32,6 +32,39 @@ def logical_lines(text: str):
     yield from re.sub(r"\\\r?\n\s*", " ", text).splitlines()
 
 
+def wheel_identity(line: str) -> tuple[str, str]:
+    """Read only named, SHA-256-pinned HTTPS wheels; never fetch a source URL."""
+    direct = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9_.-]*)\s+@\s+(\S+)\s+((?:--hash=sha256:[a-fA-F0-9]{64}\s*)+)", line)
+    if direct is None:
+        raise ValueError("Direct wheel needs an explicit name and SHA-256")
+    declared, source, _ = direct.groups()
+    url = urlsplit(source)
+    if (url.scheme != "https" or not url.hostname or url.username or url.password
+            or url.query or url.fragment):
+        raise ValueError("Unsupported wheel source")
+    filename = unquote(url.path.rsplit("/", 1)[-1])
+    if not filename.endswith(".whl"):
+        raise ValueError("Source is not a wheel")
+    fields = filename[:-4].split("-")
+    if len(fields) not in {5, 6}:
+        raise ValueError("Malformed wheel identity")
+    name, version = fields[:2]
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.]*", name):
+        raise ValueError("Malformed wheel name")
+    # Deliberately limited PEP 440 subset; unsupported identities remain incomplete.
+    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*(?:(?:a|b|rc)[0-9]+)?(?:\.post[0-9]+)?(?:\.dev[0-9]+)?(?:\+[a-zA-Z0-9]+(?:[._][a-zA-Z0-9]+)*)?", version):
+        raise ValueError("Unsupported wheel version")
+    if len(fields) == 6 and not re.fullmatch(r"[0-9][A-Za-z0-9_]*", fields[2]):
+        raise ValueError("Malformed wheel build tag")
+    if any(not re.fullmatch(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*", tag) for tag in fields[-3:]):
+        raise ValueError("Malformed wheel tags")
+    def canonical(value):
+        return re.sub(r"[-_.]+", "-", value.lower())
+    if canonical(name) != canonical(declared):
+        raise ValueError("Declared package differs from wheel")
+    return canonical(name), version
+
+
 def python_locks(path: str, text: str) -> list[Dependency]:
     result = []
     for line in logical_lines(text):
@@ -40,8 +73,9 @@ def python_locks(path: str, text: str) -> list[Dependency]:
             continue
         match = re.match(r"^([\w.-]+)(?:\[[^]]+\])?==([^\s;]+)", line)
         if not match:
-            raise ValueError("Python lock entry has no registry version; needs an explicit source identity")
-        name, version = match.groups()
+            name, version = wheel_identity(line)
+        else:
+            name, version = match.groups()
         result.append(Dependency("PyPI", re.sub(r"[-_.]+", "-", name.lower()), version, path))
     return result
 
