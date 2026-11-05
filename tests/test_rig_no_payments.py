@@ -3,6 +3,7 @@ import asyncio
 import copy
 import json
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -10,6 +11,9 @@ from uuid import uuid4
 import httpx
 import pytest
 from fastapi import FastAPI
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "agents" / "rig"))
 
 from rigbox.api import mount
 from rigbox.locate import SupplyStore
@@ -25,8 +29,6 @@ from fixtures.rig_quote_sample import KEY
 from test_rig_locate_checkout import OTHER, TENANT, Live, available, rate_stub, shop
 from test_rig_optional_auto_order import SOURCE, auto_shop
 from test_rig_optional_blind_ship import HandoffDouble
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.asyncio
