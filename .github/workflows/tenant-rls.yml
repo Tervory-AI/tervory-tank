@@ -105,8 +105,10 @@ jobs:
           asyncio.run(create())
           PYDB
           python -m pytest -q tests/test_market_lab_real_tank.py
-      - name: Paid protocol and receipt regressions
-        run: python -m pytest -q tests/test_paid_steps.py tests/test_platform_routellm_serving.py tests/test_tank_routing_data.py
+      - name: Paid protocol, private chats, settings browser and receipt regressions
+        run: |
+          python -m playwright install --with-deps chromium
+          python -m pytest -q tests/test_paid_steps.py tests/test_platform_routellm_serving.py tests/test_tank_routing_data.py tests/test_paid_steps_chats.py tests/test_paid_steps_settings.py tests/test_tank_semantic_cache.py tests/test_rig_landing_overflow.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
