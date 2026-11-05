@@ -29,6 +29,7 @@ const clerk = {
 };
 const originalLoad = Module._load;
 Module._load = function (name, parent, ...rest) {
+  if (name === 'next/headers') return {cookies: async () => ({get: () => undefined})};
   if (name === '@clerk/nextjs/server') return clerk;
   if (name === 'server-only') return {};
   return originalLoad.call(this, name, parent, ...rest);

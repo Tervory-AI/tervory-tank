@@ -27,6 +27,7 @@ const clerk = {
 };
 const originalLoad = Module._load;
 Module._load = function (name, parent, ...rest) {
+  if (name === 'next/headers') return {cookies: async () => ({get: () => undefined})};
   return name === '@clerk/nextjs/server' ? clerk : originalLoad.call(this, name, parent, ...rest);
 };
 process.env.TANK_URL = 'http://tank.offline.invalid';

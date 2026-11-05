@@ -17,6 +17,7 @@ function load(file, dependencies) {
 const hosts = load('workspace/lib/product-hosts.ts', {});
 const middleware = load('workspace/middleware.ts', {
   '@/lib/product-hosts': hosts,
+  '@/lib/tank': {mobileRequest: async () => {throw Error('Unexpected mobile resolution without a cookie');}},
   '@clerk/nextjs/server': {
     clerkMiddleware: handler => handler,
     createRouteMatcher: () => req => ['/api/health', '/sign-in', '/sign-up'].some(p => req.nextUrl.pathname.startsWith(p)),
@@ -29,7 +30,7 @@ const middleware = load('workspace/middleware.ts', {
 function request(path, forwarded = true) {
   const nextUrl = new URL('http://0.0.0.0:3000' + path);
   nextUrl.clone = () => new URL(nextUrl);
-  return { nextUrl, headers: new Headers(forwarded ? { 'x-forwarded-host': 'rig.tervory.com', host: 'internal:3000' } : { host: 'rig.tervory.com' }) };
+  return { nextUrl, cookies: {get: () => undefined}, headers: new Headers(forwarded ? { 'x-forwarded-host': 'rig.tervory.com', host: 'internal:3000' } : { host: 'rig.tervory.com' }) };
 }
 (async () => {
   const signedIn = async () => ({ userId: 'fixture-user' });

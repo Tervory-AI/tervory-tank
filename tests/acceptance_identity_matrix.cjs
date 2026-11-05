@@ -13,6 +13,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, 'workspace
   exports: exportsFixture, Buffer, process: {env: {}},
   require(name) {
     if (name === 'node:crypto') return require(name);
+    if (name === './mobile') return {mobileIdentity: async () => null};
     if (name === './tank') return {ensureCaseStudyReports: async tenant => {reports.push(tenant);}};
     if (name === '@clerk/nextjs/server') return {
       auth: async () => session,
