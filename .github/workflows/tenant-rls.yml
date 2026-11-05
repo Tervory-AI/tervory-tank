@@ -69,6 +69,21 @@ jobs:
           python -m pytest -q -s tests/test_tenant_rls.py tests/test_agent_chassis.py tests/test_tank_tenant_boundaries.py tests/test_tank_batches.py tests/test_tank_one_door.py tests/test_command.py tests/test_rig_box.py tests/test_rig_admin.py tests/test_rig_isolation.py tests/test_rig_postgres.py tests/test_vault_contract.py tests/test_base_audit.py tests/test_base_product.py tests/test_core2_baselines.py tests/test_core2_savings.py tests/test_core2c_savings.py tests/test_b3_base_room.py tests/trigger_second_build/test_second.py tests/test_tank_priority_offpeak.py tests/test_base_source_reliability.py tests/test_radix_passive.py tests/test_tank_boots.py 2>&1 | tee tenant-rls-tests.log
       - name: Read-only lock inventory regressions
         run: python -m pytest -q -s tests/test_supply_chain_watch.py
+      - name: Real Market Lab fixture with inherited listener sockets
+        env:
+          DATABASE_URL: postgresql://postgres@127.0.0.1:5432/market_fixture_test
+        run: |
+          python - <<'PYDB'
+          import asyncio, asyncpg, os
+          async def create():
+              conn = await asyncpg.connect(os.environ["POOL_SCHEMA_DATABASE_URL"])
+              try:
+                  await conn.execute("CREATE DATABASE market_fixture_test")
+              finally:
+                  await conn.close()
+          asyncio.run(create())
+          PYDB
+          python -m pytest -q tests/test_market_lab_real_tank.py
       - name: Capture integration registry for reviewed golden updates
         if: always()
         run: |
