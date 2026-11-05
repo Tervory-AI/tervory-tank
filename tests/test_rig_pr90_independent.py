@@ -1227,3 +1227,56 @@ def test_browser_search_accessories_compare_admin(monkeypatch) -> None:
     payload = {"notes": notes, "screenshots": shots}
     _record("browser", payload)
     assert notes == [], payload
+
+
+@pytest.mark.asyncio
+async def test_accessories_requested_while_product_loads_render_after_data_arrives(monkeypatch, real_chromium):
+    """Hold the real product API responses until after the shopper asks for fits."""
+    import httpx
+    from urllib.parse import urlsplit
+
+    monkeypatch.setenv("RIG_WIDGET_PUBLISHABLE_KEY", _key(CN))
+    service = await _loaded(rate_limit=5000)
+    app = _app(service)
+    release = asyncio.Event()
+    graph_waiting = asyncio.Event()
+    setup_waiting = asyncio.Event()
+    page = await real_chromium.new_page()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=LOCAL_ORIGIN) as client:
+        async def local_app(route):
+            request = route.request
+            target = urlsplit(request.url)
+            if target.scheme != "http" or target.netloc != urlsplit(LOCAL_ORIGIN).netloc:
+                await route.abort()
+                return
+            if target.path.startswith("/v1/rig/graph/"):
+                graph_waiting.set()
+                await release.wait()
+            elif target.path == "/v1/rig/setups" and request.method == "POST":
+                setup_waiting.set()
+                await release.wait()
+            response = await client.request(request.method, request.url,
+                                            headers=request.headers, content=request.post_data_buffer)
+            await route.fulfill(status=response.status_code, body=response.content,
+                                headers={k: v for k, v in response.headers.items()
+                                         if k not in {"content-length", "content-encoding", "transfer-encoding"}})
+        await page.route("**/*", local_app)
+        try:
+            await page.goto(LOCAL_ORIGIN + "/cn-classic", wait_until="domcontentloaded")
+            await page.fill("#q", "lumaworks c2")
+            await page.click("form.search button")
+            await page.locator("#results button", has_text="LumaWorks C2").first.click()
+            await asyncio.wait_for(asyncio.gather(graph_waiting.wait(), setup_waiting.wait()), timeout=10)
+            assert await page.locator("#groups").is_hidden()
+            await page.click("#show-accessories")
+            assert not await page.locator("#groups").is_hidden()
+            assert "Optics" not in await page.locator("#groups").inner_text()
+            assert "Loading" in await page.locator("#product-status").inner_text()
+            release.set()
+            await page.wait_for_selector("#groups >> text=Optics")
+            assert "LumaWorks C2" in await page.locator("#product-name").inner_text()
+            assert await page.locator("#bundle-parts li").count() > 0
+            assert "Loading" not in await page.locator("#product-status").inner_text()
+        finally:
+            release.set()
+            await page.close()
