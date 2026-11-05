@@ -88,6 +88,8 @@ Public project/client IDs, native founder subjects and organisation links are pr
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
 
+**Street Law (ZA):** ZENAS_REVIEW is the existing room-wide review setting; Street Law still requires human review while pre-launch even when that setting is off. No Street Law key or bypass switch is added.
+
 ## WINDOW-AGENTS (user settings; no new Coolify variables)
 
 `credential_name` selects a GitHub token saved by the user in their own existing

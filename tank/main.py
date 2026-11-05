@@ -3853,6 +3853,9 @@ _ZENAS_PATH = re.compile(
     r"|^matters/[0-9a-fA-F-]{36}/release$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
+    r"|^street-law/sessions$"
+    r"|^street-law/sessions/[0-9a-fA-F-]{36}(/(questions|volunteers))?$"
+    r"|^street-law/sessions/[0-9a-fA-F-]{36}/questions/[0-9a-fA-F-]{36}(/(answer|assign|handover|release))?$"
     r"|^regulations/(watches|changes)$"
     r"|^regulations/watches/[0-9a-fA-F-]{36}$"
     r"|^moot/hearing-sources$|^moot/hearings$"
@@ -4032,6 +4035,27 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     headers: dict[str, str] = {}
     if path.startswith("regulations/"):
         headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
+    if path.strip().strip("/").startswith("street-law/"):
+        if box != "za":
+            raise HTTPException(403, "needs the South Africa region")
+        # Only the existing Workspace service may attest the human actor.
+        # Founder status is derived here, never accepted from an incoming flag.
+        import hmac
+        supplied_key = request.headers.get("x-tank-key", "")
+        workspace_key = os.environ.get("TANK_API_KEY", "")
+        actor = request.headers.get("x-street-law-actor", "")
+        tenant = request.headers.get("x-street-law-tenant", "")
+        if (not workspace_key or not actor or len(actor) > 200
+                or not hmac.compare_digest(supplied_key.encode(), workspace_key.encode())):
+            raise HTTPException(404, "not_found")
+        try:
+            uuid.UUID(tenant)
+        except ValueError:
+            raise HTTPException(404, "not_found") from None
+        founder = __import__("admin").founder_allowed(supplied_key, actor)
+        headers.update({"X-Tank-Key": os.environ.get("TANK_KEY_ZENAS", ""),
+            "X-Street-Law-Actor": actor, "X-Street-Law-Tenant": tenant,
+            "X-Street-Law-Founder": "1" if founder else "0"})
     if path == "moot/hearing-sources" or path == "moot/hearings" or path.startswith("moot/hearings/"):
         # Only the Workspace service can attest Trigger sign-in-derived actor/tenant identity.
         # Discard caller-supplied founder flags; Tank derives that capability.
