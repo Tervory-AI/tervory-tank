@@ -123,6 +123,7 @@ async function openProduct(id, push) {
   compareLines.hidden = true;
   compareLines.replaceChildren();
   currentSetup = null;
+  currentGraph = null;
   let graphResponse;
   let setupResponse;
   try {
@@ -148,6 +149,8 @@ async function openProduct(id, push) {
   productPrice.textContent = priceLine(currentGraph.centre && currentGraph.centre.price);
   productStatus.textContent = "";
   renderBundle(currentSetup);
+  // Keep an accessories request made while the product data was loading.
+  if (!groups.hidden) renderGroups(currentGraph, currentSetup);
 }
 
 function renderGroups(graph, setup) {
