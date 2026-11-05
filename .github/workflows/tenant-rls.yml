@@ -80,9 +80,22 @@ jobs:
           tests/test_tiger_competitors.py::test_room_schema_repairs_only_missing_table_privileges
       - name: Install existing CLI dependencies for cross-lane fixture
         run: npm ci --prefix cli --ignore-scripts
+      - name: Create loopback Moot transport fixture database
+        run: |
+          python - <<'PYDB'
+          import asyncio, asyncpg, os
+          async def create():
+              conn = await asyncpg.connect(os.environ["POOL_SCHEMA_DATABASE_URL"])
+              try:
+                  await conn.execute("CREATE DATABASE moot_transport_test")
+              finally:
+                  await conn.close()
+          asyncio.run(create())
+          PYDB
       - name: Tenant-home deadline and legacy transport integration
         env:
           COMMAND_ACCEPTANCE_CLIENTS: '1'
+          MOOT_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/moot_transport_test
           COMMAND_TEST_TOOLS: ${{ github.workspace }}/workspace/node_modules
         run: |
           failed=0
