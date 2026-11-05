@@ -1,4 +1,5 @@
 """Tiger catalogue matching: synthetic identifiers and offline pages only."""
+from trigger_signin_fakes import set_founders
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -34,7 +35,6 @@ import asyncio
 import importlib.util
 import json
 import socket
-import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -109,9 +109,9 @@ def test_microdata_identifiers_and_nested_brand_use_existing_price_reader():
 
 @pytest.fixture(scope='module')
 def postgres(tmp_path_factory):
-    configured = os.environ.get('POOL_SCHEMA_DATABASE_URL')
-    if configured:
-        return SimpleNamespace(get_uri=lambda:configured)
+    # Roles are cluster-wide: another xdist worker's disposable database can
+    # acquire grants while this module owns agent_tiger, preventing DROP ROLE.
+    # Keep the real ownership/RLS tests on a module-private cluster per worker.
     import pgserver
     return pgserver.get_server(tmp_path_factory.mktemp('tiger-t1-postgres'))
 
@@ -144,7 +144,7 @@ async def corridor(database, monkeypatch):
     spec.loader.exec_module(agent)
     agent.app.state.pool = database
     # Test DNS never queries the outside network.
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
+    set_founders(monkeypatch, '')
     for tenant in (TENANT, OTHER):
         await database.execute("INSERT INTO tank.tenant_squad(tenant_id,agent,enabled_by) VALUES($1,'tiger','offline')", tenant)
         await database.execute("INSERT INTO tank.vault_items(tenant_id,vault,kind,name,metadata) VALUES($1,'tiger.vault','links','source',$2::jsonb)", tenant, json.dumps({'url': SITE}))

@@ -1,3 +1,4 @@
+from trigger_signin_fakes import set_founders, native_provider, ORG
 import pytest
 import graduate
 from test_train1 import database as _database
@@ -161,7 +162,8 @@ async def test_promotion_endpoint_requires_verified_founder(monkeypatch):
     import main
 
     monkeypatch.setattr(main, 'TANK_API_KEY', key)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'fixture-founder')
+    set_founders(monkeypatch, 'fixture-founder')
+    provider = native_provider(monkeypatch, {ORG: str(main.PLATFORM_TENANT)})
     monkeypatch.setattr(main, '_pool', None)
     called = []
 
@@ -172,13 +174,15 @@ async def test_promotion_endpoint_requires_verified_founder(monkeypatch):
     monkeypatch.setattr(main, '_move_task', move)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url='http://test') as client:
         for user in ('', 'reviewer'):
+            proof = {'x-trigger-signin-token': provider.token(sub=user or 'reviewer'), 'x-trigger-signin-org': ORG} if user else {}
             response = await client.post('/v1/graduation/base.fixture/promote',
-                                         headers={'X-Tank-Key': key, 'X-Tervory-Admin': user},
+                                         headers={'X-Tank-Key': key, 'X-Tervory-Admin': user, **proof},
                                          json={'by': 'fixture-founder'})
             assert response.status_code == 404
         assert called == []
         response = await client.post('/v1/graduation/base.fixture/promote',
-                                     headers={'X-Tank-Key': key, 'X-Tervory-Admin': 'fixture-founder'},
+                                     headers={'X-Tank-Key': key, 'X-Tervory-Admin': 'fixture-founder',
+                                              'x-trigger-signin-token': provider.token(sub='fixture-founder'), 'x-trigger-signin-org': ORG},
                                      json={'by': 'fixture-founder'})
         assert response.status_code == 200
     assert called == [('base.fixture', 'fixture-founder', False)]

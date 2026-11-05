@@ -311,7 +311,7 @@ The build and browser captures below were not rerun for this package/startup fol
 
 ```bash
 cd workspace
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npx next build
+NEXT_TELEMETRY_DISABLED=1 npx next build
 cd ..
 python3 - <<'PY'
 import json
@@ -339,7 +339,7 @@ node agents/market_lab/fixture_proof/capture.mjs --browser /usr/bin/chromium
 ```
 
 Result: **Local fixture page: 18 screenshots, 3 exact citations, no external browser requests or errors.**
-The page is `http://127.0.0.1:3046/market-lab`. The runner seeds saved inputs for all 14 feeds into an isolated loopback database whose name must end in `_test`. Only this local proof tenant's seeded records are deliberately classified with `fixture = false` so the unchanged production reader is exercised; this is still synthetic fixture data, not a live run. A saved page-check record proves the linked-page status path. No production database is accessed. Browser requests use the real Workspace server helper, real Tank app/client/authentication, real room routes and real Postgres. The isolated Next app supplies a fixed test tenant and carries the fixture label; it does not prove Clerk sign-in. The capture rejects external browser requests and checks:
+The page is `http://127.0.0.1:3046/market-lab`. The runner seeds saved inputs for all 14 feeds into an isolated loopback database whose name must end in `_test`. Only this local proof tenant's seeded records are deliberately classified with `fixture = false` so the unchanged production reader is exercised; this is still synthetic fixture data, not a live run. A saved page-check record proves the linked-page status path. No production database is accessed. Browser requests use the real Workspace server helper, real Tank app/client/authentication, real room routes and real Postgres. The isolated Next app supplies a fixed test tenant and carries the fixture label; it does not prove Trigger sign-in sign-in. The capture rejects external browser requests and checks:
 
 - 14 On cards and correct singular/plural observation counts;
 - both population and active-listings questions submitted through the local page;

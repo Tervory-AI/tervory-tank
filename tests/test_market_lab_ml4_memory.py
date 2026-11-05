@@ -1,4 +1,5 @@
 """ML4 through the unchanged #410 founder path; fake encoder, disposable SQL."""
+from trigger_signin_fakes import set_founders
 import json
 import sys
 from pathlib import Path
@@ -45,7 +46,7 @@ async def test_private_save_fake_encoder_founder_only_publish_and_other_tenant_s
         raise AssertionError('no model gateway permitted')
     monkeypatch.setattr(TankClient, 'route', no_model)
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-workspace')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     monkeypatch.setenv('TANK_KEY_' + m.agent.upper(), 'placeholder-room')
     app = create_app(InMemoryStore(), Encoder(), records=m.records)
     mutations = []

@@ -458,7 +458,7 @@ async def live_budget(req, row: dict, config: Policy) -> RequestBudget:
 def call_adapter(req, caller: str | None, *, budget_run=None, cap=None, book=None, nonce: str = '', live_budget=None, shadow: bool = False) -> Call:
     rt = runtime()
 
-    async def call(seat: str, model: str, messages: list[dict]) -> Answer:
+    async def work(seat: str, model: str, messages: list[dict]) -> Answer:
         import bench
         billing_tenant = PLATFORM_TENANT if shadow else req.tenant_id
         policy = await rt.load_policy(req.task_type, billing_tenant)
@@ -524,6 +524,21 @@ def call_adapter(req, caller: str | None, *, budget_run=None, cap=None, book=Non
                 WHERE id=$1 AND tenant_id=$4 AND region=$5''', reservation, result.ledger_id,
                 Decimal(str(result.cost_usd)), PLATFORM_TENANT, rt.box_region())
         return answer
+    async def call(seat: str, model: str, messages: list[dict]) -> Answer:
+        import paid_steps
+        billing_tenant = PLATFORM_TENANT if shadow else req.tenant_id
+        digest = paid_steps.fingerprint([req.model_dump(exclude={"paid_run_id"}), seat, model, messages, nonce])
+        parent = paid_steps.current.get()
+        namespace = parent.run_id if parent else (budget_run or getattr(req, "paid_run_id", None) or uuid.uuid4())
+        from tenant_db import tenant_scope
+        with tenant_scope(billing_tenant), paid_steps.run_scope(paid_steps.Run(billing_tenant, uuid.uuid5(namespace, digest), digest, root_run_id=namespace)):
+            # Ask before reserving any benchmark budget. A resumed seat replays
+            # its complete measured answer and never books another reservation.
+            await paid_steps.model_admission(billing_tenant, req.task_type + '#moa.' + seat, model,
+                                              agent='shadow' if shadow else req.agent)
+            async def invoke():
+                return asdict(await work(seat, model, messages))
+            return Answer(**await paid_steps.checkpoint(paid_steps.fingerprint(["moa", digest]), invoke))
     return call
 
 
@@ -620,18 +635,33 @@ async def run_mixture(req, row: dict, caller=None, *, kind='live', call=None, pr
 
 
 async def shadow_seats(req, row: dict, result: Mixture, run_id: uuid.UUID, caller=None) -> None:
+    import paid_steps
+    digest = paid_steps.fingerprint([req.model_dump(),row,asdict(result),run_id])
+    context = paid_steps.Run(PLATFORM_TENANT, uuid.uuid5(run_id,"paid-shadow"), digest)
+    try:
+        from tenant_db import tenant_scope
+        with tenant_scope(req.tenant_id), paid_steps.run_scope(context):
+            await _shadow_seats(req,row,result,run_id,caller)
+    except paid_steps.ApprovalRequired as pause:
+        await paid_steps.save_background(pause, {"kind":"moa_shadow","request":req.model_dump(mode="json"),
+            "policy":row,"result":asdict(result),"run_id":str(run_id),"caller":caller,
+            "root_run_id":str(context.run_id),"root_request_hash":digest})
+
+
+async def _shadow_seats(req, row: dict, result: Mixture, run_id: uuid.UUID, caller=None) -> None:
     import bench
     rt = runtime()
     config = config_for(row)
     if not any(s.candidate for s in shadow_seat_configs(config)):
         return
     budget_run = None
+    waiting = False
     try:
         book = bench.price_book(await rt._roster_models())
         # Shared durable budget with CORE-1. Unsettled calls retain their reservation.
         budget_run = await new_budget_run(req.task_type,config_hash(row),'shadow')
         call = call_adapter(req,caller,budget_run=budget_run,cap=Decimal(str(rt._shadow_budget())),
-                            book=book,nonce=uuid.uuid4().hex[:12],shadow=True)
+                            book=book,nonce=uuid.uuid5(run_id,'shadow').hex[:12],shadow=True)
         for seat in shadow_seat_configs(config):
             current = next((r for r in result.results if r.name==('aggregator' if seat.name.startswith('aggregator_') else seat.name) and r.answer and r.model==seat.model),None)
             if not seat.candidate or not current:
@@ -658,12 +688,15 @@ async def shadow_seats(req, row: dict, result: Mixture, run_id: uuid.UUID, calle
                 run_id,req.tenant_id,rt.box_region(),req.task_type,config_hash(row),seat.name,seat.model,seat.candidate,
                 'complete' if candidate.answer else 'failed',score_current,score_final,
                 total_cost([current]),total_cost([candidate]),encoded(candidate.receipt()))
+    except __import__("paid_steps").ApprovalRequired:
+        waiting = True
+        raise
     except Exception:
         # A failed shadow is visible on its parent run; it cannot become evidence.
         await rt.pool().execute('''UPDATE tank.moa_runs SET receipt=receipt || '{"shadow_error":"Seat shadow unavailable"}'::jsonb
             WHERE id=$1 AND tenant_id=$2 AND region=$3''',run_id,req.tenant_id,rt.box_region())
     finally:
-        if budget_run:
+        if budget_run and not waiting:
             await rt.pool().execute('''UPDATE tank.bench_runs SET finished_at=now(),
                 status=CASE WHEN EXISTS(SELECT 1 FROM tank.bench_calls c WHERE c.run_id=$1
                     AND c.tenant_id=$2 AND c.region=$3 AND c.status<>'complete') THEN 'failed' ELSE 'complete' END
@@ -710,11 +743,30 @@ async def routed_request(req, caller=None, *, row=None, complex_request=False, i
 
 async def new_budget_run(task: str, fingerprint: str, shape: str):
     rt = runtime()
-    return await rt.pool().fetchval('''INSERT INTO tank.bench_runs
-        (tenant_id,region,task_type,model,comparison_model,suite_hash,expected_n)
-        VALUES($1,$2,$3,$4,$4,$5,0) RETURNING id''',PLATFORM_TENANT,rt.box_region(),task,'moa:'+shape,fingerprint)
+    from tenant_db import tenant_scope
+    with tenant_scope(PLATFORM_TENANT):
+        return await rt.pool().fetchval('''INSERT INTO tank.bench_runs
+            (tenant_id,region,task_type,model,comparison_model,suite_hash,expected_n)
+            VALUES($1,$2,$3,$4,$4,$5,0) RETURNING id''',PLATFORM_TENANT,rt.box_region(),task,'moa:'+shape,fingerprint)
 
 async def bench_task(row: dict, book: dict, region: str, cap: Decimal, *, force=False) -> list[dict]:
+    import paid_steps
+    from datetime import datetime, timezone
+    digest = paid_steps.fingerprint([row, region, str(cap), force, datetime.now(timezone.utc).date()])
+    parent = paid_steps.current.get()
+    context = parent if parent and parent.tenant_id == PLATFORM_TENANT else paid_steps.Run(
+        PLATFORM_TENANT, uuid.uuid5(PLATFORM_TENANT, digest), digest)
+    try:
+        with paid_steps.run_scope(context):
+            return await _bench_task(row, book, region, cap, force=force)
+    except paid_steps.ApprovalRequired as pause:
+        await paid_steps.save_background(pause, {"kind":"moa_benchmark", "policy":row,
+            "region":region,"cap":str(cap),"force":force,
+            "root_run_id":str(context.run_id),"root_request_hash":context.request_hash})
+        return []
+
+
+async def _bench_task(row: dict, book: dict, region: str, cap: Decimal, *, force=False) -> list[dict]:
     """CORE-1 scheduled/manual bench; each attempt reserves before run_route."""
     import bench
     rt = runtime()
@@ -747,7 +799,7 @@ async def bench_task(row: dict, book: dict, region: str, cap: Decimal, *, force=
                 for case in cases:
                     req = rt.RouteRequest(tenant_id=PLATFORM_TENANT,agent='bench',task_type=row['task_type'],
                                           home_region=region,messages=bench.messages_for(case['input'],None))
-                    nonce = uuid.uuid4().hex[:12]
+                    nonce = hashlib.sha256(encoded([suite_hash, shape, case]).encode()).hexdigest()[:12]
                     call = call_adapter(req,None,budget_run=run,cap=cap,book=book,nonce=nonce)
                     try:
                         result,record,_ = await run_mixture(req,{**row,'moa_config':shape,'moa_enabled':False},

@@ -1,5 +1,6 @@
 """TRAIN-1 isolation, review, collection and export tests. All credentials ephemeral."""
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import asyncio
 import json
@@ -31,10 +32,15 @@ async def database(monkeypatch):
     name = "train1_" + uuid.uuid4().hex
     await admin.execute(f'CREATE DATABASE "{name}"')
     pool = await asyncpg.create_pool(URL, database=name, min_size=1, max_size=4)
+    monkeypatch.setenv("DATABASE_URL",URL.rsplit('/',1)[0]+'/'+name)
+    monkeypatch.setenv("LITELLM_MASTER_KEY","placeholder-training-model-key")
+    monkeypatch.setenv("TANK_API_KEY","placeholder-training-workspace-key")
     async with pool.acquire() as conn:
         await conn.execute((ROOT / "tank/schema.sql").read_text())
         from savings_defaults import initialize
         await initialize(conn)
+    from paid_steps_fixtures import configure_paid_auto
+    configure_paid_auto(monkeypatch,lambda:pool)
     rt = SimpleNamespace(pool=lambda: pool, box_region=lambda: "us-east", _packages={})
     monkeypatch.setattr(gold, "runtime", lambda: rt)
     monkeypatch.setattr(training, "runtime", lambda: rt)
@@ -144,7 +150,7 @@ async def test_import_review_correction_and_tenant_seal(database):
 async def test_auth_missing_agent_keys_and_reviewer_boundary(monkeypatch):
     key = secrets.token_urlsafe(32)
     monkeypatch.setenv("TANK_API_KEY", key)
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder")
+    set_founders(monkeypatch, "founder")
     app = FastAPI()
     app.include_router(gold.router)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture") as client:

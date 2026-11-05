@@ -123,7 +123,7 @@ is refused, and the room logs both skipped IDs and their respective reasons.
 No part of Tank is mocked. The room scheduler is disabled so no public feed is
 contacted; the actual refresh function runs with stored provider input. Next uses
 the production route components and transport. Its temporary wrapper supplies a
-local founder identity, not a Clerk session. Autumbra and Zenas rooms are absent,
+local founder identity, not a Trigger sign-in session. Autumbra and Zenas rooms are absent,
 so their captured pages prove existing unavailable/empty states only. Populated
 Moot records are covered by the offline route/component tests, not these captures.
 
@@ -143,7 +143,7 @@ Browser checks, performed at 1440px and 375px:
 ## 4. Proof
 
 All captions below are **local, fixture page**. They are not live deployment or
-Clerk sign-in evidence. The original components render the actual local route
+Trigger sign-in sign-in evidence. The original components render the actual local route
 responses; no production file is replaced by fixture HTML.
 
 ![Valid Feed review row remains after invalid rows are skipped, 1440px](quarantine-1440.png)

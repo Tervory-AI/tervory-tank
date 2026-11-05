@@ -439,7 +439,8 @@ async def test_tg45_brain_owning_key_guards_and_ledger(monkeypatch):
         fresh = brain.corridor.__wrapped__(scoped)
         await brain.test_pause_and_model_refusal_prevent_any_gateway_send(fresh)
     with monkeypatch.context() as scoped:
-        setup = ledger.setup.__wrapped__(scoped)
+        protocol = ledger.paid_protocol.__wrapped__(scoped)
+        setup = ledger.setup.__wrapped__(scoped, protocol)
         await ledger.test_hostile_room_never_reaches_sql(setup, "tiger'); DELETE FROM tank.ledger; --")
 
 

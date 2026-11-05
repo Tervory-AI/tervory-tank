@@ -1,5 +1,6 @@
 """The build adapter retains founder authorization, Confirm and room identity."""
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import importlib.util
 import json
@@ -29,7 +30,7 @@ def load_skill():
 
 @pytest.fixture
 def runtime(monkeypatch):
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     monkeypatch.setenv('TANK_KEY_TISAN', 'test-room-key')
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'za'))
 

@@ -19,7 +19,7 @@ Rooms previously had no event corridor, and #386 updated Rig's current price wit
 | `agents/rig/rigbox/price_events.py:17`, `:45`, `:62` | Resolve the actual product ID from the tenant's catalogue, under its existing catalogue lock; insert before ACK, `ON CONFLICT(event_id) DO NOTHING`. Never update history. Ignore products that were removed, rebound, or became feed-owned. |
 | `agents/rig/app.py:389` | Start/cancel the sole consumer with the existing Rig lifespan. Poll the room's own catalogue tenants every five seconds. |
 | `tank/rig_brain_routes.py:40` | Founder-only `GET /v1/agents/rig/price-history`, bounded by required tenant/product, paginated, `private, no-store`. Clients and room credentials cannot use this reader. |
-| `workspace/lib/tank.ts:8`, `workspace/app/rig/price-history/route.ts:10` | Browser-accessible JSON proxy using Clerk founder identity and the existing server-side Tank helper. Caller headers cannot override identity. Errors have empty bodies; no new page/copy. |
+| `workspace/lib/tank.ts:8`, `workspace/app/rig/price-history/route.ts:10` | Browser-accessible JSON proxy using Trigger sign-in founder identity and the existing server-side Tank helper. Caller headers cannot override identity. Errors have empty bodies; no new page/copy. |
 | `tests/tenant_bus/` | Offline delivery, isolation, producer, shared-job, real Tank, and Workspace JSON checks; saved proof below. |
 
 ### Completion producers

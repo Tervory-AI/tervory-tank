@@ -90,7 +90,7 @@ def services(*, log=None, api_port=None, seed_data=True):
         "TANK_REGION": "us-east",
     }
     for key in list(env):
-        if key.startswith(("CLERK_", "NEXT_PUBLIC_CLERK_")) or key in {
+        if key.startswith(("TRIGGER_SIGNIN_", "TRIGGER_SIGNIN_")) or key in {
             "FRED_API_KEY",
             "CENSUS_API_KEY",
             "LEGISCAN_API_KEY",

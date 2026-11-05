@@ -113,11 +113,9 @@ class TankClient:
     async def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         if not self._api_key:
             raise RuntimeError("tank key is not set")
-        response = await self._http.post(
-            self._base + path,
-            json=body,
-            headers={"X-Tank-Key": self._api_key},
-        )
+        from .paid_steps import post as paid_post
+        response = await paid_post(self._http, self._base, path, body,
+                                   {"X-Tank-Key": self._api_key})
         if response.status_code >= 400:
             raise RuntimeError(f"tank answered {response.status_code}")
         data = response.json()

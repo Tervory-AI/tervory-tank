@@ -1,3 +1,4 @@
+import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
 import "server-only";
 
 import type { Shield, ShieldBoard, ShieldTile } from "./shields-fixtures";

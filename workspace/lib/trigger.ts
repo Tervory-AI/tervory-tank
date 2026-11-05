@@ -1,5 +1,5 @@
-// Existing Clerk session authority only; no browser body/header supplies a role.
-import { auth } from "@clerk/nextjs/server";
+// Existing SigninDirectory session authority only; no browser body/header supplies a role.
+import { auth } from "@/lib/trigger-signin";
 import { tenantIdFor, type Tenant } from "./tenant";
 
 export async function triggerIdentity(tenant: Tenant | null): Promise<(Tenant & { tenantAdmin: boolean }) | null> {

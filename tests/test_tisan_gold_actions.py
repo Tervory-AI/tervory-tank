@@ -1,4 +1,4 @@
-"""Execute the actual server actions with Clerk/Tank boundary stubs."""
+"""Execute the actual server actions with Trigger sign-in/Tank boundary stubs."""
 from pathlib import Path
 import subprocess
 

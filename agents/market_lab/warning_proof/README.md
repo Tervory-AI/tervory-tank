@@ -9,7 +9,7 @@ Tiger store and Tank routes. No publisher or product page is fetched.
 
 The browser runner uses the real Market Lab components and server-side Tank
 transport. Its temporary Next app supplies one of three local tenant identities;
-it does **not** exercise Clerk, sign in, or replace production authentication.
+it does **not** exercise Trigger sign-in, sign in, or replace production authentication.
 Screenshot captions must say **local, fixture page**. The product and account
 name contain no fixture label. The refresh button in this temporary wrapper is
 not part of this proof; the existing feed refresh proof is separate.

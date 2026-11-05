@@ -1,4 +1,5 @@
 """M26 offline: real standing-record logic, fake SQL/Hermes/Tank and signed events."""
+from trigger_signin_fakes import set_founders
 import json
 import time
 import uuid
@@ -186,7 +187,7 @@ async def test_real_publisher_policy_log_and_code_only_share():
 async def test_withdraw_is_founder_only_platform_only_and_logged(monkeypatch):
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-workspace-key')
     monkeypatch.setenv('TANK_KEY_GHOST', 'placeholder-ghost-key')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     sql = SQL(tier='client')
     r = records(sql)
     app = FastAPI()
@@ -293,7 +294,7 @@ async def test_tank_share_uses_existing_publish_policy_and_requires_confirm(monk
     import trigger_routes
     from trigger_commands import CONFIRMED
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-workspace-key')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
     monkeypatch.setattr(command, 'identity', AsyncMock(return_value=actor))
     monkeypatch.setattr(trigger_routes, 'code_receipt', AsyncMock(return_value=uuid.UUID(RID)))

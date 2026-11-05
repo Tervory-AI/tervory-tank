@@ -62,7 +62,7 @@ export function productHostFor(hostHeader: string | null | undefined): ProductHo
  * - `/` (and empty) → that product's rootPath
  * - Rig /admin and /admin/* → /rig/admin and /rig/admin/*
  * - already on rootPath or under it → no rewrite
- * - public Clerk / health / webhook paths → no rewrite
+ * - public SigninDirectory / health / webhook paths → no rewrite
  * - everything else on that host stays as-is (deep links work)
  */
 export function productHostRewritePath(

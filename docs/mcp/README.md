@@ -6,7 +6,7 @@ The protocol and backend are implemented. The signed-in consent page at `/oauth/
 
 ## Connect
 
-Use the existing Tervory account and select the organization whose records the connector may use. Tervory uses Clerk only to establish that signed-in identity. Tank issues the organization-bound OAuth grant; Clerk's OAuth provider is not used. Credentials stay between the client and Tervory, without copying a CLI token.
+Use the existing Tervory account and select the organization whose records the connector may use. Tervory uses Trigger sign-in only to establish that signed-in identity. Tank issues the organization-bound OAuth grant; Trigger sign-in's OAuth provider is not used. Credentials stay between the client and Tervory, without copying a CLI token.
 
 ### Claude
 

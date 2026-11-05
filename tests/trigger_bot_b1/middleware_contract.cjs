@@ -1,21 +1,15 @@
-// Execute real Clerk middleware and matcher around the actual Workspace callback.
+// Execute real Trigger sign-in middleware and matcher around the actual Workspace callback.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../../workspace/node_modules');
-process.env.CLERK_TELEMETRY_DISABLED = '1';
-process.env.CLERK_SECRET_KEY = 'sk_test_offline-placeholder';
-const clerk = require(path.join(root, '@clerk/nextjs/server'));
 const next = require(path.join(root, 'next/server'));
 const { workspace } = require('../command_acceptance_20261031/workspace_loader.cjs');
 const origin = 'https://store.invalid';
-const env = { TANK_URL: 'http://tank.invalid', NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
-  'pk_test_' + Buffer.from('clerk.invalid$').toString('base64') };
+const env = { TANK_URL: 'http://tank.invalid' };
 const load = workspace({ env, fetch: async () => new Response(null, {status: 204,
     headers: {'Access-Control-Allow-Origin': origin}}),
   mocks: {
-    '@clerk/nextjs/server': {...clerk, clerkMiddleware: callback =>
-      clerk.clerkMiddleware(callback, {publishableKey: env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-        signInUrl: '/sign-in'})},
+    'next-auth/jwt': {getToken: async () => {throw Error('Public bot must not require a session');}},
     'next/server': next,
   }});
 const middleware = load('middleware.ts').default;
@@ -33,5 +27,5 @@ const route = load('app/v1/bot/messages/route.ts');
     const response = await route[method](request);
     assert.equal(response.status, 204);
   }
-  console.log('PASS signed-out OPTIONS and POST through real Clerk middleware: 204, no redirect');
+  console.log('PASS signed-out OPTIONS and POST through real Trigger sign-in middleware: 204, no redirect');
 })().catch(error => {console.error(error); process.exitCode = 1;});

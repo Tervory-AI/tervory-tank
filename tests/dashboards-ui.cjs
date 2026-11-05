@@ -1,4 +1,4 @@
-/* Offline render of the actual dashboard components. No Clerk, Stripe or Tank network calls. */
+/* Offline render of the actual dashboard components. No Trigger sign-in, Stripe or Tank network calls. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -21,6 +21,8 @@ const savings={as_of:'2026-10-21T12:00:00Z',revision:'1',total:savingsTotal,mont
 async function rigProxy(){if(sourceError)throw Error('unavailable');return savings;}
 Module._load = function (name, parent, isMain) {
   if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
+  if (name === 'server-only') return {};
   if (name === 'stripe') return class StripeFixture {
     constructor() {this.balance={retrieve:async()=>({livemode:false})};this.subscriptions={list:async function*(){
       yield {customer:'customer-one',items:{data:[{price:{unit_amount:1200}}]}};
@@ -29,10 +31,10 @@ Module._load = function (name, parent, isMain) {
       yield {customer:{id:'customer-two'},items:{data:[{price:{unit_amount:700}}]}};
     }}};
   };
-  if (name === '@clerk/nextjs/server') return {
+  if (name === '@/lib/trigger-signin') return {
     auth: async () => ({userId: founder ? 'founder-fixture' : 'client-fixture'}),
     currentUser: async () => ({firstName: 'Alex'}),
-    clerkClient: async () => ({users: {getCount:async()=>1,getUserList:async()=>({totalCount:1,data:[{id:'user-one',firstName:'Alex',lastName:'Example',createdAt:Date.UTC(2026,9,21),publicMetadata:{company:'Example Company',country:'United States',plan:'Trial'}}]})}}),
+    signinDirectory: async () => ({users: {getCount:async()=>1,getUserList:async()=>({totalCount:1,data:[{id:'user-one',firstName:'Alex',lastName:'Example',createdAt:Date.UTC(2026,9,21),publicMetadata:{company:'Example Company',country:'United States',plan:'Trial'}}]})}}),
   };
   if (name === '@/lib/admin') return {isFounder: id => id === 'founder-fixture'};
   if (name === '@/lib/tenant') return {activeTenant: async()=>({tenantId:'fixture',orgName:'Example Company',userId:'client-fixture'})};

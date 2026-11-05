@@ -1,4 +1,4 @@
-// Offline founder-view fixture. No Clerk, Tank, model keys or production calls.
+// Offline founder-view fixture. No Trigger sign-in, Tank, model keys or production calls.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';

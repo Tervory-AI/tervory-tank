@@ -60,8 +60,8 @@ Claude reviewed the historical Gitleaks findings as false positives. The request
 
 | File | Result |
 | --- | --- |
-| [.gitleaksignore:1](../../.gitleaksignore#L1) | 41 unique native Gitleaks fingerprints cover all 43 reviewed findings. A one-line comment explains each group: dummy Clerk publishable test keys, the dummy Stripe test key, Figma file identifiers, and public page tokens in saved HTML fixtures. Two pairs of Figma findings share a native fingerprint. No values or path-wide exemptions are included. |
-| [.gitleaks.toml:3](../../.gitleaks.toml#L3) | Keep all built-in rules and add one anchored `regexTarget = "secret"` allowance for the exact existing Clerk publishable CI dummy. Other values with the same prefix remain detectable. |
+| [.gitleaksignore:1](../../.gitleaksignore#L1) | 41 unique native Gitleaks fingerprints cover all 43 reviewed findings. A one-line comment explains each group: dummy Trigger sign-in publishable test keys, the dummy Stripe test key, Figma file identifiers, and public page tokens in saved HTML fixtures. Two pairs of Figma findings share a native fingerprint. No values or path-wide exemptions are included. |
+| [.gitleaks.toml:3](../../.gitleaks.toml#L3) | Keep all built-in rules and add one anchored `regexTarget = "secret"` allowance for the exact existing Trigger sign-in publishable CI dummy. Other values with the same prefix remain detectable. |
 | [.github/scripts/security_scan.py:63](../../.github/scripts/security_scan.py#L63) | Use the reviewed repository config and fingerprint file for both PR and weekly scans. Continue ignoring inline allow comments; every finding outside these explicit exceptions fails. |
 | [tests/ci_security/test_security.py:142](test_security.py#L142) | Native Gitleaks tests prove an exact copy is allowed and two altered values still fail. Their reports and values are never printed. |
 | [.github/workflows/ci.yml:34](../../.github/workflows/ci.yml#L34), [.github/workflows/security-weekly.yml:22](../../.github/workflows/security-weekly.yml#L22) | Install the pinned CLI before the policy tests, so the new tests exercise the real tool in CI too. |
@@ -120,7 +120,7 @@ The original local throwaway-commit proof remains in [gitleaks-fail.json](eviden
 
 ## Decisions I made
 
-- Keep every historical exception tied to its native fingerprint. Only the exact reviewed Clerk dummy receives an allowance for future copies. No broad key-prefix, file, fixture-directory, Stripe or private-key exemption was added.
+- Keep every historical exception tied to its native fingerprint. Only the exact reviewed Trigger sign-in dummy receives an allowance for future copies. No broad key-prefix, file, fixture-directory, Stripe or private-key exemption was added.
 - Deduplicate the two repeated native fingerprints; all 43 reviewed findings remain covered by 41 entries.
 - Keep all three scanners independent and save reports on failure. Keep Semgrep's high-severity and incomplete-scan gates intact and report the actual GitHub result.
 - Use supported `--metrics auto` with the required `--config auto`; changing the rule configuration would change the requested scan coverage. Distinguish missing launchers from missing reports without printing process output.

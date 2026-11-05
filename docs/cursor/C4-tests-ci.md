@@ -10,6 +10,6 @@
 - `tests/test_schema.py`: assert every statement in `tank/schema.sql` is idempotent-shaped (`CREATE … IF NOT EXISTS`, `ALTER … ADD COLUMN IF NOT EXISTS`, `INSERT … ON CONFLICT`, `UPDATE`), no `DROP`, no `RENAME`.
 - `tests/test_tenant_scoping.py`: parse `tank/main.py` with `ast`; every function decorated with an `@app.get/post/put` route whose path starts `/v1/` and takes a `tenant_id` parameter must reference `tenant_id` inside every SQL string it passes to `conn.fetch*`/`execute`. (A cheap guard, not a proof.)
 - Keep `tests/test_smoke.py` passing.
-- `.github/workflows/ci.yml` on `pull_request`: job `tank` (Python 3.12, install `tank/requirements.txt` + dev, `ruff check tank tests --select E9,F`, `pytest -q`); job `workspace` (Node 22, `npm ci`, `npx next build` with dummy env `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXk` and `CLERK_SECRET_KEY=sk_test_dummy`).
+- `.github/workflows/ci.yml` on `pull_request`: job `tank` (Python 3.12, install `tank/requirements.txt` + dev, `ruff check tank tests --select E9,F`, `pytest -q`); job `workspace` (Node 22, `npm ci`, `npx next build` with dummy env `` and ``).
 
 **Done when:** the workflow runs green on its own PR, and the PR description lists the per-skill offline pass counts.
