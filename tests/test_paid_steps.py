@@ -1055,6 +1055,12 @@ async def test_window_completion_approved_run_resumes_once_and_keeps_confirmatio
         distinct = await client.post(path, json=body)
         assert distinct.status_code == 409 and distinct.json()['detail']['run_id'] != detail['run_id']
         assert (await client.post(path, json={**body, 'paid_run_id': 'placeholder-invalid'})).status_code == 422
+        fresh = distinct.json()['detail']
+        await p.decide(tenant, uuid.UUID(fresh['approval_id']), user='placeholder-admin',
+                       approve=True, reason='placeholder distinct completion approved')
         master.paused = True
-        assert (await client.post(path, json=resumed)).status_code == 503
+        # A completed checkpoint is a stored answer, not a new paid dispatch.
+        assert (await client.post(path, json=resumed)).status_code == 200
+        # A separately approved run still reaches the real master pause before IO.
+        assert (await client.post(path, json={**body, 'paid_run_id': fresh['run_id']})).status_code == 503
         assert len(calls) == 1
