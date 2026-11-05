@@ -107,6 +107,7 @@ export default function TasksPage() {
   return (
     <div className="tasks-page">
       <h1>Tasks</h1>
+      {!tasks.length && <p className="empty">Add a task to fill this board.</p>}
       <form onSubmit={submit} className="task-form">
         <label htmlFor="task-title">Title</label>
         <input
@@ -159,7 +160,7 @@ export default function TasksPage() {
                   {t.status === "failed" && <p className="err">{t.error ?? "Failed"}</p>}
                   {t.model && (
                     <div className="meta">
-                      {t.model} · rung {t.rung} · ${Number(t.cost_usd ?? 0).toFixed(5)} · {t.latency_ms} ms
+                      {t.model} · rung {t.rung ?? "—"} · {t.cost_usd == null ? "—" : `$${Number(t.cost_usd).toFixed(5)}`} · {t.latency_ms ?? "—"} ms
                     </div>
                   )}
                   {t.status === "done" && t.ledger_id && (

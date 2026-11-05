@@ -1,3 +1,4 @@
+import { workspaceSetupMessage } from "./lib/workspace-setup";
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -77,6 +78,12 @@ export default async function middleware(req: NextRequest) {
   const canonical = mootCanonicalRedirectUrl(host, req.nextUrl.pathname, req.nextUrl.search);
   if (canonical) {
     return NextResponse.redirect(canonical, 308);
+  }
+
+  const setup = workspaceSetupMessage();
+  if (setup) {
+    if (req.nextUrl.pathname.startsWith("/api/")) return NextResponse.json({ error: setup }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.next();
   }
 
   // Explicit sign-in redirect keeps private panels (e.g. /zenas) usable when signed out.
