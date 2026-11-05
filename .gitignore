@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 .venv/
 .tmp/
+.checks/
+.venv
+node_modules
+.env.*
+!.env.example

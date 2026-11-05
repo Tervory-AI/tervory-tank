@@ -65,11 +65,8 @@ async def pull_feeds(ctx: JobContext) -> dict:
     http = app.state.http
 
     async def fetch(url: str) -> Any:
-        response = await http.get(url)
-        content_type = response.headers.get("content-type", "")
-        if "json" in content_type or url.endswith(".json"):
-            return response.json()
-        return response.text
+        from rigbox.feed_runtime import fetch as fetch_public_feed
+        return await fetch_public_feed(http, url)
 
     reports = await service.pull_feeds(ctx.tenant_id, fetch)
     log_line(AGENT, json.dumps({"feeds": reports}), tenant_id=ctx.tenant_id, job_id=ctx.job_id)
