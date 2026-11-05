@@ -5,6 +5,9 @@ const path = require('node:path');
 const Module = require('node:module');
 const root = path.resolve(__dirname, '..');
 const ts = require(path.join(root, 'workspace/node_modules/typescript'));
+const signinFetchFile = path.join(root, 'workspace/lib/trigger-signin-fetch.ts');
+require.cache[signinFetchFile] = {id: signinFetchFile, filename: signinFetchFile, loaded: true,
+  exports: {signinFetch: (...args) => globalThis.fetch(...args)}};
 const originalResolve = Module._resolveFilename;
 Module._resolveFilename = function(name, parent, ...rest) {
   if (name.startsWith('@/')) name = path.join(root, 'workspace', name.slice(2));
@@ -126,7 +129,7 @@ const snapshot = {thread:{thread_id:'one',title:'Tank test-model',updated_at:'20
   upstream=()=>new Response(stream('event: receipt\ndata: '+JSON.stringify(pending)+'\n\nevent: card\ndata: '+JSON.stringify({card_id:'action',kind:'other',summary:'Action',status:'failed',retry_safe:true,arguments:{batch:'fixture',records:[{}]}})+'\n\n'),{headers:{'content-type':'text/event-stream'}});
   response=await request('threads/one/events');const updates=[];await contract.readEvents(response.body,event=>updates.push(event));assert.deepEqual(updates[0].data,pending);assert.equal(updates[1].data.retry_safe,true);assert.equal(updates[1].data.targets[0].value,'fixture');
   // Even a server caller cannot supply arbitrary squad authority in this lane.
-  upstream=()=>Response.json([]);await require('../workspace/lib/tank.ts').commandRequest(identity,'threads',{headers:{'x-tervory-squad':'all'}});assert.equal(upstreamCalls.at(-1).init.headers.get('x-tervory-squad'),null);
+  upstream=()=>Response.json([]);await require('../workspace/lib/tank.ts').commandRequest(identity,'threads',{headers:{'x-tervory-squad':'all','x-tervory-admin':'forged'}});assert.equal(upstreamCalls.at(-1).init.headers.get('x-tervory-squad'),null);assert.equal(upstreamCalls.at(-1).init.headers.get('x-tervory-admin'),null);
   // Only generated labels are scrubbed: people can discuss gold, tanks and evaluations.
   const words='  Gold prices, Tank, eval, shadow and test-model stay exactly as written.  ';
   const wording=presentation.presentSnapshot({...snapshot,thread:{...snapshot.thread,title:words},messages:[{message_id:'u',role:'user',content:words,attachments:[{name:'gold Tank.txt',text:words}]},{message_id:'a',role:'assistant',content:words}],steps:[{step_id:'s',label:'Tank test-model eval',actor:'Skala'}],cards:[{card_id:'c',kind:'other',tool:'tiger.read',summary:'Tank test-model',arguments:{question:words},result:{answer:words,summary:words,message:words}}]},false,['test-model']);

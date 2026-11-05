@@ -16,6 +16,8 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 
+from paid_steps_fixtures import paid_protocol as paid_protocol
+
 import agent_skills as route
 
 HOSTILE = ["base'); DELETE FROM tank.ledger; --", "rig' OR '1'='1",
@@ -51,7 +53,7 @@ class Pool:
 
 
 @pytest.fixture
-def setup(monkeypatch):
+def setup(monkeypatch, paid_protocol):
     keys = {room: uuid.uuid4().hex for room in route.ROOMS}
     for room, key in keys.items():
         monkeypatch.setenv("TANK_KEY_" + room.upper(), key)

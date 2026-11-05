@@ -21,7 +21,7 @@ function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(
   if(name==='server-only')return{};
   if(name==='next/link')return{__esModule:true,default:({children,...p})=>React.createElement('a',p,children)};
   if(name==='next/navigation')return{usePathname:()=>route,useSearchParams:()=>new URLSearchParams(),useSelectedLayoutSegments:()=>route.split('/').filter(Boolean),useRouter:()=>({refresh(){},push(){}}),notFound(){throw Error('404');},redirect(){throw Error('Redirect requires identity');}};
-  if(name==='@clerk/nextjs')return{useAuth:()=>({isLoaded:true,isSignedIn:false,userId:null}),OrganizationSwitcher:()=>null,UserButton:()=>null,useOrganization:()=>({isLoaded:true,organization:null}),OrganizationList:()=>null};
+  if(name==='@/app/trigger-signin-provider')return{useSignin:()=>({isLoaded:true,isSignedIn:false,userId:null,orgId:null}),OrganisationSwitcher:()=>null,SignoutButton:()=>null,TriggerSigninButton:()=>null};
   if(name==='next/font/local')return{__esModule:true,default:({variable})=>({variable:variable.replaceAll('-','_')})};
   if(name==='@/lib/tenant')return tenant;
   if(name==='@/lib/admin')return{isFounder:()=>false};

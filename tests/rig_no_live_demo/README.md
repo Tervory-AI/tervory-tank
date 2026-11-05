@@ -20,7 +20,7 @@ The widget, pricing/fitment implementation, catalogue fixtures and supplier JSON
 - `tests/test_rig_pr90_independent.py:888,969`: reject default fixture keys; the offline classic browser journey explicitly configures its saved catalogue.
 - `tests/test_rig_postgres.py:101` and `tests/test_rig_box_containers.py:21,92`: copy fixtures into an explicit disposable offline catalogue directory; tests no longer depend on the production bundled import. These opt-in integrations were skipped locally.
 - `tests/test_rig_quotes_browser.py:77,85`: expect zero `SAMPLE DATA` labels, matching the already-merged widget change in #353. Both viewport tests failed on unchanged main with the stale expectation; they now pass. No widget source/bundle changes.
-- `tests/rig_no_live_demo/browser.py:31` and `bundle.cjs:1`: local Chromium proof using actual v5 routes and actual Workspace Lab/SearchView components. The Workspace host/navigation and unopened Plugins boundary are stubbed; its API adapter calls the real Rig Service against explicitly loaded offline data. This does **not** test Clerk, Tank routing, deployment or the founder's session. No model calls.
+- `tests/rig_no_live_demo/browser.py:31` and `bundle.cjs:1`: local Chromium proof using actual v5 routes and actual Workspace Lab/SearchView components. The Workspace host/navigation and unopened Plugins boundary are stubbed; its API adapter calls the real Rig Service against explicitly loaded offline data. This does **not** test Trigger sign-in, Tank routing, deployment or the founder's session. No model calls.
 
 ## Commands and results
 
@@ -56,11 +56,11 @@ PASS Workspace starts empty: no startup search, products, parts, added items, op
 PASS submitted Workspace search uses the stored catalogue and graph; nothing is pre-added; a no-result search stays empty
 ```
 
-Production build: in a temporary copy of `workspace/`, excluding existing `node_modules`, `.next`, `.env*` and TypeScript build artifacts, install the declared dependencies and run the same dummy Clerk build settings as CI:
+Production build: in a temporary copy of `workspace/`, excluding existing `node_modules`, `.next`, `.env*` and TypeScript build artifacts, install the declared dependencies and run the same dummy Trigger sign-in build settings as CI:
 
 ```sh
 npm install --no-audit --no-fund --no-package-lock
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npm run build
+NEXT_TELEMETRY_DISABLED=1 npm run build
 ```
 
 **Passed**, including TypeScript validation and all routes. [Build output](evidence/workspace-build.txt). The temporary copy was removed; no lockfile/dependency/authentication changes in the repository.

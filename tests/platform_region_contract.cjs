@@ -3,6 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), Module = require('node:module');
 const root = path.resolve(__dirname, '..');
 const ts = require(path.join(root, 'workspace/node_modules/typescript'));
+// Auth proof transport has its own tests; this contract exercises regional HTTP.
+const signinFetchFile = path.join(root, 'workspace/lib/trigger-signin-fetch.ts');
+require.cache[signinFetchFile] = {id: signinFetchFile, filename: signinFetchFile, loaded: true,
+  exports: {signinFetch: (...args) => globalThis.fetch(...args)}};
 const original = Module._resolveFilename;
 Module._resolveFilename = function(name, parent, ...rest) {
   if (name.startsWith('@/')) name = path.join(root, 'workspace', name.slice(2));
@@ -15,7 +19,7 @@ Object.assign(process.env, {TANK_URL: 'http://us.invalid', TANK_API_KEY: 'placeh
   TANK_API_KEY_ZA: 'placeholder-homes-only'});
 const tank = require('../workspace/lib/tank.ts');
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', other = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-const identity = {tenantId: tenant, userId: 'clerk-user'};
+const identity = {tenantId: tenant, userId: 'trigger-user'};
 let mode = 'za', calls = [];
 global.fetch = async (raw, init) => {
   const url = new URL(String(raw)), headers = new Headers(init.headers);
@@ -54,14 +58,14 @@ global.fetch = async (raw, init) => {
     body:JSON.stringify({text:'private content'})});
   assert.equal(calls.length,2);
   assert.equal(calls[1].headers.get('x-tervory-tenant'),tenant);
-  assert.equal(calls[1].headers.get('x-tervory-user'),'clerk-user');
+  assert.equal(calls[1].headers.get('x-tervory-user'),'trigger-user');
   assert.equal(calls[1].headers.get('x-tervory-squad'),null);
   assert.equal(calls[1].headers.get('x-tervory-role'),'');
   assert.equal(calls[1].headers.get('x-tank-key'),'placeholder-za-content');
   assert.equal(calls[1].headers.get('x-tervory-home-region'),'za');
   assert.equal(JSON.parse(calls[1].body).text,'private content');
   calls=[];
-  await tank.createTask(tenant,'clerk-user','Task','tier0.answer',[{role:'user',content:'private task'}]);
+  await tank.createTask(tenant,'trigger-user','Task','tier0.answer',[{role:'user',content:'private task'}]);
   assert.equal(calls[1].url.origin,'https://za.invalid');
   assert.equal(calls[1].headers.get('x-tank-key'),'placeholder-za-content');
   for (const send of [

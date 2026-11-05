@@ -1,4 +1,5 @@
 """Shared override, tenant isolation, durable budget and founder promotion tests."""
+from trigger_signin_fakes import set_founders
 import json
 import secrets
 from types import SimpleNamespace
@@ -24,6 +25,22 @@ def legacy_tenant_home(monkeypatch):
     """The MoA fixtures exercise existing tenants without an onboarding record."""
     import tenant_regions
     monkeypatch.setattr(tenant_regions, "recorded_home", AsyncMock(return_value=None))
+
+
+@pytest.fixture(autouse=True)
+def paid_step_admission_fixture(monkeypatch):
+    import paid_steps
+    import controls
+    from unittest.mock import AsyncMock
+    async def checkpoint(key, invoke):
+        return await invoke()
+    async def model_admission(*args, **kwargs):
+        await controls.refuse_paid(task="placeholder-moa", path="test")
+        return None
+    monkeypatch.setattr(controls, "paid_paused", AsyncMock(return_value=False))
+    monkeypatch.setattr(paid_steps, "checkpoint", checkpoint)
+    monkeypatch.setattr(paid_steps, "model_admission", model_admission)
+    monkeypatch.setattr(paid_steps, "attach_receipt", AsyncMock())
 
 
 def req(task='fixture'):
@@ -111,7 +128,7 @@ async def test_registered_route_forwards_complexity_and_preserves_auth(monkeypat
 async def test_founder_routes_are_not_available_to_reviewers(monkeypatch):
     key=secrets.token_urlsafe(32)
     monkeypatch.setenv('TANK_API_KEY',key)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','founder')
+    set_founders(monkeypatch, 'founder')
     app=FastAPI();app.include_router(moa.router)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
         for headers in ({},{'x-tank-key':key,'x-tervory-admin':'reviewer'}):

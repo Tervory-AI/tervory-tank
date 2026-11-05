@@ -66,7 +66,7 @@ A perimeter guard for a business that has Cloudflare and Google Workspace and no
 - Plain English on every client screen and email, written for an owner who learned what Cloudflare was a month ago: no "WAF rule", no model names, no build codes, no sample data. Empty states say "No work yet".
 
 ## Tests, locally, before any PR
-`PYTHONPATH=tank python3 -m pytest -q` on `tests/test_ghost_*.py`, `tests/test_autumbra_*.py` and everything you add; the one-door guard; the air-gap test (a crafted injection in an event line is quarantined into a `ThreatPayload` with the fixed burn detail, and Enforce's input is only the payload fields); the isolation network test; `ops/seal-check.sh` output pasted in the PR; and the Workspace build if you touch it: `cd workspace && npm install --no-package-lock --no-audit --no-fund && NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npx next build`.
+`PYTHONPATH=tank python3 -m pytest -q` on `tests/test_ghost_*.py`, `tests/test_autumbra_*.py` and everything you add; the one-door guard; the air-gap test (a crafted injection in an event line is quarantined into a `ThreatPayload` with the fixed burn detail, and Enforce's input is only the payload fields); the isolation network test; `ops/seal-check.sh` output pasted in the PR; and the Workspace build if you touch it: `cd workspace && npm install --no-package-lock --no-audit --no-fund && NEXT_TELEMETRY_DISABLED=1 npx next build`.
 
 ## Done when
 On our own sites, a test attack is shielded in seconds, undone in one tap, the owner email arrives with the right paragraph, the receipt reaches the founder, and no client payload exists on Tervory's side afterwards. Then one draft PR with the full proof (the job step by step as a client experiences it; what changed, file and line; how tested, exact commands and results; screenshots; Founder must decide), and stop. An independent reviewer checks it from a fresh clone; one finding is a fail. Never ask to merge.
@@ -81,4 +81,4 @@ On our own sites, a test attack is shielded in seconds, undone in one tap, the o
 - **Hugging Face is temporary**, for dogfood and learning only; not Enforce's permanent home.
 - **Enforce cap:** don't guess. Measure dogfood and Boston memory (RSS) first, then set it. Pin the seal after the first clean run.
 - **Cloudflare secret names:** hold until there is a real Cloudflare client. Enforce is dogfood-first, then opened to clients.
-- **Draft work lives on PR #337** (grok/…), still draft: no merge, no Boston deploy, Coolify names only, Tank for keys and spend, no Clerk, no "demo" copy.
+- **Draft work lives on PR #337** (grok/…), still draft: no merge, no Boston deploy, Coolify names only, Tank for keys and spend, no Trigger sign-in, no "demo" copy.

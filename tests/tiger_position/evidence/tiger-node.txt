@@ -1,0 +1,124 @@
+TAP version 13
+# Subtest: form sends both checkbox choices, including unchecked price
+ok 1 - form sends both checkbox choices, including unchecked price
+  ---
+  duration_ms: 76.04001
+  type: 'test'
+  ...
+# Subtest: failed checks keep their reason, attempt time and link without a price or internal evidence
+ok 2 - failed checks keep their reason, attempt time and link without a price or internal evidence
+  ---
+  duration_ms: 70.277479
+  type: 'test'
+  ...
+# Subtest: missing or invalid product_name: null is flagged
+ok 3 - missing or invalid product_name: null is flagged
+  ---
+  duration_ms: 1.70983
+  type: 'test'
+  ...
+# Subtest: missing or invalid product_name: " " is flagged
+ok 4 - missing or invalid product_name: " " is flagged
+  ---
+  duration_ms: 1.032346
+  type: 'test'
+  ...
+# Subtest: missing or invalid price: null is flagged
+ok 5 - missing or invalid price: null is flagged
+  ---
+  duration_ms: 0.971705
+  type: 'test'
+  ...
+# Subtest: missing or invalid price: "" is flagged
+ok 6 - missing or invalid price: "" is flagged
+  ---
+  duration_ms: 0.822055
+  type: 'test'
+  ...
+# Subtest: missing or invalid price: "invalid" is flagged
+ok 7 - missing or invalid price: "invalid" is flagged
+  ---
+  duration_ms: 0.933435
+  type: 'test'
+  ...
+# Subtest: missing or invalid availability: null is flagged
+ok 8 - missing or invalid availability: null is flagged
+  ---
+  duration_ms: 1.079465
+  type: 'test'
+  ...
+# Subtest: missing or invalid currency: null is flagged
+ok 9 - missing or invalid currency: null is flagged
+  ---
+  duration_ms: 1.417007
+  type: 'test'
+  ...
+# Subtest: missing or invalid currency: "" is flagged
+ok 10 - missing or invalid currency: "" is flagged
+  ---
+  duration_ms: 1.146586
+  type: 'test'
+  ...
+# Subtest: missing or invalid ts: "" is flagged
+ok 11 - missing or invalid ts: "" is flagged
+  ---
+  duration_ms: 0.331923
+  type: 'test'
+  ...
+# Subtest: missing or invalid ts: "invalid" is flagged
+ok 12 - missing or invalid ts: "invalid" is flagged
+  ---
+  duration_ms: 0.17556
+  type: 'test'
+  ...
+# Subtest: a nameless first attempt uses the URL; a later failure keeps the read name
+ok 13 - a nameless first attempt uses the URL; a later failure keeps the read name
+  ---
+  duration_ms: 1.174706
+  type: 'test'
+  ...
+# Subtest: missing page and schedule are explicit row errors
+ok 14 - missing page and schedule are explicit row errors
+  ---
+  duration_ms: 1.282887
+  type: 'test'
+  ...
+# Subtest: failed observation loads do not masquerade as never checked
+ok 15 - failed observation loads do not masquerade as never checked
+  ---
+  duration_ms: 48.977404
+  type: 'test'
+  ...
+# Subtest: missing alert values and currencies are flagged rather than guessed
+ok 16 - missing alert values and currencies are flagged rather than guessed
+  ---
+  duration_ms: 7.103718
+  type: 'test'
+  ...
+# Subtest: missing observation collection is flagged
+ok 17 - missing observation collection is flagged
+  ---
+  duration_ms: 34.217414
+  type: 'test'
+  ...
+# Subtest: missing observation collection is flagged
+ok 18 - missing observation collection is flagged
+  ---
+  duration_ms: 25.310006
+  type: 'test'
+  ...
+# Subtest: missing account name renders an explicit status, and nameless rows render links in every section
+ok 19 - missing account name renders an explicit status, and nameless rows render links in every section
+  ---
+  duration_ms: 134.694836
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 856.588788

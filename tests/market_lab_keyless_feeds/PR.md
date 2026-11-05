@@ -102,7 +102,7 @@ env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKE
 DATABASE_URL=postgresql://postgres@127.0.0.1:32772/market_keyless_test PATH=/workspace/.tervory-cloud/node-v22.23.4-linux-x64/bin:$PATH PYTHONPATH=tank /workspace/.tervory-cloud/venv/bin/python tests/market_lab_keyless_feeds/keyless_proof.py --output /workspace/market-lab-keyless/real-stack-final --browser
 ```
 
-The harness starts the real Tank app, room app/scheduler/worker, Postgres and Chromium. Publisher HTTP responses are replayed from saved responses. The temporary Next wrapper uses production components, loader, server actions and Tank client, with a local identity and CI's dummy Clerk publishable key. Production authentication files are unchanged. It clicks **Plugins → Source links → Add link**, waits for the real job, opens the stored source, checks the other tenant cannot read/delete it, then removes it as its owner. SQL assertions verify job completion, daily timing and zero model-ledger rows.
+The harness starts the real Tank app, room app/scheduler/worker, Postgres and Chromium. Publisher HTTP responses are replayed from saved responses. The temporary Next wrapper uses production components, loader, server actions and Tank client, with a local identity and CI's dummy Trigger sign-in publishable key. Production authentication files are unchanged. It clicks **Plugins → Source links → Add link**, waits for the real job, opens the stored source, checks the other tenant cannot read/delete it, then removes it as its owner. SQL assertions verify job completion, daily timing and zero model-ledger rows.
 
 Actual [result.json](evidence/result.json):
 

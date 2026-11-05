@@ -61,7 +61,7 @@ async def require_reviewer(
     x_tervory_role: str = Header(default=""),
 ) -> Reviewer:
     expected = os.environ.get("TANK_API_KEY", "")
-    founders = {v.strip() for v in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if v.strip()}
+    founders = __import__("trigger_signin_config").founders()
     if not expected or not hmac.compare_digest(expected, x_tank_key) or not x_tervory_user:
         raise HTTPException(404, "not found")
     founder = x_tervory_user in founders

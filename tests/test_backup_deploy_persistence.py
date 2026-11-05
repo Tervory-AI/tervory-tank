@@ -1,5 +1,6 @@
 """Dry-run real Compose deployment inputs without keys or live mutations."""
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -9,6 +10,12 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def offline_environment(compose: dict) -> dict[str, str]:
+    env = {name: os.environ[name] for name in ('PATH', 'HOME') if name in os.environ}
+    required = re.findall(r'\$\{([A-Z][A-Z0-9_]*):\?', yaml.safe_dump(compose))
+    return {**env, **{name: 'offline-placeholder' for name in required}}
 
 
 def _without_dependency_waits(compose: dict) -> None:
@@ -44,7 +51,7 @@ def test_boston_backup_survives_default_deployment_composition(tmp_path, directo
     source = target / "docker-compose.yaml"
     source.write_text(yaml.safe_dump(compose))
     # No inherited COMPOSE_PROFILES or env file can hide the default-off defect.
-    env = {name: os.environ[name] for name in ("PATH", "HOME") if name in os.environ}
+    env = offline_environment(compose)
     # config --services includes disabled profiles too; only up exercises selection.
     # --no-deps avoids unrelated services' runtime dependency waits in dry-run.
     command = ["docker", "compose", "--project-name", "backup-regression", "--dry-run",
@@ -100,7 +107,7 @@ def test_za_backup_survives_default_deployment_composition(tmp_path):
     (tmp_path / ".env").write_text("")
     source = tmp_path / "docker-compose.yaml"
     source.write_text(yaml.safe_dump(compose))
-    env = {name: os.environ[name] for name in ("PATH", "HOME") if name in os.environ}
+    env = offline_environment(compose)
     command = ["docker", "compose", "--project-name", "za-backup-regression", "--dry-run",
                "-f", str(source), "up", "-d", "--no-build", "--pull", "never", "--no-deps"]
     out = subprocess.run(command, env=env, capture_output=True, text=True, check=True, cwd=tmp_path)

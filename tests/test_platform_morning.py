@@ -207,7 +207,7 @@ async def test_digest_uses_actual_night_rows_and_keeps_content_out(
         str(b.tenants[1]),
     ):
         assert private not in text
-    actor = {"X-Tervory-Tenant": str(b.tenants[0]), "X-Tervory-User": "member-fixture"}
+    actor = b.native_headers("member-fixture", tenant=b.tenants[0])
     assert (
         await b.client.get("/v1/platform/morning-report", headers=actor)
     ).status_code == 403

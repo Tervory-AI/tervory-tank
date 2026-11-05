@@ -2,13 +2,15 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { OrganizationSwitcher } from "@clerk/nextjs";
+import { OrganisationSwitcher } from "../trigger-signin-provider";
 import { NAV } from "./copy";
 
 export default function TriggerShell({
   children,
+  title = "Trigger",
 }: {
   children: React.ReactNode;
+  title?: string;
 }) {
   const [open, setOpen] = useState(false),
     path = usePathname();
@@ -55,7 +57,7 @@ export default function TriggerShell({
   return (
     <div className="trigger-console">
       <div className="trigger-mobile-bar">
-        <strong>Trigger</strong>
+        <strong>{title}</strong>
         <button
           ref={toggle}
           aria-label="Menu"
@@ -77,7 +79,7 @@ export default function TriggerShell({
         ref={menu}
         id="trigger-menu"
         className={`trigger-sidebar ${open ? "is-open" : ""}`}
-        aria-label="Trigger"
+        aria-label={title}
       >
         <div className="trigger-identity">
           <div className="trigger-logo-row">
@@ -95,23 +97,9 @@ export default function TriggerShell({
           </div>
           <div className="trigger-business">
             <span>Business</span>
-            <OrganizationSwitcher
-              hidePersonal
-              afterSelectOrganizationUrl="/trigger"
-              appearance={{
-                elements: {
-                  organizationSwitcherTrigger: {
-                    padding: 0,
-                    width: 28,
-                    minWidth: 28,
-                  },
-                  organizationPreviewTextContainer: { display: "none" },
-                  organizationPreviewAvatarBox: { display: "none" },
-                },
-              }}
-            />
+            <OrganisationSwitcher />
           </div>
-          <span className="trigger-product">Trigger</span>
+          <span className="trigger-product">{title}</span>
         </div>
         <nav className="trigger-areas">
           {NAV.map(([title, links]) => (

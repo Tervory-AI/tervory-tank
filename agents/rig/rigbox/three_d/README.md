@@ -66,7 +66,7 @@ No purchase action,
 Stripe API call, checkout, webhook or existing plan is changed. Setting a price
 alone does not grant access: entitlement changes remain a trusted operational step.
 
-The admin page requires an active Clerk organization administrator on every read,
+The admin page requires an active Trigger sign-in organization administrator on every read,
 action and file request. It submits preparation jobs, previews drafts, requires
 three separate approval checks, saves approved-fit anchors and resets terminals.
 All Workspace calls go server-side through `workspace/lib/tank.ts` and the new
@@ -147,7 +147,7 @@ retailer catalogue, contact or paid job is used.
 
 6. As an organization administrator, open `/rig/admin/three-d/`, preview a draft,
    check scale/look/attachment points and approve it. Confirm `reviewed_by` is the
-   server-derived Clerk actor. A member must be unable to read previews or submit
+   server-derived Trigger sign-in actor. A member must be unable to read previews or submit
    actions. The page currently accepts previously uploaded files by name.
 7. For a tenant without the add-on and `RIG_3D_PRICE_ID` empty, `/billing` shows
    **Not available yet**, with no

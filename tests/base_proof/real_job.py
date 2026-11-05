@@ -1,7 +1,7 @@
 """Run the real Tank, Base worker and Workspace locally with offline external pages.
 
 BASE_TEST_DATABASE_URL must name a local disposable PostgreSQL server with CREATE
-DATABASE permission. Only public-page/DNS HTTP responses and Clerk are fixtures.
+DATABASE permission. Only public-page/DNS HTTP responses and Trigger sign-in are fixtures.
 The applications, skills, collector, database and CSV route are unmodified.
 """
 from __future__ import annotations
@@ -99,8 +99,8 @@ async def main() -> None:
 
         workspace = Path(subprocess.check_output([sys.executable, str(PROOF / "workspace.py")], text=True).strip())
         web_env = {**env, "NEXT_TELEMETRY_DISABLED": "1",
-                   "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==",
-                   "CLERK_SECRET_KEY": "sk_test_dummy"}
+                   "TRIGGER_SIGNIN_KEY": "<retired-build-value>",
+                   }
         web = start(["node", str(workspace / "node_modules/next/dist/bin/next"), "dev", "--port", str(web_port)],
                     workspace, "workspace", web_env)
         web_url = f"http://localhost:{web_port}"

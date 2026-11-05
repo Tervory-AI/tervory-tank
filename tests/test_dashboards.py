@@ -1,4 +1,5 @@
 """DASH-1: real source projections, isolation, auth, and paid-work enforcement."""
+from trigger_signin_fakes import set_founders
 import os
 import uuid
 from pathlib import Path
@@ -7,6 +8,9 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
+from paid_steps_fixtures import paid_protocol as paid_protocol
+
+pytestmark = pytest.mark.usefixtures("paid_protocol")
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -73,7 +77,7 @@ def conn(monkeypatch):
 @pytest.fixture
 def client(monkeypatch, conn):
     monkeypatch.setenv('TANK_API_KEY', 'offline-workspace-key')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-one')
+    set_founders(monkeypatch, 'founder-one')
     app = FastAPI()
     app.include_router(controls.router)
     app.include_router(dashboards.router)
@@ -199,7 +203,8 @@ def test_readonly_controls_have_no_write_path(client):
 def test_only_approved_narrow_main_hooks_and_no_approved_skill_edits():
     source = (ROOT / 'tank/main.py').read_text()
     assert 'event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]}' in source
-    assert 'refuse_paid(paid=True, task=req.task_type, path="route")' in source
+    assert 'model_admission(req.tenant_id' in source
+    assert 'await refuse_paid(task=task, path="paid_steps")' in (ROOT/'tank/paid_steps.py').read_text()
 
 @pytest.mark.asyncio
 async def test_resume_restores_paid_gateway(conn, monkeypatch):
@@ -288,9 +293,9 @@ def test_existing_switch_route_refuses_non_founder(monkeypatch):
     monkeypatch.setenv('TANK_API_KEY', 'test')
     # main reads TANK_API_KEY once at import; another module may have imported it first.
     monkeypatch.setattr(main, 'TANK_API_KEY', 'test')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-fixture')
+    set_founders(monkeypatch, 'founder-fixture')
     client = TestClient(main.app)
-    assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 404
+    assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 401
 
 @pytest.mark.asyncio
 async def test_unresponsive_state_is_bounded_and_fails_closed(conn, monkeypatch):

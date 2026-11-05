@@ -149,7 +149,7 @@ def test_rollback_restores_strong_model():
 
 def test_run_route_changes_only_in_the_two_reviewed_hooks():
     source = (ROOT / 'tank/main.py').read_text()
-    node = next(n for n in ast.parse(source).body if isinstance(n, ast.AsyncFunctionDef) and n.name == 'run_route')
+    node = next(n for n in ast.parse(source).body if isinstance(n, ast.AsyncFunctionDef) and n.name == '_run_route')
     function = ast.get_source_segment(source, node)
     old, skipping, hooks = [], False, 0
     for line in function.splitlines(keepends=True):
@@ -163,15 +163,21 @@ def test_run_route_changes_only_in_the_two_reviewed_hooks():
         elif not skipping:
             old.append(line)
     assert hooks == 2 and not skipping
-    # A8 authorizes only the deadline-aware off-peak dispatch predicate.
-    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '357628bcb7cec320553c0766457260096a4d04d95606c1c17e79245cfb5d474b'
+    # Paid admission wraps the reviewed body; it must remain on the public path.
+    functions = {n.name: n for n in ast.parse(source).body if isinstance(n, ast.AsyncFunctionDef)}
+    for caller, callee in [('run_route', '_paid_route'), ('_paid_route', '_run_route')]:
+        assert any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == callee
+                   for n in ast.walk(functions[caller]))
+    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '3c3ad063490d58a6706e749f39ba47525d96139aacde69a56546d3ff422975a0'
 
 
 @pytest.mark.asyncio
-async def test_revalidation_resolves_target_and_records_concrete_model(monkeypatch):
+@pytest.mark.parametrize('paid_receipt', [False, True])
+async def test_revalidation_resolves_target_and_records_concrete_model(monkeypatch, paid_receipt):
     import skala_revalidation as revalidation
     row = promoted()
     statements, calls = [], []
+    paid_ledger = uuid.uuid4()
     class Connection:
         async def execute(self, sql, *args):
             statements.append((sql, args))
@@ -182,6 +188,8 @@ async def test_revalidation_resolves_target_and_records_concrete_model(monkeypat
     async def llm(model, messages, max_tokens, *, receipt):
         calls.append((model, messages, max_tokens))
         receipt.update(model=model, tokens_in=1, tokens_out=1, cost=.001)
+        if paid_receipt:
+            receipt['_paid_ledger_id'] = str(paid_ledger)
         return 'placeholder-result', .001
     tank = tank_stub()
     tank.graduate = graduate
@@ -198,9 +206,20 @@ async def test_revalidation_resolves_target_and_records_concrete_model(monkeypat
         revalidation.ACTIVE.reset(token)
     assert output['content'] == 'placeholder-result' and calls[0][0] == 'placeholder-weak'
     sql, args = statements[-1]
-    assert 'routellm_status' in sql and args[6] == 'placeholder-weak'
-    assert args[18] == 'served' and args[14] == .2
-    assert 'revalidation_id' in sql and args[19] == job['id']
+    if paid_receipt:
+        assert len(statements) == 2
+        assert all('UPDATE tank.ledger' in statement and 'INSERT' not in statement for statement, _ in statements)
+        linked = next((statement, values) for statement, values in statements if 'SET revalidation_id' in statement)
+        assert linked[1] == (paid_ledger, uuid.UUID(int=1), job['id'])
+        assert 'WHERE id=$1 AND tenant_id=$2' in linked[0]
+        served = next((statement, values) for statement, values in statements if "routellm_status='served'" in statement)
+        assert served[1][:4] == (paid_ledger, uuid.UUID(int=1), 'placeholder-weak', .2)
+        assert all(not any(field in statement for field in ('cost_usd', 'tokens_in', 'tokens_out')) for statement, _ in statements)
+    else:
+        assert len(statements) == 1 and 'INSERT INTO tank.ledger' in sql
+        assert 'routellm_status' in sql and args[6] == 'placeholder-weak'
+        assert len(args) == 20 and args[18] == 'served' and args[14] == .2
+        assert 'revalidation_id' in sql and args[19] == job['id']
 
 
 @pytest.mark.asyncio

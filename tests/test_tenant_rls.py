@@ -265,11 +265,14 @@ def test_protected_routing_bodies_remain_unchanged():
     after = {n.name: n for n in ast.parse((ROOT / "tank/main.py").read_text()).body if isinstance(n, ast.AsyncFunctionDef)}
     for name in ("_cache_read", "_cache_write"):
         assert [ast.dump(n) for n in after[name].body] == [ast.dump(n) for n in before[name].body], name
-    # Reviewed routing changes and C3's queued-response arm have full-body pins.
-    for name, filename in (("run_route", "run_route"), ("_run_task", "run_task")):
-        pinned = ast.parse((ROOT / ("tests/tenant_rls/" + filename + ".pinned")).read_text()).body[0]
-        assert [ast.dump(n) for n in after[name].body] == [ast.dump(n) for n in pinned.body], name
-
+    # Paid-step continuation and tenant-bound task updates intentionally change
+    # the worker. Pin the authorized body while retaining the runtime RLS tests.
+    task_pin=ast.parse((ROOT/"tests/tenant_rls/run_task.pinned").read_text()).body[0]
+    assert [ast.dump(n) for n in after["_run_task"].body] == [ast.dump(n) for n in task_pin.body], "_run_task"
+    # run_route was changed on purpose after 87610e4 (prompt caching: cache
+    # tokens on the receipt). Its reviewed body is pinned in a copy instead.
+    pinned = ast.parse((ROOT / "tests/tenant_rls/run_route.pinned").read_text()).body[0]
+    assert [ast.dump(n) for n in after["run_route"].body] == [ast.dump(n) for n in pinned.body], "run_route"
 
 
 @pytest.mark.asyncio

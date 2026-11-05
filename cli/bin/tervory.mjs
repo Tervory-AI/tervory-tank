@@ -9,7 +9,7 @@ import { updateNotice } from '../src/update.mjs';
 // Sign-in is a browser device approval: no credential is typed, pasted, passed
 // in argv or the environment, or written anywhere except the OS keychain.
 function openBrowser(url) {
-  if (!/^https:\/\/(?:app\.tervory\.com\/cli\/device\?|auth-za\.tervory\.com(?:\/|$))/.test(url)) return;
+  if (!/^https:\/\/auth\.tervory\.com(?:\/|$)/.test(url)) return;
   const [command, args] = process.platform === 'darwin' ? ['open', [url]]
     : process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]] : ['xdg-open', [url]];
   try {

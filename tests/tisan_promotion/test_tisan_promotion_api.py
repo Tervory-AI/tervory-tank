@@ -1,4 +1,5 @@
 """Exercise room identity, gate transport and Tank's actual proxy function offline."""
+from trigger_signin_fakes import set_founders
 import ast
 import os
 import types
@@ -17,7 +18,7 @@ from test_promotion import FakeCoolify, NEW, OLD, TARGET, TENANT, OTHER
 async def test_room_identity_gate_binding_and_status(tmp_path, monkeypatch):
     monkeypatch.setenv('DATA_DIR', str(tmp_path))
     monkeypatch.setenv('TANK_KEY', 'room-test-only')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     monkeypatch.setenv('TANK_REGION', 'za')
     monkeypatch.setenv('TISAN_COOLIFY_URL', 'https://coolify.test')
     monkeypatch.setenv('TISAN_COOLIFY_TOKEN', 'test-only')

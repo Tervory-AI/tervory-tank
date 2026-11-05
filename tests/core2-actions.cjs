@@ -27,9 +27,10 @@ vm.runInNewContext(compiled,{exports:moduleObject.exports,module:moduleObject,re
 (async()=>{
   const compiled=ts.transpileModule(fs.readFileSync('workspace/lib/tank.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   const mod={exports:{}};let request;
+  const transport=async(url,init)=>{if(String(url).includes('/v1/tenants/')&&String(url).endsWith('/home'))return {ok:false,status:404,json:async()=>({detail:{code:'tenant_home_missing'}})};request={url,init};return {ok:true,json:async()=>({})};};
   const regionTransport={exports:{}};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('workspace/app/api/zenas/tank.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:regionTransport.exports,process:{env:{}},URL,URLSearchParams});
-  vm.runInNewContext(compiled,{exports:mod.exports,module:mod,process:{env:{TANK_API_KEY:'test-key'}},URLSearchParams,URL,Headers,AbortSignal,AbortController,setTimeout,clearTimeout,fetch:async(url,init)=>{if(String(url).includes('/v1/tenants/')&&String(url).endsWith('/home'))return {ok:false,status:404,json:async()=>({detail:{code:'tenant_home_missing'}})};request={url,init};return {ok:true,json:async()=>({})};},require(name){if(name==='@/app/api/zenas/tank')return regionTransport.exports;throw Error(name);}});
+  vm.runInNewContext(compiled,{exports:mod.exports,module:mod,process:{env:{TANK_API_KEY:'test-key'}},URLSearchParams,URL,Headers,AbortSignal,AbortController,setTimeout,clearTimeout,fetch:transport,require(name){if(name==='@/lib/trigger-signin-fetch')return {signinFetch:transport};if(name==='@/app/api/zenas/tank')return regionTransport.exports;throw Error(name);}});
   await mod.exports.readClientSavings('session-tenant','/rows',{tenant_id:'victim',population:'costs',page:'2',end:'cutoff'});
   const url=new URL(request.url);assert.equal(url.pathname,'/v1/client-savings/rows');
   assert.deepEqual([...url.searchParams.entries()],[['end','cutoff'],['page','2'],['tenant_id','session-tenant']]);
@@ -55,8 +56,10 @@ vm.runInNewContext(compiled,{exports:moduleObject.exports,module:moduleObject,re
   assert(html.includes('Proof evidence is unavailable') && html.includes('role="alert"'));
   // Founder selections must keep the same scope for charts, drawers and exports.
   const server={exports:{}};let url;
+  const proofTransport=async(value)=>{url=new URL(value);return {ok:true};};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('workspace/app/tank/proof/server.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{
-    exports:server.exports,module:server,URLSearchParams,process:{env:{}},fetch:async(value)=>{url=new URL(value);return {ok:true};},require(name){
+    exports:server.exports,module:server,URLSearchParams,process:{env:{}},fetch:proofTransport,require(name){
+      if(name==='@/lib/trigger-signin-fetch')return {signinFetch:proofTransport};
       if(name.endsWith('/access'))return {goldIdentity:async()=>({role:'founder',userId:'founder'})};return {};
     }
   });

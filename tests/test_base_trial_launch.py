@@ -1,5 +1,7 @@
 """Founder trial forwarding, platform selection, and independent truth wiring."""
 
+from trigger_signin_fakes import set_founders, install_registry, Provider, ORG
+import identity_oidc as oidc
 import json
 import sys
 import types
@@ -28,7 +30,12 @@ class Pool:
 @pytest.mark.asyncio
 async def test_founder_proxy_replaces_credentials_and_ignores_input(monkeypatch):
     monkeypatch.setenv("TANK_API_KEY", "workspace-placeholder")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-placeholder")
+    monkeypatch.setattr(tank, 'TANK_API_KEY', 'workspace-placeholder')
+    provider = Provider('us-east')
+    install_registry(monkeypatch, [provider], {ORG: PLATFORM_TENANT})
+    monkeypatch.setattr(oidc, 'http_client', lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
+    oidc._cache.clear()
+    set_founders(monkeypatch, "founder-placeholder")
     monkeypatch.setenv("TANK_KEY_BASE", "base-placeholder")
     forwarded = []
 
@@ -45,11 +52,13 @@ async def test_founder_proxy_replaces_credentials_and_ignores_input(monkeypatch)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tank.app), base_url="http://tank") as client:
             for headers in ({}, {"X-Tank-Key": "workspace-placeholder"}, {
                 "X-Tank-Key": "base-placeholder", "X-Tervory-Admin": "founder-placeholder",
-            }, {"X-Tank-Key": "workspace-placeholder", "X-Tervory-Admin": "client-placeholder"}):
+            }):
                 response = await client.post("/v1/base/context-dev/trial", headers=headers)
                 assert response.status_code == 404
             assert not forwarded
-            headers = {"X-Tank-Key": "workspace-placeholder", "X-Tervory-Admin": "founder-placeholder"}
+            spoofed = {"X-Tank-Key": "workspace-placeholder", "X-Tervory-Admin": "founder-placeholder"}
+            assert (await client.post('/v1/base/context-dev/trial', headers=spoofed)).status_code == 401
+            headers = {**spoofed, 'x-trigger-signin-token': provider.token(sub='founder-placeholder'), 'x-trigger-signin-org': ORG}
             response = await client.post("/v1/base/context-dev/trial", headers=headers, json={
                 "tenant_id": str(uuid.uuid4()), "checked_answers": {"website": "forged"},
             })

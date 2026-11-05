@@ -36,9 +36,11 @@ class StripeRows {
 process.env.STRIPE_SECRET_KEY='placeholder-provider-double';
 const load=Module._load;
 Module._load=function(name,parent,main){
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
   if(name==='server-only')return {};
   if(name==='stripe')return StripeRows;
-  if(name==='@clerk/nextjs/server')return {auth:async()=>({userId:'placeholder-founder'}),currentUser:async()=>({firstName:'placeholder'}),clerkClient:async()=>({users:{getCount:async()=>users.length,getUserList:async()=>({totalCount:users.length,data:users})}})};
+  if(name==='@/lib/trigger-signin')return {auth:async()=>({userId:'placeholder-founder'}),currentUser:async()=>({firstName:'placeholder'}),signinDirectory:async()=>({users:{getCount:async()=>users.length,getUserList:async()=>({totalCount:users.length,data:users})}})};
   if(name==='@/lib/tenant')return {activeTenant:async()=>({tenantId:'00000000-0000-0000-0000-0000000000aa',orgName:'placeholder organisation',userId:'placeholder-client'})};
   if(name==='@/app/api/zenas/tank')return {regionTank:()=>null};
   if(name==='next/navigation')return {useRouter:()=>({refresh(){}}),redirect:()=>{throw Error('redirect')},notFound:()=>{throw Error('404')}};
@@ -81,7 +83,7 @@ const fonts=`@font-face{font-family:Inter;src:url('/fonts/Inter-latin.woff2');fo
     assert.equal(clientMeasurements({...data,jobs_done:0},{...savings,month:{saved:'0'}}).saved,0);
   }
   fs.writeFileSync(path.join(out,`${screen}.html`),`<!doctype html><html lang="en"><meta charset="utf-8"><title>Offline route fixtures · ${screen}</title><style>${fonts}${css}</style><body><div class="app-shell"><aside class="shell-side">Shared shell</aside><div class="shell-main"><main>${html}</main></div></div></body></html>`);
-  fs.writeFileSync(path.join(out,`${screen}-values.json`),JSON.stringify({fixture:true,source:'production Tank routes and Clerk/Stripe transport doubles',visible,calls},null,2));
+  fs.writeFileSync(path.join(out,`${screen}-values.json`),JSON.stringify({fixture:true,source:'production Tank routes and Trigger sign-in/Stripe transport doubles',visible,calls},null,2));
   fs.writeFileSync(path.join(out,'styles.css'),fonts+css);
   fs.writeFileSync(path.join(out,`${screen}-fragment.html`),html);
   console.log(`PASS: ${baseline?'main baseline':`current ${screen}`} route/provider values rendered; ${calls.length} actual loader reads; no production IO.`);

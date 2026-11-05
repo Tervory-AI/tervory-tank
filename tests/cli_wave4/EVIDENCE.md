@@ -7,7 +7,7 @@ further PRs are opened, labeled or merged by this thread.
 
 ## Changes
 
-- Plain `login --region za` requests #589's Zitadel device approval; absent issuer/legacy Boston responses fail closed. The browser launcher accepts only the pinned approval hosts. The saved Tank credential selects ZA for all code calls.
+- Plain `login --region za` requests #589's Trigger sign-in device approval; absent issuer/legacy Boston responses fail closed. The browser launcher accepts only the pinned approval hosts. The saved Tank credential selects ZA for all code calls.
 - Windows CI runs the complete suite, with explicit POSIX-only installer/sandbox skips. Local commands are refused before prompting because no Windows filesystem/network sandbox backend equivalent to Bubblewrap is implemented. File tools, edits, undo and Tervory cards run natively.
 - Release builds add x64/arm64 Windows keyring archives and `tervory.cmd`. Native Windows builds use npm's JS entry without a shell, MSYS GNU archive paths and task-owned TMPDIR/TEMP/TMP. Both archives are built twice and the x64 installed launcher runs in CI.
 - `cli-v*` releases build all eight archives twice, then sign every archive, manifest and SHA256SUMS with Ed25519. Missing/mismatched signing settings fail before upload. Artifact retention/publication policy remains unchanged. This is detached archive signing, not Authenticode or notarization. The independently deployed Workspace installer/update path remains checksum-only; README distinguishes it from signed archive installation.
@@ -32,7 +32,7 @@ TMPDIR=/workspace/codex-cli-w3/.tmp PYTHONPATH=/workspace/codex-cli-w3/.tmp/w4-p
 
 Disposable SQL must be recreated to rerun this command. No production SQL is involved.
 
-6. The assembled CLI → ZA Tank acceptance fixture now uses the same fake Zitadel discovery/JWKS provider and **real JWT verification**. Both US/ZA login-refresh-revoke cases passed (2 tests, 14.32 seconds); the complete cross-lane file passed **7 tests**, no skips (28.00 seconds). The verified `zitadel:20001` subject, mapped tenant, real SQL credential owner and receipts are asserted; ZA makes zero Workspace approval calls. This replaced the old Boston-only approval expectation exposed by broader CI.
+6. The assembled CLI → ZA Tank acceptance fixture now uses the same fake Trigger sign-in discovery/JWKS provider and **real JWT verification**. Both US/ZA login-refresh-revoke cases passed (2 tests, 14.32 seconds); the complete cross-lane file passed **7 tests**, no skips (28.00 seconds). The verified `zitadel:20001` subject, mapped tenant, real SQL credential owner and receipts are asserted; ZA makes zero Workspace approval calls. This replaced the old Boston-only approval expectation exposed by broader CI.
 
 ## CI regressions fixed
 

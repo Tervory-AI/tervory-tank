@@ -265,6 +265,15 @@ async def test_command_deferral_survives_browser_close_and_replays_once(ladder, 
         job = await conn.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE tenant_id=$1', actor.tenant_id)
         state = json.loads(await conn.fetchval('SELECT state FROM tank.command_threads WHERE thread_id=$1 AND tenant_id=$2', thread_id, actor.tenant_id))
         assert state['active_turn'] is None and state['steps'][str(job['task_id'])]['status'] == 'planned'
+    saved_run = json.loads(job['policy'])['paid_run']
+    assert saved_run['tenant_id'] == str(actor.tenant_id)
+    assert saved_run['run_id'] == str(job['task_id'])
+    assert saved_run['thread_id'] == str(thread_id)
+    assert saved_run['user_id'] == actor.user_id
+    async with b.pool.acquire() as conn:
+        original_hash = await conn.fetchval("""SELECT request_hash FROM tank.paid_step_approvals
+            WHERE tenant_id=$1 AND run_id=$2 LIMIT 1""", actor.tenant_id, job['task_id'])
+    assert saved_run['request_hash'] == original_hash
     # Browser/SSE is gone. The durable worker uses the saved thread and task.
     clock[0] = datetime(2026, 10, 28, 4, tzinfo=UTC)
     await queue.process_once(b.tank)

@@ -1,5 +1,6 @@
+import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
 import "server-only";
-import { clerkClient } from "@clerk/nextjs/server";
+import { signinDirectory } from "@/lib/trigger-signin";
 import { tenantIdFor, uuidFrom } from "@/lib/tenant";
 import { resolveTenantNames } from "./tenant-names";
 import { goldIdentity } from "../../skala/gold/access";
@@ -23,7 +24,7 @@ export async function proofResponse(filters: ProofFilters & { until?: string; me
     let name = tenant === "clients" ? "All clients" : "All accounts";
     if (tenant && !["all", "clients"].includes(tenant)) {
       const names = await resolveTenantNames([tenant], async params => {
-        const client = await clerkClient();
+        const client = await signinDirectory();
         return client.organizations.getOrganizationList(params);
       }, tenantIdFor, uuidFrom);
       name = names.tenant_names[tenant];
@@ -41,7 +42,7 @@ export async function proofResponse(filters: ProofFilters & { until?: string; me
 export async function readProof(filters: ProofFilters = {}): Promise<Proof> {
   const data: Proof = await (await proofResponse(filters)).json();
   const names = await resolveTenantNames(data.tenants, async params => {
-    const client = await clerkClient();
+    const client = await signinDirectory();
     return client.organizations.getOrganizationList(params);
   }, tenantIdFor, uuidFrom);
   return { ...data, ...names };

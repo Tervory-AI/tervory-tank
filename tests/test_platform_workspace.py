@@ -16,11 +16,14 @@ boundary = _boundary
 ladder = _ladder
 
 
-def headers(tenant, founder=False):
-    return {
-        "X-Tervory-Tenant": str(tenant),
-        "X-Tervory-User": "founder-fixture" if founder else "member-fixture",
-    }
+def headers(b, tenant, founder=False):
+    import trigger_signin_config as registry
+    # Declare each disposable fixture organisation, then sign its real claims.
+    bindings = registry.config("us-east")["organisations"]
+    if str(tenant) not in bindings.values():
+        bindings[str(tenant.int % (10 ** 25))] = str(tenant)
+    return b.native_headers("founder-fixture" if founder else "member-fixture",
+                            "org_admin" if founder else "member", tenant)
 
 
 @pytest.mark.asyncio
@@ -31,26 +34,26 @@ async def test_founder_home_onboarding_is_immutable_and_ordinary_requests_use_it
     tenant = uuid.uuid4()
     path = f"/v1/tenants/{tenant}/home"
     assert (
-        await b.client.put(path, json={"home_region": "za"}, headers=headers(tenant))
+        await b.client.put(path, json={"home_region": "za"}, headers=headers(b, tenant))
     ).status_code == 403
     assert (await b.client.get(path)).status_code == 404
     response = await b.client.put(
-        path, json={"home_region": "za"}, headers=headers(tenant, True)
+        path, json={"home_region": "za"}, headers=headers(b, tenant, True)
     )
     assert response.status_code == 200 and response.json()["home_region"] == "za"
     assert (
         await b.client.put(
-            path, json={"home_region": "za"}, headers=headers(tenant, True)
+            path, json={"home_region": "za"}, headers=headers(b, tenant, True)
         )
     ).status_code == 200
     assert (
         await b.client.put(
-            path, json={"home_region": "us-east"}, headers=headers(tenant, True)
+            path, json={"home_region": "us-east"}, headers=headers(b, tenant, True)
         )
     ).status_code == 409
     assert (
         await b.client.put(
-            path, json={"home_region": "invalid"}, headers=headers(tenant, True)
+            path, json={"home_region": "invalid"}, headers=headers(b, tenant, True)
         )
     ).status_code == 422
     assert (await b.client.get(path)).json() == {
@@ -76,7 +79,7 @@ async def test_founder_home_onboarding_is_immutable_and_ordinary_requests_use_it
         await b.client.put(
             f"/v1/tenants/{b.tenants[0]}/home",
             json={"home_region": "za"},
-            headers=headers(b.tenants[0], True),
+            headers=headers(b, b.tenants[0], True),
         )
     ).status_code == 409
     request = {
@@ -120,7 +123,7 @@ async def test_board_states_results_and_feedback_are_tenant_bound(boundary):
     own, ledger = await seed(b, b.tenants[0])
     unknown, _ = await seed(b, b.tenants[0], outcome="unverified")
     foreign, _ = await seed(b, b.tenants[1])
-    actor = headers(b.tenants[0])
+    actor = headers(b, b.tenants[0])
     response = await b.client.get("/v1/workspace/tasks", headers=actor)
     assert response.status_code == 200
     rows = {row["id"]: row for row in response.json()["tasks"]}
@@ -205,7 +208,7 @@ async def test_queued_task_remains_queued_then_receipt_delivers_it(ladder, monke
         )
     )
     await asyncio.gather(*tuple(b.tank._background))
-    actor = headers(b.tenants[0])
+    actor = headers(b, b.tenants[0])
     rows = (await b.client.get("/v1/workspace/tasks", headers=actor)).json()["tasks"]
     row = next(row for row in rows if row["id"] == str(task["id"]))
     assert row["status"] == "queued" and row["error"] is None and not b.sent
@@ -236,7 +239,7 @@ async def test_existing_conversation_prevents_reassignment_and_wrong_box_actor_i
     path = f"/v1/tenants/{owner}/home"
     assert (
         await b.client.put(
-            path, json={"home_region": "za"}, headers=headers(b.tenants[0], True)
+            path, json={"home_region": "za"}, headers=headers(b, b.tenants[0], True)
         )
     ).status_code == 409
     new = uuid.uuid4()
@@ -244,11 +247,11 @@ async def test_existing_conversation_prevents_reassignment_and_wrong_box_actor_i
         await b.client.put(
             f"/v1/tenants/{new}/home",
             json={"home_region": "za"},
-            headers=headers(b.tenants[0], True),
+            headers=headers(b, b.tenants[0], True),
         )
     ).status_code == 200
     assert (
-        await b.client.get("/v1/command/tools", headers=headers(new))
+        await b.client.get("/v1/command/tools", headers=headers(b, new))
     ).status_code == 403
 
 

@@ -6,9 +6,10 @@ from ops import restore_drill  # noqa: F401 (existing backup module path setup)
 import backup
 
 
-def test_identity_dump_uses_only_its_own_fixed_database_and_setting(monkeypatch):
-    monkeypatch.setenv('TANK_REGION', 'za')
-    monkeypatch.setenv('POSTGRES_ZITADEL_PASSWORD', 'offline-password-marker')
+@pytest.mark.parametrize('region', ['za', 'us-east'])
+def test_identity_dump_uses_only_its_own_fixed_database_and_setting(monkeypatch, region):
+    monkeypatch.setenv('TANK_REGION', region)
+    monkeypatch.setenv('TRIGGER_SIGNIN_DB_PASSWORD', 'offline-password-marker')
     monkeypatch.setenv('DATABASE_URL', 'postgresql://unused-external-setting')
     monkeypatch.setattr(backup.shutil, 'which', lambda _: '/offline/tool')
     monkeypatch.setattr(backup, 'recipient_value', lambda: 'offline-public-recipient')
@@ -18,14 +19,15 @@ def test_identity_dump_uses_only_its_own_fixed_database_and_setting(monkeypatch)
         'PGHOST': 'identity-postgres', 'PGPORT': '5432', 'PGDATABASE': 'zitadel', 'PGUSER': 'zitadel',
         'PGPASSWORD': 'offline-password-marker', 'PGSSLMODE': 'disable'}
     assert 'DATABASE_URL' not in env and 'R2_SECRET_ACCESS_KEY_ZENAS' not in env
-    monkeypatch.setenv('TANK_REGION', 'us-east')
-    with pytest.raises(backup.StorageError, match='ZA only'):
+    monkeypatch.setenv('TANK_REGION', 'unmapped')
+    with pytest.raises(backup.StorageError, match='region refused'):
         backup.identity_dump_configuration()
 
 
 @pytest.mark.asyncio
-async def test_identity_backup_keeps_existing_encryption_and_own_archive_label(monkeypatch):
-    monkeypatch.setenv('TANK_REGION', 'za')
+@pytest.mark.parametrize('region', ['za', 'us-east'])
+async def test_identity_backup_keeps_existing_encryption_and_own_archive_label(monkeypatch, region):
+    monkeypatch.setenv('TANK_REGION', region)
     calls = []
     class Store:
         def __init__(self, owner):
@@ -50,7 +52,7 @@ async def test_identity_backup_keeps_existing_encryption_and_own_archive_label(m
     monkeypatch.setattr(backup, 'archive_file', archive)
     assert (await backup.backup_once('zenas', identity=True))['key'] == 'offline-complete-identity-manifest'
     assert calls == ['scope', 'encrypted', 'archive', 'close']
-    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.setenv('TANK_REGION', 'unmapped')
     with pytest.raises(backup.StorageError):
         await backup.backup_once('zenas', identity=True)
     with pytest.raises(backup.StorageError):

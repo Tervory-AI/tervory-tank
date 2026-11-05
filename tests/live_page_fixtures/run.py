@@ -53,7 +53,7 @@ def prepare(folder: Path):
     write('package.json', json.dumps({'private': True, 'dependencies': json.loads((WORKSPACE / 'package.json').read_text())['dependencies']}))
     write('identity.ts', 'export async function auth(){return {userId:"proof-owner"};}')
     write('tsconfig.json', json.dumps({'compilerOptions': {'baseUrl': '.', 'target': 'ES2022', 'module': 'esnext', 'moduleResolution': 'bundler', 'jsx': 'preserve', 'strict': True, 'esModuleInterop': True, 'skipLibCheck': True, 'paths': {'@/*': [str(WORKSPACE / '*')]}}}))
-    write('next.config.mjs', 'export default {experimental:{externalDir:true},devIndicators:false,webpack(config){config.resolve.alias={"@clerk/nextjs/server$":' + json.dumps(str(folder / 'identity.ts')) + ',"@":' + json.dumps(str(WORKSPACE)) + ',...config.resolve.alias};return config;}};')
+    write('next.config.mjs', 'export default {experimental:{externalDir:true},devIndicators:false,webpack(config){config.resolve.alias={"@/lib/trigger-signin$":' + json.dumps(str(folder / 'identity.ts')) + ',"@":' + json.dumps(str(WORKSPACE)) + ',...config.resolve.alias};return config;}};')
     write('app/layout.tsx', f'''import {{jost, inter, mono}} from {json.dumps(str(WORKSPACE / 'app/fonts'))};
 export default function Layout({{children}}:{{children:React.ReactNode}}){{return <html lang="en" className={{`${{jost.variable}} ${{inter.variable}} ${{mono.variable}}`}}><body style={{{{margin:0}}}}>{{children}}</body></html>}}''')
     write('app/autumbra/page.tsx', 'export {default} from "@/app/autumbra/page";')

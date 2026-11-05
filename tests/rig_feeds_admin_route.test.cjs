@@ -10,6 +10,7 @@ function moduleFrom(relative, bindings, globals = {}) {
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: name => {
+    if (name === '@/lib/trigger-signin-fetch') return { signinFetch: (...args) => globals.fetch(...args) };
     assert(name in bindings, `Unexpected dependency ${name}`); return bindings[name];
   }, process: { env: globals.env || {} }, URL, URLSearchParams, Headers, AbortSignal, AbortController, setTimeout, clearTimeout, Uint8Array, TextDecoder, Set, Error, console, ...globals });
   return exports;
@@ -49,19 +50,19 @@ async function main() {
   // Only the HTTP boundary is replaced; real actions and route call the real tank.ts exports.
   const forwarded = [];
   const regionTransport = moduleFrom('workspace/app/api/zenas/tank.ts', {});
-  const tank = moduleFrom('workspace/lib/tank.ts', { '@/app/api/zenas/tank': regionTransport }, { env: { TANK_API_KEY: 'test-key' }, fetch: async (url, options) => {
-    // Tenant home lookup: no recorded home, so the call stays on this Tank.
-    if (String(url).includes('/v1/tenants/') && String(url).endsWith('/home')) {
-      return { ok: false, status: 404, json: async () => ({ detail: { code: 'tenant_home_missing' } }) };
-    }
+  const tankFetch = async (url, options) => {
+    if (String(url).includes('/v1/tenants/') && String(url).endsWith('/home')) return {ok:false,status:404,json:async()=>({detail:{code:'tenant_home_missing'}})};
     url = String(url);
     forwarded.push({ url, options });
     return { ok: true, status: 200, json: async () => url.endsWith('/mapping')
       ? { preview_id: 'server-preview', fields: ['code'], columns: { sku: 'code' }, required: ['sku'] }
       : { saved: true } };
-  } });
+  };
+  // Trigger sign-in adds its signed token inside signinFetch; offline, it passes straight to the fake.
+  const tank = moduleFrom('workspace/lib/tank.ts', { '@/app/api/zenas/tank': regionTransport,
+    '@/lib/trigger-signin-fetch': { signinFetch: tankFetch } }, { env: { TANK_API_KEY: 'test-key' }, fetch: tankFetch });
   const actions = moduleFrom('workspace/app/rig/admin/actions.ts', {
-    '@clerk/nextjs/server': { auth: async () => ({ userId: 'server-user', orgRole: role }) },
+    '@/lib/trigger-signin': { auth: async () => ({ userId: 'server-user', orgRole: role }) },
     '@/lib/tenant': { activeTenant: async () => active },
     '../../review/founder': { isListedFounder: () => false },
     '@/lib/tank': tank,

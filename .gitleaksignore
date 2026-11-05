@@ -1,6 +1,6 @@
 # PR #374: exact historical findings triaged by Claude; no values or path-wide exemptions.
 
-# Claude-reviewed dummy Clerk publishable test keys used for CI/offline builds; not credentials.
+# Claude-reviewed historical public build values; no credential-prefix exemptions.
 1f2b472970179e339cc44746904cccbf08c61470:tests/base_proof/atf-download/README.md:generic-api-key:83
 1f2b472970179e339cc44746904cccbf08c61470:tests/base_proof/atf_download.py:generic-api-key:114
 2b12945dc78ffe3d43bf6100ba1f1517210a409e:tests/tiger_works/evidence/local_proof.py:generic-api-key:107

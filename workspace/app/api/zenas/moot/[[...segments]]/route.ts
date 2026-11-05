@@ -1,4 +1,4 @@
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth, signinDirectory } from "@/lib/trigger-signin";
 import { currentTenant } from "@/lib/tenant";
 import { isFounder } from "@/lib/admin";
 import { isWorkspaceOrigin } from "@/lib/workspace-origin";
@@ -49,7 +49,7 @@ async function serve(req: Request, context: Context) {
     if (!identity.userId) return reply({ error: "not_signed_in" }, 401);
     const tenant = await currentTenant();
     if (tenant.userId !== identity.userId) return reply({ error: "not_found" }, 404);
-    const client = await clerkClient();
+    const client = await signinDirectory();
     const ownMembership = await client.organizations.getOrganizationMembershipList({ organizationId: tenant.orgId, userId: [tenant.userId], limit: 1 });
     if (!ownMembership.data.some(m => m.publicUserData?.userId === tenant.userId)) return reply({ error: "not_found" }, 404);
     const founder = isFounder(tenant.userId);

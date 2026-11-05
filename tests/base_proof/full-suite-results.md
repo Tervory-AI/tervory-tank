@@ -45,7 +45,7 @@ Rebase preservation checks:
 Focused validation: 23 Base/CSV/boundary tests passed. CSV cases assert sentences
 for blocked/missing/unknown reasons, exact ISO dates, unchanged phone values and
 source URLs, while the stored reason and count filter stay unchanged. Workspace
-production build (CI dummy Clerk settings), CI Ruff and whitespace checks passed.
+production build (CI dummy Trigger sign-in settings), CI Ruff and whitespace checks passed.
 
 `tests/test_tank_boots.py`: 1 passed in 8.78s. It starts the real Tank under uvicorn
 twice on one empty database and checks /health both times. See tank-startup.txt

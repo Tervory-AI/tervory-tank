@@ -1,4 +1,4 @@
-// Run the actual founder route, Clerk tenant mapping and Tank helper offline.
+// Run the actual founder route, Trigger sign-in tenant mapping and Tank helper offline.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -16,9 +16,11 @@ let session = {userId: 'client-a', orgId: 'org_a'};
 const load = Module._load;
 Module._load = function(name, parent, ...rest) {
   if (name === 'server-only') return {};
-  if (name === '@clerk/nextjs/server') return {
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin') return {
     auth: async () => session,
-    clerkClient: async () => ({organizations: {getOrganization: async ({organizationId}) => ({id: organizationId, name: 'Offline'})}}),
+    signinDirectory: async () => ({organizations: {getOrganization: async ({organizationId}) => ({id: organizationId, name: 'Offline'})}}),
   };
   return load.call(this, name, parent, ...rest);
 };

@@ -1,3 +1,4 @@
+import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
 import { regionTank, type Region } from "@/app/api/zenas/tank";
 
 // The only way the Workspace talks to a model: through Tank.
@@ -101,7 +102,7 @@ const DEVICE_ERRORS = new Set(["authorization_pending", "slow_down", "access_den
 /**
  * CLI device sign-in corridor (unauthenticated: create a code, poll, refresh,
  * revoke). This Workspace fronts only its own us-east box; ZA CLIs call the ZA
- * Tank directly. Approval is never reachable here: it needs a Clerk session.
+ * Tank directly. Approval is never reachable here: it needs a SigninDirectory session.
  */
 async function personalDeviceRequest(request: Request, path: string[], timeoutMs = DEVICE_PROXY_TIMEOUT_MS): Promise<Response> {
   const headers = { "Cache-Control": "no-store" };
@@ -140,7 +141,7 @@ async function personalDeviceRequest(request: Request, path: string[], timeoutMs
   } catch { return refused(502); }
 }
 
-/** CLI-only public corridor. No Clerk cookies or service-key identity assertions. */
+/** CLI-only public corridor. No SigninDirectory cookies or service-key identity assertions. */
 export async function personalCommandRequest(request: Request, path: string[],
                                              limits: { headersMs: number; idleMs: number; deviceMs: number; bodyMs?: number } = { headersMs: PROXY_HEADERS_TIMEOUT_MS, idleMs: PROXY_IDLE_MS, deviceMs: DEVICE_PROXY_TIMEOUT_MS, bodyMs: COMMAND_BODY_TIMEOUT_MS }): Promise<Response> {
   const headers = { "Cache-Control": "no-store" };
@@ -236,7 +237,7 @@ export function rigPriceHistory(identity: { tenantId: string; userId: string }, 
   } });
 }
 
-/** API-only reports. Identity is supplied by Clerk on the server, never the browser. */
+/** API-only reports. Identity is supplied by SigninDirectory on the server, never the browser. */
 export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams(), signal?: AbortSignal): Promise<Response> {
   const allowed = ["", "ensure", "clients", "base", "tiger", "market_lab", "rig", "zenas", "trigger", "tisan", "radix", "autumbra"];
   if (!allowed.includes(path)) throw new Error("Unknown request.");
@@ -253,7 +254,7 @@ export async function caseStudyRequest(identity: { tenantId: string; userId: str
   });
 }
 
-// Optional bookkeeping, never an authorization or squad grant. Durable Clerk
+// Optional bookkeeping, never an authorization or squad grant. Durable SigninDirectory
 // identity + Tank grants/ledger are the retry source on later requests, including
 // after process restarts. This bounded per-process guard only limits load.
 const reportRegistrations = new Map<string, { failures: number; next: number; pending?: Promise<void> }>();
@@ -692,6 +693,54 @@ export type TigerWatch = {
   alert_price?: boolean;
   alert_stock?: boolean;
 };
+
+export type TigerMatch = {
+  site_label?: string;
+  id: string;
+  tenant_id: string;
+  sku: string;
+  url: string;
+  seen_on: string;
+  checked_at: string;
+  state: "suggested" | "rejected" | "confirmed";
+  method: string;
+  product?: { name: string | null; brand: string | null; mpn: string | null };
+  identifiers: {
+    own: { gtin?: string | null; brand?: string | null; mpn?: string | null };
+    seen: { gtins?: string[]; brand?: string | null; mpn?: string | null };
+  };
+};
+export type TigerPosition = {
+  sku: string;
+  name?: string | null;
+  own_price: string | number | null;
+  currency: string | null;
+  competitors: { url: string; price: string | number | null; currency: string | null; stock: string | null; checked_at: string | null }[];
+};
+
+export type TigerSiteCheck = { url: string; pages: number | null; matches: number; checked_at: string | null; status: "checked" | "human_check" | "robots" | null; skipped: number | null };
+
+export function listTigerMatches(actor: AccessIdentity): Promise<{ tenant_id: string; matches: TigerMatch[]; site_checks?: TigerSiteCheck[] }> {
+  return accessRequest(actor, "tiger/matches");
+}
+
+export function listTigerPosition(actor: AccessIdentity): Promise<{ tenant_id: string; products: TigerPosition[] }> {
+  return accessRequest(actor, "tiger/position");
+}
+
+/** A button click uses Tank's existing durable card confirmation and dispatch.
+ * No model planner runs; dispatch calls the same /access/tiger/match/{decision} route.
+ */
+export async function decideTigerMatch(actor: AccessIdentity, matchId: string, decision: "confirm" | "reject" | "undo"): Promise<TigerMatch> {
+  const post = async (path: string, body: unknown) => (await commandRequest(actor, path, { method: "POST", body: JSON.stringify(body) })).json();
+  const thread = await post("threads", { title: "Tiger" });
+  const card = await post(`threads/${encodeURIComponent(thread.thread_id)}/actions`, {
+    tool: `tiger.match.${decision}`, arguments: { match_id: matchId },
+  });
+  const result = await post(`cards/${encodeURIComponent(card.card_id)}`, { action: "confirm" });
+  if (result.status !== "confirmed" || result.result?.match?.id !== matchId || result.result.match.tenant_id !== actor.tenantId) throw new Error("Tiger decision was not confirmed");
+  return result.result.match as TigerMatch;
+}
 
 export type TigerObservation = {
   id: string;
@@ -1257,7 +1306,7 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
   headers.set("x-tervory-home-region", target.home ?? (process.env.TANK_REGION === "za" ? "za" : "us-east"));
   headers.set("x-tervory-user", identity.userId);
   headers.set("x-tervory-tenant", identity.tenantId);
-  headers.set("x-tervory-admin", identity.userId);
+  headers.delete("x-tervory-admin");
   // Lane A resolves tenant_squad from the database on each authenticated call.
   // Never turn a caller header into tool authority.
   headers.delete("x-tervory-squad");
@@ -1388,7 +1437,7 @@ export async function mootPublishedMatches(matchId?: string, signal?: AbortSigna
   return response.json();
 }
 
-// Market Lab: the server derives tenantId from Clerk before calling this corridor.
+// Market Lab: the server derives tenantId from SigninDirectory before calling this corridor.
 export type MarketFeed = {
   id: string; name: string; kind: "copy" | "linked"; rows: number;
   url?: string; cadence?: "daily" | "weekly" | "monthly" | "annual";
@@ -1470,7 +1519,7 @@ export async function triggerCrmRead(
     method: "GET", cache: "no-store", redirect: "error", signal,
     headers: {
       "accept": "application/json", "x-tank-key": TANK_API_KEY,
-      "x-tervory-user": identity.userId, "x-tervory-admin": identity.userId,
+      "x-tervory-user": identity.userId,
       "x-tervory-tenant": identity.tenantId,
     },
   });
