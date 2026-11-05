@@ -35,8 +35,7 @@ jobs:
       - name: Prepare bounded local CPU runtime
         run: |
           mkdir -p "$TMPDIR"
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          bash .github/scripts/install-video-test-tools.sh
           python -m pip install --require-hashes -r agents/video_shop/requirements.lock -r agents/video_shop/requirements-test.lock
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
