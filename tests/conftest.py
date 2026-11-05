@@ -21,6 +21,11 @@ _TANK = Path(__file__).resolve().parents[1] / "tank"
 if str(_TANK) not in sys.path:
     sys.path.insert(0, str(_TANK))
 
+# paid_http.Client inherits httpx.AsyncClient at import time. Establish its real
+# base before offline fixtures temporarily replace the shared httpx constructor;
+# otherwise an earlier room fixture permanently changes later Tank lifecycles.
+__import__("paid_http")
+
 
 @pytest.fixture(autouse=True)
 def _no_skill_temp_sweep(monkeypatch):

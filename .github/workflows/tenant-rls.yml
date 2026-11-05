@@ -67,6 +67,8 @@ jobs:
         run: npx tsc --noEmit
       - name: Verify required video tools from signed Ubuntu primary archives
         run: bash .github/scripts/install-video-test-tools.sh
+      - name: Fresh-process paid HTTP fixture import order
+        run: python -m pytest -q tests/test_paid_http_fixture_order.py
       - name: Disposable database isolation and affected regressions
         shell: bash
         run: |
