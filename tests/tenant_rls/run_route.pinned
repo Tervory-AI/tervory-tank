@@ -15,7 +15,7 @@ async def run_route(req: RouteRequest, task_id=None, caller=None, **kwargs):
             raise HTTPException(403, "Model override is not enabled for this task type")
         if kwargs["model_override"] not in {row["name"] for row in await list_models()}:
             raise HTTPException(422, "Model is not on the roster")
-    if MOA_SEAT_TASK.fullmatch(req.task_type) and kwargs.get("model_override") is None:
+    if is_moa_seat(req.task_type) and kwargs.get("model_override") is None:
         raise HTTPException(400, "A MoA seat requires a model override")
     inherited = paid_steps.current.get()
     if inherited is None:

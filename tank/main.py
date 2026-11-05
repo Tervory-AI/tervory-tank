@@ -1066,6 +1066,14 @@ def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
 # to pin one call; MoA uses the parent task's policy limits.
 MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn", "command.code"})
 MOA_SEAT_TASK = re.compile(r"[a-zA-Z0-9_.-]+#moa\.[a-z][a-z0-9_]{0,79}")
+_MOA_BASE = re.compile(r"[a-zA-Z0-9_.-]+")
+_MOA_SEAT = re.compile(r"[a-z][a-z0-9_]{0,79}")
+
+
+def is_moa_seat(task_type: str) -> bool:
+    """Linear-time check for '<task>#moa.<seat>' on caller-supplied task types."""
+    base, sep, seat = task_type.partition("#moa.")
+    return bool(sep) and _MOA_BASE.fullmatch(base) is not None and _MOA_SEAT.fullmatch(seat) is not None
 
 
 def override_allowed(task_type: str) -> bool:
@@ -1265,7 +1273,7 @@ async def run_route(req: RouteRequest, task_id=None, caller=None, **kwargs):
             raise HTTPException(403, "Model override is not enabled for this task type")
         if kwargs["model_override"] not in {row["name"] for row in await list_models()}:
             raise HTTPException(422, "Model is not on the roster")
-    if MOA_SEAT_TASK.fullmatch(req.task_type) and kwargs.get("model_override") is None:
+    if is_moa_seat(req.task_type) and kwargs.get("model_override") is None:
         raise HTTPException(400, "A MoA seat requires a model override")
     inherited = paid_steps.current.get()
     if inherited is None:
