@@ -4,6 +4,7 @@ const path = require("node:path");
 const {
   workspace,
 } = require("../command_acceptance_20261031/workspace_loader.cjs");
+const {legacyHome} = require("../legacy_tenant_home.cjs");
 const id = "00000000-0000-0000-0000-000000000411";
 const attacks = [
   "../admin",
@@ -30,6 +31,7 @@ const query = [
 ];
 (async () => {
   const calls = [];
+  const homeLookups = [];
   let identities = 0;
   const load = workspace({
     env: {
@@ -38,6 +40,8 @@ const query = [
       TANK_URL_ZA: "https://za.placeholder.invalid",
     },
     fetch: async (url, init) => {
+      const home = legacyHome(url, init, {tenants:[id], key:'placeholder-workspace-key', origin:'https://tank.placeholder.invalid', calls:homeLookups});
+      if (home) return home;
       calls.push({ url: String(url), init });
       return Response.json({ settings: { enabled: false } });
     },
@@ -68,9 +72,10 @@ const query = [
   const actions = load("app/trigger/actions.ts");
   const refused = async (invoke) => {
     const before = calls.length,
-      beforeIdentity = identities;
+      beforeIdentity = identities, beforeHome = homeLookups.length;
     await assert.rejects(invoke);
     assert.equal(calls.length, before, "malformed value reached fetch");
+    assert.equal(homeLookups.length, beforeHome, "malformed value reached the directory");
     assert.equal(
       identities,
       beforeIdentity,
@@ -79,6 +84,7 @@ const query = [
   };
   for (const section of crm) {
     await actions.readTrigger("crm", section);
+    assert(homeLookups.length > 0);
     assert.equal(
       calls.at(-1).url,
       `https://tank.placeholder.invalid/v1/command/trigger/console/crm/${section}`,

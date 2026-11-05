@@ -54,9 +54,14 @@ async def runtime(monkeypatch):
     monkeypatch.setattr(main, "box_region", lambda: "us-east")
     monkeypatch.setattr(main, "TANK_API_KEY", "placeholder-tank-key")
 
+    async def legacy_home(sql, tenant):
+        assert sql == "SELECT home_region FROM tank.tenants WHERE tenant_id=$1"
+        assert tenant == rt.actor.tenant_id
+        return None  # Explicitly unonboarded fixture actors retain their own box.
+
     @asynccontextmanager
     async def acquire():
-        yield SimpleNamespace(fetch=AsyncMock(return_value=[{"agent": "tiger"}]))
+        yield SimpleNamespace(fetch=AsyncMock(return_value=[{"agent": "tiger"}]), fetchval=legacy_home)
     monkeypatch.setattr(command, "db", lambda: SimpleNamespace(acquire=acquire))
     # The room's actual public-address checker runs; DNS answers are entirely local.
     real_dns = socket.getaddrinfo

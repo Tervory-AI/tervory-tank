@@ -43,6 +43,7 @@ export const isRedirect = (response: Response) =>
 /** fetch(url, init) then read(response), all within timeoutMs. init.signal still aborts early. */
 export async function boundedFetch<T>(url: URL | string, init: RequestInit, timeoutMs: number,
                                       read: (response: Response) => Promise<T>): Promise<T> {
+  if (init.signal?.aborted) throw init.signal.reason;
   const controller = new AbortController();
   const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
   let response: Response | undefined;
@@ -54,7 +55,20 @@ export async function boundedFetch<T>(url: URL | string, init: RequestInit, time
       try { response?.body?.cancel().catch(() => undefined); } catch { /* locked by the reader */ }
     }, timeoutMs);
   });
+  let callerAbort: (() => void) | undefined;
+  const cancelled = new Promise<never>((_, reject) => {
+    if (!init.signal) return;
+    const caller = init.signal;
+    callerAbort = () => {
+      reject(caller.reason);
+      controller.abort();
+      try { response?.body?.cancel().catch(() => undefined); } catch { /* locked reader */ }
+    };
+    caller.addEventListener("abort", callerAbort, { once: true });
+    if (caller.aborted) callerAbort();
+  });
   const work = (async () => {
+    if (signal.aborted) throw signal.reason;
     response = await fetch(url, { ...init, redirect: "manual", signal });
     if (isRedirect(response)) {
       await response.body?.cancel().catch(() => undefined);
@@ -63,7 +77,11 @@ export async function boundedFetch<T>(url: URL | string, init: RequestInit, time
     return read(response);
   })();
   work.catch(() => undefined);
-  try { return await Promise.race([work, deadline]); } finally { clearTimeout(timer); }
+  try { return await Promise.race([work, deadline, cancelled]); }
+  finally {
+    clearTimeout(timer);
+    if (callerAbort) init.signal?.removeEventListener("abort", callerAbort);
+  }
 }
 
 /**
@@ -1313,9 +1331,15 @@ export class CommandRequestError extends Error {
 }
 export async function commandRequest(identity: { tenantId: string; userId: string; tenantAdmin?: boolean }, path: string, init: RequestInit = {}, options: { passThroughErrors?: boolean } = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
+  const headersUntil = Date.now() + COMMAND_LIMITS.headersMs;
+  const stop = new AbortController();
+  const signal = init.signal ? AbortSignal.any([init.signal, stop.signal]) : stop.signal;
   let target;
-  try { target = await tenantDestination(identity.tenantId); }
-  catch { throw new CommandRequestError(503, "home_unavailable", "This workspace home is unavailable."); }
+  try { target = await tenantDestination(identity.tenantId, Math.min(COMMAND_LIMITS.headersMs, 10_000), signal); }
+  catch (error) {
+    if (error instanceof DeadlineError) throw new CommandRequestError(504, "timeout", "The conversation service did not answer in time. Reload the chat before trying again.");
+    throw new CommandRequestError(503, "home_unavailable", "This workspace home is unavailable.");
+  }
   const url = new URL(`/v1/command/${path}`, target.url);
   url.searchParams.delete("tenant_id");
   url.searchParams.delete("user_id");
@@ -1334,11 +1358,9 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
   // 3xx refused) and a bound on the body that cancels it: idle for event streams, idle
   // plus total for everything else, error bodies included. Works under undici 6's
   // redirect:"error" + GC hang because every wait is raced against a timer.
-  const stop = new AbortController();
-  const signal = init.signal ? AbortSignal.any([init.signal, stop.signal]) : stop.signal;
   let upstream: Response;
   try {
-    upstream = await boundedFetch(url, { ...init, headers, cache: "no-store", signal }, COMMAND_LIMITS.headersMs, async answer => answer);
+    upstream = await boundedFetch(url, { ...init, headers, cache: "no-store", signal }, Math.max(1, headersUntil - Date.now()), async answer => answer);
   } catch (error) {
     if (error instanceof DeadlineError) throw new CommandRequestError(504, "timeout", "The conversation service did not answer in time. Reload the chat before trying again.");
     throw new CommandRequestError(502, "request_failed", "This request could not be completed. Reload the chat before trying again.");
@@ -1559,12 +1581,12 @@ function contentTank(region: Region): { url: string; key: string } | null {
 }
 
 /** The US directory receives a tenant UUID, never the content being routed. */
-export async function tenantDestination(tenantId: string, timeoutMs = 10_000): Promise<{ url: string; key: string; home: Region | null }> {
+export async function tenantDestination(tenantId: string, timeoutMs = 10_000, signal?: AbortSignal): Promise<{ url: string; key: string; home: Region | null }> {
   const directory = contentTank("us-east");
   if (!directory) throw new Error("The tenant region directory is not configured.");
   const response = await boundedFetch(
     new URL("/v1/tenants/" + encodeURIComponent(tenantId) + "/home", directory.url),
-    { method: "GET", headers: { "x-tank-key": directory.key }, cache: "no-store" }, timeoutMs,
+    { method: "GET", headers: { "x-tank-key": directory.key }, cache: "no-store", signal }, timeoutMs,
     async response => ({ status: response.status, body: await response.json().catch(() => null) }),
   );
   const body = response.body;
@@ -1642,7 +1664,7 @@ function regionalCall(target: {url: string; key: string; home: Region | null}, r
 
 /** Resolve authority before transporting private content. Never follow a redirect. */
 export async function tenantFetch(tenant: string | null, raw: URL | string, init: RequestInit = {}): Promise<Response> {
-  const target = tenant ? await tenantDestination(tenant) : {url: TANK_URL, key: TANK_API_KEY, home: null};
+  const target = tenant ? await tenantDestination(tenant, 10_000, init.signal ?? undefined) : {url: TANK_URL, key: TANK_API_KEY, home: null};
   const call = regionalCall(target, raw, init);
   const response = await fetch(call.url, call.init);
   if (isRedirect(response)) {

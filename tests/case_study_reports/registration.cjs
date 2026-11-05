@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Module = require('node:module');
 const root = path.resolve(__dirname, '../..');
+const {legacyHome} = require('../legacy_tenant_home.cjs');
+const homeLookups = [];
 const ts = require(path.join(root, 'workspace/node_modules/typescript'));
 const originalResolve = Module._resolveFilename;
 Module._resolveFilename = function (name, parent, ...rest) {
@@ -37,17 +39,20 @@ Module._load = function (name, parent, ...rest) {
 };
 process.env.TANK_URL = 'http://tank.offline.invalid';
 process.env.TANK_API_KEY = 'dummy-offline';
+process.env.TANK_REGION = 'us-east';
 let now = Date.now(), calls = [], mode = 503, release;
 Date.now = () => now;
 const events = [];
 console.warn = (...args) => events.push(args);
 console.info = (...args) => events.push(args);
 global.fetch = async (url, init) => {
+  const home = legacyHome(url,init,{tenants:[...Object.values(bindings),'bug','timeout'],key:'dummy-offline',origin:process.env.TANK_URL,calls:homeLookups});
+  if(home)return home;
   assert.equal(new URL(url).origin, process.env.TANK_URL);
   assert.equal(init.method, 'POST');
   assert.equal(init.redirect, 'manual');
   assert.ok(init.signal instanceof AbortSignal);
-  calls.push(init.headers);
+  calls.push(Object.fromEntries(new Headers(init.headers)));
   if (mode === 'network') throw new TypeError('private transport detail');
   if (mode === 'bug') throw new Error('programming error');
   if (mode === 'wait') await new Promise(resolve => { release = resolve; });
@@ -61,6 +66,7 @@ const tank = require('../../workspace/lib/tank.ts');
   assert.equal(a.tenantId, tenant.tenantIdFor('60001'));
   assert.deepEqual(await tenant.activeTenant(), a);
   assert.equal(calls.length, 1); // Outage backoff.
+  assert(homeLookups.length > 0);
   now += 1000;
   await tenant.activeTenant();
   assert.equal(calls.length, 2);
@@ -91,9 +97,11 @@ const tank = require('../../workspace/lib/tank.ts');
     await assert.rejects(tenant.activeTenant);
     await assert.rejects(tenant.activeTenant); // Failure never becomes cached approval.
   }
+  const beforeDeniedHomes = homeLookups.length;
   authError = new Error('Trigger sign-in auth failed');
   await assert.rejects(tenant.currentTenant, /Trigger sign-in auth failed/);
   await assert.rejects(tenant.activeTenant, /Trigger sign-in auth failed/);
+  assert.equal(homeLookups.length, beforeDeniedHomes);
   authError = undefined;
   session = { userId: 'alice', orgId: null };
   await assert.rejects(tenant.currentTenant, /Trigger sign-in required/);
@@ -110,8 +118,8 @@ const tank = require('../../workspace/lib/tank.ts');
     mode = modeValue;
     session = { userId: 'bob', orgId: `org_${modeValue}` };
     assert.equal((await tenant.activeTenant()).userId, 'bob');
-    assert.equal(calls.at(-1)['X-Tervory-Tenant'], tenant.tenantIdFor(session.orgId));
-    assert.equal(calls.at(-1)['X-Tervory-User'], 'bob');
+    assert.equal(calls.at(-1)['x-tervory-tenant'], tenant.tenantIdFor(session.orgId));
+    assert.equal(calls.at(-1)['x-tervory-user'], 'bob');
   }
   // Reload the helper to model a process restart: durable identity is enough to
   // reconcile again; no pending in-memory task is required for recovery.
@@ -121,7 +129,7 @@ const tank = require('../../workspace/lib/tank.ts');
   const beforeRestart = calls.length;
   await restarted.ensureCaseStudyReports({ tenantId: a.tenantId, userId: a.userId });
   assert.equal(calls.length, beforeRestart + 1);
-  assert.equal(calls.at(-1)['X-Tervory-Tenant'], a.tenantId);
+  assert.equal(calls.at(-1)['x-tervory-tenant'], a.tenantId);
   mode = 'bug';
   await assert.rejects(() => tank.ensureCaseStudyReports({ tenantId: 'bug', userId: 'alice' }), /programming error/);
   mode = 'timeout';
