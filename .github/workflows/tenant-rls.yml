@@ -73,6 +73,8 @@ jobs:
           tests/test_tiger_competitors.py::test_room_migration_and_nonowner_tank_admin_after_role_ownership
           tests/test_tiger_competitors.py::test_room_schema_concurrently_repeats_without_catalog_writes
           tests/test_tiger_competitors.py::test_room_schema_repairs_only_missing_table_privileges
+      - name: Read-only lock inventory regressions
+        run: python -m pytest -q -s tests/test_supply_chain_watch.py
       - name: Capture integration registry for reviewed golden updates
         if: always()
         run: |

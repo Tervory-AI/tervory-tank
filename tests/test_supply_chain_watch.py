@@ -219,3 +219,40 @@ def test_nightly_is_default_branch_only_and_does_not_run_pr_code():
     assert run["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
     assert "--publish" not in run["run"]
     assert "SUPPLY_CHAIN_GITHUB_TOKEN" not in json.dumps(workflow)
+
+
+@pytest.mark.parametrize('name,version', [('torch', '2.10.0'), ('torchvision', '0.25.0')])
+def test_hash_pinned_cpu_wheels_preserve_package_and_local_version(name, version):
+    url = f'https://download.pytorch.org/whl/cpu/{name}-{version}%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl'
+    text = f'{name} @ {url} ' + '--hash=sha256:' + 'a' * 64
+    assert python_locks('requirements.lock', text) == [Dependency('PyPI', name, version + '+cpu', 'requirements.lock')]
+
+
+@pytest.mark.parametrize('source', [
+    'http://wheels.example/torch-2.10.0-cp312-cp312-linux_x86_64.whl',
+    'https://user:dummy@wheels.example/torch-2.10.0-cp312-cp312-linux_x86_64.whl',
+    'https://wheels.example/other-2.10.0-cp312-cp312-linux_x86_64.whl',
+    'https://wheels.example/torch-2.10.0.tar.gz',
+    'https://wheels.example/torch-2.10.0-cp312-cp312-linux_x86_64.whl?download=1',
+    'https://wheels.example/torch-2.10.0-cp312-cp312-linux_x86_64.whl#fragment',
+    'https://wheels.example/torch-bad.whl',
+    'git+https://wheels.example/torch.git',
+])
+def test_unknown_direct_sources_still_make_inventory_incomplete(tmp_path, source):
+    lock = tmp_path / 'requirements.lock'
+    lock.write_text('torch @ ' + source + ' --hash=sha256:' + 'a' * 64)
+    result = inventory(tmp_path, ['requirements.lock'])
+    assert result.errors and result.coverage['requirements.lock'].startswith('unreadable')
+
+
+@pytest.mark.parametrize('suffix', ['', ' --hash=sha256:abc', ' --hash=sha256:' + 'g' * 64,
+    ' --hash=sha256:' + 'a' * 64 + ' --trusted-host wheels.example'])
+def test_direct_wheels_require_only_valid_hash_options(suffix):
+    with pytest.raises(ValueError):
+        python_locks('requirements.lock', 'torch @ https://wheels.example/torch-2.10.0-cp312-cp312-linux_x86_64.whl' + suffix)
+
+
+def test_hash_options_cannot_be_concatenated():
+    with pytest.raises(ValueError):
+        python_locks('requirements.lock', 'torch @ https://wheels.example/torch-2.10.0-cp312-cp312-linux_x86_64.whl '
+            + '--hash=sha256:' + 'a' * 64 + '--hash=sha256:' + 'b' * 64)

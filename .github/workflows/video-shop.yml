@@ -1,0 +1,48 @@
+name: video-shop CPU acceptance
+on:
+  pull_request:
+    paths:
+      - 'agents/video_shop/**'
+      - 'agents/rig/rigbox/**'
+      - 'tests/*video_shop*'
+      - 'tests/acceptance/test_video_shop.py'
+      - 'tests/fixtures/video_shop/**'
+      - '.github/workflows/video-shop.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: video-shop-cpu-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  video-shop-cpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TMPDIR: ${{ github.workspace }}/.tmp
+      VIDEO_SHOP_TEST_MODELS: ${{ github.workspace }}/.tmp/models
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12.14'
+      - name: Prepare bounded local CPU runtime
+        run: |
+          mkdir -p "$TMPDIR"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --require-hashes -r agents/video_shop/requirements.lock -r agents/video_shop/requirements-test.lock
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .tmp/models
+          key: video-shop-models-${{ hashFiles('agents/video_shop/models.json') }}
+      - name: Stage and verify immutable model assets
+        run: python agents/video_shop/prepare_models.py "$VIDEO_SHOP_TEST_MODELS"
+      - name: Speech and visible product to reviewed timeline and store cart, offline
+        run: python -m pytest -q tests/test_video_shop.py tests/test_video_shop_models.py tests/test_video_shop_overlay.py tests/acceptance/test_video_shop.py --disable-socket --allow-unix-socket
