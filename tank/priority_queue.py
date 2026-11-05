@@ -221,6 +221,7 @@ async def _process(tank, conn, job):
     except (WindowClosed, __import__("paid_steps").ApprovalRequired):
         await conn.execute("UPDATE tank.offpeak_jobs SET status='queued',sent_at=NULL WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])
     except Exception as exc:
+        tank.log.exception('Offpeak dispatch failed')
         detail = exc.detail if isinstance(exc, HTTPException) else None
         known = isinstance(detail, dict) and detail.get('ledger_id')
         await _finish(tank, conn, job, error='dispatch_failed', uncertain=not isinstance(exc, HTTPException) or
