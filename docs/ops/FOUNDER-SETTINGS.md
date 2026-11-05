@@ -44,6 +44,8 @@ One Boston resource serves every country. Setup emails the founder a link to set
 - One Enforce per client (#622; on the enforce-lifecycle service only, never on Watch): AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN (read and write, no deploy), AUTUMBRA_COOLIFY_PROJECT_UUID, AUTUMBRA_COOLIFY_SERVER_UUID, AUTUMBRA_COOLIFY_ENVIRONMENT, AUTUMBRA_COOLIFY_GITHUB_APP_UUID, AUTUMBRA_LIFECYCLE_KEY (on Tank and enforce-lifecycle only)
 - Code-fix PRs: GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED
 
+**Radix own-repository scan** (on Tank): TANK_GITHUB_READ_TOKEN, read access to Tervory-AI/tervory-tank for verifying the current main commit.
+
 **Radix** (#651, breach watch): HIBP_API_KEY, only if Have I Been Pwned's domain search is free for your domains.
 
 **Brains** (leave off): TIGER_BRAIN_ENABLED, ZENAS_BRAIN_ENABLED; SANDBOX_KEY_TIGER, SANDBOX_KEY_ZENAS (fill these now; they are only used when a brain is on).
@@ -76,6 +78,8 @@ Public project/client IDs, native founder subjects and organisation links are pr
 4. Meta: the Meta app and the WhatsApp business number (they produce the Trigger Facebook and WhatsApp values above).
 5. Google Cloud: the project with Business Profile API access (it produces TRIGGER_GOOGLE_OAUTH_*).
 6. GitHub repository secrets (not Coolify): CLI_RELEASE_SIGNING_KEY, CLI_RELEASE_SIGNING_PUBLIC_KEY. Only needed to sign CLI releases.
+
+7. Radix deploy gate in GitHub (not Coolify): repository variable RADIX_DEPLOY_TENANT_ID is the founder workspace id; repository secret TANK_API_KEY reuses the existing Tank service key. No new key is created.
 
 ## D. Wording only you can write (legal text)
 
