@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 import json
 import uuid
 from datetime import datetime, timezone
@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 import batch_providers
 import offpeak_schedule
+import paid_steps
 from tenant_db import tenant_scope
 
 
@@ -31,6 +32,7 @@ def worker_lock():
 
 class WindowClosed(Exception):
     """The clock crossed a window boundary during preflight; nothing was sent."""
+    _paid_unspent = True
 
 
 class QueuedResponse(BaseModel):
@@ -127,6 +129,14 @@ async def enqueue(tank, item, *, caller=None, task_id=None, model_override=None)
     snapshot = {'routing': policy, 'messages': item.messages, 'max_tokens': item.max_tokens,
                 'generation': item.generation, 'escalation': item.escalation,
                 'semantic_cache': item.cache_snapshot, 'schedule': schedule}
+    run = paid_steps.current.get()
+    if run is not None:
+        if run.tenant_id != req.tenant_id or run.run_id != req.paid_run_id:
+            raise HTTPException(409, 'Deferred paid run does not match its request')
+        snapshot['paid_run'] = {'tenant_id': str(run.tenant_id), 'run_id': str(run.run_id),
+                                'request_hash': run.request_hash, 'user_id': run.user_id,
+                                'thread_id': str(run.thread_id) if run.thread_id else None,
+                                'root_run_id': str(run.root_run_id) if run.root_run_id else None}
     async with tank.pool().acquire() as conn, conn.transaction():
         await conn.execute("""INSERT INTO tank.offpeak_jobs
             (id,tenant_id,region,request,policy,caller,task_id,model_override)
@@ -184,11 +194,13 @@ async def _finish(tank, conn, job, result=None, *, error=None, uncertain=False):
         json.dumps(result, default=str) if result is not None else None, error)
     if job.get('task_id'):
         content = result.get('content') if isinstance(result, dict) else None
+        receipt_id = uuid.UUID(str(result.get('ledger_id') or job['id'])) if isinstance(result, dict) else job['id']
         await conn.execute("""UPDATE tank.tasks SET status=$4,result=$5,error=$6,
             ledger_id=$3,finished_at=now()
-            WHERE id=$1 AND tenant_id=$2 AND (ledger_id IS NULL OR ledger_id=$3)""",
-            job['task_id'], job['tenant_id'], job['id'], 'failed' if error else 'done',
-            content, error)
+            WHERE id=$1 AND tenant_id=$2
+              AND (ledger_id IS NULL OR ledger_id=$7 OR ledger_id=$3)""",
+            job['task_id'], job['tenant_id'], receipt_id,
+            'done' if state == 'completed' else 'failed', content, error, job['id'])
     if error:
         await conn.execute("""UPDATE tank.ledger SET outcome=$3,error=$4
             WHERE id=$1 AND tenant_id=$2 AND outcome IN ('queued','sent')""",
@@ -246,15 +258,29 @@ async def _process(tank, conn, job):
     await conn.execute("""UPDATE tank.offpeak_jobs SET status='dispatching',sent_at=$3
         WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], sent_at)
     try:
-        work = tank.run_route(req, caller=job['caller'], task_id=job['task_id'],
-            model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
-            _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot=snapshot)
-        result = (await asyncio.wait_for(work, timeout=max(0, (req.deadline-now()).total_seconds()))
-                  if req.deadline is not None else await work)
+        saved_run = snapshot.get('paid_run')
+        scope = nullcontext()
+        if saved_run is not None:
+            run = paid_steps.Run(uuid.UUID(saved_run['tenant_id']), uuid.UUID(saved_run['run_id']),
+                                 saved_run['request_hash'], saved_run.get('user_id'),
+                                 uuid.UUID(saved_run['thread_id']) if saved_run.get('thread_id') else None,
+                                 root_run_id=uuid.UUID(saved_run['root_run_id']) if saved_run.get('root_run_id') else None)
+            if run.tenant_id != job['tenant_id'] or run.tenant_id != req.tenant_id or run.run_id != req.paid_run_id:
+                raise HTTPException(409, 'Deferred paid run does not match its request')
+            # This server-owned snapshot preserves the original Command fingerprint.
+            # Fresh admission still checks the current controls and existing grant.
+            scope = paid_steps.run_scope(run)
+        with scope:
+            work = tank.run_route(req, caller=job['caller'], task_id=job['task_id'],
+                model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
+                _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot=snapshot)
+            result = (await asyncio.wait_for(work, timeout=max(0, (req.deadline-now()).total_seconds()))
+                      if req.deadline is not None else await work)
         await _finish(tank, conn, job, result.model_dump(mode='json'))
-    except WindowClosed:
+    except (WindowClosed, __import__("paid_steps").ApprovalRequired):
         await conn.execute("UPDATE tank.offpeak_jobs SET status='queued',sent_at=NULL WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])
     except Exception as exc:
+        tank.log.exception('Offpeak dispatch failed')
         detail = exc.detail if isinstance(exc, HTTPException) else None
         known = isinstance(detail, dict) and detail.get('ledger_id')
         await _finish(tank, conn, job, error='dispatch_failed', uncertain=not isinstance(exc, HTTPException) or
