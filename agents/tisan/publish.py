@@ -33,7 +33,7 @@ def stored_build(root: Path, tenant: str, slug: str, number: int) -> dict:
     total = 0
     manifest_path, archive_path = folder / f'{number}.json', folder / f'{number}.tar.gz'
     for path in (manifest_path, archive_path):
-        if path.is_symlink() or root.resolve() not in path.resolve().parents:
+        if path.is_symlink() or not path.resolve().is_relative_to(root.resolve() / "builds" / tenant / slug):
             raise ValueError('invalid stored build')
     if manifest_path.stat().st_size > 1024 * 1024 or archive_path.stat().st_size > MAX_BYTES:
         raise ValueError('stored build too large')

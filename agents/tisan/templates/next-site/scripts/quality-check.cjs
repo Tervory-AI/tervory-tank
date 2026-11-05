@@ -225,10 +225,21 @@ async function browserChecks(origin, paths, proxyUrl) {
         await context.close();
       }
     }
+    if (existsSync("visual/frames.json")) {
+      const { visualChecks } = require("./visual-check.cjs");
+      let recorded;
+      try {
+        recorded = JSON.parse(readFileSync("visual/frames.json", "utf8"));
+      } catch {
+        recorded = null;
+      }
+      accessibility.visual = await visualChecks(browser, origin, recorded);
+      if (!accessibility.visual.ok) accessibility.summary = "frame data incomplete";
+    }
   } finally {
     await browser.close();
   }
-  accessibility.ok = accessibility.violations.length === 0;
+  accessibility.ok = accessibility.violations.length === 0 && accessibility.visual?.ok !== false;
   links.ok = links.failures.length === 0;
   return [accessibility, links];
 }

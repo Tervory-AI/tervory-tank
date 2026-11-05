@@ -10,6 +10,11 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
+try:
+    from agents.tisan.storage import atomic_json
+except ModuleNotFoundError:
+    from storage import atomic_json
+
 
 TOOLS = {'scan.secrets', 'scan.dependencies', 'scan.static', 'scan.iac'}
 
@@ -86,7 +91,7 @@ async def attach(result, tenant, *, http=None):
     if check_result['ok'] is not True:
         result.update(ok=False, detail='Failed checks: radix.repo')
     # Publish reads this same sidecar and independently verifies the archive hash.
-    archive.with_suffix('').with_suffix('.json').write_text(json.dumps(result, indent=2) + '\n')
+    atomic_json(archive.with_suffix('').with_suffix('.json'), result)
     return result
 
 

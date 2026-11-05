@@ -1,4 +1,4 @@
-"""One offline scenario per Tisan founder acceptance row (T01–T48).
+"""One offline scenario per Tisan founder acceptance row (T01–T56).
 
 Reuse the shipped path and its existing fixture harness, not a parallel product
 implementation. HTTP boundaries are ASGI/MockTransport; Postgres is disposable.
@@ -394,3 +394,58 @@ def test_t47_invalid_plan_and_media(builder):
 
 def test_t48_visual_measurements_match_real_render():
     generated('T48')
+
+
+# Finish gates reuse the same offline proofs as the product regression suite.
+def test_t49_concurrent_build_numbers_preserve_failed_receipts(tmp_path):
+    from test_tisan_finish_builds import test_concurrent_builds_reserve_distinct_numbers_and_keep_failed_receipts
+    test_concurrent_builds_reserve_distinct_numbers_and_keep_failed_receipts(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_t50_approved_frame_is_bound_to_pipeline_and_direct_jobs(tmp_path, monkeypatch):
+    from test_tisan_finish_builds import test_pipeline_binds_approved_frame_even_when_caller_omits_it, test_direct_room_builds_inherit_the_same_approved_source
+    await test_pipeline_binds_approved_frame_even_when_caller_omits_it(tmp_path)
+    await test_direct_room_builds_inherit_the_same_approved_source(monkeypatch)
+
+
+def test_t51_local_quality_gate_detects_recorded_visual_regressions():
+    from test_tisan_finish_builds import test_actual_visual_gate_detects_text_and_geometry_regressions
+    test_actual_visual_gate_detects_text_and_geometry_regressions()
+
+
+def test_t52_durable_receipts_survive_failed_and_concurrent_writes(tmp_path, monkeypatch):
+    from test_tisan_finish_storage import test_failed_serialization_preserves_existing_receipt_and_cleans_partial, test_readers_never_observe_truncated_receipts_while_updates_commit, test_unwritable_room_volume_never_falls_back_to_temporary_storage
+    from agents.tisan import scaffold, figma
+    for name, proof in [('atomic',test_failed_serialization_preserves_existing_receipt_and_cleans_partial),
+                        ('concurrent',test_readers_never_observe_truncated_receipts_while_updates_commit)]:
+        folder = tmp_path/name
+        folder.mkdir()
+        proof(folder)
+    for module in (scaffold,figma):
+        with monkeypatch.context() as isolated:
+            test_unwritable_room_volume_never_falls_back_to_temporary_storage(module,tmp_path/module.__name__,isolated)
+
+
+def test_t53_existing_tenant_aliases_cannot_read_or_overwrite_foreign_artifacts(tmp_path):
+    from test_tisan_finish_storage import test_existing_review_artifact_aliases_are_rejected_on_read, test_publish_cannot_read_a_different_tenants_build_directory
+    for category in ('builds','readings','reviews'):
+        test_existing_review_artifact_aliases_are_rejected_on_read(category,tmp_path)
+    test_publish_cannot_read_a_different_tenants_build_directory(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_t54_archive_is_private_verified_and_idempotent(tmp_path, monkeypatch):
+    from test_tisan_finish_sources import test_private_archive_roundtrip_and_retry_use_signed_immutable_keys
+    await test_private_archive_roundtrip_and_retry_use_signed_immutable_keys(tmp_path,monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_t55_saturday_heartbeat_queue_and_private_receipt(command_pool):
+    from test_tisan_finish_sources import test_saturday_heartbeat_enqueues_once_per_slot_and_writes_private_receipt
+    await test_saturday_heartbeat_enqueues_once_per_slot_and_writes_private_receipt(command_pool)
+
+
+def test_t56_production_mode_build_tools_are_installed_offline(tmp_path, monkeypatch):
+    from test_tisan_finish_sources import test_production_environment_installs_the_locked_dev_toolchain_offline
+    test_production_environment_installs_the_locked_dev_toolchain_offline(tmp_path,monkeypatch)
