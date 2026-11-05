@@ -5,7 +5,7 @@ process.env.COMMAND_TEST_TOOLS ??= fileURLToPath(new URL('../../../cli/node_modu
 const { workspace } = await import('../../../tests/command_acceptance_20261031/workspace_loader.cjs');
 const ID = '00000000-0000-0000-0000-000000000011';
 const TOKEN = `tv1.us-east.${ID.replaceAll('-', '')}.${'x'.repeat(43)}`;
-function load(fetch) { return workspace({ env: { TANK_URL: 'http://local-tank:8000', TANK_API_KEY: 'must-not-forward' }, fetch }); }
+function load(fetch) { return workspace({ env: { TANK_URL: 'http://local-tank:8000', TANK_API_KEY: 'dummy-must-not-forward' }, fetch }); }
 function request(path, method = 'GET', body) {
   return new Request(`https://app.tervory.com/v1/command/${path}`, { method,
     headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json', cookie: 'forged', 'x-tank-key': 'forged', 'x-tervory-user': 'founder' },
