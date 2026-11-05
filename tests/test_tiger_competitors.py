@@ -110,9 +110,9 @@ def test_microdata_identifiers_and_nested_brand_use_existing_price_reader():
 
 @pytest.fixture(scope='module')
 def postgres(tmp_path_factory):
-    configured = os.environ.get('POOL_SCHEMA_DATABASE_URL')
-    if configured:
-        return SimpleNamespace(get_uri=lambda:configured)
+    # Roles are cluster-wide: another xdist worker's disposable database can
+    # acquire grants while this module owns agent_tiger, preventing DROP ROLE.
+    # Keep the real ownership/RLS tests on a module-private cluster per worker.
     import pgserver
     return pgserver.get_server(tmp_path_factory.mktemp('tiger-t1-postgres'))
 

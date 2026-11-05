@@ -67,6 +67,12 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest -q -s tests/test_tenant_rls.py tests/test_agent_chassis.py tests/test_tank_tenant_boundaries.py tests/test_tank_batches.py tests/test_tank_one_door.py tests/test_command.py tests/test_rig_box.py tests/test_rig_admin.py tests/test_rig_isolation.py tests/test_rig_postgres.py tests/test_vault_contract.py tests/test_base_audit.py tests/test_base_product.py tests/test_core2_baselines.py tests/test_core2_savings.py tests/test_core2c_savings.py tests/test_b3_base_room.py tests/trigger_second_build/test_second.py tests/test_tank_priority_offpeak.py tests/test_base_source_reliability.py tests/test_radix_passive.py tests/test_tank_boots.py tests/test_trigger_signin_guard.py tests/test_tank_semantic_cache.py tests/test_platform_registry_integration.py tests/test_command_streaming.py tests/test_command_code.py tests/test_radix_report.py tests/test_tisan_publish.py tests/test_tisan_gold_proxy.py tests/tenant_bus/test_tiger_history.py::test_saved_tiger_check_through_real_tank 2>&1 | tee tenant-rls-tests.log
+      - name: Isolated Tiger role and schema ownership regressions
+        run: >-
+          python -m pytest -q
+          tests/test_tiger_competitors.py::test_room_migration_and_nonowner_tank_admin_after_role_ownership
+          tests/test_tiger_competitors.py::test_room_schema_concurrently_repeats_without_catalog_writes
+          tests/test_tiger_competitors.py::test_room_schema_repairs_only_missing_table_privileges
       - name: Capture integration registry for reviewed golden updates
         if: always()
         run: |
