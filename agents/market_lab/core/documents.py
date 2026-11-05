@@ -26,7 +26,7 @@ async def accept(ledger, tenant: str, ident: str, name: str, extracted: dict, *,
     for index, ((label, title), points) in enumerate(groups.items()):
         series_id = f'{owner}:upload:{file_id}:{index}'
         await call(ledger.save_series, {'id': series_id, 'tenant_id': owner, 'source': source,
-            'ref': name, 'unit': points[0]['unit'], 'currency': points[0]['currency'], 'region': region, 'engine': ''})
+            'ref': title, 'unit': points[0]['unit'], 'currency': points[0]['currency'], 'region': region, 'engine': ''})
         count = await call(ledger.save_points, series_id, owner,
             [{**point, 'fetched_at': now, 'source': source, 'region': region} for point in points], stored=True, source=source)
         if count != len(points):

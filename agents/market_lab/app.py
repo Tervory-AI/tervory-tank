@@ -56,6 +56,10 @@ async def refresh(ctx: JobContext) -> dict:
                 live=not fixtures,
                 backfill=bool(ctx.input.get("backfill")),
             )
+            if result.get('observations_stored', 0):
+                result['opportunities'] = await perform_opportunities(
+                    tenant_id=ctx.tenant_id, engine=str(ctx.input.get('engine') or ''),
+                    ledger=ledger, memory=_SafeMemory(ctx.memory))
             from core.warning_http import refresh as refresh_warnings
             result["warnings"] = await refresh_warnings(ledger, ctx.tenant_id, str(ctx.input.get("engine") or ""))
             return result
