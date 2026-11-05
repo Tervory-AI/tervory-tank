@@ -24,6 +24,9 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
         pytest.skip("MOBILE_TEST_DATABASE_URL opts into a disposable local database")
     parsed = urlsplit(url)
     assert parsed.hostname in {"127.0.0.1", "localhost"}
+    monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setenv("TANK_API_KEY", "placeholder-mobile-workspace")
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "placeholder-mobile-import")
     name = "mobile_test_" + uuid4().hex
     role = name + "_role"
     admin = await asyncpg.connect(url)

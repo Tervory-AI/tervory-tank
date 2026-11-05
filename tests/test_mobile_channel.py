@@ -15,6 +15,14 @@ from command import Actor
 from tenant_db import bind_tenant_endpoints, _tenant
 
 
+@pytest.fixture(autouse=True)
+def offline_import_settings(monkeypatch):
+    # Main is imported by the real identity guard; no lifespan or model is run.
+    monkeypatch.setenv("DATABASE_URL", "postgresql://placeholder/placeholder")
+    monkeypatch.setenv("TANK_API_KEY", "placeholder-mobile-workspace")
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "placeholder-mobile-import")
+
+
 @pytest.fixture
 def native_context(monkeypatch):
     from contextvars import ContextVar
