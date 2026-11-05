@@ -12,7 +12,14 @@ async def post(http, base, path, body, headers, *, timeout=None):
     payload = dict(body)
     while True:
         response = await http.post(base + path, json=payload, headers=headers, **({"timeout": timeout} if timeout else {}))
-        detail = response.json().get("detail") if response.status_code == 409 else None
+        detail = None
+        if response.status_code == 409:
+            try:
+                error = response.json()
+            except ValueError:
+                return response
+            if isinstance(error, dict):
+                detail = error.get("detail")
         if not isinstance(detail, dict) or detail.get("code") != "paid_step_approval_required":
             return response
         tenant = str(payload.get("tenant_id", ""))

@@ -260,7 +260,7 @@ async def test_gateway_receipt_keeps_generation_and_batch_compatibility(routing,
     assert float(ledger["cost_usd"]) == 0.0000042
     expected = execution_receipt.capture(ledger_id=str(answer.ledger_id), tenant_id=str(TENANT),
         task_type=TASK, requested_model="kimi-lite", answered_model="kimi-lite",
-        dispatched={"max_tokens": 1024}, headers={}, response={}, delivered=True)
+        dispatched={"max_tokens": 1024, "disable_fallbacks": True}, headers={}, response={}, delivered=True)
     assert answer.execution["dispatched_settings_hash"] == expected["dispatched_settings_hash"]
     assert answer.execution["dispatched_settings_hash"] is not None
     await main.put_policy("command.turn", main.PolicyRow(task_type="command.turn", model="kimi-lite", priority="urgent"))

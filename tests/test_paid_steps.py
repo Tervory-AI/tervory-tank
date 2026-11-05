@@ -949,3 +949,20 @@ async def test_resolved_card_history_does_not_hide_new_pending_approvals(databas
     async with pool.acquire() as conn:
         row=await command.owned(conn,tid,actor)
     assert command.unpack(row['state'])['cards'][str(stopped.value.approval_id)]['status']=='pending'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('body', [b'', b'not JSON', b'[]', b'{"detail":"ordinary conflict"}'])
+async def test_room_preserves_non_approval_conflicts_without_polling(body):
+    import httpx
+    from chassis import paid_steps as room_approval
+    calls = []
+    def conflict(request):
+        calls.append(request)
+        assert request.method == 'POST'
+        return httpx.Response(409, content=body)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(conflict)) as client:
+        response = await room_approval.post(client, 'http://placeholder-tank', '/v1/route',
+            {'tenant_id': str(A)}, {'x-tank-key': 'placeholder-room-key'})
+    assert response.status_code == 409 and response.content == body
+    assert len(calls) == 1

@@ -79,7 +79,14 @@ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
             outcome, error = "failed", "skill_revalidation_call_failed"
             raise RuntimeError("Model revalidation call failed") from None
         finally:
-            if not receipt.get("_paid_ledger_id") and not receipt.get("_paid_waiting"):
+            if receipt.get("_paid_ledger_id"):
+                if served_decision is not None:
+                    # The paid path already owns the platform receipt. Annotate
+                    # that same tenant-bound row; never insert a second charge.
+                    with tenant_scope(PLATFORM_TENANT):
+                        await routellm_shadow.record_served(tank, PLATFORM_TENANT,
+                            uuid.UUID(str(receipt["_paid_ledger_id"])), served_decision)
+            elif not receipt.get("_paid_waiting"):
                 async with tank.pool().acquire() as conn:
                     await conn.execute(
                         """INSERT INTO tank.ledger
