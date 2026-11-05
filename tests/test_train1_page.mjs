@@ -1,4 +1,4 @@
-// Browser test of the real client component, with a fixture API and no Clerk secrets.
+// Browser test of the real client component, with a fixture API and no Trigger sign-in secrets.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';

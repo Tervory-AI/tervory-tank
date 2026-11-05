@@ -71,7 +71,6 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
-      TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_REGION: za
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
@@ -138,6 +137,7 @@ services:
         GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
+      TRIGGER_SIGNIN_CONFIG_TOKEN: ${TRIGGER_SIGNIN_CONFIG_TOKEN:?founder sets read-only directory capability}
       FOUNDER_REPORT_TO: ${FOUNDER_REPORT_TO:-}
       FOUNDER_REPORT_SMTP_HOST: ${FOUNDER_REPORT_SMTP_HOST:-}
       FOUNDER_REPORT_SMTP_PORT: ${FOUNDER_REPORT_SMTP_PORT:-}
@@ -173,16 +173,9 @@ services:
       HF_TOKEN: ${HF_TOKEN:-}
       HF_ORG: ${HF_ORG:-}
       TRAINING_JOB_KEY: ${TRAINING_JOB_KEY:-}
-      TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       # Homes-only key: POST /v1/zenas/tenants with home za, nothing else.
       TANK_HOMES_KEY: ${TANK_HOMES_KEY:-}
-      # CLI sign-in approval from the primary-region web app (two approval routes, plus the user's own
-      # sign-in list/revoke; never founders). Must differ from TANK_API_KEY and TANK_HOMES_KEY.
-      TANK_DEVICE_APPROVAL_KEY: ${TANK_DEVICE_APPROVAL_KEY:-}
-      # Optional ZA identity provider; empty keeps the existing approval path.
-      IDENTITY_ISSUER: ${IDENTITY_ISSUER:-}
-      IDENTITY_CLIENT_ID: ${IDENTITY_CLIENT_ID:-}
-      IDENTITY_ORG_TENANTS: ${IDENTITY_ORG_TENANTS:-}
+      TRIGGER_SIGNIN_SESSIONS_KEY: ${TRIGGER_SIGNIN_SESSIONS_KEY:-}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       ZA_HOSTED_MODELS: ${ZA_HOSTED_MODELS:-}
       TANK_PROVIDER_ALLOW: ${TANK_PROVIDER_ALLOW:-}

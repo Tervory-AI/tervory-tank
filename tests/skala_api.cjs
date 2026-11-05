@@ -13,6 +13,8 @@ const tank = new Proxy({}, {get: (_, name) => async (...args) => {
   return name === 'listSkills' || name === 'skillApprovalStatus' ? [] : {ok:true};
 }});
 Module._load = function(name, parent, isMain) {
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
   if (name === '@/lib/tank') return tank;
   if (name === '@/lib/tenant') return {currentTenant: async () => ({userId:'verified-founder', tenantId:'platform'})};
   if (name === '@/app/review/access') return {rejectUnlessFounder: async () => allowed ? null : {status:404,error:'Not found'}};

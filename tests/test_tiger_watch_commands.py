@@ -1,5 +1,6 @@
 """TG1: placeholder watches in an in-process Tiger room; no outside services."""
 
+from trigger_signin_fakes import set_founders
 import copy
 import importlib.util
 import json
@@ -37,7 +38,7 @@ async def runtime(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://placeholder@127.0.0.1/placeholder")
     monkeypatch.setenv("LITELLM_MASTER_KEY", "placeholder-litellm-key")
     monkeypatch.setenv("TANK_API_KEY", "placeholder-tank-key")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "placeholder-founder")
+    set_founders(monkeypatch, "placeholder-founder")
     import main
     spec = importlib.util.spec_from_file_location("placeholder_tg1_room", ROOT / "agents/tiger/app.py")
     agent = importlib.util.module_from_spec(spec)

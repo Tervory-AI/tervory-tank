@@ -1,4 +1,5 @@
 """Founder approval, current content hashes and tenant scoping at the room boundary."""
+from trigger_signin_fakes import set_founders
 import importlib.util
 import json
 import os
@@ -55,7 +56,7 @@ class Pool:
 def setup(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("TANK_REGION", "us-east")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-user")
+    set_founders(monkeypatch, "founder-user")
     key = secrets.token_hex(24)
     monkeypatch.setenv("TANK_KEY", key)
     frame = tmp_path / "readings" / TENANT / "frame.json"

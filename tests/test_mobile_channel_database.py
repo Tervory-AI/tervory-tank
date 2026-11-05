@@ -42,6 +42,7 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
                 statement = re.search(r"CREATE TABLE IF NOT EXISTS tank\." + table + r" \(.*?\n\);", schema, re.S)
                 assert statement
                 await owner.execute(statement.group())
+            await owner.execute("ALTER TABLE tank.command_threads ADD COLUMN trigger_signin_issuer text NOT NULL DEFAULT ''")
             # An installation that has rolled out RLS: mobile tables follow it.
             await owner.execute("ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY")
             migration = schema.split("-- BEGIN mobile\n", 1)[1].split("-- END mobile", 1)[0]
@@ -60,16 +61,30 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
         monkeypatch.setenv("TANK_VAULT_KEY", base64.urlsafe_b64encode(bytes(range(32))).decode())
         actor = Actor(uuid4(), "signed-in-user", False)
         other = Actor(uuid4(), "another-user", False)
+        from contextvars import ContextVar
+        from trigger_signin_fakes import native_provider, ORG
+        import trigger_signin_config as registry
+        provider = native_provider(monkeypatch, {ORG: str(actor.tenant_id)})
+        monkeypatch.setenv("TANK_REGION", "us-east")
+        monkeypatch.setattr(registry, "_issuer", ContextVar("mobile_db_fixture", default=provider.issuer))
         verifier = "v" * 43
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
         with tenant_scope(actor.tenant_id):
-            code = (await mobile.handshake(mobile.Handshake(challenge=challenge, org_id="org-test", org_name="Test"), actor))["code"]
+            code = (await mobile.handshake(mobile.Handshake(challenge=challenge, org_id=ORG, org_name="Test"), actor))["code"]
         with pytest.raises(HTTPException):
             await mobile.exchange(mobile.Exchange(code=code, code_verifier="b" * 43, redirect_uri=mobile.CALLBACK))
         session = await mobile.exchange(mobile.Exchange(code=code, code_verifier=verifier, redirect_uri=mobile.CALLBACK))
         with pytest.raises(HTTPException):
             await mobile.exchange(mobile.Exchange(code=code, code_verifier=verifier, redirect_uri=mobile.CALLBACK))
         assert (await mobile.session_identity(session["token"]))["userId"] == actor.user_id
+        with tenant_scope(actor.tenant_id):
+            async with store.acquire() as conn:
+                await conn.execute("UPDATE tank.mobile_sessions SET expires_at=now()-interval '1 second' WHERE tenant_id=$1", actor.tenant_id)
+        with pytest.raises(HTTPException):
+            await mobile.session_identity(session["token"])
+        with tenant_scope(actor.tenant_id):
+            async with store.acquire() as conn:
+                await conn.execute("UPDATE tank.mobile_sessions SET expires_at=now()+interval '7 days' WHERE tenant_id=$1", actor.tenant_id)
         request = SimpleNamespace(headers={"x-mobile-session": session["token"]})
         with tenant_scope(actor.tenant_id):
             assert (await mobile.register_device(mobile.Device(platform="ios", token="a" * 64), request, actor))["registered"]
@@ -78,6 +93,8 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
             assert await mobile.create_share(body, actor) == draft
             saved = await mobile.get_share(UUID(draft["draft_id"]), actor)
             assert saved["text"] == body.text
+            async with store.acquire() as conn:
+                assert await conn.fetchval("SELECT trigger_signin_issuer FROM tank.command_threads WHERE tenant_id=$1 AND thread_id=$2", actor.tenant_id, UUID(saved["thread_id"])) == provider.issuer
             assert saved["attachments"][0]["model_readable"] is False
         with tenant_scope(other.tenant_id):
             with pytest.raises(HTTPException) as failure:
@@ -93,6 +110,8 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
         assert (await mobile_push.notify(actor.tenant_id, "An update", "Ready", "/chats?proof=1", user_id=actor.user_id, provider=FakePhone()))["sent"] == 1
         assert delivered == ["/chats?proof=1"]
         await mobile.revoke(mobile.Session(token=session["token"]))
+        with pytest.raises(HTTPException):
+            await mobile.session_identity(session["token"])
         assert (await mobile_push.notify(actor.tenant_id, "An update", "Ready", provider=FakePhone()))["sent"] == 0
     finally:
         if raw is not None:

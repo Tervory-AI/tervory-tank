@@ -1,4 +1,4 @@
-// Execute the actual Workspace tenant, Tank helper and API route with Clerk/fetch stubs.
+// Execute the actual Workspace tenant, Tank helper and API route with Trigger sign-in/fetch stubs.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,24 +13,27 @@ Module._resolveFilename = function (name, parent, ...rest) {
 require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true},
 }).outputText, filename);
-let session = {userId: 'client-a', orgId: 'org_a'};
+let session = {userId: 'client-a', orgId: '60001'};
 let creations = 0;
 let membership = [];
-const clerk = {
-  auth: async () => session,
+const signin = {
+  auth: async () => ({...session, tenantId: session.orgId ? bindings[session.orgId] : null}),
   currentUser: async () => ({firstName: 'Offline'}),
-  clerkClient: async () => ({
+  signinDirectory: async () => ({
     organizations: {
       getOrganization: async ({organizationId}) => ({id: organizationId, name: 'Offline'}),
-      createOrganization: async () => {creations++; return {id: 'org_new', name: 'Offline'};},
+      createOrganization: async () => {creations++; return {id: '60003', name: 'Offline'};},
     },
     users: {getOrganizationMembershipList: async () => ({data: membership})},
   }),
 };
+const bindings = Object.fromEntries(['60001', '60002', '60003', ...[301,302,307,308,401,403,400,404,422].map(status => `org_denied_${status}`), ...[408,429,500,502,503,504,'network'].map(status => `org_${status}`)].map((org, index) => [org, `00000000-0000-4000-8000-${String(index + 11).padStart(12, '0')}`]));
 const originalLoad = Module._load;
 Module._load = function (name, parent, ...rest) {
   if (name === 'next/headers') return {cookies: async () => ({get: () => undefined})};
-  if (name === '@clerk/nextjs/server') return clerk;
+  if (name === '@/lib/trigger-signin' || name === './trigger-signin') return signin;
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => global.fetch(...args)};
+  if (name === './trigger-signin-principal') return {tenantBindings: () => bindings};
   if (name === 'server-only') return {};
   return originalLoad.call(this, name, parent, ...rest);
 };
@@ -53,46 +56,39 @@ const get = (parts = [], query = '') => route.GET(new Request('https://workspace
 }), {params: Promise.resolve({path: parts})});
 (async () => {
   session = {userId: 'client-a', orgId: null};
-  const created = await tenants.currentTenant();
-  assert.equal(creations, 1);
-  assert.equal(created.tenantId, tenants.tenantIdFor('org_new'));
-  assert.equal(calls.at(-1).method, 'POST');
-  assert.equal(calls.at(-1).url.pathname, '/v1/case-studies/ensure');
-  assert.equal(calls.at(-1).headers['X-Tervory-Tenant'], created.tenantId);
-  membership = [{organization: {id: 'org_new', name: 'Offline'}}];
-  await tenants.currentTenant();
-  assert.equal(creations, 1); // Existing membership is reconciled, not duplicated.
-  session = {userId: 'client-a', orgId: 'org_a'};
+  await assert.rejects(tenants.currentTenant(), /Trigger sign-in required/);
+  assert.equal(creations, 0);
+  session = {userId: 'client-a', orgId: '60001'};
   let response = await get(['base'], 'start=2026-10-01&user_id=forged');
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
   const sent = calls.at(-1);
   assert.equal(sent.method, 'GET');
   assert.equal(sent.headers['X-Tervory-User'], 'client-a');
-  assert.equal(sent.headers['X-Tervory-Tenant'], tenants.tenantIdFor('org_a'));
-  assert.equal(sent.url.searchParams.get('tenant_id'), tenants.tenantIdFor('org_a'));
+  assert.equal(sent.headers['X-Tervory-Tenant'], tenants.tenantIdFor('60001'));
+  assert.equal(sent.url.searchParams.get('tenant_id'), tenants.tenantIdFor('60001'));
   assert.equal(sent.url.searchParams.get('user_id'), null);
   assert.equal(sent.cache, 'no-store');
   const reads = () => calls.filter(call => call.method === 'GET').length;
   const before = reads();
-  for (const [parts, query, status] of [[['base'], 'tenant_id=' + tenants.tenantIdFor('org_b'), 403], [['clients'], '', 403], [['ensure'], '', 404], [['base', 'extra'], '', 404]]) {
+  for (const [parts, query, status] of [[['base'], 'tenant_id=' + tenants.tenantIdFor('60002'), 403], [['clients'], '', 403], [['ensure'], '', 404], [['base', 'extra'], '', 404]]) {
     response = await get(parts, query);
     assert.equal(response.status, status);
     assert.equal(await response.text(), '');
   }
   assert.equal(reads(), before);
-  session = {userId: 'client-b', orgId: 'org_b'};
+  session = {userId: 'client-b', orgId: '60002'};
   await get(['base']);
-  assert.equal(calls.at(-1).headers['X-Tervory-Tenant'], tenants.tenantIdFor('org_b'));
-  session = {userId: 'founder', orgId: 'org_a'};
+  assert.equal(calls.at(-1).headers['X-Tervory-Tenant'], tenants.tenantIdFor('60002'));
+  session = {userId: 'founder', orgId: '60001'};
   assert.equal((await get(['clients'])).status, 200);
-  assert.equal((await get(['base'], 'tenant_id=' + tenants.tenantIdFor('org_b'))).status, 200);
-  assert.equal(calls.at(-1).url.searchParams.get('tenant_id'), tenants.tenantIdFor('org_b'));
+  assert.equal((await get(['base'], 'tenant_id=' + tenants.tenantIdFor('60002'))).status, 200);
+  assert.equal(calls.at(-1).url.searchParams.get('tenant_id'), tenants.tenantIdFor('60002'));
   session = {userId: null, orgId: null};
   const count = calls.length;
   assert.equal((await get(['base'])).status, 401);
   assert.equal(calls.length, count);
-  session = {userId: 'client-a', orgId: 'org_a'};
+  session = {userId: 'client-a', orgId: '60001'};
   fail = true;
   response = await get(['base']);
   assert.equal(response.status, 503);

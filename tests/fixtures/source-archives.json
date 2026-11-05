@@ -1,0 +1,8 @@
+{
+  "agents/rig/english-20k.txt": "48bdd70766c0acddde7002bbfb86efebcd146c316a5bd792ded624e4a5d8f37e",
+  "agents/zenas/pool/fixtures/saved/ecfr/19-cfr-141.xml": "84cceccecd0c68d21ca0750fc5352dfcfcaadf83bd357fa404ea355f91c85b60",
+  "agents/zenas/pool/fixtures/saved/frap/uscode-2023-frap.html": "8f668a49e4e4663dc825b4aea3ea59037240078a73ad439f2dbce2f9253a4887",
+  "agents/zenas/pool/fixtures/saved/frcp/uscode-2023-frcp.html": "d0708b4d827e23fd2c214ff2cc0d848cfa14c5674cae8f099f752def13c15bd7",
+  "tests/fixtures/courtlistener/bulk/opinions-2026-09-30.csv": "7b3380dfa7f115d1041e025b306fc0c4e58b5c5a27d98693297867ef5a0df296",
+  "tests/fixtures/za/precedent/scrap-zafshc-402.txt": "84d9c6602e481a6e855fe735055bccf7b86dfd3eab03dcf266c95d2f225a1fd7"
+}

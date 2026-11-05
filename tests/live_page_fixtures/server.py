@@ -56,7 +56,7 @@ def services(api_port: int = 8046, log=None, *, history: bool = False):
            "LITELLM_MASTER_KEY": secrets.token_hex(32), "REDIS_URL": "redis://127.0.0.1:1/0",
            "TERVORY_ADMIN_USER_IDS": "proof-owner", "TANK_URL": f"http://127.0.0.1:{api_port}", "NEXT_TELEMETRY_DISABLED": "1"}
     for name in list(env):
-        if name.startswith(("CLERK_", "NEXT_PUBLIC_CLERK_")) or name in {"FRED_API_KEY", "CENSUS_API_KEY", "LEGISCAN_API_KEY", "EIA_API_KEY", "NOAA_TOKEN", "FEEDS_FIXTURES"}:
+        if name.startswith(("TRIGGER_SIGNIN_", "TRIGGER_SIGNIN_")) or name in {"FRED_API_KEY", "CENSUS_API_KEY", "LEGISCAN_API_KEY", "EIA_API_KEY", "NOAA_TOKEN", "FEEDS_FIXTURES"}:
             env.pop(name)
     room_env = {**env, "TANK_KEY": env["TANK_KEY_MARKET_LAB"]}
     # Local corridor forwarding, not an external network bypass. All other

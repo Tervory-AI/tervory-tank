@@ -141,6 +141,8 @@ def test_runner_records_reading_counters_and_extraction_receipts(tmp_path, monke
             else:
                 raise AssertionError(url)
             return SimpleNamespace(status_code=200, json=lambda: value)
+    import brain.paid_approval
+    monkeypatch.setattr(brain.paid_approval,'install',lambda *args:None)
     monkeypatch.setattr(runner.httpx, 'Client', Client)
     agent_module = types.ModuleType('run_agent')
     class Agent:

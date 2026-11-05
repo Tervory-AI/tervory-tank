@@ -15,6 +15,22 @@ from command import Actor
 from tenant_db import bind_tenant_endpoints, _tenant
 
 
+@pytest.fixture
+def native_context(monkeypatch):
+    from contextvars import ContextVar
+    from trigger_signin_fakes import native_provider, ORG
+    import trigger_signin_config as registry
+    import main
+    tenant = uuid4()
+    provider = native_provider(monkeypatch, {ORG: str(tenant)})
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    monkeypatch.setattr(main, "TANK_API_KEY", "placeholder-mobile-workspace")
+    monkeypatch.setattr(registry, "_issuer", ContextVar("mobile_native_fixture", default=provider.issuer))
+    principal = dict(tenantId=str(tenant), userId="user-1", orgId=ORG, orgName="Test",
+                     tenantAdmin=False, issuer=provider.issuer, boxRegion="us-east")
+    return tenant, provider, principal
+
+
 class Store:
     def __init__(self, devices=()):
         self.devices = list(devices)
@@ -119,13 +135,13 @@ async def test_fcm_unregistered_removes_only_dead_tokens(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_session_exchange_pkce_single_use_and_tenant_scope(monkeypatch):
-    tenant = uuid4()
+async def test_session_exchange_pkce_single_use_and_tenant_scope(monkeypatch, native_context):
+    tenant, _, principal = native_context
     verifier = "v" * 43
     code = str(tenant) + "_" + "c" * 43
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
     store = Store()
-    store.code = dict(hash=mobile.digest(code), challenge=challenge, identity={"userId": "user-1"})
+    store.code = dict(hash=mobile.digest(code), challenge=challenge, identity=principal)
     monkeypatch.setattr(mobile, "db", lambda: store)
     bad = mobile.Exchange(code=code, code_verifier="x" * 43, redirect_uri=mobile.CALLBACK)
     with pytest.raises(HTTPException) as failure:
@@ -179,3 +195,80 @@ def test_shared_files_are_bounded_and_inert():
     assert mobile.share_files(body) == [("proof.txt", b"hello")]
     with pytest.raises(HTTPException):
         mobile.share_files(mobile.Share(share_id="id", files=[mobile.SharedFile(name="../proof", data="aGVsbG8=")]))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["tenant", "user", "issuer", "region", "organisation", "admin-type", "missing-provenance", "absent"])
+async def test_mobile_session_provenance_is_revalidated(monkeypatch, native_context, change):
+    tenant, _, principal = native_context
+    store = Store()
+    store.session = {"identity": dict(principal), "user_id": "user-1"}
+    if change == "tenant": store.session["identity"]["tenantId"] = str(uuid4())
+    if change == "user": store.session["user_id"] = "different-user"
+    if change == "issuer": store.session["identity"]["issuer"] = "https://foreign.invalid"
+    if change == "region": store.session["identity"]["boxRegion"] = "za"
+    if change == "organisation": store.session["identity"]["orgId"] = "99999"
+    if change == "admin-type": store.session["identity"]["tenantAdmin"] = "true"
+    if change == "missing-provenance": store.session["identity"].pop("issuer")
+    if change == "absent": store.session = None
+    monkeypatch.setattr(mobile, "db", lambda: store)
+    with pytest.raises(HTTPException):
+        await mobile.session_identity(str(tenant) + "_" + "s" * 43)
+    assert "expires_at>now() AND NOT revoked" in store.calls[0][0]
+    assert store.calls[0][2] == str(tenant)
+
+
+@pytest.mark.asyncio
+async def test_mobile_guard_binds_assertions_and_cannot_mint_credentials(monkeypatch, native_context):
+    tenant, _, principal = native_context
+    from trigger_signin_guard import TriggerSigninMiddleware
+    import trigger_signin_config as registry
+    store = Store()
+    store.session = {"identity": principal, "user_id": "user-1"}
+    monkeypatch.setattr(mobile, "db", lambda: store)
+    app = FastAPI()
+    app.add_middleware(TriggerSigninMiddleware)
+
+    @app.api_route("/{rest:path}", methods=["GET", "POST"])
+    async def echo(rest: str):
+        return {"issuer": registry.issuer()}
+
+    token = str(tenant) + "_" + "s" * 43
+    headers = {"x-tank-key": "placeholder-mobile-workspace", "x-tervory-user": "user-1",
+               "x-tervory-tenant": str(tenant), "x-mobile-session": token}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://tank") as client:
+        assert (await client.get("/v1/command/threads", headers=headers)).json()["issuer"] == principal["issuer"]
+        for forged in ({"x-tervory-user": "other"}, {"x-tervory-tenant": str(uuid4())},
+                       {"x-tervory-role": "org:admin"}, {"x-tervory-admin": "user-1"}):
+            assert (await client.get("/v1/command/threads", headers={**headers, **forged})).status_code == 403
+        for path in ("/v1/mobile/handshake", "/v1/personal-tokens"):
+            assert (await client.post(path, headers=headers, json={})).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_mobile_handshake_requires_native_context_and_real_org_binding(monkeypatch, native_context):
+    tenant, provider, principal = native_context
+    from trigger_signin_guard import TriggerSigninMiddleware
+    store = Store()
+    monkeypatch.setattr(mobile, "db", lambda: store)
+    async def actor(request):
+        return Actor(tenant, "user-1", False)
+    monkeypatch.setattr(mobile, "identity", actor)
+    app = FastAPI()
+    app.include_router(mobile.router)
+    app.add_middleware(TriggerSigninMiddleware)
+    headers = {"x-tank-key": "placeholder-mobile-workspace", **provider.workspace_headers("user-1", tenant, "member")}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://tank") as client:
+        payload = {"challenge": "c" * 43, "org_id": principal["orgId"], "org_name": "Test"}
+        assert (await client.post("/v1/mobile/handshake", headers=headers, json=payload)).status_code == 200
+        assert (await client.post("/v1/mobile/handshake", headers=headers, json={**payload, "org_id": "99999"})).status_code == 401
+        assert (await client.post("/v1/mobile/handshake", headers={"x-tank-key": "placeholder-mobile-workspace"}, json=payload)).status_code == 403
+
+
+def test_mobile_and_native_proof_selection_contract():
+    from pathlib import Path
+    import subprocess
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(["node", "tests/mobile_signin_fetch.cjs"], cwd=root,
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr

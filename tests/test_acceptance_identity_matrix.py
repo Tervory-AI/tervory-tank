@@ -1,4 +1,4 @@
-"""Run actual Workspace identity resolution without Clerk or network access."""
+"""Run actual Workspace identity resolution without Trigger sign-in or network access."""
 import subprocess
 from pathlib import Path
 

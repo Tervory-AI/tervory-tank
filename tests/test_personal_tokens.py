@@ -1,4 +1,5 @@
 """CLI-1 offline authentication tests: synthetic tokens, no live credentials."""
+from trigger_signin_fakes import set_founders
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -27,7 +28,8 @@ def request(token=TOKEN, method='GET', path='/v1/command/tools', **headers):
 
 @pytest.fixture
 def runtime(monkeypatch):
-    conn = SimpleNamespace(fetchrow=AsyncMock(return_value={'token_id': uuid.uuid4(), 'user_id': 'client', 'stale': None}),
+    conn = SimpleNamespace(fetchrow=AsyncMock(return_value={'token_id': uuid.uuid4(), 'user_id': 'client', 'stale': None,
+                                                          'trigger_signin_issuer': 'https://auth.tervory.com'}),
                            execute=AsyncMock(),
                            fetch=AsyncMock(return_value=[{'agent': 'tiger'}]))
     @asynccontextmanager
@@ -36,7 +38,7 @@ def runtime(monkeypatch):
         yield conn
     monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=acquire))
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east', TANK_API_KEY='dummy-workspace'))
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     return conn
 
 
@@ -46,7 +48,7 @@ async def test_token_identity_ignores_all_assertion_headers(runtime):
                                         'x-tervory-role': 'org:admin', 'x-tervory-squad': 'base'}))
     assert actor.user_id == 'client' and actor.tenant_id == TENANT
     assert not actor.founder and not actor.tenant_admin
-    assert command.allowed_tools(actor) == ['plugins.list', 'tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.position', 'tiger.read', 'tiger.watch', 'tiger.watch.bulk', 'tiger.watch.pause', 'tiger.watch.remove', 'tiger.watch.resume', 'tiger.watches']
+    assert command.allowed_tools(actor) == ['plugins.list', 'tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.match.undo', 'tiger.matches', 'tiger.position', 'tiger.read', 'tiger.watch', 'tiger.watch.bulk', 'tiger.watch.pause', 'tiger.watch.remove', 'tiger.watch.resume', 'tiger.watches']
     args = runtime.fetchrow.call_args.args
     assert args[1:] == (TENANT, 'us-east', pat.digest(TOKEN), 'cli')
     assert TOKEN not in repr(args)
@@ -102,7 +104,7 @@ async def test_revoke_scoped_to_token_owner(runtime):
     token_id = uuid.uuid4()
     result = await pat.revoke_token(token_id, command.Actor(TENANT, 'client', False))
     assert result.status_code == 204
-    assert runtime.fetchrow.call_args.args[1:] == (TENANT, 'client', token_id)
+    assert runtime.fetchrow.call_args.args[1:] == (TENANT, 'client', token_id, 'https://auth.tervory.com')
     assert 'tenant_id=$1 AND user_id=$2 AND token_id=$3' in runtime.fetchrow.call_args.args[0]
 
 

@@ -14,10 +14,10 @@ export async function GET(request: Request) {
   let tenant = await activeTenant();
   if (!tenant) {
     try { tenant = await currentTenant(); }
-    catch { redirect(`/sign-in?redirect_url=${encodeURIComponent(`https://app.tervory.com/mobile/sign-in?${params}`)}`); }
+    catch { redirect(`/sign-in?callbackUrl=${encodeURIComponent(`https://app.tervory.com/mobile/sign-in?${params}`)}`); }
   }
   const identity = await triggerIdentity(tenant);
-  if (!identity) redirect(`/sign-in?redirect_url=${encodeURIComponent(`https://app.tervory.com/mobile/sign-in?${params}`)}`);
+  if (!identity) redirect(`/sign-in?callbackUrl=${encodeURIComponent(`https://app.tervory.com/mobile/sign-in?${params}`)}`);
   const response = await mobileRequest("handshake", { challenge, org_id: identity.orgId, org_name: identity.orgName }, identity);
   if (!response.ok) return new Response("Trigger sign-in is unavailable. Please try again.", { status: 503 });
   const result = await response.json();

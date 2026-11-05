@@ -1,13 +1,28 @@
 # Everything the founder fills in, all at once (3 Nov 2026, 16:10 PT)
 
-This is the one list. Every name below is taken from `.env.example` on main or on an open PR branch; none is a guess. You type the values in Coolify, and Claude never sees them. Skip any name you have already filled. Flags marked "leave off" stay off until testing shows there is room.
+This is the one list. Every Coolify variable name below is taken from `.env.example` on main or on an open PR branch; none is a guess. You type the values in Coolify, and Claude never sees them. Skip any name you have already filled. Flags marked "leave off" stay off until testing shows there is room.
 
 ## A. Coolify settings, Boston (the main app unless noted)
+
+**Trigger sign-in, Boston resource (names only):** TRIGGER_SIGNIN_MASTERKEY, TRIGGER_SIGNIN_SESSION_COOKIE_SECRET, TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD, TRIGGER_SIGNIN_DB_PASSWORD, TRIGGER_SIGNIN_ADMIN_EMAIL, TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD, TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION, TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION, TRIGGER_SIGNIN_MACHINE_TOKEN, TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_CONFIG_TOKEN
+
+**Trigger sign-in, Boston Tank/Workspace (names only):** TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_CONFIG_TOKEN, TRIGGER_SIGNIN_WORKSPACE_SECRET, TRIGGER_SIGNIN_DIRECTORY_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY
+
+**Trigger sign-in, Boston routing (names only):** TRIGGER_SIGNIN_PROXY_NETWORK
+
+One Boston resource serves every country. Setup emails the founder a link to set their own password and, if wanted, a passkey; nobody uses the Coolify-generated initial password. Setup binds the native subject, never email. Only Boston Tank/setup receive the setup token; Workspace receives the read-only configuration token, not a setup credential. The ZA Tank is a consumer, not a second sign-in server.
 
 **Shared email** (the morning report and default alerts): SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 
 **Market Lab** (free keys): FRED_API_KEY, EIA_API_KEY, CENSUS_API_KEY, LEGISCAN_API_KEY, NOAA_TOKEN, USPTO_API_KEY
 **Market Lab email:** MARKET_LAB_SMTP_HOST, MARKET_LAB_SMTP_PORT, MARKET_LAB_SMTP_USER, MARKET_LAB_SMTP_PASSWORD, MARKET_LAB_SMTP_FROM, MARKET_LAB_SMTP_ALERT_ADDRESSES
+
+**Base:** BASE_REFERENCE_FILE_URL (optional founder-approved, dated public HTTPS official reference file when the legacy source is blocked).
+**Base company-data trial:** CONTEXT_DEV_API_KEY, CONTEXT_DEV_MAX_CREDITS (existing optional trial only; no new account or paid service is required for ordinary Base checks).
+
+**Tiger email:** TIGER_SMTP_HOST, TIGER_SMTP_PORT, TIGER_SMTP_USER, TIGER_SMTP_PASSWORD, TIGER_SMTP_FROM, TIGER_SMTP_ALERT_ADDRESSES (JSON mapping of tenant UUID to its own recipient; no default address).
+**Tiger private sources:** TANK_VAULT_KEY (Tank only), ACCESS_BROWSER_KEY_TIGER (Tank and the Tiger browser only). Keep existing values; never rotate them just to run the sheet.
+**Tiger check-now for Rig:** RIG_TIGER_CHECK_KEY (the existing dedicated Rig-to-Tiger check credential).
 
 **Zenas US:** CONGRESS_GOV_API_KEY, LEGISCAN_API_KEY (the same key as Market Lab)
 **Zenas review (each room):** ZENAS_REVIEW (default off; scope, identifier and citation checks remain on)
@@ -37,6 +52,13 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 ## B. Coolify settings, ZA box
 
+
+**Trigger sign-in, ZA Tank consumer (names only):** TRIGGER_SIGNIN_CONFIG_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY
+
+
+- LAWS_AFRICA_API_TOKEN (if not already set)
+- Zenas training: HF_TOKEN, HF_ORG; HF_TRAIN_MAX_USD is optional (default 50); ZENAS_OWN_MODEL_KEY (#639, once that fix lands)
+
 - LAWS_AFRICA_API_TOKEN (if not already set; question-time retrieval only, never training)
 - ZENAS_REVIEW (ZA room; default off)
 - ZA regulation email uses the same ZENAS_SMTP_HOST, ZENAS_SMTP_PORT, ZENAS_SMTP_USER, ZENAS_SMTP_PASSWORD, ZENAS_SMTP_FROM and ZENAS_SMTP_ALERT_ADDRESSES names above, on the ZA room.
@@ -45,6 +67,8 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 - ZENAS_BRAIN_ENABLED (leave off), SANDBOX_KEY_ZENAS
 
 ## C. Domains and accounts (once, in Coolify or the provider)
+
+Public project/client IDs, native founder subjects and organisation links are produced by the Trigger sign-in setup job. They are not founder-entered settings. The generated setting names are TRIGGER_SIGNIN_ISSUER and TRIGGER_SIGNIN_CLIENT_ID. Tank stores the organisation-to-existing-tenant links; no JSON mapping is entered in Coolify.
 
 1. Coolify: attach **trigger.tervory.com** and **rig.tervory.com** to the app.tervory.com application, after those two PRs merge. agent-rig keeps rig.tervory.com as well.
 2. Database: the restricted database role that turns RLS on (#573).
@@ -80,6 +104,13 @@ APNs/FCM dead-token responses remove registrations; temporary/provider-auth fail
 do not. Expired/revoked mobile sessions do not receive pushes. Sign-out revokes the
 mobile session and deletes its registrations via `DELETE /api/mobile/session`.
 
+
+## Paid ladder decisions (tenant settings; no Coolify value)
+
+`paid_step_settings.mode`: `ask` (default) or `auto`, stored separately for each tenant and exact `step_id`. The authenticated founder or tenant administrator can list steps at `GET /v1/command/paid-steps` and save one at `PUT /v1/command/paid-steps/{step_id}`. Workspace backend: `GET/PUT /settings/paid-steps/api`. These are database preferences, not new environment variables or paid-service keys. Pending approvals use existing /chats Confirm/Cancel cards. The platform control `paid_paused` (“Pause all paid work”) overrides every Auto setting and every prior approval. Settings screens await the Proposed paid-step frames in `codex/figma-w5`; see `docs/paid-steps/FRAMES.md`.
+## E. Existing Tank tool controls
+
+**Base Plugins:** base.vault (existing switch in `workspace/app/base/plugin-panel.ts`; off for the Plugins-off check, on for the API key, file, source link and MCP checks). Set this in Tank's existing tool controls.
 
 ## Rig store rooms (layout B)
 

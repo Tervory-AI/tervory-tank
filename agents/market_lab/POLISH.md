@@ -12,7 +12,7 @@ not live publisher data or the client's signed-in session. The real refresh job
 parses 67 port observations (January 1960–January 2026), stores them in Postgres,
 and the real Tank and room routes serve them through `workspace/lib/tank.ts`.
 No Tank module, HTTP client, authentication dependency or lifespan is replaced.
-The existing isolated page wrapper supplies a local tenant instead of Clerk.
+The existing isolated page wrapper supplies a local tenant instead of Trigger sign-in.
 The local seed reclassifies only its own fixture documents in the disposable
 `*_test` database so the unchanged production reader can serve them.
 
@@ -93,7 +93,7 @@ run separately above. Warnings are existing FastAPI startup deprecations.
 The production Workspace build, run in `workspace/`, passed:
 
 ```sh
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npx next build
+NEXT_TELEMETRY_DISABLED=1 npx next build
 ```
 
 These are the existing documented dummy build values, not credentials.

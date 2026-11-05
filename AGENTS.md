@@ -8,7 +8,7 @@ One Docker Compose stack, deployed by Coolify on a Boston VPS:
 | Service | Path | What it does |
 | --- | --- | --- |
 | Tank | `tank/` (Python 3.12, FastAPI, asyncpg) | The only path to any AI model. Policy table, ledger, cache, shadow/graduation, skills registry (Skala), Base pipeline, queue worker. |
-| Workspace | `workspace/` (Next.js 15, App Router, Clerk) | The client app at app.tervory.com. Clerk organizations = tenants. |
+| Workspace | `workspace/` (Next.js 15, App Router, Trigger sign-in) | The client app at app.tervory.com. Trigger sign-in organizations = tenants. |
 | LiteLLM | `litellm/` | Holds every model key. Only Tank talks to it. |
 | SearXNG | `searxng/` | Self-hosted search, internal only. |
 | Postgres / Redis / Qdrant | images | Shared stores. |

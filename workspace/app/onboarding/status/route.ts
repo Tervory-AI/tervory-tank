@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { baseBatches } from "@/lib/tank";
 import { activeTenant } from "@/lib/tenant";
 import { isFounder } from "@/lib/admin";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

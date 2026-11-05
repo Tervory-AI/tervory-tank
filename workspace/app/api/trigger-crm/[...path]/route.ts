@@ -1,5 +1,5 @@
 import { isFounder } from "@/lib/admin";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { tenantIdFor } from "@/lib/tenant";
 import { triggerCrmRead } from "@/lib/tank";
 import { crmReadPath, crmReadQuery } from "@/lib/trigger-crm";

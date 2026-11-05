@@ -96,7 +96,7 @@ async def test_chat_exact_repeat_has_zero_cost_both_jobs_in_savings_and_tenants_
     monkeypatch.setattr(b.tank.httpx, 'AsyncClient', Provider)
     monkeypatch.setattr(b.tank, 'stream_completion', stream)
     for index, tenant in enumerate(b.tenants):
-        headers = {'X-Tervory-Tenant': str(tenant), 'X-Tervory-User': 'founder-fixture'}
+        headers = b.native_headers('founder-fixture', tenant=tenant)
         thread = (await b.client.post('/v1/command/threads', json={}, headers=headers)).json()['thread_id']
         route = f'/v1/command/threads/{thread}/turn'
         for _ in range(2):

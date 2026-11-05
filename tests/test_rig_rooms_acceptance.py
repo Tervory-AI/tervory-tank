@@ -45,7 +45,8 @@ async def test_chats_two_store_rooms_keep_search_cart_quote_and_destroy_isolated
     fake = FakeCoolify()
     routes, data_planes, stores, provider_calls, bucket = {}, {}, {}, {}, {}
     actor = command.Actor(UUID(A), 'fixture-founder', True, frozenset({'rig'}), True)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', actor.user_id)
+    from trigger_signin_fakes import set_founders
+    set_founders(monkeypatch, actor.user_id)
     monkeypatch.setenv('RIG_LIFECYCLE_KEY', KEY)
     monkeypatch.setattr(rooms, 'SNAPSHOT_CHUNK_BYTES', 2048)
     monkeypatch.setenv('RIG_RETAILER_KEY', 'fixture-control')
@@ -279,7 +280,8 @@ def test_room_commands_require_admin_and_never_accept_foreign_tenant(monkeypatch
     import command
     from fastapi import HTTPException
     from uuid import UUID
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'fixture-founder')
+    from trigger_signin_fakes import set_founders
+    set_founders(monkeypatch, 'fixture-founder')
     member = command.Actor(UUID(A), 'fixture-member', False, frozenset({'rig'}))
     admin = command.Actor(UUID(A), 'fixture-admin', False, frozenset({'rig'}), True)
     unlicensed = command.Actor(UUID(A), 'fixture-admin', False, frozenset(), True)

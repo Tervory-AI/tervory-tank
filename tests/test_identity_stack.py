@@ -9,12 +9,12 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-SETUP = runpy.run_path(str(ROOT / 'ops/identity/setup.py'))
+SETUP = runpy.run_path(str(ROOT / 'ops/trigger-signin/setup.py'))
 
 
 @pytest.mark.parametrize('omit_defaults', [False, True])
 def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_defaults):
-    state = {'project': None, 'roles': [], 'app': None,
+    state = {'project': None, 'roles': [], 'apps': {},
              'login': {'allowRegister': True, 'passwordCheckLifetime': '86400s', 'allowDomainDiscovery': True}, 'lockout': {}, 'writes': []}
     def api(request):
         path, method = request.url.path, request.method
@@ -33,20 +33,22 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_d
         elif path.endswith('/roles/_search'):
             result = {'result': state['roles']}
         elif path.endswith('/roles'):
-            assert body == {'roleKey': 'org_admin', 'displayName': 'org_admin'}
+            assert body['roleKey'] in {'org_admin', 'member', 'reviewer'}
+            assert body['displayName'] == body['roleKey']
             state['roles'].append({'key': body['roleKey']})
             result = {}
         elif path.endswith('/apps/_search'):
-            app = state['app']
+            app = state['apps'].get(body['queries'][0]['nameQuery']['name'])
             if app and omit_defaults:
                 app = {'oidcConfig': {k: v for k, v in app['oidcConfig'].items() if k != 'version'}}
             result = {'result': [app] if app else []}
         elif path.endswith('/apps/oidc'):
-            assert body == SETUP['APP']
+            assert body == (SETUP['APP'] if body['name'] == 'Tervory CLI' else SETUP['WORKSPACE_APP'])
             assert body['authMethodType'] == 'OIDC_AUTH_METHOD_TYPE_NONE'
-            assert set(body['grantTypes']) == {'OIDC_GRANT_TYPE_AUTHORIZATION_CODE', 'OIDC_GRANT_TYPE_DEVICE_CODE'}
-            state['app'] = {'oidcConfig': {**{k: v for k, v in body.items() if k != 'name'}, 'clientId': '30001@tervory'}}
-            result = {'clientId': '30001@tervory'}
+            assert 'OIDC_GRANT_TYPE_AUTHORIZATION_CODE' in body['grantTypes']
+            client_id = '30001@tervory' if body['name'] == 'Tervory CLI' else '30002@tervory'
+            state['apps'][body['name']] = {'oidcConfig': {**{key: value for key, value in body.items() if key != 'name'}, 'clientId': client_id}}
+            result = {'clientId': client_id}
         elif '/policies/login/second_factors' in path or '/policies/login/multi_factors' in path:
             field = 'secondFactors' if path.endswith('second_factors') else 'multiFactors'
             state['login'].setdefault(field, []).append(body['type'])
@@ -65,10 +67,10 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_d
     with httpx.Client(base_url='http://offline', transport=httpx.MockTransport(api)) as client:
         configure = SETUP['Configure'](client)
         first = configure.run()
-        assert first == {'client_id': '30001@tervory', 'project_id': '20001', 'owner_org_id': '10001'}
+        assert first == {'client_id': '30001@tervory', 'workspace_client_id': '30002@tervory', 'project_id': '20001', 'owner_org_id': '10001'}
         before = list(state['writes'])
         assert configure.run() == first and state['writes'] == before
-        assert state['login']['allowRegister'] is False
+        assert state['login']['allowRegister'] is True
         assert state['login']['passwordCheckLifetime'] == '86400s'
         assert state['login']['allowDomainDiscovery'] is True
         assert state['login']['passwordlessType'] == 'PASSWORDLESS_TYPE_ALLOWED'
@@ -81,62 +83,78 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_d
 
 
 def test_stack_is_isolated_pinned_and_uses_only_existing_proxy():
-    text = (ROOT / 'ops/identity/docker-compose.yml').read_text()
+    text = (ROOT / 'ops/trigger-signin/docker-compose.yml').read_text()
     stack = yaml.safe_load(text)
     services = stack['services']
-    for name in ['zitadel-init', 'zitadel-setup', 'zitadel-api']:
+    for name in ['trigger-signin-init', 'trigger-signin-setup', 'trigger-signin-api']:
         assert re.fullmatch(r'ghcr.io/zitadel/zitadel:v4\.20\.0@sha256:[a-f0-9]{64}', services[name]['image'])
-    assert re.fullmatch(r'ghcr.io/zitadel/zitadel-login:v4\.20\.0@sha256:[a-f0-9]{64}', services['zitadel-login']['image'])
+    assert re.fullmatch(r'ghcr.io/zitadel/zitadel-login:v4\.20\.0@sha256:[a-f0-9]{64}', services['trigger-signin-login']['image'])
     assert re.fullmatch(r'postgres:16\.15@sha256:[a-f0-9]{64}', services['identity-postgres']['image'])
-    assert stack['volumes']['identity_database']['name'] == 'identity-za-postgres'
+    assert stack['volumes']['identity_database']['name'] == 'trigger-signin-us-postgres'
     assert services['identity-postgres']['networks'] == ['database']
     assert stack['networks']['database']['internal'] is True
     assert not any('traefik' in service.get('image', '') for service in services.values())
-    assert services['zitadel-api']['labels']['traefik.http.services.identity-za-api.loadbalancer.server.scheme'] == 'h2c'
-    assert services['zitadel-init']['command'] == ['init']
-    assert services['zitadel-setup']['command'] == ['setup', '--masterkeyFromEnv']
-    assert services['zitadel-api']['command'] == ['start', '--masterkeyFromEnv']
-    assert services['zitadel-setup']['depends_on']['zitadel-init']['condition'] == 'service_completed_successfully'
-    env = services['zitadel-setup']['environment']
+    assert services['trigger-signin-api']['labels']['traefik.http.services.trigger-signin-api.loadbalancer.server.scheme'] == 'h2c'
+    assert services['trigger-signin-init']['command'] == ['init']
+    assert services['trigger-signin-setup']['command'] == ['setup', '--masterkeyFromEnv']
+    assert services['trigger-signin-api']['command'] == ['start', '--masterkeyFromEnv']
+    assert services['trigger-signin-setup']['depends_on']['trigger-signin-init']['condition'] == 'service_completed_successfully'
+    env = services['trigger-signin-setup']['environment']
     assert env['ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED'] == 'true'
-    assert env['ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWREGISTER'] == 'false'
+    # Open sign-up matches setup's login policy; a new account has no tenant access until invited.
+    assert env['ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWREGISTER'] == 'true'
     assert env['ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH'] == '/bootstrap/machine-key.json'
-    assert services['zitadel-login']['volumes'] == ['identity_login_token:/login:ro']
+    assert services['trigger-signin-login']['volumes'] == ['identity_login_token:/login:ro']
     assert 'identity_bootstrap:/bootstrap' in services['tervory-setup']['volumes']
-    for service in services.values():
+    for name, service in services.items():
         assert 'ports' not in service
-        assert not any('SMTP' in name for name in service.get('environment', {}))
+        # Only the one-shot setup job sees mail settings; it turns email on and sends the setup email.
+        if name != 'tervory-setup':
+            assert not any('SMTP' in key for key in service.get('environment', {}))
+    assert services['tervory-setup']['environment']['TRIGGER_SIGNIN_SMTP_PASSWORD'].startswith('${TRIGGER_SIGNIN_SMTP_PASSWORD:?')
     assert services['identity-backup']['depends_on'] == {'identity-postgres': {'condition': 'service_healthy'}}
-    assert 'IDENTITY_BOOTSTRAP_KEY_EXPIRATION' in services['tervory-setup']['environment']
+    assert 'TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION' in services['tervory-setup']['environment']
     # Existing main backup has no route to this separate private database.
     za = yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())
     assert za['services']['r2-backup-za']['networks'] == ['default']
     assert stack['networks']['database'].get('external', False) is False
     assert services['identity-backup']['build']['target'] == 'backup'
-    assert services['identity-backup']['environment']['TANK_REGION'] == 'za'
+    assert services['identity-backup']['environment']['TANK_REGION'] == 'us-east'
     assert 'DATABASE_URL' not in services['identity-backup']['environment']
     za = yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())
-    assert za['services']['tank']['environment']['IDENTITY_ISSUER'] == '${IDENTITY_ISSUER:-}'
+    assert 'TRIGGER_SIGNIN_ISSUER' not in za['services']['tank']['environment']
+    assert 'TRIGGER_SIGNIN_SETUP_TOKEN' not in za['services']['tank']['environment']
+    assert 'TRIGGER_SIGNIN_CONFIG_TOKEN' in za['services']['tank']['environment']
 
 
 def test_expired_bootstrap_skips_only_successfully_completed_setup(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv('IDENTITY_BOOTSTRAP_KEY_EXPIRATION', '2000-01-01T00:00:00Z')
+    monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', 'https://auth.tervory.com')
+    monkeypatch.setenv('TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION', '2000-01-01T00:00:00Z')
     def no_network(*args, **kwargs):
         pytest.fail('Expired completed bootstrap must not authenticate or call an API')
     monkeypatch.setattr(httpx, 'Client', no_network)
     with pytest.raises(SETUP['SetupError'], match='without completed setup'):
         SETUP['main'](tmp_path)
-    result = {'client_id': '30001@tervory', 'project_id': '20001', 'owner_org_id': '10001'}
+    result = {'client_id': '30001@tervory', 'workspace_client_id': '30002@tervory', 'project_id': '20001', 'owner_org_id': '10001'}
     marker = tmp_path / 'tervory.json'
     marker.write_text(json.dumps(result))
     # No machine-key file exists: even reading/signing it would fail this test.
-    assert SETUP['main'](tmp_path) is None
+    with pytest.raises(SETUP['SetupError'], match='credential needs renewal'):
+        SETUP['main'](tmp_path)
     output = capsys.readouterr()
-    assert output.out == result['client_id'] + '\n'
-    assert output.err == 'Identity setup already completed; bootstrap key expired; no changes attempted\n'
+    assert output.out == output.err == ''
     assert json.loads(marker.read_text()) == result
     marker.write_text(json.dumps({'client_id': result['client_id']}))
     with pytest.raises(SETUP['SetupError'], match='record refused'):
         SETUP['main'](tmp_path)
-    monkeypatch.setenv('IDENTITY_BOOTSTRAP_KEY_EXPIRATION', '2999-01-01T00:00:00Z')
+    monkeypatch.setenv('TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION', '2999-01-01T00:00:00Z')
     assert SETUP['completed_setup'](tmp_path) is None
+
+
+@pytest.mark.parametrize('host', ['auth.tervory.com'])
+def test_setup_accepts_only_global_signin_host(monkeypatch, host):
+    monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', 'https://' + host)
+    assert SETUP['issuer_settings']() == ('https://' + host, host)
+    monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', 'https://trigger.tervory.com')
+    with pytest.raises(SETUP['SetupError']):
+        SETUP['issuer_settings']()

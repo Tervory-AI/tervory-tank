@@ -21,7 +21,7 @@ async function main() {
     return {ok:true,json:async()=>url.endsWith('/delete-products')?{deleted:2}:{products:0,product_rows:[]}};
   }});
   const actions=load('workspace/app/rig/admin/actions.ts',{
-    '@clerk/nextjs/server':{auth:async()=>session},
+    '@/lib/trigger-signin':{auth:async()=>session},
     '@/lib/tenant':{activeTenant:async()=>({...actor,userId:session.userId})},
     '../../review/founder':load('workspace/app/review/founder.ts'),
     '@/lib/tank':tank,

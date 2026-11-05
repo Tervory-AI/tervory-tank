@@ -7,7 +7,7 @@ import hmac
 import json
 import secrets
 import uuid
-import os
+import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -67,24 +67,59 @@ class Session(Body):
     token: str = Field(pattern=r"^[a-f0-9-]{36}_[A-Za-z0-9_-]{43}$")
 
 
+async def checked_principal(principal, tenant):
+    import trigger_signin_config as registry
+    from main import box_region
+    await registry.refresh()
+    try:
+        if (not isinstance(principal, dict) or principal.get("tenantId") != str(tenant)
+                or principal.get("issuer") != registry.ISSUER
+                or principal.get("boxRegion") != box_region()
+                or type(principal.get("tenantAdmin")) is not bool
+                or not isinstance(principal.get("userId"), str)
+                or not 1 <= len(principal["userId"]) <= 200
+                or registry.config(box_region())["organisations"].get(principal.get("orgId")) != str(tenant)):
+            raise ValueError
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(401, "Mobile session refused") from None
+    return principal
+
+
 async def session_identity(token: str):
+    if not re.fullmatch(r"[a-f0-9-]{36}_[A-Za-z0-9_-]{43}", token):
+        raise HTTPException(401, "Mobile session refused")
     try:
         tenant = uuid.UUID(token[:36])
     except ValueError:
-        raise HTTPException(401) from None
+        raise HTTPException(401, "Mobile session refused") from None
     with tenant_scope(tenant):
         async with db().acquire() as conn, conn.transaction():
-            row = await conn.fetchrow("SELECT identity FROM tank.mobile_sessions WHERE tenant_id=$1 AND token_hash=$2 AND expires_at>now() AND NOT revoked", tenant, digest(token))
+            row = await conn.fetchrow("SELECT identity,user_id FROM tank.mobile_sessions WHERE tenant_id=$1 AND token_hash=$2 AND expires_at>now() AND NOT revoked", tenant, digest(token))
     if row is None:
-        raise HTTPException(401)
-    return unpack(row["identity"])
+        raise HTTPException(401, "Mobile session refused")
+    principal = await checked_principal(unpack(row["identity"]), tenant)
+    if principal["userId"] != row["user_id"]:
+        raise HTTPException(401, "Mobile session refused")
+    return principal
+
+
+async def native_identity(request: Request):
+    if (getattr(request.state, "trigger_signin", {}).get("credential_type") != "native"
+            or not request.headers.get("x-trigger-signin-token")
+            or request.headers.get("authorization")):
+        raise HTTPException(403, "Native sign-in required")
+    return await identity(request)
 
 
 @router.post("/handshake")
-async def handshake(body: Handshake, actor: Actor = Depends(identity)):
+async def handshake(body: Handshake, actor: Actor = Depends(native_identity)):
+    import trigger_signin_config as registry
+    from main import box_region
     code = f"{actor.tenant_id}_{secrets.token_urlsafe(32)}"
     principal = {"tenantId": str(actor.tenant_id), "userId": actor.user_id,
-                 "orgId": body.org_id, "orgName": body.org_name, "tenantAdmin": actor.tenant_admin}
+                 "orgId": body.org_id, "orgName": body.org_name, "tenantAdmin": actor.tenant_admin,
+                 "issuer": registry.issuer(), "boxRegion": box_region()}
+    await checked_principal(principal, actor.tenant_id)
     async with db().acquire() as conn, conn.transaction():
         await conn.execute("INSERT INTO tank.mobile_codes(tenant_id,code_hash,challenge,identity) VALUES($1,$2,$3,$4::jsonb)", actor.tenant_id, digest(code), body.challenge, json.dumps(principal))
     return {"code": code}
@@ -103,6 +138,7 @@ async def exchange(body: Exchange):
             row = await conn.fetchrow("SELECT challenge,identity FROM tank.mobile_codes WHERE tenant_id=$1 AND code_hash=$2 AND expires_at>now() FOR UPDATE", tenant, digest(body.code))
             if row is None or not hmac.compare_digest(row["challenge"], challenge):
                 raise HTTPException(401)
+            await checked_principal(unpack(row["identity"]), tenant)
             await conn.execute("DELETE FROM tank.mobile_codes WHERE tenant_id=$1 AND code_hash=$2", tenant, digest(body.code))
             await conn.execute("INSERT INTO tank.mobile_sessions(tenant_id,token_hash,user_id,identity) VALUES($1,$2,$3,$4::jsonb)", tenant, digest(token), unpack(row["identity"])["userId"], json.dumps(unpack(row["identity"])))
     return {"token": token}
@@ -112,9 +148,14 @@ async def exchange(body: Exchange):
 async def resolve(body: Session):
     principal = await session_identity(body.token)
     from command import authorized_actor
-    admins = {user.strip() for user in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",")}
-    with tenant_scope(uuid.UUID(principal["tenantId"])):
-        await authorized_actor(Actor(uuid.UUID(principal["tenantId"]), principal["userId"], principal["userId"] in admins, tenant_admin=principal["tenantAdmin"]))
+    import trigger_signin_config as registry
+    context = registry._issuer.set(principal["issuer"])
+    try:
+        with tenant_scope(uuid.UUID(principal["tenantId"])):
+            await authorized_actor(Actor(uuid.UUID(principal["tenantId"]), principal["userId"], False,
+                                         tenant_admin=principal["tenantAdmin"]))
+    finally:
+        registry._issuer.reset(context)
     return principal
 
 
@@ -191,7 +232,7 @@ async def create_share(body: Share, actor: Actor = Depends(identity)):
             return {"draft_id": str(existing["id"])}
         thread_id, draft_id = uuid.uuid4(), uuid.uuid4()
         state = {"messages": [], "steps": {}, "cards": {}, "receipts": [], "active_turn": None}
-        await conn.execute("INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,'Shared with Tervory',$4::jsonb)", thread_id, actor.tenant_id, actor.user_id, json.dumps(state))
+        await conn.execute("INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state,trigger_signin_issuer) VALUES($1,$2,$3,'Shared with Tervory',$4::jsonb,$5)", thread_id, actor.tenant_id, actor.user_id, json.dumps(state), __import__("trigger_signin_config").issuer())
         attachments = []
         for name, content in files:
             attachment_id = uuid.uuid4()

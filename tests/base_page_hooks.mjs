@@ -1,5 +1,8 @@
 // Lets node --experimental-strip-types load the Base page's extensionless TypeScript imports.
 export async function resolve(specifier, context, nextResolve) {
+  if (specifier === "@/lib/trigger-signin-fetch") {
+    return { url: "data:text/javascript,export const signinFetch = (...args) => globalThis.fetch(...args);", shortCircuit: true };
+  }
   if (specifier === "@/app/api/zenas/tank") {
     return nextResolve(new URL("../workspace/app/api/zenas/tank.ts", import.meta.url).href, context);
   }

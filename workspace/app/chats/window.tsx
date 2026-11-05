@@ -22,7 +22,7 @@ const statusLabel = { planned: "Planned", running: "Running", done: "Done", fail
 function CostReceipt({ receipt, founder, threadId, messageId }: { receipt: Receipt; founder: boolean; threadId: string; messageId: string }) {
   const pending = receipt.status === "pending";
   const rows = <div className="cw-receipt-rows">{pending && <p className="cw-note">Cost pending. Totals remain unavailable until the work is accounted for.</p>}{receipt.rows.map((row, index) => <a className="cw-receipt-row" key={`${row.ledger_id}-${index}`} href={`/chats/evidence/${encodeURIComponent(threadId)}/${encodeURIComponent(row.ledger_id)}`}>
-    <span>{founder ? row.step_id : `Step ${index + 1}`}</span>
+    <span>{founder ? row.step_id : `Step ${index + 1}`}{row.paid_step_mode && <small>{row.paid_step_id} · {row.paid_step_mode}</small>}</span>
     {founder && <span>{row.model === "code" ? "code (no model)" : row.model}<small>{row.tokens_in ?? "—"} in · {row.tokens_out ?? "—"} out</small></span>}
     <span>Cost {dollars(row.cost_usd)}</span><span>{founder && row.baseline_model ? `${row.baseline_model} ` : "Would have cost "}{dollars(row.baseline_cost_usd)}</span><span className="cw-saving">Saved {dollars(row.saved_usd)}{row.baseline_status === "baseline pending" && <small>Comparison pending</small>}</span>
     {founder && <small>{row.ledger_id}</small>}
@@ -240,10 +240,10 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
         if (event.seq !== undefined) { if (event.seq <= lastSeq) return; lastSeq = event.seq; }
         const data = event.data;
         if (event.type === "error") { rejected = true; throw new Error(String(data.message)); }
-        if (event.type === "done") completed = true;
+        if (event.type === "done" || (event.type === "step" && data.phase_finished === true)) completed = true;
         setSnapshot(current => {
           if (!current) return current;
-          if (event.type === "step") return { ...current, steps: upsert(current.steps, data as unknown as Step, "step_id") };
+          if (event.type === "step") return { ...current, messages: data.phase_finished === true ? current.messages.filter(message => message.message_id !== localId) : current.messages, steps: upsert(current.steps, data as unknown as Step, "step_id") };
           if (event.type === "card" && visibleCard(data as unknown as Card, founder)) return { ...current, cards: upsert(current.cards, data as unknown as Card, "card_id") };
           if (event.type === "receipt") return applyReceipt(current, data as unknown as Receipt, localId);
           if (event.type === "token") return { ...current, messages: current.messages.map(message => message.message_id !== localId ? message : { ...message, content: (data.replace === true ? "" : message.content) + String(data.text ?? "") }) };

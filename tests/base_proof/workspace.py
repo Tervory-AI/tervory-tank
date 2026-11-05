@@ -1,4 +1,4 @@
-"""Copy Workspace to a temporary cloud directory and stub Clerk there only."""
+"""Copy Workspace to a temporary cloud directory and stub Trigger sign-in there only."""
 from pathlib import Path
 import shutil
 import tempfile
@@ -13,7 +13,7 @@ export async function currentTenant(): Promise<Tenant> { return {tenantId: "ba5e
 export const activeTenant = currentTenant;
 ''')
 page = target / "app/base/page.tsx"
-page.write_text(page.read_text().replace('import { auth } from "@clerk/nextjs/server";', 'async function auth() { return {userId: "local-fixture-user"}; }'))
+page.write_text(page.read_text().replace('import { auth } from "@/lib/trigger-signin";', 'async function auth() { return {userId: "local-fixture-user"}; }'))
 (target / "app/layout.tsx").write_text('''import { inter, jost, mono } from "./fonts";
 import "./globals.css";
 export default function RootLayout({children}: {children: React.ReactNode}) {

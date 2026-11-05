@@ -1,5 +1,5 @@
 /* Review of #506, B3: the Workspace "CLI sign-ins" list with Revoke.
- * Runs the actual workspace/lib/cli-sign-ins.ts (with lib/device-login.ts and lib/tank.ts)
+ * Runs the actual workspace/lib/cli-sign-ins.ts (with lib/signin-regions.ts and lib/tank.ts)
  * against a recording fetch, and renders the actual app/cli/sign-ins/list.tsx.
  * Synthetic only: dummy keys, no network. Run with: node tests/cli_sign_ins.cjs */
 const assert = require('node:assert/strict');
@@ -33,14 +33,13 @@ async function recordingFetch(url, init) {
   return answer(String(url), init);
 }
 const env = { TANK_URL: HOME, TANK_API_KEY: 'dummy-workspace-key', TANK_REGION: 'us-east',
-              TANK_URL_ZA: ZA, TANK_API_KEY_ZA: 'dummy-za-workspace-key', TANK_DEVICE_APPROVAL_KEY_ZA: 'dummy-za-approval-key' };
+              TANK_URL_ZA: ZA, TANK_API_KEY_ZA: 'dummy-za-workspace-key', TRIGGER_SIGNIN_SESSIONS_KEY: 'dummy-za-sessions-key' };
 const load = workspace({ env, fetch: (...args) => recordingFetch(...args) });
 const lib = load('lib/cli-sign-ins.ts');
 const within = (promise, ms, label) => Promise.race([promise,
   new Promise((_, reject) => setTimeout(() => reject(new Error(`${label}: no answer within ${ms} ms`)), ms).unref())]);
 
 (async () => {
-  // 1. Each region is asked with that region's approval key, scoped to this user and org, no role.
   answer = url => new Response(JSON.stringify(isZa(url)
     ? [row(MINE, { region: 'za', device_name: 'za-laptop', last_used_at: '2026-10-31T21:00:00Z' })]
     : [row(OLD), row(GONE, { revoked_at: past }), row('44444444-4444-4444-8444-444444444444', { refresh_expires_at: past }),
@@ -49,7 +48,7 @@ const within = (promise, ms, label) => Promise.race([promise,
   assert.deepEqual(calls.map(c => [c.method, c.url]).sort(), [['GET', `${HOME}/v1/personal-tokens`], ['GET', `${ZA}/v1/personal-tokens`]]);
   const byUrl = Object.fromEntries(calls.map(c => [isZa(c.url) ? 'za' : 'us', c]));
   assert.equal(byUrl.us.headers['x-tank-key'], 'dummy-workspace-key');
-  assert.equal(byUrl.za.headers['x-tank-key'], 'dummy-za-approval-key', 'ZA uses the dedicated approval key, never the ZA Workspace key');
+  assert.equal(byUrl.za.headers['x-tank-key'], 'dummy-za-sessions-key', 'ZA uses the dedicated own-session key, never the ZA Workspace key');
   for (const c of calls) {
     assert.equal(c.headers['x-tervory-user'], 'user_b3');
     assert.equal(c.headers['x-tervory-tenant'], identity.tenantId);
@@ -84,7 +83,7 @@ const within = (promise, ms, label) => Promise.race([promise,
   calls.length = 0;
   answer = () => new Response(null, { status: 204 });
   assert.equal(await lib.revokeSignIn(identity, 'za', MINE), true);
-  assert.deepEqual(calls.map(c => [c.method, c.url, c.headers['x-tank-key']]), [['DELETE', `${ZA}/v1/personal-tokens/${MINE}`, 'dummy-za-approval-key']]);
+  assert.deepEqual(calls.map(c => [c.method, c.url, c.headers['x-tank-key']]), [['DELETE', `${ZA}/v1/personal-tokens/${MINE}`, 'dummy-za-sessions-key']]);
   calls.length = 0;
   for (const bad of ['../threads', `${MINE}/x`, '', 'x'.repeat(36)]) assert.equal(await lib.revokeSignIn(identity, 'us-east', bad), false);
   assert.equal(calls.length, 0, 'malformed ids never reach Tank');
@@ -118,32 +117,18 @@ const within = (promise, ms, label) => Promise.race([promise,
   const empty = renderToStaticMarkup(React.createElement(SignInList, { regions: [us, { region: 'za', ok: false, message: 'Down.' }], action, notice: 'Revoked.' }));
   assert.match(empty, /No active CLI sign-ins/); assert.match(empty, /South Africa \(ZA\): Down\./); assert.match(empty, /role="status">Revoked\./);
   assert.equal(when(null), 'Never'); assert.equal(when('nope'), 'Unknown');
-  // 6. The real pages, with Clerk-bound modules mocked: the sign-ins page lists both regions, and the
-  //    device approval page (review should-fix 6) labels the reported name, shows when the code was
-  //    created, warns about forwarded codes, and links to CLI sign-ins.
   const pageMocks = {
     react: React, 'react/jsx-runtime': jsx,
     'next/navigation': { redirect: to => { throw new Error(`redirect ${to}`); } },
     '@/lib/tenant': { activeTenant: async () => ({}) },
     '@/lib/trigger': { triggerIdentity: async () => ({ ...identity, orgName: 'Acme Ltd' }) },
-    './actions': { revokeCliSignIn: async () => {}, decideDevice: async () => {} },
+    './actions': { revokeCliSignIn: async () => {} },
     '../../access/access.css': {},
   };
   const pages = workspace({ env, fetch: (...args) => recordingFetch(...args), mocks: pageMocks });
-  answer = url => url.endsWith('/v1/personal-tokens')
-    ? new Response(JSON.stringify([row(isZa(url) ? MINE : OLD, isZa(url) ? { region: 'za', device_name: 'za-laptop' } : {})]), { status: 200 })
-    : new Response(JSON.stringify({ user_code: 'BCDF-GHJK', device_name: '<b>attacker-box</b>', region: 'us-east', status: 'pending',
-        created_at: '2026-10-31T20:59:00+00:00', expires_at: '2026-10-31T21:09:00+00:00' }), { status: 200 });
+  answer = url => new Response(JSON.stringify([row(isZa(url) ? MINE : OLD, isZa(url) ? { region: 'za', device_name: 'za-laptop' } : {})]), { status: 200 });
   const signInsPage = pages('app/cli/sign-ins/page.tsx').default;
   const listed = renderToStaticMarkup(await signInsPage({ searchParams: Promise.resolve({ result: 'revoked' }) }));
   assert.match(listed, /za-laptop/); assert.match(listed, /zenas-mbp/); assert.match(listed, /Revoked\. That sign-in stopped working/);
-  const devicePage = pages('app/cli/device/page.tsx').default;
-  const device = renderToStaticMarkup(await devicePage({ searchParams: Promise.resolve({ code: 'BCDF-GHJK', region: 'us-east' }) }));
-  assert.match(device, /<dt>Device \(the name the device reported\)<\/dt><dd data-testid="device-name">&lt;b&gt;attacker-box&lt;\/b&gt;<\/dd>/,
-               'the reported name is labelled as such and rendered as text');
-  assert.match(device, /<dt>Code created<\/dt><dd data-testid="device-created">Oct 31, 2026, 20:59 UTC<\/dd>/);
-  assert.match(device, /Did someone send you this link or code\?<\/strong> Deny it\. Approving gives whoever started this/);
-  assert.match(device, /href="\/cli\/sign-ins"/);
-  assert.match(device, /Acme Ltd/);
   console.log('cli_sign_ins: ok');
 })().catch(error => { console.error(error); process.exit(1); });

@@ -94,28 +94,18 @@ export async function keychain() {
 }
 
 const REFRESH = /^tvr1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/;
-const USER_CODE = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/;
 const DEVICE_ERRORS = ['authorization_pending', 'slow_down', 'access_denied', 'expired_token', 'invalid_grant'];
-// Clerk sign-in exists only on the us-east Workspace. ZA approval happens there
-// too; that Workspace records the decision on the ZA box (za.tervory.com is Tank only).
-export const APPROVAL_ORIGIN = ORIGINS['us-east'];
+const SIGNIN_ORIGINS = { 'us-east': 'https://auth.tervory.com', za: 'https://auth.tervory.com' };
 
-export function approvalUrl(code, region) {
-  if (!USER_CODE.test(code) || !ORIGINS[region]) throw new Error('Login refused by Tank.');
-  return `${APPROVAL_ORIGIN}/cli/device?${new URLSearchParams({ code, region })}`;
-}
-
-// ZA's optional identity provider is pinned independently of the Tank origin.
 export function identityApprovalUrl(start, region) {
-  if (start.identity_provider !== 'zitadel') return approvalUrl(start.user_code, region);
-  if (region !== 'za' || typeof start.user_code !== 'string' || !/^[A-Z0-9-]{4,40}$/.test(start.user_code)) {
+  if (start.identity_provider !== 'trigger-signin' || !SIGNIN_ORIGINS[region] || typeof start.user_code !== 'string' || !/^[A-Z0-9-]{4,40}$/.test(start.user_code)) {
     throw new Error('Login refused by Tank.');
   }
   try {
     const base = new URL(start.verification_uri);
     const url = new URL(start.verification_uri_complete || start.verification_uri);
     for (const value of [base, url]) {
-      if (value.origin !== 'https://auth-za.tervory.com' || value.username || value.password || value.hash) {
+      if (value.origin !== SIGNIN_ORIGINS[region] || value.username || value.password || value.hash) {
         throw new Error();
       }
     }
@@ -179,12 +169,11 @@ export async function session(store, transport = fetch, now = Date.now) {
   return grant.access_token;
 }
 
-async function login(region, signIn, { store, transport, io }) {
+async function login(region, { store, transport, io }) {
   const name = String(io.deviceName?.() ?? 'tervory-cli').replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim().slice(0, 100) || 'tervory-cli';
-  const start = await deviceCall(region, 'code', { device_name: name, ...(signIn === 'zitadel' ? { approval: 'zitadel' } : {}) }, transport);
+  const start = await deviceCall(region, 'code', { device_name: name, approval: 'trigger-signin' }, transport);
   if (start.error || typeof start.device_code !== 'string'
-      || (signIn === 'zitadel' && start.identity_provider !== 'zitadel')) throw new Error('Login refused by Tank.');
-  // Existing Workspace approval is unchanged; Zitadel URLs must match the fixed ZA origin.
+      || !start.device_code.startsWith('tzd1.')) throw new Error('Login refused by Tank.');
   const url = identityApprovalUrl(start, region);
   io.write(`Approve this device in your browser (${safe(name)}, ${region}):\n  ${url}\nConfirm the page shows code ${start.user_code}.\n`);
   await Promise.resolve(io.open?.(url)).catch(() => {});
@@ -357,6 +346,7 @@ export function receiptLines(receipt) {
 
 export async function confirmCard(tank, card, io) {
   io.write(`${safe(card.summary)}\n`);
+  if (card.tool === 'paid_steps.approve' && io.interactive !== true) return card;
   // Any response except an explicit yes cancels, including EOF.
   const answer = io.interactive !== true ? null : await io.prompt('Confirm [y/N] ');
   const action = /^(y|yes)$/i.test(answer?.trim() ?? '') ? 'confirm' : 'cancel';
@@ -384,6 +374,7 @@ export async function showTurn(tank, thread, text, model, attachments, io) {
         if (answer.length > 2_000_000) throw new Error('Tank answer exceeds the limit.');
         io.preview?.(answer); break;
       case 'step':
+        if (event.data.phase_finished === true) { complete = true; answer = ''; sanitizer = new StreamSanitizer(); }
         io.preview?.('');
         io.write(`\n[${safe(event.data.status)}] ${safe(event.data.actor)}: ${safe(event.data.label)}\n`);
         io.preview?.(answer); break;
@@ -399,7 +390,7 @@ export async function showTurn(tank, thread, text, model, attachments, io) {
   for (const receipt of receipts) io.write(`\n${receiptLines(receipt).map(safe).join('\n')}\n`);
   for (const card of cards.values()) {
     const result = await confirmCard(tank, card, io);
-    if (result.status !== 'cancelled') await followThread(tank, thread, result, io);
+    if (result.status !== 'cancelled' && !(result.tool === 'paid_steps.approve' && result.status === 'pending')) await followThread(tank, thread, result, io);
   }
 }
 
@@ -443,7 +434,7 @@ export function options(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith('--')) { args.push(argv[i]); continue; }
     const flag = argv[i].slice(2);
-    if (!['model', 'thread', 'file', 'args', 'region', 'version', 'sign-in'].includes(flag) || flags[flag] !== undefined || !argv[i + 1] || argv[i + 1].startsWith('--')) {
+    if (!['model', 'thread', 'file', 'args', 'region', 'version'].includes(flag) || flags[flag] !== undefined || !argv[i + 1] || argv[i + 1].startsWith('--')) {
       throw new Error('Invalid command option.');
     }
     flags[flag] = argv[++i];
@@ -454,7 +445,7 @@ export function options(argv) {
 export async function run(argv, { store, transport, io, env = process.env }) {
   const { args, flags } = options(argv); const [name, ...rest] = args;
   if (!name || name === 'help') {
-    io.write('tervory login [--region us-east|za] [--sign-in zitadel] | logout | chat [thread] | code [folder] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | update [--version X.Y.Z] | version\n');
+    io.write('tervory login [--region us-east|za] | logout | chat [thread] | code [folder] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | update [--version X.Y.Z] | version\n');
     return;
   }
   if (name === 'update') {
@@ -472,14 +463,13 @@ export async function run(argv, { store, transport, io, env = process.env }) {
     return;
   }
   if (name === 'login') {
-    const { region = 'us-east', 'sign-in': signIn, ...other } = flags;
-    if (rest.length || Object.keys(other).length || !ORIGINS[region]
-        || (signIn !== undefined && (region !== 'za' || signIn !== 'zitadel'))) {
-      throw new Error('Login accepts only --region us-east or --region za; ZA also accepts --sign-in zitadel.');
+    const { region = 'us-east', ...other } = flags;
+    if (rest.length || Object.keys(other).length || !ORIGINS[region]) {
+      throw new Error('Trigger sign-in accepts only --region us-east or --region za.');
     }
-    return login(region, signIn ?? (region === 'za' ? 'zitadel' : undefined), { store, transport, io });
+    return login(region, { store, transport, io });
   }
-  if (flags.region !== undefined || flags['sign-in'] !== undefined) throw new Error('Invalid command option.');
+  if (flags.region !== undefined) throw new Error('Invalid command option.');
   if (name === 'logout') return logout({ store, transport, io });
   const token = await session(store, transport);
   const tank = new Tank(token, transport, io.signal);

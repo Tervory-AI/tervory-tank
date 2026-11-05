@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { tenantIdFor } from "@/lib/tenant";
 
 export async function administrator() {

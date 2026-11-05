@@ -156,6 +156,12 @@ class Connection:
 
 @pytest.fixture
 def harness(monkeypatch):
+    import paid_steps
+    from unittest.mock import AsyncMock
+    async def replay_boundary(key, invoke):
+        return await invoke()
+    monkeypatch.setattr(paid_steps, "checkpoint", replay_boundary)
+    monkeypatch.setattr(paid_steps, "model_admission", AsyncMock(return_value=None))
     monkeypatch.delenv("TANK_PROVIDER_ALLOW", raising=False)
     monkeypatch.delenv("ZA_HOSTED_MODELS", raising=False)
     monkeypatch.setenv("TANK_KEY_MARKET_LAB", "test-room")
