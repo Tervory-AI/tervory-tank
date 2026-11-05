@@ -1,4 +1,5 @@
 """T3 offline: real room journal, fake Hermes, and disposable PostgreSQL cards."""
+from trigger_signin_fakes import set_founders
 import copy
 import importlib.util
 import json
@@ -100,7 +101,7 @@ async def test_memory_failure_preserves_build_and_logs_class_only(monkeypatch, c
 @pytest.fixture
 def runtime(monkeypatch):
     runtime = SimpleNamespace(TANK_API_KEY='placeholder-workspace', box_region=lambda: 'us-east')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     monkeypatch.setenv('TANK_KEY_TISAN', 'placeholder-room')
     monkeypatch.setitem(sys.modules, 'main', runtime)
     return runtime

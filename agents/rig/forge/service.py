@@ -80,10 +80,30 @@ async def brain_addresses():
 
 async def relay(action: str, body: dict) -> dict:
     async with httpx.AsyncClient(trust_env=False, timeout=30) as client:
-        response = await client.post("http://rig-brain:8001/forge/relay/" + action, json=body)
-        if response.status_code != 200:
-            raise RuntimeError("Tank receipt or budget authorization is unavailable.")
-        return response.json()
+        while True:
+            response = await client.post("http://rig-brain:8001/forge/relay/" + action, json=body)
+            detail = response.json().get("detail") if response.status_code == 409 else None
+            if isinstance(detail, dict) and detail.get("code") == "paid_step_approval_required":
+                if detail.get("tenant_id") != body["tenant_id"] or detail.get("run_id") != body["job_id"]:
+                    raise RuntimeError("Paid approval does not match this forge job")
+                while True:
+                    check = await client.post("http://rig-brain:8001/forge/relay/approval", json={
+                        **{key: body[key] for key in ("tenant_id", "job_id", "home_region")},
+                        "approval_id": detail["approval_id"]})
+                    check.raise_for_status()
+                    status = check.json()
+                    if status.get("run_id") != body["job_id"]:
+                        raise RuntimeError("Paid approval does not match this forge job")
+                    if status["state"] == "approved":
+                        break
+                    if status["state"] == "denied":
+                        raise RuntimeError("Paid forge step denied by tenant administrator")
+                    await asyncio.sleep(5)
+                continue
+            if response.status_code != 200:
+                raise RuntimeError("Tank receipt or budget authorization is unavailable.")
+            return response.json()
+
 
 
 async def perform(body: Job, work: Path, store: Storage):

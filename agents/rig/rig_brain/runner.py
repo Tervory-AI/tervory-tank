@@ -24,6 +24,8 @@ def run(work: Path) -> None:
     tank = os.environ.get("TANK_URL", "http://tank:8000").rstrip("/")
     key = os.environ["TANK_KEY"]
     headers = {"X-Tank-Key": key, "X-Tenant-ID": tenant, "X-Task-ID": task, "X-Home-Region": "us-east"}
+    from brain.paid_approval import install as install_paid_approval
+    install_paid_approval(tank, key, tenant)
     receipt = {"tenant_id": tenant, "task_id": task, "room": "rig", "steps": [], "model_receipts": []}
 
     def save():

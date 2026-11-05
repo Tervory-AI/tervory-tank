@@ -47,7 +47,7 @@
 ## DATA text: a real value, in exactly this format
 | Where | Frame shows | Real source | Format |
 |---|---|---|---|
-| Greeting name | `Thandi` | The signed-in user's first name (Clerk) | Before 12:00 morning, 12:00 to 17:59 afternoon, from 18:00 evening, in the client's local time |
+| Greeting name | `Thandi` | The signed-in user's first name (Trigger sign-in) | Before 12:00 morning, 12:00 to 17:59 afternoon, from 18:00 evening, in the client's local time |
 | Top right | `Northwind Law` | The client's organisation (the active tenant) | As stored |
 | Jobs done this month | `67` | Finished jobs this calendar month (`/v1/dashboards/client`, `jobs_done`) | Whole number, comma between thousands |
 | You saved | `$8,557` | This month's total from the client's savings report (the one `/tank/proof` shows) | `$` + whole number, comma between thousands. It opens the savings report |

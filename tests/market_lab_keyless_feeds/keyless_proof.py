@@ -74,13 +74,12 @@ def services(output):
     thread = threading.Thread(target=proxy.serve_forever, daemon=True)
     thread.start()
     env = {name: value for name, value in os.environ.items()
-           if not name.startswith(("TANK_KEY", "CLERK_", "NEXT_PUBLIC_CLERK_", "R2_"))}
+           if not name.startswith(("TANK_KEY", "TRIGGER_SIGNIN_", "TRIGGER_SIGNIN_", "R2_"))}
     for name in ("CENSUS_API_KEY", "FRED_API_KEY", "EIA_API_KEY", "NOAA_TOKEN", "LEGISCAN_API_KEY", "USPTO_API_KEY", "FEEDS_FIXTURES"):
         env.pop(name, None)
     env.update(TANK_API_KEY="placeholder-keyless-workspace-key", TANK_KEY_MARKET_LAB="placeholder-keyless-room-key",
         LITELLM_MASTER_KEY="placeholder-keyless-unused-provider-key", TANK_REGION="us-east", TERVORY_ADMIN_USER_IDS="",
         REDIS_URL="redis://127.0.0.1:1/0", TANK_URL=f"http://127.0.0.1:{tank_port}", NEXT_TELEMETRY_DISABLED="1",
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==",
         PYTHONPATH=os.pathsep.join(str(ROOT / p) for p in ("tank", "agents/market_lab", "agents/_chassis", "tests/market_lab_keyless_feeds")))
     proxy_env = {"HTTP_PROXY": f"http://127.0.0.1:{proxy.server_port}", "http_proxy": f"http://127.0.0.1:{proxy.server_port}",
                  "NO_PROXY": "localhost,127.0.0.1", "no_proxy": "localhost,127.0.0.1"}

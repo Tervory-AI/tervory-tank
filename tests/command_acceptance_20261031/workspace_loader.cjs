@@ -1,5 +1,5 @@
 /* Load actual workspace/*.ts modules (TypeScript transpile only) into a sandbox
- * with a chosen environment and fetch. Named mocks replace Clerk-bound modules. */
+ * with a chosen environment and fetch. Named mocks replace Trigger sign-in-bound modules. */
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -13,7 +13,7 @@ function resolveFile(base) {
   throw new Error(`Cannot resolve ${base}`);
 }
 
-exports.workspace = function workspace({ env, fetch, mocks = {} }) {
+exports.workspace = function workspace({ env, fetch, mocks = {}, browser }) {
   const cache = new Map();
   function load(file) {
     if (cache.has(file)) return cache.get(file).exports;
@@ -25,6 +25,8 @@ exports.workspace = function workspace({ env, fetch, mocks = {} }) {
     cache.set(file, module);
     const local = spec => {
       if (Object.hasOwn(mocks, spec)) return mocks[spec];
+      if (spec === 'server-only') return {};
+      if (spec === '@/lib/trigger-signin-fetch') return {signinFetch: fetch};
       if (spec.startsWith('node:')) return require(spec);
       if (spec.startsWith('@/')) return load(resolveFile(path.join(root, 'workspace', spec.slice(2))));
       if (spec.startsWith('.')) return load(resolveFile(path.join(path.dirname(file), spec)));
@@ -33,7 +35,7 @@ exports.workspace = function workspace({ env, fetch, mocks = {} }) {
     vm.runInNewContext(output, {
       module, exports: module.exports, require: local, process: { env },
       URL, URLSearchParams, Request, Response, Headers, Uint8Array, TextEncoder, TextDecoder, ReadableStream,
-      AbortController, AbortSignal, setTimeout, clearTimeout, console, fetch,
+      AbortController, AbortSignal, setTimeout, clearTimeout, console, fetch, window: browser,
     });
     return module.exports;
   }

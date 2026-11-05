@@ -159,7 +159,7 @@ The GitHub API returned Forbidden in this cloud environment when preparing the P
 ## 4. Proof
 
 These are **local, fixture page** screenshots. The isolated Next wrapper supplies
-a local identity; this is not Clerk sign-in or live-data proof. Production auth
+a local identity; this is not Trigger sign-in sign-in or live-data proof. Production auth
 files are unchanged. Tank itself is never replaced: real `main:app`, startup,
 authentication, pool and HTTP client run against real local Postgres. Only the
 external R2 HTTP transport is stubbed; storage signing and tenant/bucket paths run.

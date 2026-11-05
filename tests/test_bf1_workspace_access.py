@@ -79,7 +79,7 @@ def test_page_address_is_skala():
     assert "redirect" not in config
     # The only redirects allowed in middleware: /moot to the Zenas host (#303)
     # and signed-out visitors to sign-in (#319). Nothing redirects /skala.
-    assert middleware.count("NextResponse.redirect(") == 1
+    assert middleware.count("NextResponse.redirect(") == 2
     assert "NextResponse.redirect(canonical, 308)" in middleware
     client = _text(ROOT / "workspace" / "lib" / "tank.ts")
     assert "/v1/skala" in client
@@ -90,7 +90,7 @@ def test_page_address_is_skala():
 def test_product_header_skips_sign_in_and_sign_up():
     assert "OrganizationSwitcher" not in LAYOUT
     body = SHELL.split("export function Shell", 1)[1]
-    assert body.index("if (usesOwnShell(pathname)) return") < body.index("OrganizationSwitcher")
+    assert body.index("if (usesOwnShell(pathname)) return") < body.index("OrganisationSwitcher")
     assert "headerLinks(founder)" not in SHELL
     squad = _text(APP / "squad-links.tsx")
     assert 'aria-controls="squad-popout"' in SHELL or 'aria-controls="squad-popout"' in squad or (
@@ -102,11 +102,10 @@ def test_product_header_skips_sign_in_and_sign_up():
         "sign-up/layout.tsx",
         "sign-up/[[...sign-up]]/page.tsx",
         "onboarding/layout.tsx",
-        "onboarding/page.tsx",
     ):
         text = _text(APP / rel)
-        assert "OrganizationSwitcher" not in text, rel
-    assert "OrganizationList" in _text(APP / "onboarding" / "page.tsx")
+        assert "OrganisationSwitcher" not in text, rel
+    assert "OrganisationSwitcher" in _text(APP / "onboarding" / "page.tsx")
     admin = _text(ROOT / "workspace" / "lib" / "admin.ts")
     founder = _text(APP / "review" / "founder.ts")
     for snippet in ('.split(",")', ".trim()", ".includes(userId)"):

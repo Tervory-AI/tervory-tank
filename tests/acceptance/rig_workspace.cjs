@@ -28,6 +28,7 @@ global.fetch = async (url, init) => {
 };
 const model = load('workspace/app/rig/vault-model.ts', {});
 const vault = load('workspace/app/rig/vault-server.ts', {
+  '@/lib/trigger-signin-fetch': {signinFetch: (...args) => globalThis.fetch(...args)},
   '@/lib/tenant': { activeTenant: async () => ({ tenantId: 'fixture-tenant', userId: 'fixture-admin' }) },
   './vault-model': model,
 });

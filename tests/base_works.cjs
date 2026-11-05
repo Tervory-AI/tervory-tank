@@ -27,6 +27,7 @@ function load(relative) {
   } }).outputText;
   const module = { exports: {} };
   const requireFile = (name) => {
+    if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
     if (mocks[name]) return mocks[name];
     if (name === '@/app/api/zenas/tank') return load('workspace/app/api/zenas/tank.ts');
     if (name === '@/lib/tank') return load('workspace/lib/tank.ts');

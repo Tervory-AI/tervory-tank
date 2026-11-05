@@ -1,8 +1,9 @@
 "use server";
+import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { isListedFounder } from "../review/founder";
 
 const PLATFORM = "00000000-0000-0000-0000-000000000001";

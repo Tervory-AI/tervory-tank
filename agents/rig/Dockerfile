@@ -12,7 +12,7 @@ RUN python -c 'import hashlib; from pathlib import Path; root = Path("rigbox/pag
 COPY rig/app.py /app/app.py
 COPY rig/gold_sources.py /app/gold_sources.py
 COPY rig/schema.sql /app/schema.sql
-COPY rig/english-20k.txt /app/english-20k.txt
+COPY rig/english-20k.txt.gz /app/english-20k.txt.gz
 COPY rig/shopping.txt /app/shopping.txt
 USER agent
 ENV AGENT_NAME=rig \

@@ -6,11 +6,25 @@ import subprocess
 from pathlib import Path
 import uuid
 
+import httpx
 import pytest
 
 from test_command import api, command_pool, runtime, TENANT, OTHER  # noqa: F401
-from test_command_streaming import streaming  # noqa: F401
-from test_identity_za import provider as oidc_provider  # noqa: F401
+from test_command_streaming import streaming as streaming_fixture
+import identity_oidc as oidc
+from trigger_signin_fakes import Provider, ORG, install_registry, set_founders
+
+streaming = streaming_fixture
+
+
+@pytest.fixture(params=['us-east', 'za'])
+def oidc_provider(monkeypatch, request):
+    provider = Provider(request.param)
+    install_registry(monkeypatch, [provider], {ORG: str(TENANT)})
+    monkeypatch.setattr(oidc, 'http_client', lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
+    oidc._cache.clear()
+    yield provider
+    oidc._cache.clear()
 
 
 WORKER = {'x-tank-key': 'dummy-worker-key'}
@@ -111,8 +125,8 @@ async def test_persisted_pat_cannot_escalate_headers_or_cross_user_and_revokes(a
     # Deliberately non-random test credential. Never accepted by a live service.
     token = f'tv1.us-east.{TENANT.hex}.' + 'x' * 43
     async with pool.acquire() as conn:
-        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
-                           "VALUES($1,'offline-client','us-east','offline-only',$2)", TENANT, pat.digest(token))
+        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin,trigger_signin_issuer) "
+                           "VALUES($1,'offline-client','us-east','offline-only',$2,true,'https://auth.tervory.com')", TENANT, pat.digest(token))
     headers = {'authorization': 'Bearer ' + token, 'x-tervory-user': 'founder',
                'x-tervory-tenant': str(OTHER), 'x-tervory-role': 'org:admin'}
     created = await client.post('/v1/command/threads', json={}, headers=headers)
@@ -145,8 +159,8 @@ async def test_cli_public_adapter_reaches_real_tank_with_cancel_barrier(streamin
     async with b.pool.acquire() as conn:
         for user, suffix in [('founder', 'f'), ('offline-client', 'c')]:
             token = f'tv1.us-east.{TENANT.hex}.' + suffix * 43
-            await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
-                               "VALUES($1,$2,'us-east','offline-edge',$3)", TENANT, user, pat.digest(token))
+            await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin,trigger_signin_issuer) "
+                               "VALUES($1,$2,'us-east','offline-edge',$3,true,'https://auth.tervory.com')", TENANT, user, pat.digest(token))
     # The subprocess waits on loopback HTTP; keep the async server loop running.
     decoded = await asyncio.to_thread(subprocess.run,
         ['node', str(Path(__file__).with_name('public_edge.cjs'))],
@@ -164,7 +178,7 @@ async def test_cli_public_adapter_reaches_real_tank_with_cancel_barrier(streamin
         assert next(iter(state['cards'].values()))['status'] == 'cancelled'
 
 
-async def device_login_edge(b, region, za_key=None):
+async def device_login_edge(b, region):
     async with b.pool.acquire() as conn:
         # A live price row for the policy model; the customer's pinned turn is refused
         # anyway, so no Auto comparison is priced (review of #506 B2).
@@ -173,7 +187,7 @@ async def device_login_edge(b, region, za_key=None):
     decoded = await asyncio.to_thread(subprocess.run,
         ['node', str(Path(__file__).with_name('device_edge.cjs'))],
         input=json.dumps({'origin': str(b.api.base_url).rstrip('/'), 'tenant': str(TENANT), 'region': region,
-                          'pin': 'fixture-pin', **({'za_key': za_key} if za_key else {})}),
+                          'pin': 'fixture-pin'}),
         text=True, capture_output=True, timeout=60, check=False)
     assert decoded.returncode == 0, decoded.stderr
     assert decoded.stdout.startswith(f'PASS: CLI device login {region}')
@@ -186,7 +200,7 @@ async def device_login_edge(b, region, za_key=None):
         ledger = await conn.fetchrow("SELECT * FROM tank.ledger WHERE tenant_id=$1 ORDER BY ts DESC LIMIT 1", TENANT)
         state = json.loads(await conn.fetchval("SELECT state FROM tank.command_threads WHERE thread_id=$1", thread))
     # One org-scoped credential for the approving user, used, rotated, then revoked.
-    expected_user = 'zitadel:20001' if region == 'za' else 'offline-client'
+    expected_user = '20001'
     assert (token['region'], token['user_id'], token['device_name']) == (region, expected_user, f'acceptance-{region}')
     assert token['last_used_at'] is not None and token['revoked_at'] is not None
     assert token['expires_at'] is not None and token['refresh_hash'] is not None
@@ -205,22 +219,25 @@ async def device_login_edge(b, region, za_key=None):
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
                     reason='Requires assembled CLI/Workspace and local-only client dependencies')
-async def test_cli_device_login_through_workspace_with_automated_approval(streaming):  # noqa: F811
+@pytest.mark.parametrize('oidc_provider', ['us-east'], indirect=True)
+async def test_cli_device_login_through_workspace_with_automated_approval(streaming, oidc_provider):
+    oidc_provider.claims['urn:zitadel:iam:org:project:roles'] = {'member': {'10001': 'tervory'}}
     await device_login_edge(streaming, 'us-east')
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
                     reason='Requires assembled CLI/Workspace and local-only client dependencies')
-async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkeypatch, oidc_provider):  # noqa: F811
-    """ZA default login uses fake Zitadel, real JWT verification and real Tank SQL;
+@pytest.mark.parametrize('oidc_provider', ['za'], indirect=True)
+async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkeypatch, oidc_provider):
+    """ZA Trigger sign-in uses an offline fake, real JWT verification and real Tank SQL;
     no Workspace approval, Boston proxy or live identity provider is involved."""
     monkeypatch.setenv('TANK_REGION', 'za')
     monkeypatch.setenv('TANK_HOMES_KEY', 'dummy-za-homes-key')
-    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', 'dummy-za-device-approval-key')
     # A ZA Tank process reads TANK_REGION=za at import; mirror that for the ledger.
     monkeypatch.setattr(streaming.tank, 'DEFAULT_REGION', 'za')
-    await device_login_edge(streaming, 'za', za_key='dummy-za-device-approval-key')
+    oidc_provider.claims['urn:zitadel:iam:org:project:roles'] = {'member': {'10001': 'tervory'}}
+    await device_login_edge(streaming, 'za')
     assert ('POST', '/oauth/v2/device_authorization') in oidc_provider.calls
     assert ('POST', '/oauth/v2/token') in oidc_provider.calls
     assert ('GET', '/keys') in oidc_provider.calls
@@ -229,7 +246,8 @@ async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkey
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
                     reason='Requires assembled CLI/Workspace and local-only client dependencies')
-async def test_existing_founder_token_cli_answer_is_visible_in_chats_with_same_receipt(streaming):  # noqa: F811 (imported pytest fixture)
+@pytest.mark.parametrize('oidc_provider', ['us-east'], indirect=True)
+async def test_existing_founder_token_cli_answer_is_visible_in_chats_with_same_receipt(streaming, oidc_provider, monkeypatch):
     """Existing PAT only: CLI ask -> persisted Tank turn -> actual /chats API read.
 
     No login, new credential flow, native keychain read or external model request.
@@ -237,10 +255,12 @@ async def test_existing_founder_token_cli_answer_is_visible_in_chats_with_same_r
     """
     import personal_tokens as pat
     b = streaming
+    set_founders(monkeypatch, 'founder')
+    workspace_proof = oidc_provider.token(sub='founder')
     token = f'tv1.us-east.{TENANT.hex}.' + 'f' * 43
     async with b.pool.acquire() as conn:
-        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
-                           "VALUES($1,'founder','us-east','offline-existing-token',$2)", TENANT, pat.digest(token))
+        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin,trigger_signin_issuer) "
+                           "VALUES($1,'founder','us-east','offline-existing-token',$2,true,'https://auth.tervory.com')", TENANT, pat.digest(token))
     script = r"""
 const assert = require('node:assert/strict');
 const {pathToFileURL} = require('node:url');
@@ -253,7 +273,14 @@ assert.equal(new URL(input.origin).hostname, '127.0.0.1');
     env: {TANK_URL: input.origin, TANK_API_KEY: 'dummy-workspace-key', TANK_REGION: 'us-east'},
     fetch: async (url, init) => {
       assert.equal(new URL(url).origin, input.origin);
-      return fetch(url, init);
+      const headers = new Headers(init.headers);
+      if (headers.has('x-tervory-user')) {
+        headers.set('x-trigger-signin-token', input.workspaceProof);
+        headers.set('x-trigger-signin-org', input.org);
+      }
+      const response = await fetch(url, {...init, headers});
+      assert(response.ok, `Offline Tank ${new URL(url).pathname}: ${response.status}`);
+      return response;
     },
     mocks: {
       '@/lib/tenant': {activeTenant: async () => identity},
@@ -292,7 +319,7 @@ assert.equal(new URL(input.origin).hostname, '127.0.0.1');
 """
     result = await asyncio.to_thread(subprocess.run, ['node', '-e', script],
         input=json.dumps({'origin': str(b.api.base_url).rstrip('/'), 'tenant': str(TENANT),
-                          'answer': 'Hello world.\nA 😀 answer.'}),
+                          'answer': 'Hello world.\nA 😀 answer.', 'workspaceProof': workspace_proof, 'org': ORG}),
         text=True, capture_output=True, timeout=30, check=False)
     assert result.returncode == 0, result.stderr
     evidence = json.loads(result.stdout)

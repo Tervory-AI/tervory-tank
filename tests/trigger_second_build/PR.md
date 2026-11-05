@@ -18,9 +18,9 @@ The build and offline checks are complete. **Live founder acceptance and PR CI r
 | `tank/trigger_commands.py:73`, `tank/trigger_routes.py:95` | Bind mutation dispatch to the committed executing card, tenant, user, tool and exact validated arguments. Direct unconfirmed mutations fail. |
 | `tank/trigger_learning.py:12` | Save each successful `trigger.write` tool result using the existing `training.save_pair`: brief, draft and checker report, private to the tenant. |
 | `tank/trigger_learning.py:30`, `tank/schema.sql:1949` | Preserve accepted/change-requested/rejected events, exact change text, user and operation ID. Pending/rejected/change-requested pairs are inactive; accepted pairs remain tenant-private. |
-| `workspace/lib/trigger.ts:1`, `workspace/lib/tank.ts:911` | Reuse existing Clerk session roles, binding user, organization and mapped tenant. Override caller role headers; never trust browser-supplied roles or squads. |
+| `workspace/lib/trigger.ts:1`, `workspace/lib/tank.ts:911` | Reuse existing Trigger sign-in session roles, binding user, organization and mapped tenant. Override caller role headers; never trust browser-supplied roles or squads. |
 | `workspace/app/chats/page.tsx`, `workspace/app/chats/api/[...path]/route.ts` | Pass verified existing tenant-admin authority into the existing chat path. No new UI, text, buttons or sign-in flow. |
-| `tests/trigger_second_build/` | Parser, confirmation, isolation, concurrency, learning, Clerk boundary and browser proof. Existing Command tests are retained; their mocks include the new server role helper. First-build fixtures now use the confirmed voice workflow/house fallback. |
+| `tests/trigger_second_build/` | Parser, confirmation, isolation, concurrency, learning, Trigger sign-in boundary and browser proof. Existing Command tests are retained; their mocks include the new server role helper. First-build fixtures now use the confirmed voice workflow/house fallback. |
 
 Tank's current Dockerfile already copies `*.py`, so it includes both new Tank modules without another Dockerfile change. No router, cache, queue worker, paid route, approved skill version, vendor dependency or other-room implementation was changed.
 
@@ -32,7 +32,7 @@ Tank's current Dockerfile already copies `*.py`, so it includes both new Tank mo
 - `trigger, accept`, `trigger, reject: <reason>` and `trigger, changes: <requested changes>` select this owned thread's latest completed Trigger draft in code. Confirm records feedback. `trigger.feedback` also accepts an explicit write ID in its argument schema.
 - `Trigger, check: <paragraph>` retains the first build's fully model-free check path. Other conversational phrasing may still use the existing planner; none of the voice/check/feedback operations use a model.
 
-Founders and the active tenant's Clerk `org:admin` may manage that tenant's voice and feedback. Ordinary members cannot acquire those tools through headers, payloads, a stale Confirm card, or another tenant ID. Write/check retain the first build's founder access; no new client squad grant was created.
+Founders and the active tenant's Trigger sign-in `org:admin` may manage that tenant's voice and feedback. Ordinary members cannot acquire those tools through headers, payloads, a stale Confirm card, or another tenant ID. Write/check retain the first build's founder access; no new client squad grant was created.
 
 ## House rule sources and licences
 
@@ -54,7 +54,7 @@ The checker scripts reused from agent-style are MIT; its rules are CC BY 4.0; pr
 - A set operation replaces the current file in a new version; it does not silently merge old rules. Preview/save uses the same parser and content hash, with the expected previous revision. Two concurrent confirmations cannot overwrite each other.
 - History begins with the existing current file on schema application. Versions overwritten before the second build cannot be reconstructed. Rollback increments revision while restoring the selected content, so cache identity changes correctly.
 - Retired inline `trigger.write.voice` and the old room PUT route to avoid a second, unversioned save path. Existing saved files/results remain. Pending old inline-voice cards fail closed and need the new set flow.
-- Reused Clerk's existing `org:admin` role; no sign-in behavior, new key, browser authority, or broad squad entitlement. The role is re-read by Workspace on each request, including Confirm.
+- Reused Trigger sign-in's existing `org:admin` role; no sign-in behavior, new key, browser authority, or broad squad entitlement. The role is re-read by Workspace on each request, including Confirm.
 - New learning pairs are inactive and unapproved until explicit accepted feedback. Rejections and requested changes are retained as inactive negative records, with all feedback events in the tenant-scoped event table. Even accepted pairs have `public=false` and `client_matter=true`, so the existing shared export path excludes them. No automatic training/promotion was added.
 - Recording feedback does not generate a revision draft. The next requested write is a separate recorded draft; no acceptance is inferred from silence. Pending is an honest state.
 - Use the previous PR's handoff convention: proof in this file, Claude opens the PR. No GitHub API was used to inspect/open one.
@@ -110,7 +110,7 @@ The tests apply both schemas twice; preserve literal source; demonstrate zero sa
 /tmp/trigger-venv/bin/pytest -q tests/test_secrets.py tests/test_room_seal.py --tb=short
 # 74 passed.
 node tests/trigger_second_build/admin_contract.cjs
-# PASS: existing Clerk user/org/tenant binding; forged role/squad/tenant headers cannot grant voice access.
+# PASS: existing Trigger sign-in user/org/tenant binding; forged role/squad/tenant headers cannot grant voice access.
 node tests/command_1b_contract.cjs
 node tests/command_1b_pages.cjs
 # Both PASS, retaining existing stream, CSRF, files, evidence, Auto-only and page-boundary assertions.
@@ -123,9 +123,9 @@ mv .next/types /tmp/trigger2-next-types-stale
 node node_modules/next/dist/bin/next typegen
 node node_modules/typescript/bin/tsc --noEmit
 NEXT_TELEMETRY_DISABLED=1 \
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== \
-CLERK_SECRET_KEY=sk_test_dummy node node_modules/next/dist/bin/next build
-# All PASS. These are the repository CI's dummy Clerk values, not credentials.
+\
+node node_modules/next/dist/bin/next build
+# All PASS. These are the repository CI's dummy Trigger sign-in values, not credentials.
 ```
 
 The first type-check encountered stale generated `.next/types` for a route removed on main. Moving the generated directory aside and regenerating it fixed that; no product-code workaround was added. No successful unchanged suite was restarted just to obtain status.

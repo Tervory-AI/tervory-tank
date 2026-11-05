@@ -13,7 +13,7 @@ PASS:
 node workspace/node_modules/typescript/bin/tsc --noEmit --incremental false --project workspace/tsconfig.json
 
 PASS:
-next build (Workspace, local placeholder Clerk settings, telemetry disabled)
+next build (Workspace, local placeholder Trigger sign-in settings, telemetry disabled)
 Optimized production bundle, type checks, page collection and dynamic route build complete.
 
 PASS (disposable local Postgres, --disable-socket --allow-unix-socket):

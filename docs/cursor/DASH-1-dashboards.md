@@ -13,7 +13,7 @@
 
 ## Founder control panel (`/control`, founders only)
 - **Top:** a health pill (from Ghost) and **Pause all paid work**. The pause flips a Tank switch that refuses paid calls and paid tools until it is turned back on.
-- **Key numbers with sparklines:** sign-ups (Clerk), paying clients (Stripe), work done today and the share done by code (ledger), spent this month against the budget, saved this month (ledger baseline).
+- **Key numbers with sparklines:** sign-ups (Trigger sign-in), paying clients (Stripe), work done today and the share done by code (ledger), spent this month against the budget, saved this month (ledger baseline).
 - **Case study, AmmoSync on Base:** verified records by state (bar), cost per verified record over time against Apollo (line), headline numbers, and the "Run next state" and "Export case study" buttons.
 - **Needs you:** every pending action, each with its buttons: skill approvals ("Approve all ready" from SKALA-2), paid steps, proven cheaper models (Switch), the gold check (Start), Ghost issues (Look / Let it fix).
 - **Squad:** each agent's status, what it is doing now, and Pause/Start, per region.

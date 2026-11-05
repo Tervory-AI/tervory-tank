@@ -1,3 +1,4 @@
+import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
 // Server-only. The browser never imports this file and never calls the vault itself.
 // Talks to Tank the same way Market Lab does. Rig's vault only. It is not turned on here.
 

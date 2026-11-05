@@ -1,7 +1,8 @@
+import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
 import "server-only";
 
 // Founder console. Server-side only. Never import this from a client component.
-// The Workspace key stays here. Tank answers 404 unless the Clerk user id is listed.
+// The Workspace key stays here. Tank answers 404 unless the SigninDirectory user id is listed.
 
 const TANK_URL = process.env["TANK_URL"] ?? "http://tank:8000";
 const TANK_API_KEY = process.env["TANK_API_KEY"] ?? "";
@@ -213,7 +214,7 @@ async function adminFetch<T>(userId: string, path: string, init: RequestInit = {
     cache: "no-store",
   });
   if (res.status === 404) {
-    throw new Error("Tank does not list this user as a founder. Set TERVORY_ADMIN_USER_IDS on Tank to the same Clerk user id.");
+    throw new Error("Tank does not list this user as a founder. Set TERVORY_ADMIN_USER_IDS on Tank to the same SigninDirectory user id.");
   }
   if (!res.ok) {
     const text = await res.text();

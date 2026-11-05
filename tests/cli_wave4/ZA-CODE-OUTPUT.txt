@@ -1,5 +1,5 @@
 Approve this device in your browser (placeholder-worker, za):
-  https://auth-za.tervory.com/device?user_code=1234-5678
+  https://auth.tervory.com/device?user_code=1234-5678
 Confirm the page shows code 1234-5678.
 Signed in on za. Credential saved in the OS keychain; it refreshes automatically.
 Thread placeholder-thread

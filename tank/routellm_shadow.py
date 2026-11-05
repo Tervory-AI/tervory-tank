@@ -252,28 +252,39 @@ async def save(tank: Any, req: Any, config: Configuration, ledger_id: uuid.UUID,
                primary_cost: float, primary_known: bool, content: str | None, total_cost: float,
                receipt: dict, agreement: float | None, method: str, fields: dict) -> None:
     """Persist the existing shadow runner's result, with measured model cost."""
-    async with tank.pool().acquire() as conn, conn.transaction():
-        parent = await conn.fetchrow("SELECT id FROM tank.ledger WHERE id=$1 AND tenant_id=$2", ledger_id, req.tenant_id)
-        if parent is None:
-            raise ValueError("shadow parent is not owned by this tenant")
-        shadow_id = await conn.fetchval("""INSERT INTO tank.ledger
-            (tenant_id,region,agent,task_type,rung,model,priority,tokens_in,tokens_out,cost_usd,latency_ms,cache_hit,outcome,
-             routellm_model_cost_usd,routellm_parent_id,routellm_sample_tenant)
-            VALUES($1,$2,'shadow',$3,1,$4,'batch',$5,$6,$7,0,false,$8,$9,$10,$11) RETURNING id""",
-            tank.PLATFORM_TENANT, req.region or tank.DEFAULT_REGION, req.task_type+"#shadow", receipt.get("model", config.weak),
-            receipt.get("tokens_in", 0), receipt.get("tokens_out", 0), total_cost,
-            "delivered" if content is not None else "failed", receipt.get("cost"), ledger_id, req.tenant_id)
-        await conn.execute("""INSERT INTO tank.shadow
-            (ledger_id,tenant_id,task_type,primary_model,candidate_model,primary_content,candidate_content,
-             candidate_cost_usd,primary_cost_usd,agreement,method,fields,routellm_config,candidate_ledger_id)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14)""",
-            ledger_id, req.tenant_id, req.task_type, config.strong, config.candidate, primary[:20000],
-            (content or "")[:20000], total_cost, primary_cost, agreement, method, json.dumps(fields),
-            config.fingerprint, shadow_id)
-        await conn.execute("""UPDATE tank.ledger SET routellm_status=$3,routellm_primary_cost_known=$4
-            WHERE id=$1 AND tenant_id=$2""", ledger_id, req.tenant_id,
-            "sampled" if content is not None else "sample_failed", primary_known)
-        await tank._add_spend(conn, req.task_type, total_cost)
+    from tenant_db import tenant_scope
+    with tenant_scope(req.tenant_id):
+        async with tank.pool().acquire() as conn, conn.transaction():
+            parent = await conn.fetchrow("SELECT id FROM tank.ledger WHERE id=$1 AND tenant_id=$2", ledger_id, req.tenant_id)
+            if parent is None:
+                raise ValueError("shadow parent is not owned by this tenant")
+            if receipt.get("_paid_ledger_id"):
+                import paid_steps
+                shadow_id = uuid.UUID(receipt["_paid_ledger_id"])
+                async with paid_steps.connection(tank.PLATFORM_TENANT) as paid_conn:
+                    await paid_conn.execute("""UPDATE tank.ledger SET routellm_model_cost_usd=$3,
+                        routellm_parent_id=$4,routellm_sample_tenant=$5 WHERE tenant_id=$1 AND id=$2""",
+                        tank.PLATFORM_TENANT, shadow_id, receipt.get("cost"), ledger_id, req.tenant_id)
+            else:
+                shadow_id = await conn.fetchval("""INSERT INTO tank.ledger
+                    (tenant_id,region,agent,task_type,rung,model,priority,tokens_in,tokens_out,cost_usd,latency_ms,cache_hit,outcome,
+                     routellm_model_cost_usd,routellm_parent_id,routellm_sample_tenant)
+                    VALUES($1,$2,'shadow',$3,1,$4,'batch',$5,$6,$7,0,false,$8,$9,$10,$11) RETURNING id""",
+                    tank.PLATFORM_TENANT, req.region or tank.DEFAULT_REGION, req.task_type+"#shadow", receipt.get("model", config.weak),
+                    receipt.get("tokens_in", 0), receipt.get("tokens_out", 0), total_cost,
+                    "delivered" if content is not None else "failed", receipt.get("cost"), ledger_id, req.tenant_id)
+            await conn.execute("""INSERT INTO tank.shadow
+                (ledger_id,tenant_id,task_type,primary_model,candidate_model,primary_content,candidate_content,
+                 candidate_cost_usd,primary_cost_usd,agreement,method,fields,routellm_config,candidate_ledger_id)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14)""",
+                ledger_id, req.tenant_id, req.task_type, config.strong, config.candidate, primary[:20000],
+                (content or "")[:20000], total_cost, primary_cost, agreement, method, json.dumps(fields),
+                config.fingerprint, shadow_id)
+            await conn.execute("""UPDATE tank.ledger SET routellm_status=$3,routellm_primary_cost_known=$4
+                WHERE id=$1 AND tenant_id=$2""", ledger_id, req.tenant_id,
+                "sampled" if content is not None else "sample_failed", primary_known)
+            if not receipt.get("_paid_ledger_id"):
+                await tank._add_spend(conn, req.task_type, total_cost)
 
 
 async def ladder(tank: Any, tenant: uuid.UUID | None, founder_mix: bool) -> dict[str, list[dict]]:

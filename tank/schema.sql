@@ -3130,7 +3130,120 @@ CREATE TABLE IF NOT EXISTS tank.rig_rooms (
 -- END worker
 -- BEGIN platform (new blocks for platform go here)
 ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
+-- Paid ladder steps: tenant preferences default to Ask, independent of master stop.
+CREATE TABLE IF NOT EXISTS tank.paid_steps (
+    step_id text PRIMARY KEY,
+    product text NOT NULL CHECK(product IN ('base','tiger','market_lab','rig','tisan','radix','zenas','trigger','autumbra','model')),
+    kind text NOT NULL,
+    source text NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tank.paid_step_settings (
+    tenant_id uuid NOT NULL,
+    step_id text NOT NULL REFERENCES tank.paid_steps(step_id),
+    mode text NOT NULL CHECK(mode IN ('ask','auto')),
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,step_id)
+);
+CREATE TABLE IF NOT EXISTS tank.paid_step_settings_log (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    step_id text NOT NULL REFERENCES tank.paid_steps(step_id),
+    mode text NOT NULL CHECK(mode IN ('ask','auto')),
+    by_user text NOT NULL,
+    at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.paid_step_approvals (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    step_id text NOT NULL REFERENCES tank.paid_steps(step_id),
+    request_hash text NOT NULL CHECK(request_hash ~ '^[a-f0-9]{64}$'),
+    state text NOT NULL CHECK(state IN ('pending','approved','denied')),
+    authorization_mode text NOT NULL CHECK(authorization_mode IN ('pending','approved','automatic','denied')),
+    user_id text,
+    thread_id uuid,
+    decided_by text,
+    reason text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    decided_at timestamptz,
+    UNIQUE(tenant_id,run_id,step_id),
+    CHECK(state <> 'denied' OR (decided_by IS NOT NULL AND length(btrim(reason)) > 0))
+);
+CREATE INDEX IF NOT EXISTS paid_step_pending ON tank.paid_step_approvals(tenant_id,created_at) WHERE state='pending';
+CREATE TABLE IF NOT EXISTS tank.paid_step_calls (
+    tenant_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    call_key text NOT NULL CHECK(call_key ~ '^[a-f0-9]{64}$'),
+    request_hash text NOT NULL CHECK(request_hash ~ '^[a-f0-9]{64}$'),
+    state text NOT NULL CHECK(state IN ('executing','completed')),
+    result jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,run_id,call_key)
+);
+DO $$
+DECLARE relation text;
+BEGIN
+ -- Match the existing rollout: additive tables inherit RLS when the platform
+ -- boundary is enabled; this feature does not enable the opt-in rollout itself.
+ IF NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+     WHERE n.nspname='tank' AND c.relname='ledger' AND c.relrowsecurity) THEN
+  RETURN;
+ END IF;
+ FOREACH relation IN ARRAY ARRAY['paid_step_settings','paid_step_settings_log','paid_step_approvals','paid_step_calls'] LOOP
+  EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY', relation);
+  EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY', relation);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='tank' AND tablename=relation AND policyname='tenant_access') THEN
+   EXECUTE format('CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',relation);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='tank' AND tablename=relation AND policyname='tenant_boundary') THEN
+   EXECUTE format('CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',relation);
+  END IF;
+ END LOOP;
+END $$;
+ALTER TABLE tank.paid_step_approvals ADD COLUMN IF NOT EXISTS continuation jsonb;
+ALTER TABLE tank.paid_step_approvals ADD COLUMN IF NOT EXISTS resume_status text CHECK(resume_status IN ('waiting','running','completed','failed'));
+ALTER TABLE tank.paid_step_approvals ADD COLUMN IF NOT EXISTS resume_started_at timestamptz;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS paid_step_id text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS paid_step_approval_id uuid;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS paid_step_mode text CHECK(paid_step_mode IN ('approved','automatic'));
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS paid_steps jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- Keep the originating private turn separate from its administrator decision card.
+ALTER TABLE tank.paid_step_approvals ADD COLUMN IF NOT EXISTS delivery_thread_id uuid;
+
+-- Human-readable route metadata accompanies stable switch identities.
+ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS task_type text;
+ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS model text;
+-- END PAID LADDER STEPS
 -- END platform
+
+-- BEGIN trigger_signin
+ALTER TABLE tank.command_threads ADD COLUMN IF NOT EXISTS trigger_signin_issuer text NOT NULL DEFAULT '';
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.oauth_codes ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin_issuer text;
+
+CREATE TABLE IF NOT EXISTS tank.trigger_signin_config (
+    region text PRIMARY KEY CHECK (region = 'us-east'),
+    issuer text NOT NULL UNIQUE,
+    client_id text NOT NULL,
+    workspace_client_id text NOT NULL,
+    project_id text NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_signin_organisations (
+    region text NOT NULL REFERENCES tank.trigger_signin_config(region),
+    org_id text NOT NULL,
+    tenant_id uuid NOT NULL,
+    PRIMARY KEY (region,org_id),
+    UNIQUE (region,tenant_id)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_signin_founders (
+    region text PRIMARY KEY REFERENCES tank.trigger_signin_config(region),
+    subject text NOT NULL
+);
+-- END trigger_signin
 
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;

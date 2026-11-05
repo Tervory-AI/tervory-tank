@@ -83,7 +83,7 @@ Results: **lint and whitespace checks passed; 3 CI tests passed in 11.05s**. Tan
 From `/workspace/tervory-tank/workspace`, using the existing workflow's non-secret test placeholders:
 
 ```sh
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npm run build > ../tests/base_reference_file/workspace-build.txt 2>&1
+NEXT_TELEMETRY_DISABLED=1 npm run build > ../tests/base_reference_file/workspace-build.txt 2>&1
 ```
 
 Result: **exit 0**, compiled successfully, **38/38 static pages generated**. [Full build output](workspace-build.txt). No real credential was used. Hosted CI has not been claimed: Claude will open the PR, and this thread did not call `api.github.com`.

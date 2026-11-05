@@ -152,7 +152,7 @@ Workspace tested: PR 497 `135e764befd79b33bc56556f2818d4c8bddaab3a`.
 First isolated assembly: `9f7472fa05fd910202eb9dc6f247af0088b927f9`.
 Harness runtime: `b92f069b` on this branch.
 
-- Actual Workspace GET route and `workspace/lib/tank.ts` adapter call actual loopback HTTP Tank, using its existing service-key/user/tenant/home identity checks. Only Clerk session input and BottleCRM transport are synthetic. No service identity override is installed.
+- Actual Workspace GET route and `workspace/lib/tank.ts` adapter call actual loopback HTTP Tank, using its existing service-key/user/tenant/home identity checks. Only Trigger sign-in session input and BottleCRM transport are synthetic. No service identity override is installed.
 - Three actual pinned response envelopes traverse both implementations: leads open/closed groups, contact_obj_list, estimate results. Page 2 reaches BottleCRM as offset 10 / limit 10. No caller tenant/user assertion is forwarded to CRM.
 - Unconfigured active tenant yields 503; client/anonymous Workspace users yield 404 before Tank; unsupported paths/query fail closed; Workspace exports no POST.
 - Only allowed record fields reach the response; synthetic token/password/org metadata is omitted. This proves the tested metadata projection, not universal secret detection inside arbitrary user-controlled free text.
@@ -224,7 +224,7 @@ Read-only upstream source command: `gh api 'repos/Django-CRM/Django-CRM/contents
 
 Supersedes the earlier founder-only Workspace mismatch for this exact reviewed head: Workspace PR 497 `a3954f2` (runtime change `378fb6e`), backend PR 498 `cb482eae2dacacedc7594a3c66bd3c7466b0858a`. Assembly `46ac68905f401873cf4f0a26344a3b03eaa56a71`; independent harness `ad0d3630`.
 
-Independently reviewed the Workspace change: it removes only the obsolete founder prefilter. Signed-in user plus active organization remain mandatory, identity still comes from Clerk/session and server tenant alias mapping, and Tank remains authoritative for persisted Trigger grants and authenticated organization binding. No client role, grant or founder privilege is created by the proxy.
+Independently reviewed the Workspace change: it removes only the obsolete founder prefilter. Signed-in user plus active organization remain mandatory, identity still comes from Trigger sign-in/session and server tenant alias mapping, and Tank remains authoritative for persisted Trigger grants and authenticated organization binding. No client role, grant or founder privilege is created by the proxy.
 
 The actual loopback integration now runs the same client twice. With a synthetic persisted Trigger grant, the actual Tank `authorized_actor` reads the tenant-scoped `tenant_squad` predicate and the client receives 200 through Workspace. With that grant revoked, the same user/organization request receives 403 and causes zero additional CRM requests. An unrelated no-grant tenant also receives 403. Only the persistence adapter is synthetic; the actual authorization predicate/function executes. The test is not a real Postgres/RLS deployment claim.
 

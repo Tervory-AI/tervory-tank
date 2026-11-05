@@ -12,7 +12,7 @@ Memory limits: **512 MiB** room plus **2 GiB** LanguageTool, with Java heap capp
 
 ## Tenant voice and actions
 
-No voice is seeded. In the existing chat, a founder or the active tenant's Clerk `org:admin` can use these code-only commands:
+No voice is seeded. In the existing chat, a founder or the active tenant's Trigger sign-in `org:admin` can use these code-only commands:
 
 - `trigger.voice.set:` followed by pasted plain-text notes. Optional headings: `Brand:`, `Rules:`, `Preferred words:`, `Banned words:`, `Required words:`, `Tone:`, `On-voice:`, `Off-voice:`. Lists can be separate lines; word lists can use CSV quoting. Unlabelled text is retained as rules. No brand is guessed when absent.
 - The existing card's **Brief** shows the parsed spec. **Confirm** saves it; Cancel saves nothing. A changed voice invalidates an older preview. Source text, the exact parsed spec and every revision are retained. Direct gateway mutations without an executing confirmed card are refused.
@@ -27,7 +27,7 @@ A founder or the active tenant’s verified admin can ask for a description in t
 
 For a completely model-free check from the window, use **`Trigger, check: <pasted paragraph>`** or **`Trigger, check this paragraph: <pasted paragraph>`**. Command recognizes these prefixes in code, proposes the existing confirmation card, and dispatches `trigger.check`. Other conversational phrasing still uses the existing planner. The actual check action always uses code only. Its real ledger record has zero tokens/cost; Tank's existing receipt pricing trigger owns the comparison.
 
-All Trigger tools allow founders and the active tenant's verified admin, only within their active tenant; no ordinary-member squad grant is created. The Workspace derives that role from the existing Clerk session and checks the user, organization and mapped tenant together; no browser-supplied role or squad grants access.
+All Trigger tools allow founders and the active tenant's verified admin, only within their active tenant; no ordinary-member squad grant is created. The Workspace derives that role from the existing Trigger sign-in session and checks the user, organization and mapped tenant together; no browser-supplied role or squad grants access.
 
 ## Learning records
 

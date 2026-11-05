@@ -151,7 +151,7 @@ No approval is seeded.
 The Tisan page loads platform pages and the active organization’s pages beside
 sandboxed built-page previews. Approval scope is limited to those two tenants.
 Only signed-in founders in `TERVORY_ADMIN_USER_IDS` can use **Approve as gold**.
-The server action derives the tenant and user from Clerk, calls Tank through
+The server action derives the tenant and user from Trigger sign-in, calls Tank through
 `workspace/lib/tank.ts`, and Tank verifies the Workspace key and founder again
 before forwarding to the fixed Tisan corridor. The room also requires its own
 key and the same founder allowlist. Configure the existing founder-id setting

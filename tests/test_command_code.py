@@ -101,8 +101,8 @@ async def test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_tr
     b.gateway.parts = [json.dumps({'answer': 'done', 'requests': [{'name': 'read_file', 'arguments': {'path': 'test.py'}}]})]
     token = f'tv1.{region}.{TENANT.hex}.' + ('placeholder' + 'x' * 43)[:43]
     async with b.pool.acquire() as conn:
-        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
-                           "VALUES($1,'founder',$2,'placeholder-code',$3)", TENANT, region, pat.digest(token))
+        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,trigger_signin,trigger_signin_issuer) "
+                           "VALUES($1,'founder',$2,'placeholder-code',$3,true,'https://auth.tervory.com')", TENANT, region, pat.digest(token))
     bearer = {'authorization': 'Bearer ' + token}
     thread = (await b.api.post('/v1/command/threads', json={}, headers=bearer)).json()['thread_id']
     answer = await b.api.post(f'/v1/command/threads/{thread}/code-turn', headers=bearer,
@@ -121,7 +121,7 @@ async def test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_tr
     assert await b.pool.fetchval("SELECT count(*) FROM tank.route_cache WHERE tenant_id=$1 AND task_type='command.code'", TENANT) == 0
     assert float(ledger['cost_usd']) == 0.0024
     assert ledger['region'] == region
-    snapshot = (await b.api.get(f'/v1/command/threads/{thread}')).json()
+    snapshot = (await b.api.get(f'/v1/command/threads/{thread}', headers=bearer)).json()
     assert snapshot['receipts'][0]['ledger_id'] == str(ledger_id)
     wrong_region = {'authorization': 'Bearer ' + token.replace(region, 'za' if region == 'us-east' else 'us-east')}
     assert (await b.api.post(f'/v1/command/threads/{thread}/code-turn', headers=wrong_region,

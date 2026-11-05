@@ -1,4 +1,5 @@
 """CORE-1: offline decisions plus disposable-Postgres receipts, isolation and caps."""
+from trigger_signin_fakes import set_founders
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
@@ -70,7 +71,7 @@ def test_automatic_promotion_always_waits_for_founder():
 @pytest.mark.asyncio
 async def test_founder_gate_including_exports(monkeypatch):
     key=secrets.token_urlsafe(32)
-    monkeypatch.setenv('TANK_API_KEY',key); monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','founder-fixture')
+    monkeypatch.setenv('TANK_API_KEY',key); set_founders(monkeypatch, 'founder-fixture')
     app=FastAPI(); app.include_router(proof.router)
     async def snap(*args):
         return dict(tenant_id=str(PLATFORM_TENANT),region='us-east',**{k:[] for k in ['tasks','ledger','shadows','runs','cases','promotions','policies','state']})
@@ -275,7 +276,7 @@ async def test_founder_pause_stops_bench_before_reservation_and_network(database
         assert result['status']=='paused' and not called
         assert await conn.fetchval('SELECT count(*) FROM tank.bench_calls WHERE tenant_id=$1',PLATFORM_TENANT)==0
         assert await conn.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)==0
-        assert await conn.fetchval("SELECT count(*) FROM tank.control_log WHERE tenant_id=$1 AND task='fixture' AND path='bench'",PLATFORM_TENANT)==1
+        assert await conn.fetchval("SELECT count(*) FROM tank.control_log WHERE tenant_id=$1 AND task='fixture.benchmark' AND path='paid_steps'",PLATFORM_TENANT)==1
 
 
 @pytest.mark.asyncio

@@ -413,6 +413,7 @@ async def serve(settings: Settings) -> None:
     records: list[dict[str, Any]] = []
     inflight: set[int] = set()
     service: Service | None = None
+    window_service: Any = None
     last_error = LastError()
     log.addHandler(last_error)
 
@@ -429,7 +430,7 @@ async def serve(settings: Settings) -> None:
         if method != "GET":
             body, status, kind = b"Method not allowed\n", "405 Method Not Allowed", "text/plain"
         elif path == "/health":
-            body = (json.dumps({"ok": True, "busy": service.busy if service else False}) + "\n").encode()
+            body = (json.dumps({"ok": True, "busy": bool((service and service.busy) or (window_service and window_service.busy))}) + "\n").encode()
             status, kind = "200 OK", "application/json"
         elif path == "/workers":
             body = status_page.render(records).encode()
@@ -452,6 +453,10 @@ async def serve(settings: Settings) -> None:
     log.info("workers listening on 127.0.0.1:%s", settings.service_port)
     async with httpx.AsyncClient(timeout=60) as client:
         control = TankControl(settings, client)
+        from workers.window_agent.service import WindowJobs
+        window_service = WindowJobs(settings, control, client, legacy=lambda: service)
+        window_jobs = asyncio.create_task(window_service.serve())
+        window_jobs.add_done_callback(lambda task: log.warning("Window job poller stopped") if not task.cancelled() and task.exception() else None)
 
         async def beat() -> None:
             while True:
@@ -485,7 +490,7 @@ async def serve(settings: Settings) -> None:
                         installation_id=settings.installation_id,
                         key_file=settings.private_key_file,
                     )
-                    await service.poll_once(token)
+                    await window_service.poll_legacy(service, token)
                 except (GitHubError, TokenRejected, OSError, SettingsError, RuntimeError, httpx.HTTPError) as exc:
                     log.warning("poll failed: %s", redact(str(exc)))
                 await asyncio.sleep(settings.poll_s)

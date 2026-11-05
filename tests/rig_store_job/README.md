@@ -16,7 +16,7 @@ fixture certificate. Runtime credentials are generated into mode-0600 temporary
 files; they are never put in logs, URLs, fixtures or command arguments.
 
 The browser runs the production retailer component, route, server actions and
-`workspace/lib/tank.ts`. The external Clerk session boundary supplies two fixture
+`workspace/lib/tank.ts`. The external Trigger sign-in session boundary supplies two fixture
 organization administrators; production sign-in is not exercised. Public DNS is
 routed to the local services. API responses, catalogue parsing, field mapping,
 publication, key issuance, approved setup building, quotes, SMTP delivery and
