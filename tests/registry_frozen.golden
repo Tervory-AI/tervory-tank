@@ -9391,6 +9391,104 @@
           "GET"
         ],
         "name": "room_status"
+      },
+      {
+        "path": "/v1/window-agents/vault/github",
+        "methods": [
+          "POST"
+        ],
+        "name": "save_credential"
+      },
+      {
+        "path": "/v1/window-agents/vault/github",
+        "methods": [
+          "GET"
+        ],
+        "name": "names"
+      },
+      {
+        "path": "/v1/window-agents/jobs",
+        "methods": [
+          "POST"
+        ],
+        "name": "start"
+      },
+      {
+        "path": "/v1/window-agents/jobs/{job_id}/cancel",
+        "methods": [
+          "POST"
+        ],
+        "name": "cancel"
+      },
+      {
+        "path": "/v1/window-agents/jobs",
+        "methods": [
+          "GET"
+        ],
+        "name": "jobs"
+      },
+      {
+        "path": "/v1/window-agents/jobs/{job_id}/receipt",
+        "methods": [
+          "GET"
+        ],
+        "name": "receipt"
+      },
+      {
+        "path": "/v1/window-agents/worker/next",
+        "methods": [
+          "POST"
+        ],
+        "name": "next_job"
+      },
+      {
+        "path": "/v1/window-agents/worker/{tenant_id}/{job_id}/heartbeat",
+        "methods": [
+          "POST"
+        ],
+        "name": "heartbeat"
+      },
+      {
+        "path": "/v1/window-agents/worker/{tenant_id}/{job_id}/credential",
+        "methods": [
+          "POST"
+        ],
+        "name": "worker_credential"
+      },
+      {
+        "path": "/v1/window-agents/worker/{tenant_id}/{job_id}/code-turn",
+        "methods": [
+          "POST"
+        ],
+        "name": "code_turn"
+      },
+      {
+        "path": "/v1/window-agents/worker/{tenant_id}/{job_id}/finish",
+        "methods": [
+          "POST"
+        ],
+        "name": "finish"
+      },
+      {
+        "path": "/v1/window-agents/reviews",
+        "methods": [
+          "POST"
+        ],
+        "name": "start_review"
+      },
+      {
+        "path": "/v1/window-agents/webhooks",
+        "methods": [
+          "POST"
+        ],
+        "name": "configure_hook"
+      },
+      {
+        "path": "/v1/window-agents/webhooks/{tenant_id}/{hook_id}",
+        "methods": [
+          "POST"
+        ],
+        "name": "receive_hook"
       }
     ],
     "lifecycle": {
