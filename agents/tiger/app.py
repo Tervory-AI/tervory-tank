@@ -147,6 +147,8 @@ async def official_feed(tenant: str, url: str) -> dict:
         raise FeedUnavailable("Official feed lookup returned an unreadable answer.") from exc
     if not isinstance(data, dict) or type(data.get("found")) is not bool:
         raise FeedUnavailable("Official feed lookup returned an unreadable answer.")
+    if data['found'] and (not isinstance(data.get('item'), dict) or not isinstance(data.get('receipt'), dict)):
+        raise FeedUnavailable("Official feed lookup returned an unreadable answer.")
     return data
 
 
@@ -164,13 +166,19 @@ async def check(ctx: JobContext) -> dict:
     if watch is None or not watch.get("enabled"):
         return {"status": "skipped", "url": url, "alerts": []}
 
+    skill_receipts = []
+    def record_skill(value, name):
+        if value.get('_ledger_id'):
+            skill_receipts.append({'skill': name, 'ledger_id': value['_ledger_id'], 'cost_usd': value.get('_cost_usd')})
+        return value
+
     async def extract(html: str, page_url: str) -> dict[str, Any]:
-        return await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_extract", {"html": html, "url": page_url})
+        value = await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_extract", {"html": html, "url": page_url})
+        return record_skill(value, "tiger.price_extract")
 
     async def ocr(png_base64: str, page_url: str) -> dict[str, Any]:
-        if ctx.input.get('code_only'):
-            return {'items': []}
-        return await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_ocr", {"png_base64": png_base64, "url": page_url})
+        value = await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_ocr", {"png_base64": png_base64, "url": page_url})
+        return record_skill(value, "tiger.price_ocr")
 
     async def render(url, session, agent, tenant):
         return await _render(url, session, agent, tenant, str(ctx.job_id))
@@ -194,6 +202,8 @@ async def check(ctx: JobContext) -> dict:
         await rig.deliver(ctx.tenant_id, TankRig(app.state.http))
     except (httpx.HTTPError, ValueError):
         log.warning("Rig watch delivery is unavailable; saved readings remain pending.")
+    if skill_receipts:
+        result['skill_receipts'] = skill_receipts
     return result
 
 
@@ -216,6 +226,8 @@ async def rig_discover(ctx: JobContext) -> dict:
 
 
 async def competitor_match(ctx: JobContext) -> dict:
+    if ctx.input.get('_batch_discovery') is True:
+        return await batch_discover(ctx)
     root = str(ctx.input.get('root_job_id') or ctx.job_id)
     try:
         return await _competitor_match_slice(ctx, root)
@@ -300,6 +312,15 @@ async def _competitor_match_slice(ctx, root):
     return result
 
 
+async def batch_discover(ctx):
+    from batch_discovery import step
+    async def fetch(url):
+        return await _fetch_text(url, catalogue=True)
+    async def render(url):
+        return await _render(url, '', AGENT, ctx.tenant_id, str(ctx.job_id), catalogue_match=True)
+    return await step(ctx, app.state.pool, fetch, render)
+
+
 app = create_app(
     agent=AGENT,
     handlers={"ping": ping, "check": check, "dispatch": dispatch, "rig_discover": rig_discover, "competitor_match": competitor_match},
@@ -368,6 +389,30 @@ class BatchCheckIn(BaseModel):
     batch_id: UUID
     record_id: str = Field(min_length=1)
     url: str
+    retry_failed: bool = False
+
+
+@app.post('/batch/discover', status_code=201)
+async def batch_source(body: BatchCheckIn):
+    from batch import discovery_id
+    try:
+        url = await asyncio.to_thread(check_url, body.url)
+    except BadWatch as exc:
+        raise _watch_http(exc) from None
+    tenant = str(body.tenant_id)
+    ident = discovery_id(tenant, str(body.batch_id), body.record_id, url)
+    async with app.state.pool.acquire() as conn:
+        await conn.execute("""INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input,timeout_s)
+            VALUES($1,$2,'competitor_match',$3::jsonb,45) ON CONFLICT(id) DO NOTHING""", ident, body.tenant_id,
+            json.dumps({'url': url, 'record_id': body.record_id, 'batch_id': str(body.batch_id), '_batch_discovery': True}))
+        if body.retry_failed:
+            await conn.execute("""UPDATE agent_tiger.jobs SET status='queued',attempts=0,error=NULL,
+                started_at=NULL,finished_at=NULL,run_at=now() WHERE tenant_id=$1 AND kind='competitor_match'
+                AND input->>'_batch_discovery'='true'
+                AND status='failed' AND (id=$2 OR input->>'root_job_id'=$2::text)""", body.tenant_id, ident)
+        row = await conn.fetchrow('SELECT id,tenant_id,status,result FROM agent_tiger.jobs WHERE id=$1 AND tenant_id=$2', ident, body.tenant_id)
+    result = json.loads(row['result']) if isinstance(row['result'], str) else row['result']
+    return {'id': str(row['id']), 'tenant_id': tenant, 'status': row['status'], 'result': result}
 
 
 @app.post('/batch/check', status_code=201)
@@ -389,7 +434,11 @@ async def batch_check(body: BatchCheckIn):
     async with app.state.pool.acquire() as conn:
         await conn.execute("""INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input)
             VALUES($1,$2,'check',$3::jsonb) ON CONFLICT(id) DO NOTHING""", ident, body.tenant_id,
-            json.dumps({'url': url, 'code_only': True, 'batch_id': str(body.batch_id), 'record_id': body.record_id}))
+            json.dumps({'url': url, 'batch_id': str(body.batch_id), 'record_id': body.record_id}))
+        if body.retry_failed:
+            await conn.execute("""UPDATE agent_tiger.jobs SET status='queued',attempts=0,error=NULL,
+                started_at=NULL,finished_at=NULL,run_at=now() WHERE id=$1 AND tenant_id=$2 AND status='failed'""",
+                ident, body.tenant_id)
         row = await conn.fetchrow('SELECT id,tenant_id,status,result FROM agent_tiger.jobs WHERE id=$1 AND tenant_id=$2',
                                   ident, body.tenant_id)
     if row is None:

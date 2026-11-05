@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY _chassis/chassis /app/chassis
 COPY tiger/app.py /app/app.py
 COPY tiger/batch.py /app/batch.py
+COPY tiger/batch_discovery.py /app/batch_discovery.py
 COPY tiger/watch.py /app/watch.py
 COPY tiger/g5_alerts.py /app/g5_alerts.py
 COPY tiger/schema.sql /app/schema.sql

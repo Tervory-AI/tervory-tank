@@ -44,7 +44,7 @@ def test_checkpoint_binds_source_and_tenant(tmp_path):
 async def test_receipts_resume_after_lost_submission_without_rechecking_completed_record(tmp_path):
     rows = [{'id': 'a', 'state': 'WY', 'product_urls': [URL]},
             {'id': 'b', 'state': 'AK', 'product_urls': [URL + '2']},
-            {'id': 'c', 'state': 'AK', 'website': URL}]
+            {'id': 'c', 'state': 'AK'}]
     jobs, posts, failed = {}, [], False
     async def answer(request):
         nonlocal failed

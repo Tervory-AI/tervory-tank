@@ -1063,7 +1063,7 @@ def _save_png(files: Any, tenant_id: str, png_base64: str | None, stamp: datetim
         return None
     if not raw.startswith(b"\x89PNG") or len(raw) > 1_500_000:
         return None
-    name = f"price-{int(stamp.timestamp())}.png"
+    name = f"price-{int(stamp.timestamp())}-{hashlib.sha256(raw).hexdigest()}.png"
     return str(files.save_file(tenant_id, name, raw))
 
 
@@ -1075,9 +1075,20 @@ async def external_observation(store, tenant_id, watch, item, method, receipt, c
     issue = "missing_name" if not name else None
     if not issue and not re.fullmatch(r"[A-Za-z]{3}", str(item.get("currency") or "")):
         issue = "missing_currency"
-    quantity = item.get("quantity")
-    availability = ("in_stock" if Decimal(str(quantity)) > 0 else "out_of_stock") if quantity is not None else None
-    price = None if issue else item.get("price")
+    def number(value):
+        try:
+            value = Decimal(str(value))
+            return value if value.is_finite() and value >= 0 else None
+        except (InvalidOperation, ValueError):
+            return None
+    quantity = number(item.get("quantity"))
+    availability = ("in_stock" if quantity > 0 else "out_of_stock") if quantity is not None else None
+    amount = number(item.get("price"))
+    if not issue and amount is None:
+        issue = "missing_price"
+    if not issue and availability is None:
+        issue = "missing_stock"
+    price = None if issue else _money(amount)
     saved_method = "unread" if issue else method
     evidence = _reading_evidence(json.dumps({"method": method, "receipt": receipt}, default=str), name,
                                  fields["product_name"] or fields["last_product_name"], issue)
@@ -1087,6 +1098,8 @@ async def external_observation(store, tenant_id, watch, item, method, receipt, c
     stock_before = await _last_known_stock(store, tenant_id, url, current["id"])
     found = alerts_for(previous, current, watch.get("threshold") or 0, stock_before,
                        price_enabled=watch.get("alert_price", True), stock_enabled=watch.get("alert_stock", True))
+    if issue:
+        found = []
     saved = [await store.add_alert({"tenant_id": tenant_id, "url": url, "ts": clock(), **alert,
         "product_name": current.get("product_name"), "currency": current.get("currency")}) for alert in found]
     from rig_watch import publish_price_changed
