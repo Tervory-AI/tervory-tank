@@ -157,7 +157,7 @@ export async function personalCommandRequest(request: Request, path: string[],
   const target = path.join("/");
   const routes: Record<string, RegExp> = {
     GET: new RegExp(`^(tools|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`),
-    POST: new RegExp(`^(threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`),
+    POST: new RegExp(`^(complete|threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`),
     PATCH: new RegExp(`^threads/${id}$`),
   };
   const agentRoutes: Record<string, RegExp[]> = {

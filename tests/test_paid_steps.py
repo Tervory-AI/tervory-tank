@@ -23,6 +23,11 @@ PRODUCT_TASKS = {'base':'base.extract','tiger':'agent.tiger.think','market_lab':
     'trigger':'trigger.write','autumbra':'agent.ghost.think','model':'command.turn'}
 
 
+def _assert_offline_gateway_url(tank, url):
+    # Both offline gateways enforce the same exact Tank destination.
+    assert url == tank.LITELLM_URL + '/v1/chat/completions'
+
+
 def command_schema_fixture(schema):
     # Apply the actual command tables and their later native-identity migration.
     # These focused tests intentionally omit unrelated platform schemas.
@@ -460,7 +465,7 @@ async def exercise_model_router(router_database, monkeypatch, owner, *, fail_pri
         async def __aexit__(self,*args):
             pass
         async def post(self,url,**kwargs):
-            assert url == tank.LITELLM_URL + '/v1/chat/completions'
+            _assert_offline_gateway_url(tank, url)
             assert kwargs['json']['disable_fallbacks'] is True
             calls.append(kwargs['json'])
             if fail_primary and kwargs['json']['model'] == 'placeholder-model':
@@ -977,3 +982,85 @@ async def test_room_preserves_non_approval_conflicts_without_polling(body):
             {'tenant_id': str(A)}, {'x-tank-key': 'placeholder-room-key'})
     assert response.status_code == 409 and response.content == body
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio(loop_scope='module')
+async def test_window_completion_approved_run_resumes_once_and_keeps_confirmation(router_database, monkeypatch):
+    from unittest.mock import AsyncMock
+    import httpx
+    import main as tank
+    import window_complete
+    from fastapi import FastAPI
+    from command import Actor
+
+    client_class = httpx.AsyncClient
+    pool, master = router_database
+    tenant = uuid.uuid4()
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.delenv('TANK_PROVIDER_ALLOW', raising=False)
+    monkeypatch.setattr(tank, 'pool', lambda: pool)
+    monkeypatch.setattr(tank, '_redis', None)
+    policy = dict(model='placeholder-completion', rung=1, priority='standard', system_prompt=None,
+                  max_tokens_out=256, cache_scope='none', candidate_model=None, shadow_rate=0,
+                  semantic_cache=False, fallbacks=[])
+    monkeypatch.setattr(tank, 'load_policy', AsyncMock(return_value=policy))
+    monkeypatch.setattr(tank, '_roster_models', AsyncMock(return_value=[{
+        'model_name': 'placeholder-completion', 'model_info': {
+            'input_cost_per_token': 0.000001, 'output_cost_per_token': 0.000002}}]))
+    monkeypatch.setattr(tank, '_check_route_task', AsyncMock())
+    calls = []
+
+    class Gateway:
+        def __init__(self, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def post(self, url, **kwargs):
+            _assert_offline_gateway_url(tank, url)
+            assert kwargs['json']['disable_fallbacks'] is True
+            assert 'paid_run_id' not in __import__('json').dumps(kwargs['json'])
+            calls.append(kwargs['json'])
+            return httpx.Response(200, json={
+                'choices': [{'message': {'content': 'return 1\n'}, 'finish_reason': 'stop'}],
+                'usage': {'prompt_tokens': 5, 'completion_tokens': 5}}, headers={
+                'x-litellm-response-cost': '0.01', 'x-litellm-model-group': 'placeholder-completion'})
+
+    monkeypatch.setattr(tank.httpx, 'AsyncClient', Gateway)
+    app = FastAPI()
+    app.add_middleware(p.ApprovalMiddleware)
+    app.include_router(window_complete.router)
+    app.dependency_overrides[window_complete.identity] = lambda: Actor(tenant, 'placeholder-completion-user', False)
+    body = {'prefix': 'placeholder insertion', 'paid_mode': 'ask', 'confirmed': True}
+    async with client_class(transport=httpx.ASGITransport(app), base_url='http://placeholder-tank') as client:
+        path = '/v1/command/complete'
+        waiting = await client.post(path, json=body)
+        assert waiting.status_code == 409 and not calls
+        detail = waiting.json()['detail']
+        await p.decide(tenant, uuid.UUID(detail['approval_id']), user='placeholder-admin',
+                       approve=True, reason='placeholder completion approved')
+        resumed = {**body, 'paid_run_id': detail['run_id']}
+        first = await client.post(path, json=resumed)
+        assert first.status_code == 200 and first.json()['status'] == 'ok', first.text
+        assert first.json()['text'] == 'return 1\n' and first.json()['receipts']
+        again = await client.post(path, json=resumed)
+        assert again.status_code == 200 and again.json()['text'] == first.json()['text']
+        assert len(calls) == 1
+        async with pool.acquire() as conn:
+            assert await conn.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1', tenant) == 1
+        assert (await client.post(path, json={**resumed, 'prefix': 'different insertion'})).status_code == 409
+        unconfirmed = await client.post(path, json={**resumed, 'confirmed': False})
+        assert unconfirmed.json()['status'] == 'ask' and len(calls) == 1
+        distinct = await client.post(path, json=body)
+        assert distinct.status_code == 409 and distinct.json()['detail']['run_id'] != detail['run_id']
+        assert (await client.post(path, json={**body, 'paid_run_id': 'placeholder-invalid'})).status_code == 422
+        fresh = distinct.json()['detail']
+        await p.decide(tenant, uuid.UUID(fresh['approval_id']), user='placeholder-admin',
+                       approve=True, reason='placeholder distinct completion approved')
+        master.paused = True
+        # A completed checkpoint is a stored answer, not a new paid dispatch.
+        assert (await client.post(path, json=resumed)).status_code == 200
+        # A separately approved run still reaches the real master pause before IO.
+        assert (await client.post(path, json={**body, 'paid_run_id': fresh['run_id']})).status_code == 503
+        assert len(calls) == 1

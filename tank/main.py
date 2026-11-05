@@ -5029,5 +5029,8 @@ app.add_middleware(__import__("paid_steps").ApprovalMiddleware)
 # Window agents: reuse the existing authenticated command corridor.
 __import__("window_agents").install(app, __import__("sys").modules[__name__])
 
+# Window completion uses the existing code ladder and personal-token identity.
+app.include_router(__import__('window_complete').router)
+
 # Bind only accepted endpoint arguments after existing authentication dependencies.
 bind_tenant_endpoints(app)

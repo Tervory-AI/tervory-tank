@@ -9489,6 +9489,13 @@
           "POST"
         ],
         "name": "receive_hook"
+      },
+      {
+        "path": "/v1/command/complete",
+        "methods": [
+          "POST"
+        ],
+        "name": "complete"
       }
     ],
     "lifecycle": {
