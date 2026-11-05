@@ -26,6 +26,7 @@ assert.equal(typeof globalThis.gc, 'function', 'run with node --expose-gc');
 const TENANT = '00000000-0000-4000-8000-000000000001';
 const ID = '00000000-0000-4000-8000-000000000002';
 const BOUND = 1500;
+const HOME = `/v1/tenants/${TENANT}/home`;
 const within = (promise, ms, label) => Promise.race([
   promise,
   new Promise((_, reject) => setTimeout(() => reject(new Error(`${label}: no answer within ${ms} ms (hang)`)), ms).unref()),
@@ -40,7 +41,15 @@ const server = http.createServer((req, res) => {
     if (mode.roster === 'stall') { res.writeHead(200, { 'content-type': 'application/json' }); res.write('['); return; }
     res.writeHead(200, { 'content-type': 'application/json' }); res.end('[]'); return;
   }
-  const kind = mode[url.pathname] ?? 'silent';
+  if (url.pathname === HOME && !mode.home) {
+    assert.equal(req.method, 'GET');
+    assert.equal(req.headers['x-tank-key'], 'dummy-workspace-key');
+    assert.equal(req.headers['x-tervory-user'], undefined);
+    res.writeHead(404, {'content-type':'application/json'});
+    res.end(JSON.stringify({detail:{code:'tenant_home_missing'}}));
+    return;
+  }
+  const kind = (url.pathname === HOME ? mode.home : mode[url.pathname]) ?? 'silent';
   if (kind === 'silent') return; // accept, never answer
   if (kind === 'stalled-json') { res.writeHead(200, { 'content-type': 'application/json' }); res.write('{"thread_id":'); return; }
   if (kind === 'stalled-error') { res.writeHead(500, { 'content-type': 'application/json' }); res.write('{"detail":'); return; }
@@ -85,7 +94,7 @@ const server = http.createServer((req, res) => {
   const sent = [];
   const recording = (url, init) => {
     const p = new URL(String(url)).pathname;
-    sent.push({ url: String(url), signal: init?.signal, kind: p === '/v1/models' ? mode.roster ?? 'ok' : mode[p] ?? 'silent' });
+    sent.push({ url: String(url), signal: init?.signal, kind: p === '/v1/models' ? mode.roster ?? 'ok' : p === HOME ? mode.home ?? 'home-missing' : mode[p] ?? 'silent' });
     return globalThis.fetch(url, init);
   };
   const { tank, route } = make(recording);
@@ -97,6 +106,23 @@ const server = http.createServer((req, res) => {
     return { result, took };
   };
   const collect = setInterval(() => globalThis.gc(), 300);
+
+  // Home metadata shares the command header budget; neither stalled headers nor
+  // a stalled JSON body may fall back to sending private content locally.
+  for (const home of ['silent', 'stalled-json']) {
+    mode = {home};
+    const contentBefore = sent.filter(entry => new URL(entry.url).pathname.startsWith('/v1/command/')).length;
+    const {result, took} = await timed('home ' + home, () => call('threads'));
+    assert.equal(result.status, 504);
+    assert(took >= BOUND - 100 && took < BOUND * 2.5);
+    assert.equal(sent.filter(entry => new URL(entry.url).pathname.startsWith('/v1/command/')).length, contentBefore);
+  }
+  // A caller abort is raced even if an upstream fetch ignores its signal.
+  const ignored = make(() => new Promise(() => {}));
+  const cancelled = new AbortController();
+  const cancelledCall = ignored.tank.commandRequest({tenantId:TENANT,userId:'user_chat'}, 'threads', {signal:cancelled.signal});
+  cancelled.abort(new Error('fixture caller stopped'));
+  await assert.rejects(within(cancelledCall, BOUND, 'ignored caller abort'), error => error.code === 'home_unavailable');
 
   // 1. Headers never come.
   mode = {};
