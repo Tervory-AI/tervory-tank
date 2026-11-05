@@ -29,7 +29,7 @@ class Investigator:
         if origin not in {"look", "alert", "message"}:
             raise ValueError("Unknown issue source.")
         item = self.store.open(PLATFORM_TENANT, request.target.value, request.signal.value, origin)
-        if item["state"] == "blocked" and origin == "look":
+        if item["state"] in {"blocked", "not_reproduced"}:
             item["state"] = "open"
         if item["state"] != "open":
             return item

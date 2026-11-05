@@ -8,7 +8,9 @@ severity comes only from a matched public advisory.
 from __future__ import annotations
 
 import json
+import fcntl
 import os
+import re
 import shutil
 import time
 import uuid
@@ -16,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .client_settings import ClientAutumbraSettings
+from .durable_shields import _atomic_write_json
 from .enforce_apply import apply_from_payload, approve_pending, undo_from_payload
 from .fixture_edge import DEFAULT_CONTROL, FixtureEdgeControl
 from .never_block import ActionCap, may_block_ip
@@ -40,6 +43,9 @@ class ThreatPayloadQueue:
         (self.root / "inbox").mkdir(exist_ok=True)
         (self.root / "receipts").mkdir(exist_ok=True)
         (self.root / "quarantine").mkdir(exist_ok=True)
+        (self.root / "processing").mkdir(exist_ok=True)
+        self._claim = False
+        self._active_item = None
 
     def put(self, payload: ThreatPayload) -> str:
         if not isinstance(payload, ThreatPayload):
@@ -49,7 +55,7 @@ class ThreatPayloadQueue:
         data = payload.model_dump(mode="json")
         if not data.get("queued_at"):
             data["queued_at"] = utc_now()
-        path.write_text(json.dumps(data, sort_keys=True), encoding="utf-8")
+        _atomic_write_json(path, data)
         return item_id
 
     def take(self) -> tuple[str, ThreatPayload] | None:
@@ -76,7 +82,11 @@ class ThreatPayloadQueue:
                     path, item_id, reason=type(exc).__name__, tenant_id=tenant_hint
                 )
                 continue
-            path.unlink(missing_ok=True)
+            if self._claim:
+                os.replace(path, self.root / "processing" / path.name)
+                self._active_item = item_id
+            else:
+                path.unlink(missing_ok=True)
             return item_id, payload
 
     def _quarantine(
@@ -120,8 +130,12 @@ class ThreatPayloadQueue:
         if "timestamp" not in receipt:
             receipt["timestamp"] = utc_now()
         rid = str(receipt.get("id") or uuid.uuid4())
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", rid):
+            raise ValueError("Invalid receipt identifier.")
+        if self._active_item:
+            receipt["queue_item_id"] = self._active_item
         path = self.root / "receipts" / f"{rid}.json"
-        path.write_text(json.dumps(receipt, sort_keys=True, default=str), encoding="utf-8")
+        _atomic_write_json(path, receipt)
         try:
             push_receipt_to_founder_console(self.root, receipt)
         except Exception:
@@ -472,7 +486,40 @@ def _queue_transit_seconds(payload: ThreatPayload) -> float | None:
         return None
 
 
-def enforce_drain_once(
+def enforce_drain_once(queue: ThreatPayloadQueue, **kwargs) -> dict[str, Any] | None:
+    """Serialize drains and retain interrupted actions for receipt reconciliation, never replay."""
+    with (queue.root / ".drain.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        for pending in sorted((queue.root / "processing").glob("*.json")):
+            receipts = queue.list_receipts()
+            prior = next((r for r in receipts if r.get("queue_item_id") == pending.stem), None)
+            if prior is None:
+                prior = {"id": str(uuid.uuid5(uuid.NAMESPACE_URL, "autumbra-interrupted:" + pending.stem)),
+                         "tenant_id": kwargs["settings"].tenant_id, "product": "Autumbra", "role": "Enforce",
+                         "outcome": "edge_unconfirmed", "applied": False, "queue_item_id": pending.stem,
+                         "raw_log_seen": False,
+                         "note": "Edge outcome could not be confirmed. Inspect the owned rule before retrying."}
+                queue.write_receipt(prior)
+            pending.unlink()
+            return prior
+        queue._claim = True
+        try:
+            result = _enforce_drain_once(queue, **kwargs)
+        except Exception:
+            # Known provider failures already have a receipt; unexpected failures
+            # retain the claim for the next drain's bounded reconciliation receipt.
+            if queue._active_item and any(r.get("queue_item_id") == queue._active_item for r in queue.list_receipts()):
+                (queue.root / "processing" / (queue._active_item + ".json")).unlink(missing_ok=True)
+            raise
+        else:
+            if queue._active_item:
+                (queue.root / "processing" / (queue._active_item + ".json")).unlink(missing_ok=True)
+            return result
+        finally:
+            queue._claim, queue._active_item = False, None
+
+
+def _enforce_drain_once(
     queue: ThreatPayloadQueue,
     *,
     settings: ClientAutumbraSettings,

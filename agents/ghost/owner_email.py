@@ -304,6 +304,7 @@ def send_owner_update(
     result = sender.send(to=to, subject=email["subject"], body=email["body"])
     return {
         "sent": bool(result.get("sent")),
+        "delivery_state": result.get("state"),
         "transport": result.get("transport") or type(sender).__name__,
         "to": to,
         "subject": email["subject"],
