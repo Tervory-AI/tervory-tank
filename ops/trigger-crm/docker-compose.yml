@@ -96,11 +96,30 @@ services:
       retries: 15
       start_period: 90s
     networks:
+      product-proxy: {}
       internal: {}
       gw:
         aliases:
           - trigger-crm-backend
     security_opt: ["no-new-privileges:true"]
+    # Repo-owned public ingress; clear the documented Coolify UI domains at cutover.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "aty7tukal0rlksfpet1mzplb"
+      traefik.http.routers.product-crm-api-http.rule: "Host(`crm.tervory.com`) && (PathPrefix(`/healthz`) || PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/static`))"
+      traefik.http.routers.product-crm-api-http.entrypoints: "http"
+      traefik.http.routers.product-crm-api-http.service: "product-crm-api"
+      traefik.http.routers.product-crm-api-http.priority: "1000"
+      traefik.http.routers.product-crm-api-http.middlewares: "product-crm-api-redirect"
+      traefik.http.routers.product-crm-api-https.rule: "Host(`crm.tervory.com`) && (PathPrefix(`/healthz`) || PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/static`))"
+      traefik.http.routers.product-crm-api-https.entrypoints: "https"
+      traefik.http.routers.product-crm-api-https.service: "product-crm-api"
+      traefik.http.routers.product-crm-api-https.priority: "1000"
+      traefik.http.routers.product-crm-api-https.tls: "true"
+      traefik.http.routers.product-crm-api-https.tls.certresolver: "letsencrypt"
+      traefik.http.middlewares.product-crm-api-redirect.redirectscheme.scheme: "https"
+      traefik.http.middlewares.product-crm-api-redirect.redirectscheme.permanent: "true"
+      traefik.http.services.product-crm-api.loadbalancer.server.port: "8000"
 
   celery-worker:
     build:
@@ -243,10 +262,33 @@ services:
       retries: 15
       start_period: 60s
     networks:
+      - product-proxy
       - internal
     security_opt: ["no-new-privileges:true"]
+    # Repo-owned public ingress; clear the documented Coolify UI domains at cutover.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "aty7tukal0rlksfpet1mzplb"
+      traefik.http.routers.product-crm-app-http.rule: "Host(`crm.tervory.com`) && PathPrefix(`/`) && !(PathPrefix(`/healthz`) || PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/static`))"
+      traefik.http.routers.product-crm-app-http.entrypoints: "http"
+      traefik.http.routers.product-crm-app-http.service: "product-crm-app"
+      traefik.http.routers.product-crm-app-http.priority: "100"
+      traefik.http.routers.product-crm-app-http.middlewares: "product-crm-app-redirect"
+      traefik.http.routers.product-crm-app-https.rule: "Host(`crm.tervory.com`) && PathPrefix(`/`) && !(PathPrefix(`/healthz`) || PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/static`))"
+      traefik.http.routers.product-crm-app-https.entrypoints: "https"
+      traefik.http.routers.product-crm-app-https.service: "product-crm-app"
+      traefik.http.routers.product-crm-app-https.priority: "100"
+      traefik.http.routers.product-crm-app-https.tls: "true"
+      traefik.http.routers.product-crm-app-https.tls.certresolver: "letsencrypt"
+      traefik.http.middlewares.product-crm-app-redirect.redirectscheme.scheme: "https"
+      traefik.http.middlewares.product-crm-app-redirect.redirectscheme.permanent: "true"
+      traefik.http.services.product-crm-app.loadbalancer.server.port: "3000"
 
 networks:
+  # Existing per-resource proxy network; no new shared agent corridor.
+  product-proxy:
+    external: true
+    name: aty7tukal0rlksfpet1mzplb
   internal:
     driver: bridge
   gw:

@@ -188,9 +188,10 @@ services:
       litellm:
         condition: service_started
     networks:
+      - product-proxy
       - default
       - tervory-gw-zenas
-    # Coolify attaches za.tervory.com to this service only.
+    # Repo-owned ingress attaches za.tervory.com to this service only.
     expose:
       - "8000"
     healthcheck:
@@ -207,7 +208,25 @@ services:
   # Every value is compose interpolation from Coolify env, so the .env that
   # Coolify writes on each deploy is enough; no side env_file is needed.
   # Uses the Zenas R2 pair (same names as agents/zenas/docker-compose.za.yml).
-  # Public age recipient only. Private age identity never mounts here.
+  # Public age recipient only. Private age identity never mounts here.    # Repo-owned public ingress; clear the documented Coolify UI domains at cutover.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "9iwqimptdhspitnsgmv0imdl"
+      traefik.http.routers.product-za-tank-http.rule: "Host(`za.tervory.com`) && PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-za-tank-http.entrypoints: "http"
+      traefik.http.routers.product-za-tank-http.service: "product-za-tank"
+      traefik.http.routers.product-za-tank-http.priority: "100"
+      traefik.http.routers.product-za-tank-http.middlewares: "product-za-tank-redirect"
+      traefik.http.routers.product-za-tank-https.rule: "Host(`za.tervory.com`) && PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-za-tank-https.entrypoints: "https"
+      traefik.http.routers.product-za-tank-https.service: "product-za-tank"
+      traefik.http.routers.product-za-tank-https.priority: "100"
+      traefik.http.routers.product-za-tank-https.tls: "true"
+      traefik.http.routers.product-za-tank-https.tls.certresolver: "letsencrypt"
+      traefik.http.middlewares.product-za-tank-redirect.redirectscheme.scheme: "https"
+      traefik.http.middlewares.product-za-tank-redirect.redirectscheme.permanent: "true"
+      traefik.http.services.product-za-tank.loadbalancer.server.port: "8000"
+
   r2-backup-za:
     build:
       context: .
@@ -280,6 +299,10 @@ volumes:
   za_litellm_chatgpt_token:
 
 networks:
+  # Existing per-resource proxy network; no new shared agent corridor.
+  product-proxy:
+    external: true
+    name: 9iwqimptdhspitnsgmv0imdl
   default:
     name: tervory-za
   tervory-gw-zenas:

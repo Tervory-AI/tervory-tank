@@ -64,7 +64,7 @@ try {
       });
       const page = await context.newPage();
       const reasons = new Set();
-      const row = {width, status: null, reasons: [], screenshot: null};
+      const row = {width, status: null, path: new URL(target.url).pathname, reasons: [], screenshot: null};
       page.on('pageerror', () => reasons.add('Uncaught browser exception'));
       page.on('crash', () => reasons.add('Browser page crashed'));
       page.on('console', message => {
@@ -122,6 +122,11 @@ const summary = ['# Signed-out live page check', '',
   'Signed-in checks skipped: step 2 awaits founder-provided LIVE_CHECK_EMAIL and LIVE_CHECK_PASSWORD.', '',
   '| Host | Result | Reason | Screenshots |', '| --- | --- | --- | --- |'];
 for (const result of results) {
+  if (!result.passed) {
+    const failures = [...new Set(result.viewports.filter(row => row.reasons.length)
+      .map(row => `FAIL host=${result.host} status=${row.status ?? 'unavailable'} path=${row.path}`))];
+    summary.push(...failures, '');
+  }
   const reasons = [...new Set(result.viewports.flatMap(row => row.reasons))].join('; ') || 'Loaded without a detected failure';
   const shots = result.viewports.map(row => row.screenshot ? `[${row.width}px](${row.screenshot})` : `${row.width}px unavailable`).join(', ');
   summary.push(`| ${result.host} | ${result.passed ? 'PASS' : 'FAIL'} | ${reasons.replaceAll('|', '\\|')} | ${shots} |`);
