@@ -182,7 +182,10 @@ async def lifespan(app):
     async def maintain():
         while True:
             await asyncio.sleep(60)
-            sweep(root, set(tasks))
+            try:
+                sweep(root, set(tasks))
+            except OSError:
+                logging.getLogger(__name__).error("Forge retention will retry.")
     maintenance = asyncio.create_task(maintain())
     try:
         yield

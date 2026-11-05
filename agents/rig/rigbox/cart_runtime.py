@@ -1,5 +1,6 @@
 """US-only wiring. Credentials stay in the existing Tank vault at rest."""
 import asyncio
+import logging
 import os
 
 from chassis.tenant_db import tenant_scope
@@ -55,9 +56,12 @@ def install(service, http, tank):
 
     async def loop():
         while True:
-            with tenant_scope(None, administrative=True):
-                tenants = await service.store.tenant_ids()
-            await asyncio.gather(*(sweep_tenant(tenant) for tenant in tenants))
+            try:
+                with tenant_scope(None, administrative=True):
+                    tenants = await service.store.tenant_ids()
+                await asyncio.gather(*(sweep_tenant(tenant) for tenant in tenants))
+            except Exception:
+                logging.getLogger(__name__).warning('Cart tenant discovery will retry')
             await asyncio.sleep(1)
 
     return asyncio.create_task(loop())

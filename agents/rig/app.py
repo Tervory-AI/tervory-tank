@@ -79,8 +79,11 @@ async def expire_searches(ctx: JobContext) -> dict:
     Safe to run twice: the second run finds nothing left to delete.
     It writes only to agent_rig.searches.
     """
+    if str(ctx.tenant_id) != HEARTBEAT_TENANT:
+        raise PermissionError("Maintenance tenant required")
     service: Service = app.state.rig
-    deleted = await service.expire_searches()
+    with tenant_scope(None, administrative=True):
+        deleted = await service.expire_searches()
     log_line(AGENT, json.dumps({"deleted": deleted}), tenant_id=ctx.tenant_id, job_id=ctx.job_id)
     return {"deleted": deleted}
 
