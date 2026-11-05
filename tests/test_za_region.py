@@ -62,7 +62,15 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
     assert "tervory-gw-zenas" in data["services"]["hermes"]["networks"]
     assert data["services"]["tank"]["environment"]["ZENAS_AGENT_URL"] == "http://agent-zenas:8000"
     assert "/app/config.za.yaml" in data["services"]["litellm"]["command"]
-    assert COMPOSE.splitlines().count("    # Coolify attaches za.tervory.com to this service only.") == 1
+    labels = data["services"]["tank"]["labels"]
+    for protocol in ("http", "https"):
+        prefix = f"traefik.http.routers.product-za-tank-{protocol}."
+        assert labels[prefix + "rule"] == (
+            "Host(`za.tervory.com`) && PathPrefix(`/`) && "
+            "!PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+        )
+        assert labels[prefix + "service"] == "product-za-tank"
+    assert labels["traefik.http.services.product-za-tank.loadbalancer.server.port"] == "8000"
     assert data["services"]["tank"]["expose"] == ["8000"]
     for service in data["services"].values():
         assert "ports" not in service
@@ -120,7 +128,16 @@ def test_za_compose_names_no_us_host_and_does_not_replicate() -> None:
     assert "replicaof" not in lowered
     assert "wal_level" not in lowered
     assert "primary_conninfo" not in lowered
-    assert "external: true" not in lowered
+    # The sole external network is this region's existing ingress network.
+    # Stores/corridors remain owned by ZA; only Tank may join the proxy.
+    data = _parsed()
+    assert {name for name, spec in data["networks"].items() if spec.get("external")} == {"product-proxy"}
+    proxy = data["networks"]["product-proxy"]
+    assert proxy == {"external": True, "name": "9iwqimptdhspitnsgmv0imdl"}
+    assert data["services"]["tank"]["labels"]["traefik.docker.network"] == proxy["name"]
+    for name, service in data["services"].items():
+        assert ("product-proxy" in service.get("networks", [])) == (name == "tank"), name
+        assert bool(service.get("labels")) == (name == "tank"), name
     addresses = set(re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", COMPOSE))
     assert addresses <= {"127.0.0.1"}
     for banned in ("workspace", "searxng", "agent-base", "agent-tiger", "agent-rig"):

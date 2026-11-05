@@ -58,7 +58,12 @@ def test_no_workflow_uses_pull_request_target(path: Path) -> None:
 def test_ci_keeps_job_names_and_no_main_push_trigger() -> None:
     text = CI.read_text(encoding="utf-8")
     jobs = _load(CI)["jobs"]
-    assert set(jobs) == {"security", "lint", "changes", "runner", "tank", "workspace", "command-acceptance", "savings-page", "ci-ok"}
+    assert set(jobs) == {"security", "lint", "routing", "changes", "runner", "tank", "workspace", "command-acceptance", "savings-page", "ci-ok"}
+    # Routing always runs, including docs-only edits to the ingress authority.
+    routing = jobs["routing"]
+    assert "if" not in routing and "needs" not in routing
+    assert routing["runs-on"] == "ubuntu-24.04"
+    assert any(step.get("run") == "python3 tests/test_routing.py" for step in routing["steps"])
     # ci-ok is the one check the merge queue requires: it waits for every other job.
     assert jobs["ci-ok"]["if"] == "always()"
     assert set(jobs["ci-ok"]["needs"]) == set(jobs) - {"runner", "ci-ok"}
