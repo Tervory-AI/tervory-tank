@@ -183,7 +183,7 @@ def check_threshold(value: Any) -> str:
         number = Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
         raise BadWatch("threshold must be a number") from exc
-    if number < 0:
+    if not number.is_finite() or number < 0:
         raise BadWatch("threshold must be zero or more")
     return _plain(number)
 
@@ -857,13 +857,20 @@ class PgStore(PgPlaybooks, PgAlerts):
             found = await conn.fetchval(self._sql(SQL_CHECK_OPEN), uuid.UUID(str(tenant_id)), url)
         return found is not None
 
-    async def enqueue_check(self, tenant_id: str, url: str) -> None:
+    async def enqueue_check(self, tenant_id: str, url: str) -> bool:
         async with self.pool.acquire() as conn:
-            await conn.execute(
-                self._sql(SQL_ENQUEUE_CHECK),
-                uuid.UUID(str(tenant_id)),
-                json.dumps({"url": url}),
-            )
+            async with conn.transaction():
+                # Serialize both scheduled and Rig-triggered enqueue attempts.
+                # Locking the watch also orders this against pause/delete.
+                watch = await conn.fetchrow(self._sql(SQL_GET_WATCH) + " FOR UPDATE",
+                                            uuid.UUID(str(tenant_id)), url)
+                if not watch or not watch['enabled']:
+                    return False
+                if await conn.fetchval(self._sql(SQL_CHECK_OPEN), uuid.UUID(str(tenant_id)), url):
+                    return False
+                await conn.execute(self._sql(SQL_ENQUEUE_CHECK), uuid.UUID(str(tenant_id)),
+                                   json.dumps({"url": url}))
+                return True
 
 
 class MemoryStore(MemoryPlaybooks, MemoryAlerts):
@@ -1033,13 +1040,17 @@ class MemoryStore(MemoryPlaybooks, MemoryAlerts):
             for item in self.jobs
         )
 
-    async def enqueue_check(self, tenant_id: str, url: str) -> None:
+    async def enqueue_check(self, tenant_id: str, url: str) -> bool:
+        watch = await self.get_watch(tenant_id, url)
+        if not watch or not watch['enabled'] or await self.check_open(tenant_id, url):
+            return False
         self.jobs.append({
             "tenant_id": str(tenant_id),
             "url": url,
             "kind": "check",
             "status": "queued",
         })
+        return True
 
 
 def _save_png(files: Any, tenant_id: str, png_base64: str | None, stamp: datetime) -> str | None:
@@ -1091,7 +1102,14 @@ async def run_check(
     captured = {}
 
     async def rendered(*args):
-        page = await render(*args)
+        try:
+            page = await render(*args)
+        except (httpx.HTTPError, TimeoutError):
+            # Keep a failed attempt in history, without transport messages that
+            # may contain private headers/URLs. Cancellation still propagates.
+            page = {"ok": False, "error": "unread"}
+        if not isinstance(page, dict):
+            page = {"ok": False, "error": "unread"}
         if (page.get("ok") and not page.get("challenge") and not page.get("blocked_by_check")
                 and page.get("status") not in {401, 403, 429} and not page.get("portal_item")):
             captured["html"] = page.get("html") or ""
@@ -1305,6 +1323,6 @@ async def dispatch_tenant(store: Any, tenant_id: str, now: datetime) -> dict[str
             continue
         if await store.check_open(tenant_id, watch["url"]):
             continue
-        await store.enqueue_check(tenant_id, watch["url"])
-        queued.append(watch["url"])
+        if await store.enqueue_check(tenant_id, watch["url"]):
+            queued.append(watch["url"])
     return {"queued": queued}
