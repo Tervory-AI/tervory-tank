@@ -11,7 +11,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from test_prices import A, B, ROOT, URL, corridor, product  # noqa: F401
+from rig_tiger_prices.test_prices import A, B, ROOT, URL, corridor, product  # noqa: F401
 from test_tiger import _load
 from tiger_works.fixture import extract, no_paid_call, saved_page
 from chassis.db import ensure_schema
