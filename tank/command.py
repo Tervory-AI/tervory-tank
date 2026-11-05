@@ -1495,6 +1495,9 @@ class MarketLabReadArgs(Body):
     limit: int = Field(default=20, ge=1, le=100)
     page: int = Field(default=0, ge=0, le=10000)
 
+class MarketLabBriefArgs(MarketLabReadArgs):
+    report_id: uuid.UUID | None = None
+
 
 class MarketLabWebhookArgs(Body):
     url: str = Field(min_length=1, max_length=2000)

@@ -157,16 +157,22 @@ export async function personalCommandRequest(request: Request, path: string[],
   const target = path.join("/");
   const routes: Record<string, RegExp> = {
     GET: new RegExp(`^(tools|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`),
-    POST: new RegExp(`^(threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`),
+    POST: new RegExp(`^(complete|threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`),
     PATCH: new RegExp(`^threads/${id}$`),
   };
-  if (path.some(segment => !/^[a-z0-9-]+$/.test(segment)) || !routes[request.method]?.test(target)) return refused(404);
+  const agentRoutes: Record<string, RegExp[]> = {
+    GET: [/^window-agents\/jobs$/, new RegExp(`^window-agents/jobs/${id}/receipt$`), /^window-agents\/vault\/github$/],
+    POST: [/^window-agents\/jobs$/, new RegExp(`^window-agents/jobs/${id}/cancel$`),
+      /^window-agents\/reviews$/, /^window-agents\/webhooks$/, /^window-agents\/vault\/github$/],
+  };
+  if (path.some(segment => !/^[a-z0-9-]+$/.test(segment)) ||
+      !(routes[request.method]?.test(target) || agentRoutes[request.method]?.some(route => route.test(target)))) return refused(404);
   const query = new URL(request.url).searchParams;
   for (const key of query.keys()) if (key !== "after" || !target.endsWith("/events")) return refused(400);
   const after = query.getAll("after");
   if (after.length > 1 || (after.length && !/^\d{1,15}$/.test(after[0]))) return refused(400);
   // Never select TANK_URL_ZA or a caller URL; this Workspace talks to its own box.
-  const url = new URL(`/v1/command/${target}`, TANK_URL);
+  const url = new URL(target.startsWith("window-agents/") ? `/v1/${target}` : `/v1/command/${target}`, TANK_URL);
   if (after.length) url.searchParams.set("after", after[0]);
   let body: Uint8Array | undefined;
   if (request.method !== "GET") {

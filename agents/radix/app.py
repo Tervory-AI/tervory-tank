@@ -63,7 +63,9 @@ async def watch_tick(ctx: JobContext) -> dict:
 app = create_app(
     agent=AGENT,
     handlers={"ping": ping, "scan": scan, "watch_tick": watch_tick},
-    job_timeouts={"scan": 360, "watch_tick": 420},
+    # One scheduled phase may be a 20-minute infrastructure run. Keep the
+    # worker outside that scan/control budget and inside its 30-minute lease.
+    job_timeouts={"scan": 360, "watch_tick": 1260},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,

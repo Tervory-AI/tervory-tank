@@ -29,12 +29,23 @@ import personal_tokens as pat
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000011")
 SAMPLE = {"uuid.UUID": str(uuid.UUID(int=7))}
 CORRIDOR = {
+    ("POST", "/v1/command/complete"),
     ("GET", "/v1/command/models"), ("GET", "/v1/command/tools"), ("GET", "/v1/command/threads"),
     ("GET", "/v1/command/threads/{thread_id}"), ("GET", "/v1/command/threads/{thread_id}/events"),
     ("GET", "/v1/command/tasks/{task_id}/receipts"), ("POST", "/v1/command/threads"),
     ("POST", "/v1/command/threads/{thread_id}/code-turn"),
     ("POST", "/v1/command/threads/{thread_id}/turn"), ("POST", "/v1/command/threads/{thread_id}/actions"),
     ("POST", "/v1/command/cards/{card_id}"), ("POST", "/v1/command/build"), ("PATCH", "/v1/command/threads/{thread_id}"),
+}
+
+# Explicit window user endpoints authenticate the same CLI audience through their
+# feature-owned dependency. The worker and signed-hook routes are not included.
+WINDOW_CORRIDOR = {
+    ('GET', '/v1/window-agents/jobs'), ('POST', '/v1/window-agents/jobs'),
+    ('GET', '/v1/window-agents/jobs/{job_id}/receipt'),
+    ('POST', '/v1/window-agents/jobs/{job_id}/cancel'),
+    ('GET', '/v1/window-agents/vault/github'), ('POST', '/v1/window-agents/vault/github'),
+    ('POST', '/v1/window-agents/reviews'), ('POST', '/v1/window-agents/webhooks'),
 }
 
 # Device-login routes authenticate the code, refresh token or presented credential
@@ -93,10 +104,10 @@ def lookups(monkeypatch):
 def test_corridor_list_matches_the_workspace_proxy_plus_founder_roster():
     source = open("workspace/lib/tank.ts").read()
     assert "GET: new RegExp(`^(tools|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`)" in source
-    assert "POST: new RegExp(`^(threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`)" in source
+    assert "POST: new RegExp(`^(complete|threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`)" in source
     assert "PATCH: new RegExp(`^threads/${id}$`)" in source
     routes = set(endpoints())
-    assert CORRIDOR <= routes
+    assert CORRIDOR | WINDOW_CORRIDOR <= routes
     for method, path in CORRIDOR:
         assert pat.cli_route(SimpleNamespace(method=method, url=SimpleNamespace(path=concrete(path))))
 
@@ -108,7 +119,7 @@ async def test_every_tank_route_outside_the_cli_corridor_refuses_a_cli_token(loo
     checked = []
     async with httpx.AsyncClient(transport=transport, base_url="http://za.tervory.com") as client:
         for method, path in sorted(set(endpoints())):
-            if (method, path) in CORRIDOR or (method, path) in DEVICE:
+            if (method, path) in CORRIDOR | WINDOW_CORRIDOR or (method, path) in DEVICE:
                 continue
             before = len(lookups)
             response = await client.request(method, concrete(path), json={},
@@ -138,3 +149,14 @@ async def test_corridor_routes_do_look_the_token_up(lookups):
         response = await client.get("/v1/command/models", headers={"Authorization": f"Bearer {token}"})
     assert len(lookups) == 1
     assert response.status_code == 404  # a customer's token: the roster is founder-only
+
+
+@pytest.mark.asyncio
+async def test_each_explicit_window_user_route_authenticates_cli_audience(lookups):
+    token = f"tv1.za.{TENANT.hex}." + "x" * 43
+    transport = httpx.ASGITransport(app=main.app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://za.tervory.com") as client:
+        for method, path in sorted(WINDOW_CORRIDOR):
+            before = len(lookups)
+            await client.request(method, concrete(path), json={}, headers={"Authorization": f"Bearer {token}"})
+            assert len(lookups) == before + 1, (method, path)

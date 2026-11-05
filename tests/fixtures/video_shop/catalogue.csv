@@ -1,0 +1,2 @@
+sku,name,brand,category,price,currency,image_url,active,attributes
+stock,Red cup,Sample,Drinkware,10,USD,https://store.example/cup.ppm,yes,"{""stock"": {""status"": ""in_stock""}}"

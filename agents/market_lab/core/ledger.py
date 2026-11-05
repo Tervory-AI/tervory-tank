@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +34,7 @@ class MemoryLedger:
         self.predictions: list[dict[str, Any]] = []
         self.reports: list[dict[str, Any]] = []
         self.brief_deliveries: dict[tuple, dict] = {}
+        self.brief_events: list[dict] = []
         self.refused: list[str] = []
         self.pool = Pool()
 
@@ -116,19 +117,26 @@ class MemoryLedger:
     def save_brief(self, report: dict, status: str, reason: str | None) -> None:
         self.save_report(report)
         for channel in ("email", "webhook"):
-            self.brief_deliveries.setdefault((str(report["tenant_id"]), str(report["id"]), channel),
-                                             {"channel": channel, "status": status, "reason": reason})
+            key = (str(report["tenant_id"]), str(report["id"]), channel)
+            if key not in self.brief_deliveries:
+                self.brief_deliveries[key] = {"channel": channel, "status": status, "reason": reason}
+                self.brief_events.append({"tenant_id": key[0], "report_id": key[1],
+                    "channel": channel, "status": status, "reason": reason, "happened_at": datetime.now(UTC)})
 
-    def briefs_for(self, tenant: str) -> list[dict]:
+    def briefs_for(self, tenant: str, report_id: str | None = None) -> list[dict]:
         rows = []
         for report in self.reports:
-            if str(report["tenant_id"]) != str(tenant):
+            if str(report["tenant_id"]) != str(tenant) or (report_id is not None and str(report["id"]) != str(report_id)):
                 continue
             states = [dict(row) for key, row in self.brief_deliveries.items()
                       if key[:2] == (str(tenant), str(report["id"]))]
             if states:
                 rows.append({**report, "deliveries": states})
         return sorted(rows, key=lambda row: (row["made_at"], str(row["id"])), reverse=True)[:12]
+
+    def brief_history(self, tenant: str, ident: str) -> list[dict]:
+        return [dict(row) for row in self.brief_events
+                if row["tenant_id"] == str(tenant) and row["report_id"] == str(ident)]
 
     def pending_briefs(self, tenant: str, channel: str) -> list[dict]:
         return [dict(report) for report in self.reports if str(report["tenant_id"]) == str(tenant)
@@ -140,6 +148,8 @@ class MemoryLedger:
         if row is None or row["status"] != expected:
             return False
         row.update(status=status, reason=reason)
+        self.brief_events.append({"tenant_id": str(tenant), "report_id": str(ident),
+            "channel": channel, "status": status, "reason": reason, "happened_at": datetime.now(UTC)})
         return True
 
     def series_for(self, tenant_id: str) -> list[dict[str, Any]]:
@@ -538,14 +548,21 @@ class PostgresLedger:
                 "CROSS JOIN (VALUES ('email'),('webhook')) AS c(channel) "
                 "WHERE tenant_id=$1 AND id=$2 ON CONFLICT DO NOTHING",
                 uuid.UUID(str(report["tenant_id"])), uuid.UUID(str(report["id"])), status, reason)
+            await self.conn.execute(
+                "INSERT INTO agent_market_lab.brief_delivery_history "
+                "(tenant_id,report_id,channel,status,reason,happened_at) "
+                "SELECT tenant_id,report_id,channel,status,reason,updated_at "
+                "FROM agent_market_lab.brief_deliveries WHERE tenant_id=$1 AND report_id=$2",
+                uuid.UUID(str(report["tenant_id"])), uuid.UUID(str(report["id"])))
 
-    async def briefs_for(self, tenant: str) -> list[dict]:
+    async def briefs_for(self, tenant: str, report_id: str | None = None) -> list[dict]:
         rows = await self.conn.fetch(
             "SELECT r.*, (SELECT jsonb_agg(jsonb_build_object('channel',d.channel,'status',d.status,'reason',d.reason) ORDER BY d.channel) "
             "FROM agent_market_lab.brief_deliveries d WHERE d.tenant_id=r.tenant_id AND d.report_id=r.id) AS deliveries "
             "FROM agent_market_lab.reports r WHERE r.tenant_id=$1 "
             "AND EXISTS (SELECT 1 FROM agent_market_lab.brief_deliveries d WHERE d.tenant_id=$1 AND d.report_id=r.id) "
-            "ORDER BY r.made_at DESC,r.id DESC LIMIT 12", uuid.UUID(str(tenant)))
+            "AND ($2::uuid IS NULL OR r.id=$2) ORDER BY r.made_at DESC,r.id DESC LIMIT 12",
+            uuid.UUID(str(tenant)), uuid.UUID(str(report_id)) if report_id else None)
         result = []
         for row in rows:
             report = _record(row)
@@ -553,6 +570,13 @@ class PostgresLedger:
                 report["deliveries"] = json.loads(report["deliveries"])
             result.append(report)
         return result
+
+    async def brief_history(self, tenant: str, ident: str) -> list[dict]:
+        rows = await self.conn.fetch(
+            "SELECT channel,status,reason,happened_at FROM agent_market_lab.brief_delivery_history "
+            "WHERE tenant_id=$1 AND report_id=$2 ORDER BY happened_at,id",
+            uuid.UUID(str(tenant)), uuid.UUID(str(ident)))
+        return [dict(row) for row in rows]
 
     async def pending_briefs(self, tenant: str, channel: str) -> list[dict]:
         rows = await self.conn.fetch(
@@ -565,8 +589,11 @@ class PostgresLedger:
     async def update_brief(self, tenant: str, ident: str, channel: str, status: str,
                            reason: str | None = None, *, expected: str = "sending") -> bool:
         changed = await self.conn.fetchval(
-            "UPDATE agent_market_lab.brief_deliveries SET status=$4,reason=$5,updated_at=now() "
-            "WHERE tenant_id=$1 AND report_id=$2 AND channel=$3 AND status=$6 RETURNING report_id",
+            "WITH changed AS (UPDATE agent_market_lab.brief_deliveries SET status=$4,reason=$5,updated_at=now() "
+            "WHERE tenant_id=$1 AND report_id=$2 AND channel=$3 AND status=$6 RETURNING *) "
+            "INSERT INTO agent_market_lab.brief_delivery_history "
+            "(tenant_id,report_id,channel,status,reason,happened_at) "
+            "SELECT tenant_id,report_id,channel,status,reason,updated_at FROM changed RETURNING report_id",
             uuid.UUID(str(tenant)), uuid.UUID(str(ident)), channel, status, reason, expected)
         return changed is not None
 

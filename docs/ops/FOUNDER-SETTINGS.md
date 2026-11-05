@@ -48,6 +48,8 @@ One Boston resource serves every country. Setup emails the founder a link to set
 - One Enforce per client (#622; on the enforce-lifecycle service only, never on Watch): AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN (read and write, no deploy), AUTUMBRA_COOLIFY_PROJECT_UUID, AUTUMBRA_COOLIFY_SERVER_UUID, AUTUMBRA_COOLIFY_ENVIRONMENT, AUTUMBRA_COOLIFY_GITHUB_APP_UUID, AUTUMBRA_LIFECYCLE_KEY (on Tank and enforce-lifecycle only)
 - Code-fix PRs: GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED
 
+**Radix own-repository scan** (on Tank): TANK_GITHUB_READ_TOKEN, read access to Tervory-AI/tervory-tank for verifying the current main commit.
+
 **Radix** (#651, breach watch): HIBP_API_KEY, only if Have I Been Pwned's domain search is free for your domains.
 
 **Brains** (leave off): TIGER_BRAIN_ENABLED, ZENAS_BRAIN_ENABLED; SANDBOX_KEY_TIGER, SANDBOX_KEY_ZENAS (fill these now; they are only used when a brain is on).
@@ -81,12 +83,27 @@ Public project/client IDs, native founder subjects and organisation links are pr
 5. Google Cloud: the project with Business Profile API access (it produces TRIGGER_GOOGLE_OAUTH_*).
 6. GitHub repository secrets (not Coolify): CLI_RELEASE_SIGNING_KEY, CLI_RELEASE_SIGNING_PUBLIC_KEY. Only needed to sign CLI releases.
 
+7. Radix deploy gate in GitHub (not Coolify): repository variable RADIX_DEPLOY_TENANT_ID is the founder workspace id; repository secret TANK_API_KEY reuses the existing Tank service key. No new key is created.
+
 ## D. Wording only you can write (legal text)
 
 1. Radix: the client consent text a tenant admin agrees to before an active scan of their domain (#651).
 2. Chat bot (**D2**): the client’s privacy notice and conversation-retention wording (decision 35). The shipped retention job removes expired conversations after 12 calendar months; agree the wording against that behavior before enabling capture. Save the actual notice and its version as tenant data fields `privacy_notice` and `notice_version` using the existing confirmed `trigger.bot.settings` tool. They are not environment settings. Without both, visitor lead/quote capture stays disabled; changed versions require a fresh notice before submission.
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
+
+**Street Law (ZA):** ZENAS_REVIEW is the existing room-wide review setting; Street Law still requires human review while pre-launch even when that setting is off. No Street Law key or bypass switch is added.
+
+## WINDOW-AGENTS (user settings; no new Coolify variables)
+
+`credential_name` selects a GitHub token saved by the user in their own existing
+Tank vault. `repo` selects their GitHub repository. `enabled` is the user's
+per-repository PR review webhook opt-in. The window gives them the callback URL
+and a generated webhook secret for GitHub's webhook form; the secret stays sealed
+in their vault. The founder never collects users' GitHub tokens in chat.
+
+The worker continues to use the existing Tank worker key, pause, region, resource
+limits and code directory. There is no new model provider or paid route setting.
 
 ## Paid ladder decisions (tenant settings; no Coolify value)
 
