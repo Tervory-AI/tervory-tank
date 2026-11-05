@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 import json
 import uuid
 from datetime import datetime, timezone
@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 import batch_providers
+import paid_steps
 from tenant_db import tenant_scope
 
 
@@ -116,6 +117,14 @@ async def enqueue(tank, item, *, caller=None, task_id=None, model_override=None)
     snapshot = {'routing': policy, 'messages': item.messages, 'max_tokens': item.max_tokens,
                 'generation': item.generation, 'escalation': item.escalation,
                 'semantic_cache': item.cache_snapshot}
+    run = paid_steps.current.get()
+    if run is not None:
+        if run.tenant_id != req.tenant_id or run.run_id != req.paid_run_id:
+            raise HTTPException(409, 'Deferred paid run does not match its request')
+        snapshot['paid_run'] = {'tenant_id': str(run.tenant_id), 'run_id': str(run.run_id),
+                                'request_hash': run.request_hash, 'user_id': run.user_id,
+                                'thread_id': str(run.thread_id) if run.thread_id else None,
+                                'root_run_id': str(run.root_run_id) if run.root_run_id else None}
     async with tank.pool().acquire() as conn, conn.transaction():
         await conn.execute("""INSERT INTO tank.offpeak_jobs
             (id,tenant_id,region,request,policy,caller,task_id,model_override)
@@ -214,9 +223,22 @@ async def _process(tank, conn, job):
     await conn.execute("""UPDATE tank.offpeak_jobs SET status='dispatching',sent_at=$3
         WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], sent_at)
     try:
-        result = await tank.run_route(req, caller=job['caller'], task_id=job['task_id'],
-            model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
-            _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot=snapshot)
+        saved_run = snapshot.get('paid_run')
+        scope = nullcontext()
+        if saved_run is not None:
+            run = paid_steps.Run(uuid.UUID(saved_run['tenant_id']), uuid.UUID(saved_run['run_id']),
+                                 saved_run['request_hash'], saved_run.get('user_id'),
+                                 uuid.UUID(saved_run['thread_id']) if saved_run.get('thread_id') else None,
+                                 root_run_id=uuid.UUID(saved_run['root_run_id']) if saved_run.get('root_run_id') else None)
+            if run.tenant_id != job['tenant_id'] or run.tenant_id != req.tenant_id or run.run_id != req.paid_run_id:
+                raise HTTPException(409, 'Deferred paid run does not match its request')
+            # This server-owned snapshot preserves the original Command fingerprint.
+            # Fresh admission still checks the current controls and existing grant.
+            scope = paid_steps.run_scope(run)
+        with scope:
+            result = await tank.run_route(req, caller=job['caller'], task_id=job['task_id'],
+                model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
+                _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot=snapshot)
         await _finish(tank, conn, job, result.model_dump(mode='json'))
     except (WindowClosed, __import__("paid_steps").ApprovalRequired):
         await conn.execute("UPDATE tank.offpeak_jobs SET status='queued',sent_at=NULL WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])
