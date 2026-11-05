@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .client_settings import ClientAutumbraSettings
+from .durable_shields import _atomic_write_json
 
 _TENANT_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -58,10 +59,7 @@ def mirror_settings(settings: ClientAutumbraSettings, queue_root: Path | str) ->
     root = Path(queue_root)
     root.mkdir(parents=True, exist_ok=True)
     path = root / SETTINGS_MIRROR
-    path.write_text(
-        json.dumps(settings.model_dump(mode="json"), sort_keys=True),
-        encoding="utf-8",
-    )
+    _atomic_write_json(path, settings.model_dump(mode="json"))
     return path
 
 
@@ -99,8 +97,10 @@ def push_receipt_to_founder_console(queue_root: Path | str, receipt: dict[str, A
     """Product path: receipts reach the founder console (queue box), not only disk inbox."""
     console = founder_console_dir(queue_root)
     rid = str(receipt.get("id") or "unknown")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", rid):
+        raise ValueError("Invalid receipt identifier.")
     path = console / f"{rid}.json"
-    path.write_text(json.dumps(receipt, sort_keys=True, default=str), encoding="utf-8")
+    _atomic_write_json(path, receipt)
     return path
 
 

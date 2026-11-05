@@ -34,13 +34,23 @@ def pending_path(data_dir: Path | str) -> Path:
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> Path:
     """Write JSON atomically: temp file, fsync, rename over the target."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
+    import tempfile
+    descriptor, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    tmp = Path(temporary)
     data = json.dumps(payload, sort_keys=True, default=str)
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(data)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        tmp.unlink(missing_ok=True)
     return path
 
 
