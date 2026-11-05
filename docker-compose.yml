@@ -3,9 +3,9 @@
 # by name (http://tank:8000, postgres:5432). Agent boxes are not in this file.
 # Each box is its own Coolify resource (agents/<name>/docker-compose.yml) and
 # reaches Tank and Postgres only through an external network, tervory-gw-<agent>,
-# created once on the server. Nothing else joins that network. Coolify attaches
-# app.tervory.com to workspace and tervory.com to site. Tank and the stores
-# are never exposed.
+# created once on the server. Nothing else joins that network. Public ingress
+# is defined below and checked against docs/ops/PRODUCT-HOSTS.md.
+# Boston Tank and the stores are never exposed.
 
 # Coolify injects app-wide settings via env_file. Override the privileged setup
 # capability outside its intended service; empty/null can inherit the real key.
@@ -463,7 +463,7 @@ services:
       RIG_3D_PRICE_ID: ${RIG_3D_PRICE_ID:-}
     depends_on:
       - tank
-    # Coolify attaches the public domain to this service (port 3000).
+    # Repo-owned ingress targets port 3000.
     expose:
       - "3000"
     healthcheck:
@@ -473,10 +473,38 @@ services:
       retries: 10
       start_period: 40s
 
-  # Public one-page site. No secrets, no Tank, no sign-in, no marketing tool.
-  # A release address is appended to /data/release-signups.jsonl on site_signups.
-  # Coolify still has to attach https://tervory.com to this service on port 3000.
-  # app.tervory.com stays on workspace. /internal is on this same service and is noindex.
+    # Repo-owned public ingress; clear the documented Coolify UI domains at cutover.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "xnmc0jkz8j9i5jh1jwanbsfv"
+      traefik.http.routers.product-workspace-http.rule: "(Host(`app.tervory.com`) || Host(`base.tervory.com`) || Host(`tiger.tervory.com`) || Host(`market-lab.tervory.com`) || Host(`tisan.tervory.com`) || Host(`radix.tervory.com`) || Host(`skala.tervory.com`) || Host(`tank.tervory.com`) || Host(`zenas.tervory.com`) || Host(`autumbra.tervory.com`) || Host(`protect.tervory.com`) || Host(`opli.tervory.com`) || Host(`window.tervory.com`) || Host(`mobile.tervory.com`)) && PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-workspace-http.entrypoints: "http"
+      traefik.http.routers.product-workspace-http.service: "product-workspace"
+      traefik.http.routers.product-workspace-http.priority: "100"
+      traefik.http.routers.product-workspace-http.middlewares: "product-workspace-redirect"
+      traefik.http.routers.product-workspace-https.rule: "(Host(`app.tervory.com`) || Host(`base.tervory.com`) || Host(`tiger.tervory.com`) || Host(`market-lab.tervory.com`) || Host(`tisan.tervory.com`) || Host(`radix.tervory.com`) || Host(`skala.tervory.com`) || Host(`tank.tervory.com`) || Host(`zenas.tervory.com`) || Host(`autumbra.tervory.com`) || Host(`protect.tervory.com`) || Host(`opli.tervory.com`) || Host(`window.tervory.com`) || Host(`mobile.tervory.com`)) && PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-workspace-https.entrypoints: "https"
+      traefik.http.routers.product-workspace-https.service: "product-workspace"
+      traefik.http.routers.product-workspace-https.priority: "100"
+      traefik.http.routers.product-workspace-https.tls: "true"
+      traefik.http.routers.product-workspace-https.tls.certresolver: "letsencrypt"
+      traefik.http.middlewares.product-workspace-redirect.redirectscheme.scheme: "https"
+      traefik.http.middlewares.product-workspace-redirect.redirectscheme.permanent: "true"
+      traefik.http.services.product-workspace.loadbalancer.server.port: "3000"
+      traefik.http.routers.product-rig-app-http.rule: "Host(`rig.tervory.com`) && PathPrefix(`/`) && !(Path(`/v1/rig`) || PathPrefix(`/v1/rig/`) || Path(`/widget`) || PathPrefix(`/widget/`) || Path(`/3d`) || PathPrefix(`/3d/`) || Path(`/page`) || PathPrefix(`/page/`) || Path(`/product`) || PathPrefix(`/product/`) || Path(`/v5`) || PathPrefix(`/v5/`) || Path(`/cn-classic`) || Path(`/house`) || Path(`/health`) || Path(`/storage`) || PathPrefix(`/storage/`)) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-rig-app-http.entrypoints: "http"
+      traefik.http.routers.product-rig-app-http.service: "product-workspace"
+      traefik.http.routers.product-rig-app-http.priority: "100"
+      traefik.http.routers.product-rig-app-http.middlewares: "product-workspace-redirect"
+      traefik.http.routers.product-rig-app-https.rule: "Host(`rig.tervory.com`) && PathPrefix(`/`) && !(Path(`/v1/rig`) || PathPrefix(`/v1/rig/`) || Path(`/widget`) || PathPrefix(`/widget/`) || Path(`/3d`) || PathPrefix(`/3d/`) || Path(`/page`) || PathPrefix(`/page/`) || Path(`/product`) || PathPrefix(`/product/`) || Path(`/v5`) || PathPrefix(`/v5/`) || Path(`/cn-classic`) || Path(`/house`) || Path(`/health`) || Path(`/storage`) || PathPrefix(`/storage/`)) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-rig-app-https.entrypoints: "https"
+      traefik.http.routers.product-rig-app-https.service: "product-workspace"
+      traefik.http.routers.product-rig-app-https.priority: "100"
+      traefik.http.routers.product-rig-app-https.tls: "true"
+      traefik.http.routers.product-rig-app-https.tls.certresolver: "letsencrypt"
+    networks: [default, product-proxy]
+
+  # Public marketing site; /internal has no public ingress.
   site:
     environment:
       TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
@@ -493,8 +521,27 @@ services:
       retries: 10
       start_period: 15s
 
-  # Public Claude connector. Coolify attaches https://mcp.tervory.com to port 8000.
-  # Main network only, so it can reach Tank and Redis and no agent corridor.
+    # Repo-owned public ingress; clear the documented Coolify UI domains at cutover.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "xnmc0jkz8j9i5jh1jwanbsfv"
+      traefik.http.routers.product-site-http.rule: "(Host(`tervory.com`) || Host(`www.tervory.com`)) && PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-site-http.entrypoints: "http"
+      traefik.http.routers.product-site-http.service: "product-site"
+      traefik.http.routers.product-site-http.priority: "100"
+      traefik.http.routers.product-site-http.middlewares: "product-site-redirect"
+      traefik.http.routers.product-site-https.rule: "(Host(`tervory.com`) || Host(`www.tervory.com`)) && PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-site-https.entrypoints: "https"
+      traefik.http.routers.product-site-https.service: "product-site"
+      traefik.http.routers.product-site-https.priority: "100"
+      traefik.http.routers.product-site-https.tls: "true"
+      traefik.http.routers.product-site-https.tls.certresolver: "letsencrypt"
+      traefik.http.middlewares.product-site-redirect.redirectscheme.scheme: "https"
+      traefik.http.middlewares.product-site-redirect.redirectscheme.permanent: "true"
+      traefik.http.services.product-site.loadbalancer.server.port: "3000"
+    networks: [default, product-proxy]
+
+  # Public connector, no direct access to agent corridors.
   mcp:
     environment:
       TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
@@ -504,6 +551,7 @@ services:
       - tank
       - redis
     networks:
+      - product-proxy
       - default
     expose:
       - "8000"
@@ -513,6 +561,24 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+    # Repo-owned public ingress; clear the documented Coolify UI domains at cutover.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "xnmc0jkz8j9i5jh1jwanbsfv"
+      traefik.http.routers.product-mcp-http.rule: "(Host(`mcp.tervory.com`) || Host(`www.mcp.tervory.com`)) && PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-mcp-http.entrypoints: "http"
+      traefik.http.routers.product-mcp-http.service: "product-mcp"
+      traefik.http.routers.product-mcp-http.priority: "100"
+      traefik.http.routers.product-mcp-http.middlewares: "product-mcp-redirect"
+      traefik.http.routers.product-mcp-https.rule: "(Host(`mcp.tervory.com`) || Host(`www.mcp.tervory.com`)) && PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)"
+      traefik.http.routers.product-mcp-https.entrypoints: "https"
+      traefik.http.routers.product-mcp-https.service: "product-mcp"
+      traefik.http.routers.product-mcp-https.priority: "100"
+      traefik.http.routers.product-mcp-https.tls: "true"
+      traefik.http.routers.product-mcp-https.tls.certresolver: "letsencrypt"
+      traefik.http.middlewares.product-mcp-redirect.redirectscheme.scheme: "https"
+      traefik.http.middlewares.product-mcp-redirect.redirectscheme.permanent: "true"
+      traefik.http.services.product-mcp.loadbalancer.server.port: "8000"
 
 volumes:
   r2_backup_spool:
@@ -528,6 +594,10 @@ volumes:
 #   docker network create tervory-gw-template
 # A later agent gets tervory-gw-<agent>, joined here by tank and postgres only.
 networks:
+  # Existing per-resource proxy network; no new shared agent corridor.
+  product-proxy:
+    external: true
+    name: xnmc0jkz8j9i5jh1jwanbsfv
   tervory-gw-trigger-signin:
     name: tervory-gw-trigger-signin
     internal: true

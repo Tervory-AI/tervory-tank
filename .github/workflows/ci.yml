@@ -79,6 +79,22 @@ jobs:
           python -m pip install --disable-pip-version-check "ruff==0.17.2"
           ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
 
+  routing:
+    # Always required, including docs-only edits to the ingress contract.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12.14"
+      - name: Install existing pinned YAML parser
+        run: python -m pip install --disable-pip-version-check --require-hashes -r .github/requirements-routing.lock
+      - name: Validate every Compose file and product ingress
+        run: python3 tests/test_routing.py
+
   changes:
     runs-on: ubuntu-latest
     # 5, not 2 (3 Nov): in a merge-queue run the full-history checkout plus post steps took
@@ -552,7 +568,7 @@ jobs:
   # when any failed or was cancelled.
   ci-ok:
     if: always()
-    needs: [security, lint, changes, tank, workspace, command-acceptance, savings-page]
+    needs: [security, lint, routing, changes, tank, workspace, command-acceptance, savings-page]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
