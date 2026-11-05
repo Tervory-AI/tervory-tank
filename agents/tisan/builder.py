@@ -15,6 +15,11 @@ from urllib.parse import urlsplit
 
 import httpx
 from pydantic_core import SchemaValidator, ValidationError, core_schema
+try:
+    from agents.tisan.storage import atomic_json, tenant_folder
+except ModuleNotFoundError:
+    from storage import atomic_json, tenant_folder
+
 
 
 def _scaffold():
@@ -239,8 +244,7 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
             for section in page["sections"]:
                 SchemaValidator(_validator(contract["sections"][section["type"]]["props"])).validate_python(section["props"])
         root = scaffold._data_root(data_root)
-        folder = root / "builds" / tenant / brief["slug"]
-        folder.mkdir(parents=True, exist_ok=True)
+        folder = tenant_folder(root, "builds", tenant, brief["slug"])
         number = scaffold._next_build_number(folder)
         with tempfile.TemporaryDirectory(prefix="tisan-build-") as tmp:
             project = Path(tmp) / "project"
@@ -251,11 +255,12 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
                                     if name in {"home", "contact", "privacy"}]}, project)
             (project / "content").mkdir(exist_ok=True)
             (project / "content/site.json").write_text(json.dumps({"schema": "tisan.content/1", **plan}, ensure_ascii=False, indent=2) + "\n")
+            scaffold.attach_visual_frames(payload, project, root, tenant, brief)
             checks, detail = await scaffold.run_checks(project, tenant_id=tenant, tank=tank)
             if detail or not checks or not all(c["ok"] for c in checks):
                 failed = scaffold._manifest(brief, files=scaffold.project_files(project), checks=checks,
                                             detail=detail, archive="", build=number)
-                (folder / f"{number}.json").write_text(json.dumps(failed, indent=2) + "\n")
+                atomic_json(folder / f"{number}.json", failed)
                 rows = scaffold._quality_results(checks)
                 return {"ok": False, "slug": brief["slug"], "build": number, "checks": checks, "detail": detail,
                         **({"results": rows} if rows else {})}
@@ -265,7 +270,7 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
             archive = folder / f"{number}.tar.gz"
             files = scaffold.pack(project, archive)
         result = scaffold._manifest(brief, files=files, checks=checks, detail=detail, archive=str(archive), build=number)
-        (folder / f"{number}.json").write_text(json.dumps(result, indent=2) + "\n")
+        atomic_json(folder / f"{number}.json", result)
         return result
     except (ValueError, ValidationError) as exc:
         return {"ok": False, "refused": True, "detail": str(exc)}

@@ -115,7 +115,15 @@ class Pipeline:
             result['approval'] = {key: approval[key] for key in
                                   ('page_id', 'figma_file_id', 'figma_frame_id', 'frame_hash', 'page_hash')}
             progress('build')
-            built = await self.build(tenant, ident, payload['brief'])
+            # Bind the build to the approved source, never a caller-selected frame.
+            brief = dict(payload['brief'])
+            source = {'file_key': approval['figma_file_id'], 'node_id': approval['figma_frame_id']}
+            supplied = brief.get('figma')
+            if supplied is not None and (not isinstance(supplied, dict) or any(
+                    supplied.get(key) != value for key, value in source.items())):
+                raise ValueError('approved frame changed')
+            brief['figma'] = {**(supplied or {}), **source}
+            built = await self.build(tenant, ident, brief)
             result.update({k: v for k, v in built.items() if k in
                 {'ok', 'slug', 'build', 'checks', 'results', 'detail', 'memory_id', 'copy_needed', 'media_needed'}})
             if built.get('ok') is not True:

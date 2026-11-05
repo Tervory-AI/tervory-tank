@@ -52,13 +52,13 @@ RUN apt-get update \
     && cp /app/templates/next-site/package.json /app/templates/next-site/package-lock.json /tmp/npm-warm/ \
     && cd /tmp/npm-warm \
     && NEXT_TELEMETRY_DISABLED=1 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-       npm ci --cache /opt/npm-cache --no-audit --no-fund \
+       npm ci --cache /opt/npm-cache --include=dev --ignore-scripts --no-audit --no-fund \
     && mkdir -p /opt/tisan-check \
     && mv /tmp/npm-warm/node_modules /opt/tisan-check/node_modules \
     && PLAYWRIGHT_BROWSERS_PATH=/opt/tisan-browser /opt/tisan-check/node_modules/.bin/playwright install --with-deps chromium \
     && rm -rf /tmp/npm-warm \
     && chown -R agent:agent /opt/npm-cache /data
-COPY agents/tisan/app.py agents/tisan/promotion.py agents/tisan/promotion_api.py agents/tisan/publish.py agents/tisan/builder.py agents/tisan/quotes.py agents/tisan/schema.sql /app/
+COPY agents/tisan/app.py agents/tisan/promotion.py agents/tisan/promotion_api.py agents/tisan/publish.py agents/tisan/builder.py agents/tisan/archive.py agents/tisan/storage.py agents/tisan/quotes.py agents/tisan/schema.sql /app/
 # Reuse Tiger's SMTP transport without copying other rooms or their configuration.
 COPY agents/rig/rigbox/reserve.py /app/quote_smtp.py
 COPY docs/figma /app/docs/figma

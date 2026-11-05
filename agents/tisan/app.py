@@ -60,6 +60,7 @@ async def ping(ctx: JobContext) -> dict:
                 f"{ctx.agent} heartbeat",
                 "heartbeat",
                 "schedule:*/5",
+                index=False,
             )
             result["heartbeats_seen"] = saved.get("seen")
         except Exception as exc:  # noqa: BLE001 — class name only, never the message
@@ -115,6 +116,8 @@ async def _approved_build(ctx: JobContext) -> bool:
                 or source.get('file_key') != approval['figma_file_id']
                 or source.get('node_id') != approval['figma_frame_id']):
             return False
+        ctx.input = {**ctx.input, 'figma': {**(source or {}),
+            'file_key': approval['figma_file_id'], 'node_id': approval['figma_frame_id']}}
         return True
     except (ValueError, OSError, HTTPException):
         return False
@@ -136,11 +139,15 @@ async def pipeline(ctx: JobContext) -> dict:
     return await service.run(str(ctx.tenant_id), str(ctx.job_id), ctx.input)
 
 
+async def archive(ctx: JobContext) -> dict:
+    return await _load_beside(_figma_cache(), 'tisan_archive', 'archive.py').handle(ctx)
+
+
 app = create_app(
     agent=AGENT,
     handlers={"ping": ping, "scaffold": scaffold, "figma": figma, "pipeline": pipeline,
-              "build": build},
-    job_timeouts={"scaffold": SCAFFOLD_TIMEOUT_S, "build": SCAFFOLD_TIMEOUT_S, "pipeline": 2400},
+              "build": build, "archive": archive},
+    job_timeouts={"scaffold": SCAFFOLD_TIMEOUT_S, "build": SCAFFOLD_TIMEOUT_S, "pipeline": 2400, "archive": SCAFFOLD_TIMEOUT_S},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,

@@ -383,6 +383,6 @@ async def test_reading_file_symlink_cannot_write_outside_its_folder(tmp_path):
     outside = tmp_path / 'placeholder-outside.json'
     outside.write_text('placeholder original')
     (folder / '0-1.json').symlink_to(outside)
-    with pytest.raises(AssertionError):
+    with pytest.raises(reader.FigmaError):
         reader._store(source, TENANT, tmp_path)
     assert outside.read_text() == 'placeholder original'
