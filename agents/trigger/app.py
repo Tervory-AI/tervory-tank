@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hmac
 import os
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from uuid import UUID
 
@@ -24,15 +24,15 @@ async def authorized(x_tank_key: str = Header(default="")):
 
 @asynccontextmanager
 async def lifespan(app):
-    app.state.pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=3)
-    await app.state.pool.execute(Path(__file__).with_name("schema.sql").read_text())
-    app.state.http = httpx.AsyncClient(timeout=60, follow_redirects=False, trust_env=False)
-    app.state.tank = TankClient("http://tank:8000", os.environ.get("TANK_KEY", ""), "trigger", app.state.http)
-    try:
+    async with AsyncExitStack() as resources:
+        app.state.pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=3)
+        resources.push_async_callback(app.state.pool.close)
+        resources.callback(setattr, app.state, "pool", None)
+        await app.state.pool.execute(Path(__file__).with_name("schema.sql").read_text())
+        app.state.http = httpx.AsyncClient(timeout=60, follow_redirects=False, trust_env=False)
+        resources.push_async_callback(app.state.http.aclose)
+        app.state.tank = TankClient("http://tank:8000", os.environ.get("TANK_KEY", ""), "trigger", app.state.http)
         yield
-    finally:
-        await app.state.http.aclose()
-        await app.state.pool.close()
 
 
 app = FastAPI(lifespan=lifespan)
