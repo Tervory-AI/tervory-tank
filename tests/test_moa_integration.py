@@ -19,6 +19,22 @@ import main
 database = _database
 
 
+@pytest.fixture(autouse=True)
+def paid_step_admission_fixture(monkeypatch):
+    import paid_steps
+    import controls
+    from unittest.mock import AsyncMock
+    async def checkpoint(key, invoke):
+        return await invoke()
+    async def model_admission(*args, **kwargs):
+        await controls.refuse_paid(task="placeholder-moa", path="test")
+        return None
+    monkeypatch.setattr(controls, "paid_paused", AsyncMock(return_value=False))
+    monkeypatch.setattr(paid_steps, "checkpoint", checkpoint)
+    monkeypatch.setattr(paid_steps, "model_admission", model_admission)
+    monkeypatch.setattr(paid_steps, "attach_receipt", AsyncMock())
+
+
 def req(task='fixture'):
     return main.RouteRequest(tenant_id=TENANT,task_type=task,
                              messages=[main.Message(role='user',content='Hello')])

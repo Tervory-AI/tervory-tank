@@ -33,6 +33,20 @@ async def pass_policy_swaps(b):
 @pytest_asyncio.fixture
 async def ladder(boundary, monkeypatch):  # noqa: F811 -- pytest fixture injection
     b = boundary
+    # These pre-existing ladder/batch protocol cases explicitly exercise Auto.
+    # Default Ask and real approval/card behavior live in test_paid_steps.py.
+    import paid_steps
+    original_admit = paid_steps.admit
+    monkeypatch.setattr(paid_steps, "db", lambda:b.pool)
+    async def configured_auto(step_id, **kwargs):
+        if kwargs.get("paid",True):
+            async with paid_steps.connection(kwargs["tenant_id"]) as conn:
+                await paid_steps.register(conn,step_id,kwargs["owner"],kwargs["kind"],kwargs["source"])
+                await conn.execute("""INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by)
+                    VALUES($1,$2,'auto','placeholder-fixture-admin') ON CONFLICT(tenant_id,step_id)
+                    DO UPDATE SET mode='auto'""",kwargs["tenant_id"],step_id)
+        return await original_admit(step_id,**kwargs)
+    monkeypatch.setattr(paid_steps,"admit",configured_auto)
     monkeypatch.setattr(skala, "run_skill", REAL_RUN)
     monkeypatch.setattr(b.tank, "_packages", skala.load_packages())
     await b.tank.register_packages()

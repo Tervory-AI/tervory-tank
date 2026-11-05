@@ -35,7 +35,6 @@ import asyncio
 import importlib.util
 import json
 import socket
-import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -181,6 +180,109 @@ async def decision(system, match_id, decision='confirm', tenant=TENANT):
         return await system.client.post('/v1/access/tiger/match/' + decision, json=args)
     finally:
         CONFIRMED.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_review_read_is_tenant_scoped_newest_first_bounded_and_receipted(corridor):
+    for tenant in (TENANT, OTHER):
+        await corridor.pool.execute("""INSERT INTO agent_tiger.matches
+            (tenant_id,sku,url,method,identifiers,seen_on,state,checked_at)
+            SELECT $1,'own',$2 || n,'brand_mpn','{"seen":{"brand":"Offline brand","mpn":"ABC-1"}}'::jsonb,
+                $2 || n,CASE WHEN n % 2=0 THEN 'suggested' ELSE 'rejected' END,
+                now() - make_interval(secs => n) FROM generate_series(1,105) n""", tenant, SITE + '/item-')
+    await publish(corridor, markup())  # Confirmed matches are excluded.
+    response = await corridor.client.get('/v1/access/tiger/matches')
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert len(result['matches']) == 100
+    assert [row['url'] for row in result['matches']] == [SITE + '/item-' + str(n) for n in range(1,101)]
+    assert all(row['tenant_id'] == str(TENANT) for row in result['matches'])
+    assert all(row['identifiers']['seen']['mpn'] == 'ABC-1' and row['seen_on'] == row['url'] for row in result['matches'])
+    receipt = await corridor.pool.fetchrow('SELECT * FROM tank.ledger WHERE id=$1', UUID(result['ledger_id']))
+    assert receipt['tenant_id'] == TENANT and receipt['agent'] == 'tiger'
+    assert receipt['task_type'] == 'tiger.matches' and receipt['cost_usd'] == 0
+    assert command.ADAPTERS['tiger.matches'].method == 'GET'
+
+
+@pytest.mark.asyncio
+async def test_review_undo_requires_confirmation_and_only_changes_own_rejection(corridor):
+    row = (await publish(corridor, markup(gtin13=None)))['matches'][0]
+    match_id = row['id']
+    assert (await decision(corridor, match_id, 'undo')).status_code == 409
+    assert (await decision(corridor, match_id, 'reject')).status_code == 200
+    response = await corridor.client.post('/v1/access/tiger/match/undo', json={'match_id': match_id})
+    assert response.status_code == 409
+    assert (await decision(corridor, match_id, 'undo', OTHER)).status_code == 404
+    response = await decision(corridor, match_id, 'undo')
+    assert response.status_code == 200 and response.json()['match']['state'] == 'suggested'
+    assert response.json()['match']['identifiers'] == row['identifiers']
+    assert (await decision(corridor, match_id, 'confirm')).status_code == 200
+    assert (await decision(corridor, match_id, 'undo')).status_code == 409
+    assert await corridor.pool.fetchval('SELECT state FROM agent_tiger.matches WHERE id=$1', UUID(match_id)) == 'confirmed'
+
+
+@pytest.mark.asyncio
+async def test_review_read_requires_tiger_entitlement(corridor):
+    await corridor.pool.execute("DELETE FROM tank.tenant_squad WHERE tenant_id=$1 AND agent='tiger'", TENANT)
+    assert (await corridor.client.get('/v1/access/tiger/matches')).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_review_keeps_stored_evidence_readable_when_catalogue_is_unavailable(corridor, monkeypatch):
+    row = (await publish(corridor, markup(gtin13=None)))['matches'][0]
+    monkeypatch.setattr(access, 'tiger_catalogue', AsyncMock(side_effect=HTTPException(503)))
+    response = await corridor.client.get('/v1/access/tiger/matches')
+    assert response.status_code == 200
+    actual = response.json()['matches'][0]
+    assert actual['id'] == row['id'] and actual['identifiers'] == row['identifiers']
+    assert actual['product']['name'] is None
+
+
+@pytest.mark.asyncio
+async def test_review_buttons_use_real_durable_cards_and_decision_routes(corridor, monkeypatch):
+    match = (await publish(corridor, markup(gtin13=None)))['matches'][0]
+    app = corridor.client._transport.app
+    app.include_router(command.router)
+    app.dependency_overrides[command.identity] = lambda: corridor.actor.current
+    monkeypatch.setattr(sys.modules['main'], 'app', app, raising=False)
+    monkeypatch.setattr(sys.modules['main'], 'TANK_API_KEY', 'placeholder-service-key', raising=False)
+    thread = (await corridor.client.post('/v1/command/threads', json={'title': 'Tiger'})).json()['thread_id']
+    for operation, state in [('reject','rejected'),('undo','suggested'),('confirm','confirmed')]:
+        card = await corridor.client.post(f'/v1/command/threads/{thread}/actions', json={
+            'tool': 'tiger.match.' + operation, 'arguments': {'match_id': match['id']}})
+        assert card.status_code == 200, card.text
+        response = await corridor.client.post('/v1/command/cards/' + card.json()['card_id'], json={'action': 'confirm'})
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result['status'] == 'confirmed', result
+        assert result['result']['match']['state'] == state
+        assert result['result']['cost_usd'] == 0
+    assert await corridor.pool.fetchval('SELECT state FROM agent_tiger.matches WHERE id=$1', UUID(match['id'])) == 'confirmed'
+
+
+@pytest.mark.asyncio
+async def test_saved_site_checks_use_only_own_latest_run_and_immutable_sightings(corridor):
+    ctx = await seeded_run(corridor, [OWN])
+    root = UUID(ctx.job_id)
+    progress = {'sites': [{'site': SITE, 'status': 'human_check', 'pages': 12, 'warnings': []},
+                          {'site': 'https://unsaved.example', 'status': 'completed', 'pages': 500}]}
+    await corridor.pool.execute('UPDATE agent_tiger.match_runs SET progress=$2::jsonb WHERE job_id=$1', root, json.dumps(progress))
+    await corridor.pool.execute("UPDATE agent_tiger.jobs SET finished_at=now(),status='completed',result=$2::jsonb WHERE id=$1", root, json.dumps(progress))
+    first_finished = await corridor.pool.fetchval('SELECT finished_at FROM agent_tiger.jobs WHERE id=$1', root)
+    await corridor.pool.execute("""INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input,result,status,finished_at)
+        VALUES($1,$2,'competitor_match',$3::jsonb,$4::jsonb,'completed',now()+interval '1 hour')""",
+        uuid4(), TENANT, json.dumps({'root_job_id': str(root)}), json.dumps(progress))
+    match = (await publish(corridor, markup(gtin13=None)))['matches'][0]
+    for _ in range(2):
+        await corridor.pool.execute('INSERT INTO agent_tiger.match_sightings(tenant_id,job_id,root_job_id,match_id,evidence) VALUES($1,$2,$3,$4,$5::jsonb)',
+            TENANT, uuid4(), root, UUID(match['id']), json.dumps(match))
+    checks = (await corridor.client.get('/v1/access/tiger/matches')).json()['site_checks']
+    assert len(checks) == 1 and checks[0]['url'] == SITE
+    assert checks[0]['pages'] == 12 and checks[0]['matches'] == 1
+    assert checks[0]['status'] == 'human_check' and checks[0]['checked_at']
+    assert checks[0]['checked_at'] == first_finished.isoformat()
+    corridor.actor.current = command.Actor(OTHER, 'offline-user', False, frozenset({'tiger'}))
+    assert (await corridor.client.get('/v1/access/tiger/matches')).json()['site_checks'] == []
 
 
 @pytest.mark.asyncio
@@ -376,7 +478,7 @@ async def test_explicit_planning_requires_tiger_squad_and_never_uses_a_model(mon
     monkeypatch.setattr(command,'authorized_actor',same)
     monkeypatch.setattr(trigger_routes,'code_receipt',AsyncMock(return_value=TENANT))
     actor = command.Actor(TENANT,'offline',False,frozenset({'tiger'}))
-    for text in ('tiger.match','tiger.position','tiger.match.confirm '+str(OTHER),'tiger.match.reject '+str(OTHER)):
+    for text in ('tiger.match','tiger.position','tiger.matches','tiger.match.confirm '+str(OTHER),'tiger.match.reject '+str(OTHER),'tiger.match.undo '+str(OTHER)):
         plan = await command.tiger_code_plan(actor,[{'role':'user','content':text}],None)
         assert json.loads(plan.content)['actions'][0]['tool'] == text.split()[0]
     with pytest.raises(HTTPException) as exc:

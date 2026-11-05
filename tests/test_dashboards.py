@@ -8,6 +8,9 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
+from paid_steps_fixtures import paid_protocol as paid_protocol
+
+pytestmark = pytest.mark.usefixtures("paid_protocol")
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -200,7 +203,8 @@ def test_readonly_controls_have_no_write_path(client):
 def test_only_approved_narrow_main_hooks_and_no_approved_skill_edits():
     source = (ROOT / 'tank/main.py').read_text()
     assert 'event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]}' in source
-    assert 'refuse_paid(paid=True, task=req.task_type, path="route")' in source
+    assert 'model_admission(req.tenant_id' in source
+    assert 'await refuse_paid(task=task, path="paid_steps")' in (ROOT/'tank/paid_steps.py').read_text()
 
 @pytest.mark.asyncio
 async def test_resume_restores_paid_gateway(conn, monkeypatch):

@@ -1,3 +1,7 @@
+## 0.6.1 — 2026-11-04
+
+Add Ask/Auto controls for paid steps and retain approval state when a command resumes.
+
 ## 0.6.0
 
 Approved commands run on Windows and on hosts without Bubblewrap or Seatbelt, with a restricted environment, 120-second timeout and 64 KB output bound.

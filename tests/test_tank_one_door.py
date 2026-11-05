@@ -272,6 +272,13 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
     ('tests/test_workers_1.py', 'model/paid endpoint', '19dbe6b9d49db063'): (1, 'Provider host is a refused worker destination.'),
     ('tests/test_za_region.py', 'model/paid endpoint', '41e71010f55fab11'): (1, 'Checks a configured backend URL in a region contract fixture.'),
     ('workers/task/__main__.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Inbound loopback compatibility endpoint; forward_chat only sends to Tank /v1/route.'),
+    ('agents/_brain/paid_approval.py', 'model/paid endpoint', '7b7967ff1233927e'): (1, 'Compare only the existing Tank completion path before waiting for owned approval; no provider destination or credential.'),
+    ('agents/rig/forge/service.py', 'model/paid endpoint', '7050e1d3366d0829'): (1, 'Poll owned approval through the existing Rig brain relay; the forge receives no Tank or provider key.'),
+    ('tests/test_paid_steps.py', 'assembled endpoint', 'a1284b32374ca9b9'): (1, 'Offline paid-boundary fixtures: ASGI/MockTransport only, including refused foreign/default-port URLs; no provider traffic.'),
+    ('tests/test_paid_steps.py', 'model/paid endpoint', '6e731d686cb06811'): (2, 'Offline paid-boundary fixtures: ASGI/MockTransport only, including refused foreign/default-port URLs; no provider traffic.'),
+    ('tests/test_paid_steps.py', 'model/paid endpoint', '7b7967ff1233927e'): (2, 'Offline paid-boundary fixtures: ASGI/MockTransport only, including refused foreign/default-port URLs; no provider traffic.'),
+    ('tests/test_paid_steps.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Offline paid-boundary fixtures: ASGI/MockTransport only, including refused foreign/default-port URLs; no provider traffic.'),
+    ('tests/test_paid_steps.py', 'model/paid endpoint', '73e132bd91c9775c'): (1, "Offline SDK admission/resume proof using ASGI and MockTransport; no provider traffic."),
 }
 
 

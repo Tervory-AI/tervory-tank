@@ -448,9 +448,16 @@ class SecurityDownloadTests(unittest.TestCase):
 
     def downloads(self, recover):
         script = (ROOT / ".github/scripts/install-security-tools.sh").read_text()
-        commands = [shlex.split(line) for line in script.replace("\\\n", "").splitlines()
-                    if line.startswith("curl ")]
-        self.assertEqual(len(commands), 2)
+        lines = [line.strip().removeprefix("if ! ").removesuffix("; then")
+                 for line in script.replace("\\\n", "").splitlines()]
+        commands = [shlex.split(line) for line in lines if line.startswith("curl ")]
+        self.assertEqual(len(commands), 4)  # primary and same-asset API for each tool
+        api_urls = [value for command in commands for value in command
+                    if value.startswith("https://api.github.com/")]
+        self.assertEqual(api_urls, [
+            "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378332058",
+            "https://api.github.com/repos/google/osv-scanner/releases/assets/632251666",
+        ])
         attempts = []
         payload = b"local test download"
 

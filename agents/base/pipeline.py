@@ -138,8 +138,9 @@ def _skills_root() -> Path:
     configured = os.environ.get("SKILLS_DIR")
     if configured:
         return Path(configured)
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "tank" / "skills"
+    source = Path(__file__).resolve()
+    if source.parent.name == "base" and source.parent.parent.name == "agents":
+        candidate = source.parents[2] / "tank" / "skills"
         if candidate.is_dir():
             return candidate
     return Path("/nonexistent-skills")

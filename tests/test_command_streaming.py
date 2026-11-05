@@ -102,6 +102,20 @@ class Gateway:
 
 @pytest_asyncio.fixture
 async def streaming(monkeypatch, command_pool):
+    # Streaming/CLI protocol cases exercise an explicitly configured Auto seat.
+    # Real default-Ask cards and resume/deny are covered in test_paid_steps.py.
+    import paid_steps
+    original_admit=paid_steps.admit
+    monkeypatch.setattr(paid_steps,"db",lambda:command_pool)
+    async def configured_auto(step_id,**kwargs):
+        if kwargs.get("paid",True):
+            async with paid_steps.connection(kwargs["tenant_id"]) as conn:
+                await paid_steps.register(conn,step_id,kwargs["owner"],kwargs["kind"],kwargs["source"])
+                await conn.execute("""INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by)
+                    VALUES($1,$2,'auto','placeholder-fixture-admin') ON CONFLICT(tenant_id,step_id)
+                    DO UPDATE SET mode='auto'""",kwargs["tenant_id"],step_id)
+        return await original_admit(step_id,**kwargs)
+    monkeypatch.setattr(paid_steps,"admit",configured_auto)
     monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/unused")
     monkeypatch.setenv("TANK_API_KEY", "dummy-workspace-key")
     monkeypatch.setenv("LITELLM_MASTER_KEY", "dummy-gateway-key")
@@ -117,6 +131,9 @@ async def streaming(monkeypatch, command_pool):
               "max_tokens_out": 512, "cache_scope": "tenant", "semantic_cache": False,
               "candidate_model": None, "shadow_rate": 0, "acceptance_window_s": 86400}
     monkeypatch.setattr(tank, "load_policy", AsyncMock(return_value=policy))
+    monkeypatch.setattr(tank,"_roster_models",AsyncMock(return_value=[
+        {"model_name":name,"litellm_params":{"model":"openai/placeholder"},"model_info":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000004}}
+        for name in ("fixture-auto","fixture-pin","fixture-answered")]))
     monkeypatch.setattr(tank, "list_models", AsyncMock(return_value=[{"name": "fixture-pin"}]))
     gateway = Gateway()
     original_client = httpx.AsyncClient
@@ -144,11 +161,11 @@ async def streaming(monkeypatch, command_pool):
             return
         subject = request.headers.get('x-tervory-user')
         org = organisations.get(request.headers.get('x-tervory-tenant'))
-        if subject not in {'founder', 'client'} or org is None:
+        if subject not in {'founder', 'client', 'placeholder-member'} or org is None:
             return
         request.headers['x-trigger-signin-org'] = org
         request.headers['x-trigger-signin-token'] = signin.token(sub=subject, **{
-            oidc.ORG_CLAIM: org, oidc.ROLES_CLAIM: {'org_admin': {org: 'Fixture'}}})
+            oidc.ORG_CLAIM: org, oidc.ROLES_CLAIM: ({} if subject == 'placeholder-member' else {'org_admin': {org: 'Fixture'}})})
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     port = listener.getsockname()[1]
@@ -163,7 +180,7 @@ async def streaming(monkeypatch, command_pool):
         async with original_client(base_url=f"http://127.0.0.1:{port}", timeout=10, trust_env=False,
             event_hooks={"request": [sign_browser_request]},
             headers={"X-Tank-Key": "dummy-workspace-key", "X-Tervory-User": "founder", "X-Tervory-Tenant": str(TENANT)}) as api:
-            yield SimpleNamespace(api=api, tank=tank, pool=command_pool, gateway=gateway, policy=policy)
+            yield SimpleNamespace(api=api, tank=tank, pool=command_pool, gateway=gateway, policy=policy,paid_admission=original_admit)
     finally:
         gateway.release.set()
         if command._background:
@@ -251,8 +268,14 @@ async def test_streamed_and_buffered_turn_accounting_match(streaming, monkeypatc
     buffered_events = await turn(b, await thread(b), model="fixture-pin")
     assert answer(streamed) == answer(buffered_events) == TEXT
     receipts = [next(data for kind, data in result if kind == "receipt")["rows"][0] for result in (streamed, buffered_events)]
-    ignored = {"step_id", "ledger_id"}
-    assert {k: v for k, v in receipts[0].items() if k not in ignored} == {k: v for k, v in receipts[1].items() if k not in ignored}
+    ignored = {"step_id", "ledger_id", "paid_step_approval_id"}
+    def comparable(receipt):
+        result={key:value for key,value in receipt.items() if key not in ignored}
+        if "paid_steps" in result:
+            result["paid_steps"]=[{key:value for key,value in item.items() if key!="id"} for item in result["paid_steps"]]
+        return result
+    assert all(receipt['paid_step_mode']=='automatic' for receipt in receipts)
+    assert comparable(receipts[0]) == comparable(receipts[1])
     async with b.pool.acquire() as conn:
         rows = await conn.fetch("SELECT model,rung,tokens_in,tokens_out,cost_usd,cache_hit,outcome,route_seat,escalation FROM tank.ledger WHERE tenant_id=$1 ORDER BY ts", TENANT)
         assert len(rows) == 2 and dict(rows[0]) == dict(rows[1])

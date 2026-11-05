@@ -1,0 +1,25 @@
+{
+  "source": "ZnphBOJU6657tohGLD3IzS; approved register 115cae58d4ac219a40989f69902c182d94ecf471, 3 Nov 15:20 PT",
+  "common": ["Track product prices and stock availability across your watched stores.", "Scheduled checks of public product pages. Alerts for confirmed price and stock changes."],
+  "position": [
+    "Your products against confirmed matches on the competitor sites you saved.",
+    "Older than watch interval", "Last reading retained; excluded from position.",
+    "No reading yet", "Price, stock and check time unavailable.", "No matches yet",
+    "Cheapest", "Your rank", "Difference", "How position is calculated",
+    "Proposed rule: compare your price with current readings for confirmed matches in the same currency. Include your store in the rank; equal prices share a rank. Difference is your price minus the cheapest price, divided by that price for %. Exclude missing and overdue readings; show no position when no current competitor reading is available. Stock is shown separately."
+  ],
+  "matches": [
+    "Same brand and maker part number. No barcode match. Confirm the product before it affects price position.",
+    "Evidence seen on the page", "Barcode match: none", "Confirm", "Reject", "Rejected", "Undo",
+    "Your confirmation decides the match",
+    "Suggested matches do not affect price position. Confirm only when the competitor page is the same product. Reject a suggestion when it is a different product."
+  ],
+  "sites": [
+    "Sites saved under Source links in Tiger’s Plugins.", "Tiger Plugins → Source links",
+    "Pages checked", "Matches found", "Checked", "Latest site check completed.",
+    "Blocked by a human check", "Stopped at a human check. Tiger never solves or bypasses it.",
+    "Some pages closed to robots", "What these counts cover",
+    "Pages checked and matches found refer to the latest site check. Skipped pages are not counted as checked. A human check can stop a run after some pages have been read; robots restrictions can leave other permitted pages readable. Only saved Source links are checked."
+  ],
+  "empty": { "matches": "No matches to review.", "sites": "No saved sites." }
+}

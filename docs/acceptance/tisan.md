@@ -148,3 +148,11 @@ git diff --check
 Validation: **48 passed, 0 skipped**, 10 existing warnings in **127.55s**, using the exact acceptance command above with two xdist workers. `tests/test_secrets.py -q --disable-socket` also passed (**2 passed**). The 48 unique table IDs match the 48 test functions and the workflow YAML parses. Exact CI lint returned **All checks passed!**; `git diff --check` was clean. The pushed head is reported in the handoff. The founder still
 runs the live positive cases after deployment in his own workspace; offline
 fixtures do not establish that live acceptance occurred.
+
+## Paid ladder approval
+
+Use a disposable test tenant and the cloud-side authenticated Tank client; do not put service keys into a browser. Configure an existing paid model on `tisan.plan` for this fixture. The screen switches await the frames listed in `docs/paid-steps/FRAMES.md`; the authenticated settings API is available now.
+
+| Row | Where | What the founder does | Expected result | Setting it needs | Offline case |
+| --- | --- | --- | --- | --- | --- |
+| PAID-TISAN | Tank `POST /v1/route`, task_type `tisan.plan`; existing `/chats` confirmation card | Send a test request in Ask mode. Confirm its pending paid-step card, then repeat the same run. Set that exact step to Auto and start a new run. Enable Pause all paid work and start another run. | Ask returns 409 with `paid_step_approval_required` before dispatch. Approval resumes with HTTP 200 and receipt `paid_step_mode=approved`; repeating the run does not dispatch again. Auto returns 200 with `paid_step_mode=automatic`. Master pause returns 503 and sends no paid call. | `paid_step_settings.mode`; `paid_paused`; existing configured model and room credentials | `tests/acceptance/test_paid_steps.py`, `tisan` |

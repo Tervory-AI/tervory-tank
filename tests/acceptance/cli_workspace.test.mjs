@@ -88,7 +88,7 @@ test('CLI acceptance: real eight-platform tag payloads carry verified signatures
 test('CLI acceptance: verified Windows archive installs and its real Node entry reports the release', () => {
   const { folder, directory, manifest, publicKey } = releaseFixture();
   const platform = 'win32-x64-msvc';
-  assert.equal(manifest.version, JSON.parse(readFileSync(new URL('../../cli/package.json', import.meta.url))).version);
+  assert.equal(manifest.version, JSON.parse(readFileSync(new URL('../../cli/package.json', import.meta.url), 'utf8')).version);
   assert.equal(verifyRelease(directory, publicKey, platform, manifest.version), 1);
   const unpack = join(folder, 'unpack'); mkdirSync(unpack);
   execFileSync('tar', ['--force-local', '-xzf', join(directory, manifest.artifacts[platform].file), '-C', unpack]);

@@ -15,6 +15,9 @@ os.environ.setdefault("LITELLM_MASTER_KEY", "test")
 os.environ.setdefault("TANK_API_KEY", "test")
 
 import pytest
+from paid_steps_fixtures import paid_protocol as paid_protocol
+
+pytestmark = pytest.mark.usefixtures("paid_protocol")
 import yaml
 from fastapi import HTTPException
 from starlette.requests import Request

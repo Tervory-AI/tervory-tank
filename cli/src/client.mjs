@@ -346,6 +346,7 @@ export function receiptLines(receipt) {
 
 export async function confirmCard(tank, card, io) {
   io.write(`${safe(card.summary)}\n`);
+  if (card.tool === 'paid_steps.approve' && io.interactive !== true) return card;
   // Any response except an explicit yes cancels, including EOF.
   const answer = io.interactive !== true ? null : await io.prompt('Confirm [y/N] ');
   const action = /^(y|yes)$/i.test(answer?.trim() ?? '') ? 'confirm' : 'cancel';
@@ -373,6 +374,7 @@ export async function showTurn(tank, thread, text, model, attachments, io) {
         if (answer.length > 2_000_000) throw new Error('Tank answer exceeds the limit.');
         io.preview?.(answer); break;
       case 'step':
+        if (event.data.phase_finished === true) { complete = true; answer = ''; sanitizer = new StreamSanitizer(); }
         io.preview?.('');
         io.write(`\n[${safe(event.data.status)}] ${safe(event.data.actor)}: ${safe(event.data.label)}\n`);
         io.preview?.(answer); break;
@@ -388,7 +390,7 @@ export async function showTurn(tank, thread, text, model, attachments, io) {
   for (const receipt of receipts) io.write(`\n${receiptLines(receipt).map(safe).join('\n')}\n`);
   for (const card of cards.values()) {
     const result = await confirmCard(tank, card, io);
-    if (result.status !== 'cancelled') await followThread(tank, thread, result, io);
+    if (result.status !== 'cancelled' && !(result.tool === 'paid_steps.approve' && result.status === 'pending')) await followThread(tank, thread, result, io);
   }
 }
 
