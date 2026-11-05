@@ -1,6 +1,5 @@
 """Run real import/scheduler code with fixture sources and an isolated database."""
 import asyncio
-from contextlib import asynccontextmanager
 import json
 from unittest.mock import AsyncMock
 from uuid import uuid4
