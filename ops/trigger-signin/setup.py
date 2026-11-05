@@ -29,6 +29,8 @@ WORKSPACE_APP = {
     'postLogoutRedirectUris': ['https://app.tervory.com/sign-in'],
     'grantTypes': ['OIDC_GRANT_TYPE_AUTHORIZATION_CODE'], 'appType': 'OIDC_APP_TYPE_WEB',
 }
+# Protobuf JSON omits zero-valued enums, including WEB and OIDC 1.0.
+OIDC_JSON_DEFAULTS = {'appType': 'OIDC_APP_TYPE_WEB', 'version': 'OIDC_VERSION_1_0'}
 LOGIN = {'allowUsernamePassword': True, 'allowRegister': True, 'allowExternalIdp': False,
          'forceMfa': False, 'passwordlessType': 'PASSWORDLESS_TYPE_ALLOWED'}
 LOCKOUT = {'maxPasswordAttempts': '5', 'maxOtpAttempts': '5'}
@@ -87,7 +89,7 @@ class Configure:
             app = self.search(root + '/apps/_search', desired['name'])
             if app:
                 config = app.get('oidcConfig', {})
-                if any(config.get(key, 'OIDC_VERSION_1_0' if key == 'version' else None) != value
+                if any(config.get(key, OIDC_JSON_DEFAULTS.get(key)) != value
                        for key, value in desired.items() if key != 'name'):
                     raise SetupError('Existing application configuration differs')
                 clients[name] = config['clientId']

@@ -40,7 +40,8 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_d
         elif path.endswith('/apps/_search'):
             app = state['apps'].get(body['queries'][0]['nameQuery']['name'])
             if app and omit_defaults:
-                app = {'oidcConfig': {k: v for k, v in app['oidcConfig'].items() if k != 'version'}}
+                app = {'oidcConfig': {k: v for k, v in app['oidcConfig'].items()
+                                      if k != 'version' and not (k == 'appType' and v == 'OIDC_APP_TYPE_WEB')}}
             result = {'result': [app] if app else []}
         elif path.endswith('/apps/oidc'):
             assert body == (SETUP['APP'] if body['name'] == 'Tervory CLI' else SETUP['WORKSPACE_APP'])
@@ -77,6 +78,22 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_d
         assert set(state['login']['secondFactors']) == {'SECOND_FACTOR_TYPE_OTP', 'SECOND_FACTOR_TYPE_U2F'}
         assert state['login']['multiFactors'] == ['MULTI_FACTOR_TYPE_U2F_WITH_VERIFICATION']
         assert state['lockout'] == {'maxPasswordAttempts': '5', 'maxOtpAttempts': '5'}
+        # Defaults must not turn a missing native type or authentication mismatch
+        # into permission to reuse an incompatible application.
+        for app_name, field, replacement in [
+            ('Tervory CLI', 'appType', None),
+            ('Tervory Workspace', 'appType', 'OIDC_APP_TYPE_NATIVE'),
+            ('Tervory Workspace', 'authMethodType', None),
+        ]:
+            original = dict(state['apps'][app_name]['oidcConfig'])
+            if replacement is None:
+                state['apps'][app_name]['oidcConfig'].pop(field)
+            else:
+                state['apps'][app_name]['oidcConfig'][field] = replacement
+            with pytest.raises(SETUP['SetupError'], match='configuration differs'):
+                configure.run()
+            state['apps'][app_name]['oidcConfig'] = original
+            assert state['writes'] == before
         state['project']['details']['resourceOwner'] = '99999'
         with pytest.raises(SETUP['SetupError'], match='owner refused'):
             configure.run()
