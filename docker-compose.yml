@@ -7,11 +7,14 @@
 # app.tervory.com to workspace and tervory.com to site. Tank and the stores
 # are never exposed.
 
+# Coolify injects app-wide settings via env_file. Override the privileged setup
+# capability outside its intended service; empty/null can inherit the real key.
 services:
   postgres:
     image: postgres:16.15
     restart: unless-stopped
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       POSTGRES_USER: ${POSTGRES_USER:-tervory}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-tervory}
@@ -37,6 +40,8 @@ services:
       - tervory-gw-trigger-crm
 
   redis:
+    environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
     # 7.4.12 is the current 7.4 patch. It carries the 7.4.11 fix for CVE-2026-81934
     # and the 7.4.9 fix for CVE-2026-23479.
     # Multi-arch index digest; keep identical in docker-compose.yml and docker-compose.za.yml.
@@ -56,6 +61,7 @@ services:
     image: qdrant/qdrant:v1.20.0
     restart: unless-stopped
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
     volumes:
       - qdrantdata:/qdrant/storage
@@ -77,6 +83,7 @@ services:
       dockerfile: hermes/Dockerfile
     restart: unless-stopped
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_REGION: us-east
       QDRANT_URL: http://qdrant:6333
@@ -122,6 +129,7 @@ services:
     restart: unless-stopped
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
@@ -153,6 +161,8 @@ services:
   # A forward proxy on this same server is not here: the engines would still see Boston.
   # The image tag is lowercase because Docker rejects a capital letter in a repository name.
   Ferry:
+    environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
     image: ferry
     build: ./tor
     restart: unless-stopped
@@ -171,6 +181,7 @@ services:
     build: ./searxng
     restart: unless-stopped
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       SEARXNG_SECRET: ${SEARXNG_SECRET:-change-me-in-coolify}
       SEARXNG_BASE_URL: http://searxng:8080/
     depends_on:
@@ -195,6 +206,7 @@ services:
     build: ./researcher
     restart: unless-stopped
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       TANK_KEY: ${TANK_KEY_MARKET_LAB:-}
     networks:
       - research-internal
@@ -216,6 +228,7 @@ services:
     restart: unless-stopped
     shm_size: "1gb"            # Chromium needs shared memory
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       TIGER_MAX_PAGES: ${TIGER_MAX_PAGES:-4}
     volumes:
       - tiger_data:/data
@@ -366,6 +379,7 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       TANK_REGION: us-east
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       QDRANT_URL: http://qdrant:6333
@@ -399,6 +413,7 @@ services:
     # One-shot job: it exits after setting up agent logins, so Coolify must not count it in the stack's health.
     exclude_from_hc: true
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       AGENT_DB_PASSWORD_TEMPLATE: ${AGENT_DB_PASSWORD_TEMPLATE:-}
       AGENT_DB_PASSWORD_TIGER: ${AGENT_DB_PASSWORD_TIGER:-}
@@ -424,6 +439,7 @@ services:
         cli: ./cli
     restart: unless-stopped
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       TANK_URL: http://tank:8000
       NEXTAUTH_URL: https://app.tervory.com
       TRIGGER_SIGNIN_CONFIG_TOKEN: ${TRIGGER_SIGNIN_CONFIG_TOKEN:?founder sets read-only directory capability}
@@ -462,6 +478,8 @@ services:
   # Coolify still has to attach https://tervory.com to this service on port 3000.
   # app.tervory.com stays on workspace. /internal is on this same service and is noindex.
   site:
+    environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
     build: ./site
     restart: unless-stopped
     volumes:
@@ -478,6 +496,8 @@ services:
   # Public Claude connector. Coolify attaches https://mcp.tervory.com to port 8000.
   # Main network only, so it can reach Tank and Redis and no agent corridor.
   mcp:
+    environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
     build: ./mcp
     restart: unless-stopped
     depends_on:
