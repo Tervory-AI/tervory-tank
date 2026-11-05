@@ -816,6 +816,17 @@ def shared_router(monkeypatch):
     monkeypatch.setenv('TANK_REGION', 'us-east')
     monkeypatch.delenv('TANK_PROVIDER_ALLOW', raising=False)
     import main as tank
+    # These tests isolate routing under an explicitly automatic tenant step.
+    # Paid-step persistence and approval/card behavior run against Postgres in test_paid_steps.
+    import paid_steps
+    async def checkpoint(_key, invoke):
+        return await invoke()
+    monkeypatch.setattr(paid_steps, 'checkpoint', checkpoint)
+    async def automatic_admission(_tenant, task, _model, **_kwargs):
+        import controls
+        await controls.refuse_paid(task=task, path='placeholder automatic model step')
+        return None
+    monkeypatch.setattr(paid_steps, 'model_admission', automatic_admission)
     policy = {'model': 'fixture-auto', 'priority': 'standard', 'rung': 1, 'system_prompt': 'Policy prompt',
               'max_tokens_out': 32, 'cache_scope': 'tenant', 'candidate_model': None, 'shadow_rate': 0}
     conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]))
@@ -1150,7 +1161,7 @@ async def test_shared_override_disables_fallback_and_shadow_without_mutating_pol
     import asyncio
     await asyncio.gather(*list(tank._background))
     shadow.assert_awaited_once()
-    assert 'disable_fallbacks' not in calls[-1]
+    assert calls[-1]['disable_fallbacks'] is True  # Tank admits each fallback seat separately.
 
 
 @pytest.mark.asyncio

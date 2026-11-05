@@ -22,6 +22,13 @@ async def setup(pool, rt, monkeypatch):
     app = FastAPI()
     app.include_router(rig_forge_routes.build_router(rt))
     tenant, job = uuid.uuid4(), uuid.uuid4()
+    # Existing GPU accounting/cap tests explicitly exercise this tenant's Auto.
+    import paid_steps
+    monkeypatch.setattr(paid_steps,"db",lambda:pool)
+    async with pool.acquire() as conn:
+        await paid_steps.register(conn,"rig.forge.trellis2","rig","gpu","placeholder test fixture")
+        await conn.execute("""INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by)
+            VALUES($1,'rig.forge.trellis2','auto','placeholder-admin')""",tenant)
     await pool.execute("""INSERT INTO tank.rig_forge_limits
         (tenant_id,method,enabled,image,flavor,hour_usd,billing_quantum_seconds,max_seconds,max_job_usd,total_budget_usd)
         VALUES($1,'trellis2',true,$2,'a10g-small',1,60,600,1,1)""", tenant,

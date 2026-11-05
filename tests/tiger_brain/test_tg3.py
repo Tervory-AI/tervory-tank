@@ -89,6 +89,16 @@ async def test_standby_health_has_no_task_api_or_model_path():
 
 @pytest.fixture
 def corridor(monkeypatch):
+    # Corridor protocol fixtures configure admission explicitly; default Ask,
+    # durable cards and master precedence use real SQL in test_paid_steps.py.
+    import paid_steps
+    async def checkpoint(key, invoke):
+        return await invoke()
+    async def configured_admission(*args, **kwargs):
+        await agent_skills.controls.refuse_paid(task=args[1], path="paid_steps")
+        return None
+    monkeypatch.setattr(paid_steps,"checkpoint",checkpoint)
+    monkeypatch.setattr(paid_steps,"model_admission",configured_admission)
     keys = {room: "placeholder-" + room + "-key" for room in ("base", "rig", "tiger")}
     for room, key in keys.items():
         monkeypatch.setenv("TANK_KEY_" + room.upper(), key)

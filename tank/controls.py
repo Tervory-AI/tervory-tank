@@ -35,10 +35,13 @@ class Pause(BaseModel):
 
 
 async def paid_paused() -> bool:
-    async with db().acquire() as conn:
-        return bool(await conn.fetchval(
-            "SELECT value FROM tank.controls WHERE tenant_id=$1 AND name='paid_paused'", PLATFORM
-        ))
+    from tenant_db import tenant_scope
+    # The master stop is platform-owned even when a client tenant is running.
+    with tenant_scope(PLATFORM):
+        async with db().acquire() as conn:
+            return bool(await conn.fetchval(
+                "SELECT value FROM tank.controls WHERE tenant_id=$1 AND name='paid_paused'", PLATFORM
+            ))
 
 
 async def refuse_paid(*, paid: bool = True, task: str | None = None, path: str = "route") -> None:
@@ -64,12 +67,14 @@ async def refuse_paid(*, paid: bool = True, task: str | None = None, path: str =
     log.warning("paid_refused task=%s path=%s at=%s", task, path, at)
     try:
         async with asyncio.timeout(AUDIT_TIMEOUT_S):
-            async with db().acquire() as conn:
-                await conn.execute(
-                    """INSERT INTO tank.control_log
-                    (tenant_id,name,by_user,old_value,new_value,task,path)
-                    VALUES ($1,'paid_refused','system',true,true,$2,$3)""", PLATFORM, task, path,
-                )
+            from tenant_db import tenant_scope
+            with tenant_scope(PLATFORM):
+                async with db().acquire() as conn:
+                    await conn.execute(
+                        """INSERT INTO tank.control_log
+                        (tenant_id,name,by_user,old_value,new_value,task,path)
+                        VALUES ($1,'paid_refused','system',true,true,$2,$3)""", PLATFORM, task, path,
+                    )
     except Exception:
         # Database outage must not turn a refusal into permission.
         log.error("paid_refusal_audit_unavailable task=%s path=%s at=%s", task, path, at)
@@ -81,7 +86,11 @@ async def paid_host_hook(request: httpx.Request) -> None:
     host = request.url.host.lower()
     if host in vendor_meter.PAID_HOSTS:
         await refuse_paid(path=f"HTTP host:{host}", task=_task.get() or "base.find_site (HTTP client has no run ID)")
+        approval = await __import__("paid_steps").http_admission(request)
         await vendor_meter.request_hook(request)
+        reserved = request.extensions.get("vendor_receipt")
+        if reserved:
+            await __import__("paid_steps").attach_receipt(reserved[0], approval)
 
 
 async def paid_response_hook(response: httpx.Response) -> None:

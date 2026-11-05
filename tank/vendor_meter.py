@@ -231,6 +231,17 @@ class RunReceipts:
                 return await receive()
             delivered = True
             return {"type": "http.request", "body": payload, "more_body": False}
+        import paid_steps
+        digest = paid_steps.fingerprint({"request": {k: v for k, v in body.items() if k != "paid_run_id"}, "record_id": str(run.record_id), "path": scope["path"]})
+        stable_id = uuid.uuid5(run.record_id, digest) if run.record_id else uuid.uuid4()
+        try:
+            run_id = uuid.UUID(str(body.get("paid_run_id") or stable_id))
+        except (ValueError, TypeError):
+            await send({"type": "http.response.start", "status": 422, "headers": [(b"content-type", b"application/json")]})
+            await send({"type": "http.response.body", "body": b'{"detail":"Invalid paid-step run identity."}'})
+            return
+        paid_run = paid_steps.Run(run.tenant, run_id, digest)
+        paid_token = paid_steps.current.set(paid_run)
         token, task_token = current.set(run), controls._task.set(run.skill)
         started: Message | None = None
         content = bytearray()
@@ -266,5 +277,6 @@ class RunReceipts:
         try:
             await self.app(scope, replay, capture)
         finally:
+            paid_steps.current.reset(paid_token)
             current.reset(token)
             controls._task.reset(task_token)

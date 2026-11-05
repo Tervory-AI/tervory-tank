@@ -31,10 +31,15 @@ async def database(monkeypatch):
     name = "train1_" + uuid.uuid4().hex
     await admin.execute(f'CREATE DATABASE "{name}"')
     pool = await asyncpg.create_pool(URL, database=name, min_size=1, max_size=4)
+    monkeypatch.setenv("DATABASE_URL",URL.rsplit('/',1)[0]+'/'+name)
+    monkeypatch.setenv("LITELLM_MASTER_KEY","placeholder-training-model-key")
+    monkeypatch.setenv("TANK_API_KEY","placeholder-training-workspace-key")
     async with pool.acquire() as conn:
         await conn.execute((ROOT / "tank/schema.sql").read_text())
         from savings_defaults import initialize
         await initialize(conn)
+    from paid_steps_fixtures import configure_paid_auto
+    configure_paid_auto(monkeypatch,lambda:pool)
     rt = SimpleNamespace(pool=lambda: pool, box_region=lambda: "us-east", _packages={})
     monkeypatch.setattr(gold, "runtime", lambda: rt)
     monkeypatch.setattr(training, "runtime", lambda: rt)

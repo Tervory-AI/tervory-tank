@@ -298,6 +298,7 @@ def test_b35_ffl_package_and_new_vertical_template(tmp_path):
     wave.test_new_vertical_scaffold_is_empty_and_never_overwrites(tmp_path)
 
 def test_b36_context_comparison_budget(monkeypatch):
+    context.configured_paid_step.__wrapped__(monkeypatch)
     context.test_only_identity_is_sent()
     context.test_budget_and_ledger(monkeypatch)
     context.test_no_ledger_means_no_network(monkeypatch)

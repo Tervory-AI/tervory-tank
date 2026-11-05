@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-import yaml
 import controls
+import yaml
 from base_public_http import BaseBlockResponse, PublicPageHTTP
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -87,6 +87,7 @@ def zenas_scope_rules(package_path: Path):
 
 class Chat(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    paid_run_id: uuid.UUID | None = None
     model: str = "policy"
     messages: list[dict[str, Any]] = Field(min_length=1, max_length=512)
     tools: list[dict[str, Any]] | None = Field(default=None, max_length=64)
@@ -106,7 +107,7 @@ class Chat(BaseModel):
 
 
 def validate_chat(body: Chat) -> None:
-    if len(json.dumps(body.model_dump())) > 1_000_000:
+    if len(json.dumps(body.model_dump(exclude={"paid_run_id"}))) > 1_000_000:
         raise HTTPException(413, "Conversation is too large.")
     for message in body.messages:
         if message.get("role") not in {"system", "developer", "user", "assistant", "tool"}:
@@ -173,6 +174,18 @@ def input_tokens(payload: dict) -> int:
 
 
 async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str, *, room: str = ROOM) -> dict:
+    import paid_steps
+    room = room_text(room)
+    validate_chat(body)
+    digest = paid_steps.fingerprint(body.model_dump(exclude={"paid_run_id"}))
+    identity = body.paid_run_id or (uuid.uuid5(task,digest) if task else uuid.uuid4())
+    run = paid_steps.Run(tenant, identity, digest)
+    with paid_steps.run_scope(run):
+        return await paid_steps.checkpoint(paid_steps.fingerprint(["agent.chat", digest]),
+            lambda: _complete(tank, body, tenant, task, region, room=room))
+
+
+async def _complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str, *, room: str = ROOM) -> dict:
     room = room_text(room)
     task_type = f"agent.{room}.think"
     validate_chat(body)
@@ -183,10 +196,9 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
         # Scan the whole supplied conversation, including tool results/arguments.
         # This is the room's existing classifier, with no model scope fallback.
         scope = zenas_scope_rules(package.path).classify(
-            json.dumps(body.model_dump(exclude_none=True), ensure_ascii=False), "za" if region == "za" else "us")
+            json.dumps(body.model_dump(exclude_none=True,exclude={"paid_run_id"}), ensure_ascii=False), "za" if region == "za" else "us")
         if scope.get("criminal") or not scope.get("in_scope"):
             raise HTTPException(403, scope["reason"])
-    await controls.refuse_paid(task=task_type, path="agent.chat")
     policy = await tank.load_policy(task_type, tenant)
     model = policy["model"]
     if tank.graduate.router_cannot_serve(model):
@@ -217,7 +229,7 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     if refusal:
         raise HTTPException(403, refusal)
     # Policy chooses the route; a model name in an SDK request cannot override it.
-    payload = body.model_dump(exclude_none=True, exclude={"model", "stream", "stream_options", "max_completion_tokens", "user", "reasoning_effort"})
+    payload = body.model_dump(exclude_none=True, exclude={"paid_run_id", "model", "stream", "stream_options", "max_completion_tokens", "user", "reasoning_effort"})
     payload.update(model=model, messages=messages, stream=False,
                    max_tokens=min(body.max_tokens or body.max_completion_tokens or policy["max_tokens_out"], policy["max_tokens_out"]))
     # Match Hermes' minimum 64k context, reserving the requested output budget.
@@ -227,6 +239,8 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     roster = await tank._roster_models()
     if baseline_cost(roster, model, 1, 1) is None:
         raise HTTPException(503, "The brain's policy model needs roster prices before it can be called.")
+    controls._task.set(task_type)
+    approval = await __import__("paid_steps").model_admission(tenant, task_type, model, agent=room, roster=roster)
     ledger_id = uuid.uuid4()
     started = time.perf_counter()
     outcome, error, cost = "failed", "Model gateway unavailable.", 0.0
@@ -300,6 +314,9 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
         "saving_usd": None if baseline_usd is None or cost is None else baseline_usd - cost,
         "tokens_in": tokens_in, "tokens_out": tokens_out, "latency_ms": latency, "outcome": outcome,
     }
+    if approval:
+        receipt["paid_step_id"] = approval["step_id"]
+        receipt["paid_step_mode"] = approval["authorization_mode"]
     async with tank.pool().acquire() as conn:
         async with conn.transaction():
             await conn.execute(LEDGER_SQL, ledger_id, tenant, region, policy["rung"], answered, policy["priority"],
@@ -313,6 +330,7 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
                 "INSERT INTO tank.agent_receipts (ledger_id,tenant_id,room,receipt) VALUES ($1,$2,$4,$3::jsonb)",
                 ledger_id, tenant, json.dumps(receipt), room,
             )
+    await __import__("paid_steps").attach_receipt(ledger_id, approval)
     if outcome != "delivered":
         raise HTTPException(502, {"message": error, "receipt": receipt})
     return {

@@ -35,6 +35,8 @@ async def boundary(monkeypatch, tmp_path):
         import skala
         monkeypatch.setattr(tank, "TANK_API_KEY", key)
         monkeypatch.setattr(tank, "_pool", pool)
+        from paid_steps_fixtures import configure_paid_auto
+        configure_paid_auto(monkeypatch,lambda:pool)
         monkeypatch.setattr(tank, "_http", object())
         monkeypatch.setattr(tank, "_agent_keys_synced", True)
         tenants = (uuid.uuid4(), uuid.uuid4())
