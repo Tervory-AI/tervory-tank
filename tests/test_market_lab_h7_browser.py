@@ -24,11 +24,11 @@ def wrapper(folder):
         path.write_text(text)
     write('package.json', json.dumps({'private': True, 'dependencies': json.loads((WORKSPACE / 'package.json').read_text())['dependencies']}))
     write('tsconfig.json', json.dumps({'compilerOptions': {'target': 'ES2022', 'module': 'esnext', 'moduleResolution': 'bundler', 'jsx': 'preserve', 'strict': True, 'esModuleInterop': True, 'skipLibCheck': True}}))
-    # Only the isolated visual fixture replaces Clerk's shared switcher. The
-    # production page retains the existing authenticated Workspace component.
-    write('fixture-clerk.tsx', 'export function OrganizationSwitcher(){return <button aria-label="Business">⌄</button>}')
-    write('next.config.mjs', 'export default {experimental:{externalDir:true,cpus:1},devIndicators:false,webpack(config){config.resolve.alias={...config.resolve.alias,"@clerk/nextjs$":' +
-          json.dumps(str(folder / 'fixture-clerk.tsx')) + '};return config;}};')
+    # Only the isolated visual fixture doubles the shared native identity widget.
+    # The production page uses the authenticated Workspace sign-in provider.
+    write('fixture-signin.tsx', 'export function OrganisationSwitcher(){return <button aria-label="Business">⌄</button>}')
+    write('next.config.mjs', 'export default {experimental:{externalDir:true,cpus:1},devIndicators:false,webpack(config){config.resolve.alias={...config.resolve.alias,"../trigger-signin-provider$":' +
+          json.dumps(str(folder / 'fixture-signin.tsx')) + '};return config;}};')
     write('app/layout.tsx', f'''import {{inter}} from {json.dumps(str(WORKSPACE / 'app/fonts'))};
 import {json.dumps(str(WORKSPACE / 'app/market-lab/h7.css'))};
 export default function Layout({{children}}:{{children:React.ReactNode}}){{return <html lang="en" className={{inter.variable}}><body style={{{{margin:0}}}}>{{children}}</body></html>}}''')

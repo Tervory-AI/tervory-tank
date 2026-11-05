@@ -62,6 +62,9 @@ jobs:
                   await conn.close()
           asyncio.run(prepare())
           PY
+      - name: Type-check Workspace including native Market Lab identity
+        working-directory: workspace
+        run: npx tsc --noEmit
       - name: Verify required video tools from signed Ubuntu primary archives
         run: bash .github/scripts/install-video-test-tools.sh
       - name: Disposable database isolation and affected regressions
