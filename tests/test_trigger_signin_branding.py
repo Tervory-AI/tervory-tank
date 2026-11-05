@@ -48,6 +48,9 @@ class NativeSettings:
                 assert kwargs['json']['locale'] == 'en'
                 self.translations = kwargs['json']['translations']
             return {'translations': copy.deepcopy(self.translations)}
+        if path.startswith('/admin/v1/text/'):
+            # These legacy-looking spellings are real upstream 404s.
+            assert path.split('/')[-2] not in {'passwordchange', 'inviteuser'}
         if path.startswith('/admin/v1/text/default/message/'):
             return {'customText': copy.deepcopy(self.default)}
         assert path.startswith('/admin/v1/text/message/')
@@ -108,7 +111,7 @@ def test_every_native_email_drops_the_provider_name(resources):
                    'preHeader': 'Zitadel notice'}
     BRAND['configure_branding'](api, bootstrap, assets, 'https://auth.tervory.com')
     kinds = {path.split('/')[-2] for path in api.messages}
-    assert {'init', 'passwordreset', 'passwordchange', 'verifyemail', 'inviteuser'} <= kinds
+    assert {'init', 'passwordreset', 'password_change', 'verifyemail', 'invite_user'} <= kinds
     for message in api.messages.values():
         assert 'zitadel' not in json.dumps(message).lower()
         assert '{{.PreferredLoginName}}' in message['text']

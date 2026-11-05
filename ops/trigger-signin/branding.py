@@ -13,12 +13,12 @@ ASSETS = [('logo', 'tervory-logo.png', 'image/png'), ('logo/dark', 'tervory-logo
           ('font', 'Inter-latin.woff2', 'font/woff2')]
 EMAILS = {'verifyemail': 'Verify your Trigger sign-in email',
           'passwordreset': 'Reset your Trigger sign-in password', 'init': 'Set up Trigger sign-in',
-          'passwordchange': 'Your Trigger sign-in password changed',
+          'password_change': 'Your Trigger sign-in password changed',
           'verifyphone': 'Verify your Trigger sign-in phone',
           'verifyemailotp': 'Your Trigger sign-in code', 'verifysmsotp': 'Your Trigger sign-in code',
           'domainclaimed': 'Your Trigger sign-in username changed',
           'passwordless_registration': 'Add a passkey to Trigger sign-in',
-          'inviteuser': 'You are invited to Trigger sign-in'}
+          'invite_user': 'You are invited to Trigger sign-in'}
 # Every native email is renamed: the upstream provider's name never reaches a recipient.
 PROVIDER_NAMES = ('ZITADEL', 'Zitadel', 'zitadel')
 FIELDS = ('title', 'preHeader', 'subject', 'greeting', 'text', 'buttonText', 'footerText')
