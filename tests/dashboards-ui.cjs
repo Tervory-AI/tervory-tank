@@ -61,7 +61,7 @@ async function render() {
   await assert.rejects(()=>ControlPage(),/404/);
   founder=true;
   let client = renderToStaticMarkup(await ClientPage({searchParams:Promise.resolve({})}));
-  const visible = client.replace(/<script[\s\S]*?<\/script>/g,'').replace(/<[^>]*>/g,' ');
+  const visible = require('./html-visible-text.cjs')(client);
   for (const word of ['Skala','Tank','ledger','receipt IDs','haiku','sonnet','eval','gold','shadow','retire','rung','tenant','region box']) {
     assert(!new RegExp(`\\b${word}\\b`,'i').test(visible),`banned client copy: ${word}`);
   }
