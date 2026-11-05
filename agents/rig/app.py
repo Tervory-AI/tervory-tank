@@ -375,6 +375,15 @@ def _room_read_kind(method: str, path: str) -> str | None:
 @app.middleware("http")
 async def rig_room_reads(request: Request, call_next):
     """Serve Tank's read with the room key. Shopper calls fall through."""
+    if request.url.path == '/health/configuration' and request.method == 'GET':
+        from rigbox.configuration import report
+        names = getattr(request.app.state, 'missing_settings', [])
+        return JSONResponse({**report(), 'startup': {'ready': not names, 'missing_settings': names}},
+                            headers={'Cache-Control': 'no-store'})
+    missing = getattr(request.app.state, 'missing_settings', [])
+    if missing:
+        return JSONResponse(status_code=503, content={"ok": False,
+            "error": "Settings unavailable: " + ", ".join(missing), "missing_settings": missing})
     if request.url.path == "/health" and not proxy_configured():
         return JSONResponse(status_code=503, content={"ok": False, "error": "RIG_TRUSTED_PROXY_CIDRS is required"})
     kind = _room_read_kind(request.method.upper(), request.url.path)
@@ -393,6 +402,12 @@ _inner = app.router.lifespan_context
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    from rigbox.configuration import startup_missing
+    app.state.missing_settings = await startup_missing(AGENT)
+    if app.state.missing_settings:
+        log.warning('Settings unavailable: %s', ', '.join(app.state.missing_settings))
+        yield
+        return
     async with _inner(app):
         store = PgStore(app.state.pool)
         await store.apply_schema()

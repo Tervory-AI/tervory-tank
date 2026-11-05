@@ -139,6 +139,8 @@ async def perform(body: Question):
 
 @app.get("/health")
 async def health():
+    if not os.environ.get('TANK_KEY', '').strip():
+        return JSONResponse({'ok': False, 'missing_settings': ['TANK_KEY']}, status_code=503)
     return {"ok": True, "room": "rig", "hermes_version": "0.22.2"}
 
 

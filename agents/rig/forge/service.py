@@ -201,7 +201,7 @@ app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
 
 @app.middleware("http")
 async def private_peer(request: Request, call_next):
-    if request.url.path == "/health" and request.client and request.client.host in {"127.0.0.1", "::1"}:
+    if request.url.path in {"/health", "/health/configuration"} and request.client and request.client.host in {"127.0.0.1", "::1"}:
         return await call_next(request)
     try:
         allowed = await brain_addresses()
@@ -215,6 +215,15 @@ async def private_peer(request: Request, call_next):
 @app.get("/health")
 async def health():
     return {"ok": True, "room": "rig", "service": "forge"}
+
+
+@app.get('/health/configuration')
+async def configuration():
+    # Names only. The sealed forge does not require database or Tank credentials.
+    groups = {'storage': ('R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID_RIG', 'R2_SECRET_ACCESS_KEY_RIG'),
+              'gpu': ('HF_JOBS_TOKEN', 'HF_JOBS_NAMESPACE')}
+    return {group: {'ready': not (missing := [name for name in names if not os.environ.get(name, '').strip()]),
+                    'missing_settings': missing} for group, names in groups.items()}
 
 
 @app.post("/jobs")

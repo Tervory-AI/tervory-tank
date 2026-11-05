@@ -28,6 +28,9 @@ _original = app.router.lifespan_context
 @asynccontextmanager
 async def lifespan(application):
     async with _original(application):
+        if getattr(application.state, 'missing_settings', []):
+            yield
+            return
         # Missing R2 credentials must not break Rig's existing catalogue API.
         # Initialize lazily at the first 3D storage operation and show its error.
         assets = LazyR2()
