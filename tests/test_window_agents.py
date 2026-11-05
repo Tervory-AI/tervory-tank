@@ -101,6 +101,9 @@ async def agent_db(monkeypatch):
     try:
         async with pool.acquire() as conn:
             await conn.execute('CREATE SCHEMA tank; CREATE TABLE tank.command_threads(thread_id uuid PRIMARY KEY,tenant_id uuid,user_id text,title text,state jsonb)')
+            issuer_migration = next(line for line in (Path(__file__).parents[1] / 'tank/schema.sql').read_text().splitlines()
+                                    if line.startswith('ALTER TABLE tank.command_threads ADD COLUMN IF NOT EXISTS trigger_signin_issuer '))
+            await conn.execute(issuer_migration)
             await conn.execute("CREATE TABLE tank.vault_items(tenant_id uuid,vault text,kind text,name text,metadata jsonb,sealed text, PRIMARY KEY(tenant_id,vault,kind,name))")
             await conn.execute(SCHEMA)
             await conn.execute(SCHEMA)  # Every Tank restart is safe.
@@ -366,8 +369,12 @@ def test_real_workspace_public_proxy_and_signed_webhook_transport():
     import os
     import subprocess
     root = Path(__file__).resolve().parents[1]
+    configured = os.environ.get('COMMAND_TEST_TOOLS')
+    candidates = ([Path(configured)] if configured else []) + [root / 'cli/node_modules', root / 'workspace/node_modules']
+    tools = next((candidate for candidate in candidates if (candidate / 'typescript').is_dir()), None)
+    assert tools is not None, 'Install the existing locked Workspace or CLI TypeScript dependency'
     result = subprocess.run(['node', '--test', 'workers/window_agent/test/public-edge.test.mjs'],
-                            cwd=root, env={**os.environ, 'COMMAND_TEST_TOOLS': str(root / 'cli/node_modules')},
+                            cwd=root, env={**os.environ, 'COMMAND_TEST_TOOLS': str(tools)},
                             capture_output=True, text=True, timeout=120, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
 
