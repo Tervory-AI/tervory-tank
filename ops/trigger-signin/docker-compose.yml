@@ -37,11 +37,14 @@ x-runtime: &runtime
   ZITADEL_OIDC_DEFAULTLOGINURLV2: https://auth.tervory.com/ui/v2/login/login?authRequest=
   ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://auth.tervory.com/ui/v2/login/logout?post_logout_redirect=
   ZITADEL_SAML_DEFAULTLOGINURLV2: https://auth.tervory.com/ui/v2/login/login?samlRequest=
+# Coolify injects app-wide settings via env_file. Override the privileged setup
+# capability outside its intended service; empty/null can inherit the real key.
 services:
   identity-postgres:
     image: postgres:16.15@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a
     restart: unless-stopped
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
       POSTGRES_PASSWORD: ${TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD:?Coolify-generated TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD}
@@ -57,6 +60,7 @@ services:
     restart: "no"
     command: [init]
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       <<: *database
       ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD:?Coolify-generated TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD}
@@ -71,6 +75,7 @@ services:
     user: "0"
     command: [setup, --masterkeyFromEnv]
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       <<: *runtime
       ZITADEL_FIRSTINSTANCE_ORG_NAME: Tervory
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${TRIGGER_SIGNIN_ADMIN_EMAIL:?Coolify-generated TRIGGER_SIGNIN_ADMIN_EMAIL}
@@ -96,7 +101,9 @@ services:
     image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499
     command: [start, --masterkeyFromEnv]
     restart: unless-stopped
-    environment: *runtime
+    environment:
+      <<: *runtime
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
     expose: ["8080"]
     networks: [database, proxy]
     depends_on:
@@ -123,6 +130,7 @@ services:
     restart: unless-stopped
     user: "0"
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       ZITADEL_API_URL: http://trigger-signin-api:8080
       NEXT_PUBLIC_BASE_PATH: /ui/v2/login
       ZITADEL_SERVICE_USER_TOKEN_FILE: /login/login-client.pat
@@ -188,6 +196,7 @@ services:
       target: backup
     restart: unless-stopped
     environment:
+      TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       TANK_REGION: us-east
       TRIGGER_SIGNIN_DB_PASSWORD: ${TRIGGER_SIGNIN_DB_PASSWORD:?Coolify-generated TRIGGER_SIGNIN_DB_PASSWORD}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:?existing storage account}
