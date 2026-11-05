@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
-import { codeSession } from './code-mode.mjs';
+import { codeSession, dollars } from './code-mode.mjs';
+import { redactSecrets } from './code-tools.mjs';
+import { loadMCP, mcpKeyring, serverIdentity } from './mcp.mjs';
 import { basename, extname } from 'node:path';
 import { parse } from 'csv-parse/sync';
 import { installedRelease, packageVersion, update } from './update.mjs';
@@ -261,6 +263,17 @@ export class Tank {
   async json(path, body, method = body === undefined ? 'GET' : 'POST') {
     return this.#call(path, body, method, JSON_TIMEOUT_MS, response => response.json());
   }
+  async codeTurn(thread, body, preview) {
+    const response = await this.request(`/v1/command/threads/${encodeURIComponent(thread)}/code-stream`, body);
+    let result;
+    for await (const event of events(response, { signal:this.signal })) {
+      if (event.kind === 'code_preview' && typeof event.data.text === 'string') preview?.(event.data.text);
+      else if (event.kind === 'code_result') result = event.data;
+      else if (event.kind === 'error') throw new Error('Code stream failed; nothing was retried.');
+    }
+    if (!result) throw new Error('Code stream interrupted; nothing was retried.');
+    return result;
+  }
 }
 
 // The abort for each streaming response from Tank.request, so events() closes the
@@ -434,7 +447,8 @@ export function options(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith('--')) { args.push(argv[i]); continue; }
     const flag = argv[i].slice(2);
-    if (!['model', 'thread', 'file', 'args', 'region', 'version'].includes(flag) || flags[flag] !== undefined || !argv[i + 1] || argv[i + 1].startsWith('--')) {
+    if (['resume','plain'].includes(flag) && flags[flag] === undefined) { flags[flag] = true; continue; }
+    if (!['model', 'thread', 'file', 'args', 'region', 'version', 'output'].includes(flag) || flags[flag] !== undefined || !argv[i + 1] || argv[i + 1].startsWith('--')) {
       throw new Error('Invalid command option.');
     }
     flags[flag] = argv[++i];
@@ -443,9 +457,37 @@ export function options(argv) {
 }
 
 export async function run(argv, { store, transport, io, env = process.env }) {
+  if (argv[0] === 'mcp' && argv[1] === 'secret') {
+    if (argv.length !== 4 || io.interactive !== true || !io.secret || !/^[A-Za-z0-9_.-]+$/.test(argv[2]) || !/^[A-Za-z0-9_.-]+$/.test(argv[3])) throw new Error('Code MCP refused.');
+    const entry = await mcpKeyring(argv[2], argv[3]);
+    const value = await io.secret('MCP secret (hidden): ');
+    if (!value) throw new Error('Code MCP refused.');
+    await entry.setPassword(value); io.write('MCP secret saved in OS keyring.\n'); return;
+  }
+  if (argv[0] === '-p') {
+    const { args: extra, flags: headlessFlags } = options(argv.slice(2));
+    const output = headlessFlags.output ?? 'text';
+    if (!argv[1]?.trim() || extra.length || Object.keys(headlessFlags).some(key => key !== 'output') || !['json', 'text'].includes(output)) throw new Error('Invalid headless command option.');
+    let result;
+    try {
+      const token = await session(store, transport);
+      result = await codeSession(new Tank(token, transport, io.signal), '.', 'auto',
+        { ...io, interactive: false, prompt: async () => null, write() {} }, receiptLines, safe,
+        { task: argv[1], headless: true });
+    } catch {
+      result = { status: 'error', answer: 'Code task failed; nothing was retried.', cost_usd: null, turns: [] };
+    }
+    io.write(output === 'json' ? JSON.stringify(result) + '\n'
+      : `${safe(redactSecrets(result.answer ?? ''))}\n${result.turns.map(turn => `Model ${turn.model} | cost ${dollars(turn.cost_usd)}\n`).join('')}Status ${result.status}\nCost ${dollars(result.cost_usd)}\n`);
+    if (result.status !== 'completed') {
+      const error = new Error('Code task needs attention.'); error.reported = true; error.exitCode = result.status === 'needs_input' ? 2 : 1; throw error;
+    }
+    return result;
+  }
   const { args, flags } = options(argv); const [name, ...rest] = args;
+  if (flags.output !== undefined || ((flags.resume !== undefined || flags.plain !== undefined) && name !== 'code')) throw new Error('Invalid command option.');
   if (!name || name === 'help') {
-    io.write('tervory login [--region us-east|za] | logout | chat [thread] | code [folder] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | update [--version X.Y.Z] | version\n');
+    io.write('tervory login [--region us-east|za] | logout | chat [thread] | code [folder] [--resume] [--plain] | -p "<task>" [--output json|text] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | mcp secret <server> <name> | mcp block|unblock <server> | update [--version X.Y.Z] | version\n');
     return;
   }
   if (name === 'update') {
@@ -473,9 +515,18 @@ export async function run(argv, { store, transport, io, env = process.env }) {
   if (name === 'logout') return logout({ store, transport, io });
   const token = await session(store, transport);
   const tank = new Tank(token, transport, io.signal);
+  if (name === 'mcp') {
+    if (Object.keys(flags).length || rest.length !== 2 || !['block','unblock'].includes(rest[0])) throw new Error('Code MCP refused.');
+    const config = (await loadMCP())[rest[1]];
+    const server_id = config ? serverIdentity(config) : rest[1];
+    io.write(`MCP policy: ${safe(server_id)}\n`);
+    if (io.interactive !== true || (await io.prompt('Change tenant MCP policy [y/N] '))?.trim().toLowerCase() !== 'y') return;
+    await tank.json('/v1/command/code-mcp-policy', { server_id, blocked: rest[0] === 'block' }, 'PUT');
+    io.write('MCP policy updated.\n'); return;
+  }
   if (name === 'code') {
-    if (rest.length > 1 || Object.keys(flags).some(flag => flag !== 'model')) throw new Error('Invalid command option.');
-    return codeSession(tank, rest[0] ?? '.', flags.model ?? 'auto', io, receiptLines, safe);
+    if (rest.length > 1 || Object.keys(flags).some(flag => !['model', 'resume','plain'].includes(flag))) throw new Error('Invalid command option.');
+    return codeSession(tank, rest[0] ?? '.', flags.model ?? 'auto', io, receiptLines, safe, { resume: flags.resume });
   }
   if (name === 'models') {
     // Founder-only and unadvertised: Tank answers 404 to everyone else (and the

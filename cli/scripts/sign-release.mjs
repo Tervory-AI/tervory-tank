@@ -2,8 +2,8 @@
 // Detached Ed25519 signatures. The trusted public key comes from release settings,
 // never from the downloaded archive. No signing material is written to disk.
 import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { join, resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export function signRelease(directory, privatePem, publicPem) {
@@ -22,6 +22,14 @@ export function signRelease(directory, privatePem, publicPem) {
     const signature = sign(null, bytes, key);
     if (!verify(null, bytes, trusted, signature)) throw new Error('Release signature verification failed.');
     writeFileSync(join(directory, name + '.sig'), signature.toString('base64') + '\n');
+  }
+  // The installed key is independent of archive contents and survives updates.
+  if (basename(dirname(directory)) === 'releases') {
+    const encoded = trusted.export({type:'spki',format:'der'}).toString('base64');
+    for (const name of ['install.sh','opli-install.sh']) {
+      const installer = join(dirname(dirname(directory)),name);
+      if (existsSync(installer)) writeFileSync(installer,readFileSync(installer,'utf8').replace(/PUBLIC_KEY_DER="[A-Za-z0-9+/=]*" # TERVORY_RELEASE_TRUST/,`PUBLIC_KEY_DER="${encoded}" # TERVORY_RELEASE_TRUST`));
+    }
   }
   return files;
 }

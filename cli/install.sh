@@ -21,6 +21,8 @@ set -eu
 # through `curl | sh` defines a function that never runs, instead of half an install.
 main() {
   BASE="${TERVORY_CLI_BASE:-https://app.tervory.com/cli}"
+  PUBLIC_KEY_DER="" # TERVORY_RELEASE_TRUST
+  KEY_FILE="${TERVORY_CLI_PUBLIC_KEY_FILE:-}"
   BASE="${BASE%/}"
   HOME_DIR="${TERVORY_HOME:-${HOME:?HOME is not set}/.tervory}"
   BIN_DIR="${TERVORY_BIN_DIR:-$HOME/.local/bin}"
@@ -114,10 +116,36 @@ main() {
   fi
   say "SHA-256 verified: $GOT"
 
+  # Signing stamps the trusted public key into the HTTPS installer. A caller
+  # may instead supply a separately obtained public key file. Never trust a key
+  # from the downloaded archive itself, and never execute it before verification.
+  if [ -n "$PUBLIC_KEY_DER$KEY_FILE" ]; then
+    fetch "$BASE/releases/$VERSION/manifest.json.sig" "$TMP/manifest.json.sig" || fail "Release signature missing."
+    fetch "$BASE/releases/$VERSION/$FILE.sig" "$TMP/$FILE.sig" || fail "Release signature missing."
+    node - "$TMP" "$FILE" "$KEY_FILE" "$PUBLIC_KEY_DER" <<'JS' || fail "Release signature refused. Nothing was installed."
+const fs=require('node:fs'),c=require('node:crypto'),p=require('node:path');
+try {
+  const [dir,file,keyFile,der]=process.argv.slice(2);
+  const key=c.createPublicKey(keyFile?fs.readFileSync(keyFile):{key:Buffer.from(der,'base64'),format:'der',type:'spki'});
+  if(key.asymmetricKeyType!=='ed25519')throw Error();
+  for(const name of ['manifest.json',file])if(!c.verify(null,fs.readFileSync(p.join(dir,name)),key,Buffer.from(fs.readFileSync(p.join(dir,name+'.sig'),'utf8').trim(),'base64')))throw Error();
+  fs.writeFileSync(p.join(dir,'TRUSTED-RELEASE.pem'),key.export({type:'spki',format:'pem'}));
+} catch {process.exit(1);}
+JS
+    say "Release signatures verified."
+  fi
+
   mkdir -p "$TMP/x"
   tar -xzf "$TMP/$FILE" -C "$TMP/x" --no-same-owner
   [ -f "$TMP/x/tervory-cli-$VERSION/RELEASE.json" ] || fail "The release archive is not laid out as expected."
   [ "$(json version < "$TMP/x/tervory-cli-$VERSION/RELEASE.json")" = "$VERSION" ] || fail "The release archive is for another version."
+  if [ -f "$TMP/TRUSTED-RELEASE.pem" ]; then cp "$TMP/TRUSTED-RELEASE.pem" "$TMP/x/tervory-cli-$VERSION/TRUSTED-RELEASE.pem"; fi
+  node - "$TMP/x/tervory-cli-$VERSION" "$BASE" <<'JS'
+const fs=require('node:fs'),p=require('node:path'),[root,base]=process.argv.slice(2),file=p.join(root,'RELEASE.json'),record=JSON.parse(fs.readFileSync(file));
+if(['https://opli.tervory.com','https://app.tervory.com/cli'].includes(base))record.release_base=base;
+if(fs.existsSync(p.join(root,'TRUSTED-RELEASE.pem')))record.signed=true;
+fs.writeFileSync(file,JSON.stringify(record,null,2)+'\n');
+JS
 
   mkdir -p "$CLI_DIR" "$BIN_DIR"
   # Stage beside the target, move any old copy aside, move the new one in, then drop the old.
