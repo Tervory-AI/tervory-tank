@@ -1,5 +1,6 @@
 """The scheduled worker must not cancel a bounded weekly infrastructure scan early."""
 import importlib.util
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,6 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.asyncio
 async def test_weekly_infra_reaches_its_scan_budget_through_the_real_worker(monkeypatch):
+    # The full suite also imports Tiger/Market Lab modules named gold_sources.
+    # Bind this fixture to Radix's actual implementation for its own app load.
+    monkeypatch.syspath_prepend(str(ROOT / 'agents/radix'))
+    gold_spec = importlib.util.spec_from_file_location('placeholder_radix_gold_sources', ROOT / 'agents/radix/gold_sources.py')
+    gold_module = importlib.util.module_from_spec(gold_spec)
+    gold_spec.loader.exec_module(gold_module)
+    monkeypatch.setitem(sys.modules, 'gold_sources', gold_module)
     path = ROOT / 'agents/radix/app.py'
     spec = importlib.util.spec_from_file_location('placeholder_radix_scheduler', path)
     room = importlib.util.module_from_spec(spec)
