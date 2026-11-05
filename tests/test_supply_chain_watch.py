@@ -250,3 +250,9 @@ def test_unknown_direct_sources_still_make_inventory_incomplete(tmp_path, source
 def test_direct_wheels_require_only_valid_hash_options(suffix):
     with pytest.raises(ValueError):
         python_locks('requirements.lock', 'torch @ https://wheels.example/torch-2.10.0-cp312-cp312-linux_x86_64.whl' + suffix)
+
+
+def test_hash_options_cannot_be_concatenated():
+    with pytest.raises(ValueError):
+        python_locks('requirements.lock', 'torch @ https://wheels.example/torch-2.10.0-cp312-cp312-linux_x86_64.whl '
+            + '--hash=sha256:' + 'a' * 64 + '--hash=sha256:' + 'b' * 64)

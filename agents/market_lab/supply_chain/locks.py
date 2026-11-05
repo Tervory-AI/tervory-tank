@@ -34,7 +34,7 @@ def logical_lines(text: str):
 
 def wheel_identity(line: str) -> tuple[str, str]:
     """Read only named, SHA-256-pinned HTTPS wheels; never fetch a source URL."""
-    direct = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9_.-]*)\s+@\s+(\S+)\s+((?:--hash=sha256:[a-fA-F0-9]{64}\s*)+)", line)
+    direct = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9_.-]*)\s+@\s+(\S+)\s+(--hash=sha256:[a-fA-F0-9]{64}(?:\s+--hash=sha256:[a-fA-F0-9]{64})*)", line)
     if direct is None:
         raise ValueError("Direct wheel needs an explicit name and SHA-256")
     declared, source, _ = direct.groups()
