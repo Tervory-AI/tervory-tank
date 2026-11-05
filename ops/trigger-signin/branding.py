@@ -13,12 +13,12 @@ ASSETS = [('logo', 'tervory-logo.png', 'image/png'), ('logo/dark', 'tervory-logo
           ('font', 'Inter-latin.woff2', 'font/woff2')]
 EMAILS = {'verifyemail': 'Verify your Trigger sign-in email',
           'passwordreset': 'Reset your Trigger sign-in password', 'init': 'Set up Trigger sign-in',
-          'passwordchange': 'Your Trigger sign-in password changed',
+          'password_change': 'Your Trigger sign-in password changed',
           'verifyphone': 'Verify your Trigger sign-in phone',
           'verifyemailotp': 'Your Trigger sign-in code', 'verifysmsotp': 'Your Trigger sign-in code',
           'domainclaimed': 'Your Trigger sign-in username changed',
           'passwordless_registration': 'Add a passkey to Trigger sign-in',
-          'inviteuser': 'You are invited to Trigger sign-in'}
+          'invite_user': 'You are invited to Trigger sign-in'}
 # Every native email is renamed: the upstream provider's name never reaches a recipient.
 PROVIDER_NAMES = ('ZITADEL', 'Zitadel', 'zitadel')
 FIELDS = ('title', 'preHeader', 'subject', 'greeting', 'text', 'buttonText', 'footerText')
@@ -40,7 +40,8 @@ def configure_branding(api, bootstrap: Path, assets: Path, issuer: str):
     previous = previous if previous.get('issuer') == issuer else {}
     hashes = {}
     changed = False
-    current = api.request('GET', '/admin/v1/policies/label').get('policy', {})
+    # Updates and uploads modify the draft; active policy may still be the old one.
+    current = api.request('GET', '/admin/v1/policies/label/_preview').get('policy', {})
     if any(current.get(key) != value for key, value in LABEL.items()):
         api.request('PUT', '/admin/v1/policies/label', json={
             **{key: current[key] for key in ('warnColor', 'warnColorDark') if key in current}, **LABEL,

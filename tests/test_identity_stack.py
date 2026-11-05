@@ -175,3 +175,19 @@ def test_setup_accepts_only_global_signin_host(monkeypatch, host):
     monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', 'https://trigger.tervory.com')
     with pytest.raises(SETUP['SetupError']):
         SETUP['issuer_settings']()
+
+
+def test_only_successful_asset_upload_accepts_empty_response():
+    def uploaded(request):
+        return httpx.Response(200)
+    with httpx.Client(base_url='http://offline', transport=httpx.MockTransport(uploaded)) as client:
+        api = SETUP['Configure'](client)
+        assert api.request('POST', '/assets/v1/instance/policy/label/logo') == {}
+        with pytest.raises(ValueError):
+            api.request('GET', '/management/v1/orgs/me')
+        with pytest.raises(ValueError):
+            api.request('GET', '/assets/v1/instance/policy/label/logo')
+    with httpx.Client(base_url='http://offline', transport=httpx.MockTransport(
+            lambda request: httpx.Response(400, json={'code': 9}))) as client:
+        with pytest.raises(SETUP['SetupError']):
+            SETUP['Configure'](client).request('POST', '/assets/v1/instance/policy/label/logo')

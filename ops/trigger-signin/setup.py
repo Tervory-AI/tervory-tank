@@ -54,6 +54,9 @@ class Configure:
         response = self.client.request(method, path, **kwargs)
         if not response.is_success:
             raise SetupError('Trigger sign-in setup refused')
+        # The pinned assets service returns an empty 200 after a successful upload.
+        if method == 'POST' and path.startswith('/assets/v1/') and not response.content:
+            return {}
         result = response.json()
         if not isinstance(result, dict):
             raise SetupError('Trigger sign-in setup refused')
@@ -166,10 +169,13 @@ def main(bootstrap: Path = Path('/bootstrap')):
         client.headers['Authorization'] = 'Bearer ' + credential
         api = Configure(client)
         result = api.run()
+        print('Trigger sign-in applications configured', flush=True)
         from branding import configure_branding
         configure_branding(api, bootstrap, Path('/app/brand'), issuer)
+        print('Trigger sign-in branding configured', flush=True)
         from email_setup import configure_email
         configure_email(api, bootstrap)
+        print('Trigger sign-in email configured', flush=True)
         from provision import provision
         setup_token = os.environ['TRIGGER_SIGNIN_SETUP_TOKEN']
         with httpx.Client(base_url='http://tank:8000', timeout=30, trust_env=False, follow_redirects=False,
