@@ -1269,7 +1269,9 @@ async def test_accessories_requested_while_product_loads_render_after_data_arriv
             await asyncio.wait_for(asyncio.gather(graph_waiting.wait(), setup_waiting.wait()), timeout=10)
             assert await page.locator("#groups").is_hidden()
             await page.click("#show-accessories")
-            assert not await page.locator("#groups").is_hidden()
+            # Empty containers have no area; inspect the requested hidden state
+            # now, then assert real visibility after the held data is released.
+            assert await page.locator("#groups").evaluate("node => node.hidden") is False
             assert "Optics" not in await page.locator("#groups").inner_text()
             assert "Loading" in await page.locator("#product-status").inner_text()
             release.set()
