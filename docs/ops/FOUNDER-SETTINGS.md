@@ -12,6 +12,10 @@ This is the one list. Every Coolify variable name below is taken from `.env.exam
 **Base:** BASE_REFERENCE_FILE_URL (optional founder-approved, dated public HTTPS official reference file when the legacy source is blocked).
 **Base company-data trial:** CONTEXT_DEV_API_KEY, CONTEXT_DEV_MAX_CREDITS (existing optional trial only; no new account or paid service is required for ordinary Base checks).
 
+**Tiger email:** TIGER_SMTP_HOST, TIGER_SMTP_PORT, TIGER_SMTP_USER, TIGER_SMTP_PASSWORD, TIGER_SMTP_FROM, TIGER_SMTP_ALERT_ADDRESSES (JSON mapping of tenant UUID to its own recipient; no default address).
+**Tiger private sources:** TANK_VAULT_KEY (Tank only), ACCESS_BROWSER_KEY_TIGER (Tank and the Tiger browser only). Keep existing values; never rotate them just to run the sheet.
+**Tiger check-now for Rig:** RIG_TIGER_CHECK_KEY (the existing dedicated Rig-to-Tiger check credential).
+
 **Zenas US:** CONGRESS_GOV_API_KEY, LEGISCAN_API_KEY (the same key as Market Lab)
 **Zenas review (each room):** ZENAS_REVIEW (default off; scope, identifier and citation checks remain on)
 **Zenas email:** ZENAS_SMTP_HOST, ZENAS_SMTP_PORT, ZENAS_SMTP_USER, ZENAS_SMTP_PASSWORD, ZENAS_SMTP_FROM, ZENAS_SMTP_ALERT_ADDRESSES

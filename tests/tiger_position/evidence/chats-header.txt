@@ -1,0 +1,1 @@
+COMMAND window header: totals hidden with no chat selected, shown for a selected chat.
