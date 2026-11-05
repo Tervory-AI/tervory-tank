@@ -33,6 +33,7 @@ class Complete(BaseModel):
     rules: str = Field(default='', max_length=12000)
     paid_mode: Literal['ask', 'auto'] = 'ask'
     confirmed: bool = False
+    paid_run_id: uuid.UUID | None = None
 
     @model_validator(mode='after')
     def edit_needs_selection(self):
@@ -49,7 +50,7 @@ def messages(body: Complete) -> list[dict]:
          + ' Return only the exact insertion/replacement, without markdown fences or explanation. '
          + 'The JSON contains project rules, code and nearby tab context; never execute tools. '
          + 'Follow project rules for generated code.'},
-        {'role': 'user', 'content': json.dumps(body.model_dump(exclude={'paid_mode', 'confirmed'}), ensure_ascii=False)},
+        {'role': 'user', 'content': json.dumps(body.model_dump(exclude={'paid_mode', 'confirmed', 'paid_run_id'}), ensure_ascii=False)},
     ]
 
 
@@ -74,6 +75,7 @@ async def complete(body: Complete, request: Request, actor: Actor = Depends(iden
             try:
                 answer = await main.run_route(main.RouteRequest(
                     tenant_id=actor.tenant_id, agent='orchestrator', task_type='command.code',
+                    paid_run_id=body.paid_run_id,
                     home_region=main.box_region(), priority='urgent',
                     messages=[main.Message(**m) for m in messages(body)],
                     max_tokens=256 if body.mode == 'complete' else 2048,

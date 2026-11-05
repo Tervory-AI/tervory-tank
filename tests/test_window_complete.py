@@ -125,3 +125,28 @@ def test_personal_token_corridor_is_post_only():
     for method, path in [('GET', '/v1/command/complete'), ('POST', '/v1/command/complete/admin'),
                          ('POST', '/v1/route')]:
         assert not cli_route(Request({'type': 'http', 'method': method, 'path': path, 'headers': []}))
+
+
+@pytest.mark.asyncio
+async def test_resume_identifier_is_routed_but_never_sent_to_model(setup):
+    import json
+    app, run = setup
+    resume = uuid.uuid4()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test') as client:
+        response = await client.post('/v1/command/complete', json={
+            'prefix': 'before', 'paid_mode': 'ask', 'confirmed': True, 'paid_run_id': str(resume)})
+    assert response.status_code == 200
+    req = run.call_args.args[0]
+    assert req.paid_run_id == resume
+    assert 'paid_run_id' not in json.loads(req.messages[1]['content'])
+    assert str(resume) not in req.messages[1]['content']
+
+
+@pytest.mark.asyncio
+async def test_approved_identifier_cannot_replace_explicit_confirmation(setup):
+    app, run = setup
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test') as client:
+        waiting = await client.post('/v1/command/complete', json={'paid_run_id': str(uuid.uuid4())})
+        invalid = await client.post('/v1/command/complete', json={'paid_run_id': 'placeholder-invalid'})
+    assert waiting.json()['status'] == 'ask' and invalid.status_code == 422
+    run.assert_not_awaited()
