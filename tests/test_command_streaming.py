@@ -165,7 +165,7 @@ async def streaming(monkeypatch, command_pool):
             return
         request.headers['x-trigger-signin-org'] = org
         request.headers['x-trigger-signin-token'] = signin.token(sub=subject, **{
-            oidc.ORG_CLAIM: org, oidc.ROLES_CLAIM: ({} if subject == 'placeholder-member' else {'org_admin': {org: 'Fixture'}})})
+            oidc.ORG_CLAIM: org, oidc.ROLES_CLAIM: ({'org_member': {org: 'Fixture'}} if subject == 'placeholder-member' else {'org_admin': {org: 'Fixture'}})})
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     port = listener.getsockname()[1]
