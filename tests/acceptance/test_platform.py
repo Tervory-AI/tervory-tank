@@ -8,6 +8,7 @@ import re
 import uuid
 
 import pytest
+from paid_steps_fixtures import paid_protocol as paid_protocol
 import yaml
 
 import test_command as chats
@@ -174,7 +175,7 @@ async def test_p17_task_board(boundary):
     foreign, _ = await workspace.seed(b, b.tenants[1])
     async with b.pool.acquire() as db:
         await db.execute("UPDATE tank.ledger SET cost_status='not_set' WHERE tenant_id=$1", b.tenants[0])
-    response = await b.client.get("/v1/workspace/tasks", headers=workspace.headers(b.tenants[0]))
+    response = await b.client.get("/v1/workspace/tasks", headers=workspace.headers(b, b.tenants[0]))
     assert response.status_code == 200
     rows = {row["id"]: row for row in response.json()["tasks"]}
     assert rows[str(delivered)]["status"] == "delivered"
@@ -189,7 +190,7 @@ async def test_p18_wrong_with_note(boundary):
     task, ledger = await workspace.seed(b, b.tenants[0])
     foreign, _ = await workspace.seed(b, b.tenants[1])
     unverified, _ = await workspace.seed(b, b.tenants[0], outcome="unverified")
-    headers = workspace.headers(b.tenants[0])
+    headers = workspace.headers(b, b.tenants[0])
     path = f"/v1/workspace/tasks/{task}/feedback"
     response = await b.client.post(path, headers=headers, json={"verdict": "wrong", "note": "placeholder correction"})
     assert response.status_code == 200 and response.json()["verdict"] == "wrong"
@@ -210,7 +211,7 @@ async def test_p19_recorded_results(boundary):
         await db.execute("UPDATE tank.tasks SET result=NULL WHERE id=$1 AND tenant_id=$2", task, b.tenants[0])
         await db.execute("""INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content)
             VALUES($1,$2,'placeholder.task','[]','actual fixture transcript')""", ledger, b.tenants[0])
-    response = await b.client.get("/v1/workspace/results", headers=workspace.headers(b.tenants[0]))
+    response = await b.client.get("/v1/workspace/results", headers=workspace.headers(b, b.tenants[0]))
     assert response.status_code == 200
     rows = response.json()["results"]
     assert len(rows) == 1 and rows[0]["id"] == str(task)
@@ -247,6 +248,7 @@ def test_p23_product_registries():
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("paid_protocol")
 async def test_p24_global_paid_pause(conn, monkeypatch):
     await dashboards.test_main_call_stops_after_cache_miss_and_cache_still_runs(conn, monkeypatch, 1)
 
