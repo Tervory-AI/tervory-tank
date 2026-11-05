@@ -207,15 +207,7 @@ jobs:
           pip install -r tank/requirements.txt -r tank/requirements-dev.txt
           pip install --require-hashes -r agents/rig/forge/requirements.lock
       - name: Prepare video processing tools for offline acceptance
-        run: |
-          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
-            if [ "$RUNNER_ENVIRONMENT" != github-hosted ]; then
-              echo "Self-hosted video acceptance needs preinstalled FFmpeg and ffprobe."
-              exit 1
-            fi
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends ffmpeg
-          fi
+        run: bash .github/scripts/install-video-test-tools.sh
       - name: Prepare pinned k6 for offline Tisan smoke tests
         run: |
           python3 - <<'PYK6'
