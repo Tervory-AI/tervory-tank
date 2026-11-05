@@ -1,5 +1,5 @@
 {
-  "origin_commit": "15220461fd5eb0e983562c9cb5dd3f5ae17ed32a",
+  "origin_commit": "de60e32c60e666aac75158c64cfe3509b53e23d4",
   "registry": {
     "tools": [
       [
@@ -9489,6 +9489,13 @@
           "POST"
         ],
         "name": "receive_hook"
+      },
+      {
+        "path": "/v1/command/complete",
+        "methods": [
+          "POST"
+        ],
+        "name": "complete"
       }
     ],
     "lifecycle": {
