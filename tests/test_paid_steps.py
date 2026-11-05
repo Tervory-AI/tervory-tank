@@ -23,6 +23,11 @@ PRODUCT_TASKS = {'base':'base.extract','tiger':'agent.tiger.think','market_lab':
     'trigger':'trigger.write','autumbra':'agent.ghost.think','model':'command.turn'}
 
 
+def _assert_offline_gateway_url(tank, url):
+    # Both offline gateways enforce the same exact Tank destination.
+    assert url == tank.LITELLM_URL + '/v1/chat/completions'
+
+
 def command_schema_fixture(schema):
     # Apply the actual command tables and their later native-identity migration.
     # These focused tests intentionally omit unrelated platform schemas.
@@ -465,7 +470,7 @@ async def exercise_model_router(router_database, monkeypatch, owner, *, fail_pri
         async def __aexit__(self,*args):
             pass
         async def post(self,url,**kwargs):
-            assert url == tank.LITELLM_URL + '/v1/chat/completions'
+            _assert_offline_gateway_url(tank, url)
             assert kwargs['json']['disable_fallbacks'] is True
             calls.append(kwargs['json'])
             if fail_primary and kwargs['json']['model'] == 'placeholder-model':
@@ -1018,7 +1023,7 @@ async def test_window_completion_approved_run_resumes_once_and_keeps_confirmatio
         async def __aexit__(self, *args):
             pass
         async def post(self, url, **kwargs):
-            assert url == tank.LITELLM_URL + '/v1/chat/completions'
+            _assert_offline_gateway_url(tank, url)
             assert kwargs['json']['disable_fallbacks'] is True
             assert 'paid_run_id' not in __import__('json').dumps(kwargs['json'])
             calls.append(kwargs['json'])
