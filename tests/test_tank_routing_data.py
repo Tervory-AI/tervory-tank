@@ -1,4 +1,5 @@
 """Offline routing data contracts: disposable SQL and a gateway stub only."""
+from trigger_signin_fakes import set_founders, native_provider, ORG
 import json
 import os
 from pathlib import Path
@@ -251,12 +252,16 @@ async def test_gateway_receipt_keeps_generation_and_batch_compatibility(routing,
     req = main.RouteRequest(tenant_id=TENANT, agent="base", task_type=TASK,
                            messages=[main.Message(role="user", content="placeholder question")])
     answer = await main.run_route(req)
-    assert bodies[0]["fallbacks"] == ["haiku"] and answer.cost_usd == 0.0000042
+    # Tank admits configured fallback seats individually; the gateway may not
+    # spend on an invisible fallback while fulfilling this request.
+    assert bodies[0]["disable_fallbacks"] is True and "fallbacks" not in bodies[0]
+    assert (await read(routing))["fallbacks"] == ["haiku"]
+    assert answer.cost_usd == 0.0000042
     ledger = await routing.fetchrow("SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2", answer.ledger_id, TENANT)
     assert float(ledger["cost_usd"]) == 0.0000042
     expected = execution_receipt.capture(ledger_id=str(answer.ledger_id), tenant_id=str(TENANT),
         task_type=TASK, requested_model="kimi-lite", answered_model="kimi-lite",
-        dispatched={"max_tokens": 1024}, headers={}, response={}, delivered=True)
+        dispatched={"max_tokens": 1024, "disable_fallbacks": True}, headers={}, response={}, delivered=True)
     assert answer.execution["dispatched_settings_hash"] == expected["dispatched_settings_hash"]
     assert answer.execution["dispatched_settings_hash"] is not None
     await main.put_policy("command.turn", main.PolicyRow(task_type="command.turn", model="kimi-lite", priority="urgent"))
@@ -399,9 +404,11 @@ async def test_restricted_foreground_body_cannot_select_the_second_host(routing,
 
 @pytest.mark.asyncio
 async def test_policy_confirm_card_shows_exact_data_through_existing_fields(routing, monkeypatch):
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-placeholder")
+    set_founders(monkeypatch, "founder-placeholder")
     monkeypatch.setattr(main, "TANK_API_KEY", "placeholder")
     headers = {"x-tank-key": "placeholder", "x-tervory-tenant": str(TENANT), "x-tervory-user": "founder-placeholder"}
+    provider = native_provider(monkeypatch, {ORG: str(TENANT)})
+    headers.update({'x-trigger-signin-token': provider.token(sub='founder-placeholder'), 'x-trigger-signin-org': ORG})
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://placeholder", headers=headers) as client:
         thread = (await client.post("/v1/command/threads", json={})).json()["thread_id"]
         args = {"task_type": TASK, "fallbacks": ["haiku"], "default": True}

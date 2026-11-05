@@ -6,7 +6,7 @@
 
 ## Build
 - Remote MCP server over HTTPS (Streamable HTTP), public at `mcp.tervory.com` (Claude sets the domain).
-- **Auth: OAuth 2.0** with Clerk as the identity provider, dynamic client registration supported; the user's Clerk organization is the tenant (same tenant mapping as the Workspace, including `TERVORY_TENANT_ALIASES`). No API keys handed to users.
+- **Auth: OAuth 2.0** with Trigger sign-in as the identity provider, dynamic client registration supported; the user's Trigger sign-in organization is the tenant (same tenant mapping as the Workspace, including `TERVORY_TENANT_ALIASES`). No API keys handed to users.
 - **Every call goes through Tank** with the tenant id, so the ladder, cache, ledger and costs apply.
 - **First tools** (each with a `title` and `readOnlyHint` or `destructiveHint`, clear descriptions):
   - `rig_search` (read-only): search a retailer's catalogue the user has access to.

@@ -1,4 +1,5 @@
 """M12 rules-only settings and the real stored-match to draft-PR corridor."""
+from trigger_signin_fakes import set_founders
 import base64
 import json
 from pathlib import Path
@@ -87,7 +88,7 @@ async def test_stored_matches_dry_run_and_fake_github(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_tank_fix_confirmation_and_receipts(monkeypatch):
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-workspace-key')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
     monkeypatch.setattr(command, 'identity', AsyncMock(return_value=actor))
     room = AsyncMock(return_value=httpx.Response(200, json={'items': []}))

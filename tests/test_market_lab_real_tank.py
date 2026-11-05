@@ -16,7 +16,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents/market_lab"))
-from fixture_proof.server import TENANT, database_url, free_port, services
+from fixture_proof.server import TENANT, database_url, services
 from fixture_proof.boot_tank import verify_imported_cases
 
 
@@ -31,7 +31,7 @@ def test_real_tank_routes_to_real_room_and_postgres(tmp_path):
     other = str(uuid.uuid4())
     with (tmp_path / "services.log").open("w+") as log:
         try:
-            with services(free_port(), log=log, history=True) as env, httpx.Client(base_url=env["TANK_URL"], trust_env=False, timeout=40) as client:
+            with services(0, log=log, history=True) as env, httpx.Client(base_url=env["TANK_URL"], trust_env=False, timeout=40) as client:
                 def request(operation, *, tenant=TENANT, **payload):
                     return client.post(f"/v1/market-lab/{operation}", json={"tenant_id": tenant, **payload}, headers={"x-tank-key": env["TANK_API_KEY"]})
 

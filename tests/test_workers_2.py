@@ -1,6 +1,7 @@
 """WORKERS-2: heartbeat, the workers pause, the /control tile data, and the auto-updater."""
 
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import asyncio
 import logging
@@ -109,7 +110,7 @@ def conn(monkeypatch):
 @pytest.fixture
 def client(monkeypatch, conn):
     monkeypatch.setenv("TANK_API_KEY", "offline-workspace-key")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-one")
+    set_founders(monkeypatch, "founder-one")
     monkeypatch.setenv("TANK_KEY_WORKERS", WORKER_KEY)
     app = FastAPI()
     app.include_router(controls.router)
@@ -304,9 +305,12 @@ def test_storage_is_additive_and_main_only_registers_routes():
     assert "ALTER TABLE" not in block and "DROP" not in block
     assert "CHECK (name = 'paid_paused')" in schema
     main = (ROOT / "tank/main.py").read_text()
-    assert 'app.include_router(__import__("workers_status").router)' in main
-    assert 'app.include_router(__import__("workers_status").founder_router)' in main
-    assert main.count("include_router(__import__(\"workers_status\")") == 2
+    from routes_registry import ROUTES
+    assert [entry for entry in ROUTES if entry[1] == 'workers_status'] == [
+        ('early', 'workers_status', 'router', None, True),
+        ('early', 'workers_status', 'founder_router', None, True),
+    ]
+    assert main.count(".register_routes(__import__(\"sys\").modules[__name__], 'early')") == 1
     assert 'return await __import__("workers_status").panel()' in main
     assert (ROOT / "tank/workers_status.py").is_file() and "COPY *.py " in (ROOT / "tank/Dockerfile").read_text()
 

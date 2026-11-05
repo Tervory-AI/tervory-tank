@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { readFileSync } from "fs";
 import path from "path";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { isFounder } from "@/lib/admin";
 import { publicScores } from "@/app/api/zenas/feeds/public";
 import { homeRegion, zenasIn } from "@/app/api/zenas/tank";

@@ -21,6 +21,6 @@ Other new calls audited: `proposeTrigger` always uses the literal `trigger/conso
 - `x?y`
 - an over-long placeholder value
 
-It also checks `/`, `..`, `#`, prototype keys, malformed 36-character UUIDs, a trailing newline and wrong runtime types. Every rejection leaves fetch counts unchanged. Server-action rejections also leave identity lookup counts unchanged, so malformed values cannot reach Clerk's identity network lookups either. Valid list/detail/query/confirm requests and all four widget operations retain their exact intended upstream URLs.
+It also checks `/`, `..`, `#`, prototype keys, malformed 36-character UUIDs, a trailing newline and wrong runtime types. Every rejection leaves fetch counts unchanged. Server-action rejections also leave identity lookup counts unchanged, so malformed values cannot reach Trigger sign-in's identity network lookups either. Valid list/detail/query/confirm requests and all four widget operations retain their exact intended upstream URLs.
 
 Local verification: both Workspace contract tests pass with socket blocking; TypeScript and CI's exact Ruff lint pass; `git diff --check` passes. Pushing the changes reruns PR CI and CodeQL; their actual final-head results are reported in the task handoff rather than assumed here.

@@ -1,4 +1,5 @@
 """Offline products: structured page evidence only, never page instructions."""
+from trigger_signin_fakes import set_founders
 import importlib.util
 import json
 from pathlib import Path
@@ -100,7 +101,7 @@ async def test_search_card_reuses_summary_for_products_and_preserves_older_recor
     async def records():
         return [{"profile": {"products": {"value": products}}}, older]
     monkeypatch.setitem(sys.modules, "main", SimpleNamespace(app=app, TANK_API_KEY="placeholder", box_region=lambda: "us-east"))
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "placeholder-founder")
+    set_founders(monkeypatch, "placeholder-founder")
     actor = command.Actor(uuid4(), "placeholder-founder", True)
     status, result = await command.dispatch_action(command.PlannedAction(tool="base.search", arguments={}), actor)
     assert status == 200 and result[0]["summary"] == ", ".join(row["name"] for row in products[:50])

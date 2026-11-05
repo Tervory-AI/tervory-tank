@@ -66,7 +66,7 @@ async def authority(actor: Actor, tool: str = "trigger.crm.write") -> Actor:
 
 
 def binding(actor: Actor) -> tuple[str, str, str]:
-    """Configuration is founder-supplied. No Clerk/BottleCRM org identity is inferred."""
+    """Configuration is founder-supplied. No Trigger sign-in/BottleCRM org identity is inferred."""
     try:
         bindings = json.loads(os.environ.get("TRIGGER_CRM_TENANT_BINDINGS", "{}"))
         if not isinstance(bindings, dict):

@@ -34,6 +34,7 @@ MARKER = re.compile(r"\[([a-z_]+):(\d+)\]")
 class ResearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tenant_id: uuid.UUID
+    paid_run_id: uuid.UUID | None = None
     question: str = Field(min_length=1, max_length=64000)
     preset: Literal["fast", "low", "medium", "high"] | None = None
     home_region: str | None = None
@@ -243,51 +244,64 @@ def register(app: Any, runtime: dict[str, Any]) -> None:
         _, model, _ = await allowed(req)
         return {"enabled": True, "preset": PRESETS[model]}
 
-    @router.post("", dependencies=[Depends(authenticate)])
-    async def research(req: ResearchRequest) -> dict[str, Any]:
+    async def _research(req: ResearchRequest) -> dict[str, Any]:
         policy, model, box = await allowed(req)
         await controls.refuse_paid(task=TASK, path="research")
+        approval = await __import__("paid_steps").model_admission(req.tenant_id, TASK, model, agent="market_lab")
         prices = await rates()  # Fail before spending if the fee schedule is unavailable.
-        payload = {"model": model, "input": req.question,
-                   "max_output_tokens": policy["max_tokens_out"], "stream": False,
-                   "fallbacks": [], "disable_fallbacks": True}
-        if policy.get("system_prompt"):
-            payload["instructions"] = policy["system_prompt"]
-        started = time.perf_counter()
-        data: dict[str, Any] = {}
-        costs = None
-        sources: list[dict[str, str]] = []
-        error = None
-        content = ""
-        try:
-            async with httpx.AsyncClient(timeout=180) as client:
-                response = await client.post(
-                    runtime["LITELLM_URL"].rstrip("/") + "/v1/responses",
-                    headers={"Authorization": f"Bearer {runtime['LITELLM_MASTER_KEY']}"}, json=payload,
-                )
-            parsed = response.json()
-            if not isinstance(parsed, dict):
-                raise ValueError("invalid response")
-            data = parsed
-            if response.status_code != 200 or data.get("status") != "completed":
-                raise ValueError("research provider did not complete")
-            costs = receipt_costs(data, prices)
-            content, sources = answer_sources(data)
-        except (httpx.HTTPError, ValueError, TypeError, AttributeError, KeyError):
-            # Never echo provider error bodies, prompts, credentials or response URLs.
-            error = "Research failed or its sources and costs could not be verified."
-        elapsed = int((time.perf_counter() - started) * 1000)
-        ledger_ids = await record(req, model, box, data, elapsed, costs, sources, error)
-        ledger_id = ledger_ids["model"]
-        wire_ids = {kind: str(value) for kind, value in ledger_ids.items()}
-        if error:
-            raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id),
-                                                        "ledger_ids": wire_ids, "message": error})
-        wire_receipt = json.loads(json.dumps({**costs, "sources": sources,
-                                             "ledger_ids": wire_ids},
-                                            default=float))
-        return {"ledger_id": str(ledger_id), "model": model, "preset": PRESETS[model],
-                "content": content, "sources": sources, "cost_usd": float(costs["cost_usd"]),
-                "receipt": wire_receipt}
+        import paid_steps
+        async def dispatch():
+            payload = {"model": model, "input": req.question,
+                       "max_output_tokens": policy["max_tokens_out"], "stream": False,
+                       "fallbacks": [], "disable_fallbacks": True}
+            if policy.get("system_prompt"):
+                payload["instructions"] = policy["system_prompt"]
+            started = time.perf_counter()
+            data: dict[str, Any] = {}
+            costs = None
+            sources: list[dict[str, str]] = []
+            error = None
+            content = ""
+            try:
+                async with httpx.AsyncClient(timeout=180) as client:
+                    response = await client.post(
+                        runtime["LITELLM_URL"].rstrip("/") + "/v1/responses",
+                        headers={"Authorization": f"Bearer {runtime['LITELLM_MASTER_KEY']}"}, json=payload,
+                    )
+                parsed = response.json()
+                if not isinstance(parsed, dict):
+                    raise ValueError("invalid response")
+                data = parsed
+                if response.status_code != 200 or data.get("status") != "completed":
+                    raise ValueError("research provider did not complete")
+                costs = receipt_costs(data, prices)
+                content, sources = answer_sources(data)
+            except (httpx.HTTPError, ValueError, TypeError, AttributeError, KeyError):
+                # Never echo provider error bodies, prompts, credentials or response URLs.
+                error = "Research failed or its sources and costs could not be verified."
+            elapsed = int((time.perf_counter() - started) * 1000)
+            ledger_ids = await record(req, model, box, data, elapsed, costs, sources, error)
+            ledger_id = ledger_ids["model"]
+            for receipt_id in ledger_ids.values():
+                await __import__("paid_steps").attach_receipt(receipt_id, approval)
+            wire_ids = {kind: str(value) for kind, value in ledger_ids.items()}
+            if error:
+                raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id),
+                                                            "ledger_ids": wire_ids, "message": error})
+            wire_receipt = json.loads(json.dumps({**costs, "sources": sources,
+                                                 "ledger_ids": wire_ids},
+                                                default=float))
+            return {"ledger_id": str(ledger_id), "model": model, "preset": PRESETS[model],
+                    "content": content, "sources": sources, "cost_usd": float(costs["cost_usd"]),
+                    "receipt": wire_receipt}
+        return await paid_steps.checkpoint(paid_steps.fingerprint(["research", req.model_dump(exclude={"paid_run_id"})]), dispatch)
+
+    @router.post("", dependencies=[Depends(authenticate)])
+    async def research(req: ResearchRequest) -> dict[str, Any]:
+        import paid_steps
+        digest = paid_steps.fingerprint(req.model_dump(exclude={"paid_run_id"}))
+        run = paid_steps.Run(req.tenant_id, req.paid_run_id or uuid.uuid4(), digest)
+        with paid_steps.run_scope(run):
+            return await _research(req)
 
     app.include_router(router)

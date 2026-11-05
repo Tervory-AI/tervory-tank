@@ -443,7 +443,7 @@ def test_hermes_joins_each_agent_corridor() -> None:
     env = hermes["environment"]
     assert env["QDRANT_URL"] == "http://qdrant:6333"
     assert "@postgres:5432/" in env["DATABASE_URL"]
-    assert "TERVORY_ADMIN_USER_IDS" in env
+    assert "TANK_API_KEY" in env  # User identity belongs to Tank's verified sign-in registry.
     assert "TANK_KEY_TEMPLATE" in env
     assert "TANK_KEY_TIGER" in env
     assert "TANK_KEY_MARKET_LAB" in env

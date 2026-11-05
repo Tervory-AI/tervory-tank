@@ -45,6 +45,8 @@ async def test_step_receipts_are_idempotent_tenant_scoped_and_readable(database,
 @pytest.mark.asyncio
 async def test_rig_chat_uses_rig_policy_pause_and_real_ledger(database, monkeypatch):
     pool, rt = database
+    from paid_steps_fixtures import configure_paid_auto
+    configure_paid_auto(monkeypatch,lambda:pool)
     rig_key, base_key = uuid.uuid4().hex, uuid.uuid4().hex
     monkeypatch.setenv("TANK_KEY_RIG", rig_key)
     monkeypatch.setenv("TANK_KEY_BASE", base_key)
@@ -86,7 +88,9 @@ async def test_rig_chat_uses_rig_policy_pause_and_real_ledger(database, monkeypa
         stored = await pool.fetchval("SELECT receipt FROM tank.agent_receipts WHERE ledger_id=$1 AND tenant_id=$2", row["id"], tenant)
         assert json.loads(stored) == receipt
         await pool.execute("INSERT INTO tank.controls(tenant_id,name,value,updated_by) VALUES($1,'paid_paused',true,'fixture') ON CONFLICT (tenant_id,name) DO UPDATE SET value=true", agent_skills.controls.PLATFORM)
-        assert (await client.post("/v1/agents/rig/chat/completions", json=body, headers=headers)).status_code == 503
+        # A new paid operation must stop; a replay of the completed task is free.
+        assert (await client.post("/v1/agents/rig/chat/completions", json=body,
+            headers={**headers,"X-Task-ID":str(uuid.uuid4())})).status_code == 503
         assert len(calls) == 1
         assert await pool.fetchval("SELECT count(*) FROM tank.control_log WHERE task='agent.rig.think'") == 1
 

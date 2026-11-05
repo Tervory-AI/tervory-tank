@@ -19,6 +19,9 @@ os.environ.setdefault("LITELLM_MASTER_KEY", "test")
 os.environ.setdefault("TANK_API_KEY", "test")
 
 import pytest
+from paid_steps_fixtures import paid_protocol as paid_protocol
+
+pytestmark = pytest.mark.usefixtures("paid_protocol")
 import yaml
 from fastapi import HTTPException
 
@@ -59,7 +62,8 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
     assert "tervory-gw-zenas" in data["services"]["hermes"]["networks"]
     assert data["services"]["tank"]["environment"]["ZENAS_AGENT_URL"] == "http://agent-zenas:8000"
     assert "/app/config.za.yaml" in data["services"]["litellm"]["command"]
-    assert "za.tervory.com" in COMPOSE
+    assert COMPOSE.splitlines().count("    # Coolify attaches za.tervory.com to this service only.") == 1
+    assert data["services"]["tank"]["expose"] == ["8000"]
     for service in data["services"].values():
         assert "ports" not in service
 
@@ -481,6 +485,7 @@ async def test_a_request_with_no_home_is_accepted_on_us_east(monkeypatch: pytest
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setattr(main, "pool", lambda: _Pool())
     monkeypatch.setattr(main, "_redis", None)
+    monkeypatch.setattr(main, "_http", object())
     monkeypatch.setattr(main.httpx, "AsyncClient", _Gateway)
     seen: dict[str, str | None] = {}
 
@@ -690,6 +695,7 @@ async def test_only_the_zenas_key_and_a_real_pool_row_skip_the_identifier_rule(
     gate = _SeenGateway()
     monkeypatch.setattr(main, "pool", lambda: court)
     monkeypatch.setattr(main, "_redis", None)
+    monkeypatch.setattr(main, "_http", gate)
     monkeypatch.setattr(main.httpx, "AsyncClient", lambda *_a, **_k: gate)
     client = (
         "Please advise our client. The identity number "

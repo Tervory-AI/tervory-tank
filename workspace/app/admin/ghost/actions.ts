@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { revalidatePath } from "next/cache";
 import { isFounder } from "@/lib/admin";
 import { ghostLook, ghostResolve } from "@/lib/tank";

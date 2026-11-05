@@ -1,9 +1,9 @@
 # Tiger local proof
 
 These screenshots are **local, fixture page** proof, as requested by the founder.
-They do not claim a Clerk login, a live store check, or a deployed service.
+They do not claim a Trigger sign-in login, a live store check, or a deployed service.
 
-The harness copies Workspace to a temporary directory and substitutes Clerk
+The harness copies Workspace to a temporary directory and substitutes Trigger sign-in
 there only. The dummy publishable and secret keys match `.github/workflows/ci.yml`.
 The repository's authentication and middleware are unchanged. The real add-watch
 server action calls the actual `tank.app` served by uvicorn and the real Tiger

@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { activeTenant } from "@/lib/tenant";
 import { rigAdminAction, rigAdminPanel } from "@/lib/tank";
 import { isListedFounder } from "../../review/founder";

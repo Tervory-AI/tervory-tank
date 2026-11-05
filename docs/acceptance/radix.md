@@ -83,3 +83,11 @@ All rows describe existing finished paths and their evidence; none tests that an
 **HIBP:** only applicable if domain search is free for the founder's domains and a shipped integration is enabled with the already-listed HIBP_API_KEY. No paid domain-search call or acceptance row is enabled by merely setting that key. HIBP is outside the shipped scan inventory verified here; this sheet neither adds a paid service nor tests the absence of a future route.
 
 Offline proof uses fake external services, real shipped handlers/engines and disposable loopback stores. It does not claim founder live acceptance or production deployment. See `tests/radix_sheet/PR.md` for defects fixed at the top of this PR and the source inventory.
+
+## Paid ladder approval
+
+Use a disposable test tenant and the cloud-side authenticated Tank client; do not put service keys into a browser. Configure an existing paid model on `agent.radix.think` for this fixture. The screen switches await the frames listed in `docs/paid-steps/FRAMES.md`; the authenticated settings API is available now.
+
+| Row | Where | What the founder does | Expected result | Setting it needs | Offline case |
+| --- | --- | --- | --- | --- | --- |
+| PAID-RADIX | Tank `POST /v1/route`, task_type `agent.radix.think`; existing `/chats` confirmation card | Send a test request in Ask mode. Confirm its pending paid-step card, then repeat the same run. Set that exact step to Auto and start a new run. Enable Pause all paid work and start another run. | Ask returns 409 with `paid_step_approval_required` before dispatch. Approval resumes with HTTP 200 and receipt `paid_step_mode=approved`; repeating the run does not dispatch again. Auto returns 200 with `paid_step_mode=automatic`. Master pause returns 503 and sends no paid call. | `paid_step_settings.mode`; `paid_paused`; existing configured model and room credentials | `tests/acceptance/test_paid_steps.py`, `radix` |

@@ -43,11 +43,11 @@ test('offline ZA OIDC device approval to keychain to ZA code, plugin Confirm and
         return send({}, 404);
       }
       if (req.url.endsWith('/device/code')) {
-        assert.equal(json.approval, 'zitadel');
+        assert.equal(json.approval, 'trigger-signin');
         const start = await (await fetch(base + '/oidc/device_authorization', { method: 'POST' })).json();
-        return send({ ...start, device_code: 'tzd1.placeholder', identity_provider: 'zitadel', interval: 1,
-          verification_uri: 'https://auth-za.tervory.com/device',
-          verification_uri_complete: 'https://auth-za.tervory.com/device?user_code=1234-5678' });
+        return send({ ...start, device_code: 'tzd1.placeholder', identity_provider: 'trigger-signin', interval: 1,
+          verification_uri: 'https://auth.tervory.com/device',
+          verification_uri_complete: 'https://auth.tervory.com/device?user_code=1234-5678' });
       }
       if (req.url.endsWith('/device/token')) {
         const result = await (await fetch(base + '/oidc/token', { method: 'POST' })).json();
@@ -83,7 +83,7 @@ test('offline ZA OIDC device approval to keychain to ZA code, plugin Confirm and
     await run(['login', '--region', 'za'], { store, transport, io: {
       deviceName: () => 'placeholder-worker', write: value => { output += value; }, sleep: async () => {},
       open: async url => {
-        assert.equal(new URL(url).origin, 'https://auth-za.tervory.com');
+        assert.equal(new URL(url).origin, 'https://auth.tervory.com');
         await fetch(base + '/oidc/approve', { method: 'POST' });
       },
     } });
@@ -107,10 +107,11 @@ test('offline exact output for US login and plugin commands', async () => {
   let saved; let output = ''; let tool = ''; let action = '';
   const store = { get: async () => saved, set: async value => { saved = value; }, remove: async () => { saved = null; } };
   const io = { interactive: true, deviceName: () => 'placeholder-worker', write: value => { output += value; }, sleep: async () => {},
-    prompt: async label => { output += label + 'y\n'; return 'y'; }, open: url => { assert.equal(new URL(url).origin, 'https://app.tervory.com'); } };
+    prompt: async label => { output += label + 'y\n'; return 'y'; }, open: url => { assert.equal(new URL(url).origin, 'https://auth.tervory.com'); } };
   const transport = async (url, init) => {
     assert.equal(new URL(url).origin, 'https://app.tervory.com');
-    if (url.endsWith('/device/code')) return Response.json({ user_code: 'BCDF-GHJK', device_code: 'tvd1.us-east.placeholder', interval: 1 });
+    if (url.endsWith('/device/code')) return Response.json({ user_code: 'BCDF-GHJK', device_code: 'tzd1.placeholder', identity_provider: 'trigger-signin',
+      verification_uri: 'https://auth.tervory.com/device', verification_uri_complete: 'https://auth.tervory.com/device?code=BCDF-GHJK', interval: 1 });
     if (url.endsWith('/device/token')) return Response.json(grant('us-east'));
     if (url.endsWith('/device/revoke')) return Response.json({ revoked: true });
     assert.equal(init.headers.Authorization, `Bearer ${grant('us-east').access_token}`);

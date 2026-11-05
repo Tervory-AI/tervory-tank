@@ -5,10 +5,12 @@ These tests use fixtures. They do not need a database or the network.
 
 import os
 
+import pytest
+from trigger_signin_fakes import set_founders
+
 os.environ.setdefault("DATABASE_URL", "postgresql://x:y@localhost/z")
 os.environ.setdefault("LITELLM_MASTER_KEY", "test")
 os.environ.setdefault("TANK_API_KEY", "test")
-os.environ.setdefault("TERVORY_ADMIN_USER_IDS", "user_founder")
 
 import sys
 from datetime import date, datetime, timezone
@@ -22,6 +24,11 @@ T = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 NOW = datetime(2026, 10, 1, 12, tzinfo=timezone.utc)
 DAY = date(2026, 10, 1)
 TODAY = date(2026, 10, 13)
+
+
+@pytest.fixture(autouse=True)
+def native_founder(monkeypatch):
+    set_founders(monkeypatch, 'user_founder')
 
 
 def _calls(rung: int, cost: float, n: int, cache: bool = False) -> list[dict]:
@@ -376,7 +383,9 @@ def test_reads_do_not_rebuild_and_rollup_sql_is_bounded():
     assert "ts >= $1::timestamptz" in admin.FEEDBACK_SQL
     assert admin.rejection_cutoff(date(2026, 10, 13)) == datetime(2026, 9, 13, tzinfo=timezone.utc)
     main = (Path(__file__).resolve().parents[1] / "tank" / "main.py").read_text()
-    assert 'app.include_router(__import__("admin").router)' in main
+    from routes_registry import ROUTES
+    assert ('early', 'admin', 'router', None, True) in ROUTES
+    assert main.count(".register_routes(__import__(\"sys\").modules[__name__], 'early')") == 1
 
 
 def test_schema_additions_are_idempotent():
@@ -396,15 +405,15 @@ def test_schema_additions_are_idempotent():
 def test_allowlist_matches_stripped_ids_only(monkeypatch):
     # Set the key here: another module in this worker may have set a different one first.
     monkeypatch.setenv("TANK_API_KEY", "test")
-    os.environ["TERVORY_ADMIN_USER_IDS"] = " user_founder , user_other "
+    set_founders(monkeypatch, " user_founder , user_other ")
     assert admin.founder_allowed("test", "user_founder")
     assert admin.founder_allowed("test", "user_other")
     assert not admin.founder_allowed("test", "user_nope")
     assert not admin.founder_allowed("wrong", "user_founder")
     assert not admin.founder_allowed("test", "")
-    os.environ["TERVORY_ADMIN_USER_IDS"] = ""
+    set_founders(monkeypatch, "")
     assert not admin.founder_allowed("test", "user_founder")
-    os.environ["TERVORY_ADMIN_USER_IDS"] = "user_founder"
+    set_founders(monkeypatch, "user_founder")
 
 
 def test_non_admin_gets_404_on_every_admin_endpoint():
@@ -412,7 +421,6 @@ def test_non_admin_gets_404_on_every_admin_endpoint():
     from fastapi.testclient import TestClient
 
     os.environ["TANK_API_KEY"] = "test"
-    os.environ["TERVORY_ADMIN_USER_IDS"] = "user_founder"
     app = FastAPI()
     app.include_router(admin.router)
     client = TestClient(app)
@@ -445,7 +453,6 @@ def test_founder_is_not_hidden():
     from fastapi.testclient import TestClient
 
     os.environ["TANK_API_KEY"] = "test"
-    os.environ["TERVORY_ADMIN_USER_IDS"] = "user_founder"
     app = FastAPI()
     app.include_router(admin.router)
     client = TestClient(app, raise_server_exceptions=False)

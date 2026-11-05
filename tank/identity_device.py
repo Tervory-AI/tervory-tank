@@ -1,4 +1,4 @@
-"""Zitadel device grants -> existing hash-only Tank credentials, ZA only."""
+"""Trigger sign-in device grants issue the existing regional Tank credential pair."""
 from __future__ import annotations
 
 import base64
@@ -15,6 +15,7 @@ PREFIX = 'tzd1.'
 
 
 async def create(name: str) -> JSONResponse:
+    box = device.region()
     try:
         upstream = await oidc.start()
         # Caller carries the provider code; only its envelope's hash is stored.
@@ -29,13 +30,13 @@ async def create(name: str) -> JSONResponse:
             if count >= device.MAX_PENDING:
                 return device.error('slow_down', 429)
             row = await conn.fetchrow(
-                "INSERT INTO tank.device_authorizations(device_hash,user_code,region,device_name,expires_at,provider) "
-                "VALUES($1,$2,'za',$3,now()+$4::interval,'zitadel') ON CONFLICT DO NOTHING RETURNING expires_at",
-                pat.digest(wrapped), device.user_code(), name, timedelta(seconds=upstream['expires_in']))
+                "INSERT INTO tank.device_authorizations(device_hash,user_code,region,device_name,expires_at,trigger_signin) "
+                "VALUES($1,$2,$3,$4,now()+$5::interval,true) ON CONFLICT DO NOTHING RETURNING expires_at",
+                pat.digest(wrapped), device.user_code(), box, name, timedelta(seconds=upstream['expires_in']))
             if row is None:
                 return device.error('temporarily_unavailable', 503)
     return JSONResponse({
-        'identity_provider': 'zitadel', 'region': 'za', 'device_code': wrapped,
+        'identity_provider': 'trigger-signin', 'region': box, 'device_code': wrapped,
         'user_code': upstream['user_code'], 'verification_uri': upstream['verification_uri'],
         'verification_uri_complete': upstream.get('verification_uri_complete', upstream['verification_uri']),
         'expires_in': upstream['expires_in'], 'interval': interval,
@@ -43,6 +44,7 @@ async def create(name: str) -> JSONResponse:
 
 
 async def poll(wrapped: str) -> JSONResponse:
+    box = device.region()
     try:
         encoded = wrapped.removeprefix(PREFIX)
         code = base64.b64decode(encoded + '=' * (-len(encoded) % 4), altchars=b'-_', validate=True).decode('ascii')
@@ -55,8 +57,8 @@ async def poll(wrapped: str) -> JSONResponse:
             # Reserve the poll interval, then release the admin connection before HTTP.
             async with conn.transaction():
                 row = await conn.fetchrow(
-                    "SELECT * FROM tank.device_authorizations WHERE device_hash=$1 AND region='za' "
-                    "AND provider='zitadel' FOR UPDATE", pat.digest(wrapped))
+                    "SELECT * FROM tank.device_authorizations WHERE device_hash=$1 AND region=$2 "
+                    "AND trigger_signin FOR UPDATE", pat.digest(wrapped), box)
                 if row is None or row['status'] != 'pending':
                     return device.error('invalid_grant')
                 if row['expires_at'] <= device.now():
@@ -80,21 +82,21 @@ async def poll(wrapped: str) -> JSONResponse:
                 # overlapped while the provider was slow. Roll back on insert failure.
                 row = await conn.fetchrow(
                     "UPDATE tank.device_authorizations SET status='consumed',tenant_id=$2,user_id=$3 "
-                    "WHERE device_hash=$1 AND status='pending' AND region='za' "
-                    "AND provider='zitadel' AND expires_at > now() RETURNING *", pat.digest(wrapped), tenant, user)
+                    "WHERE device_hash=$1 AND status='pending' AND region=$4 "
+                    "AND trigger_signin AND expires_at > now() RETURNING *", pat.digest(wrapped), tenant, user, box)
                 if row is None:
                     return device.error('invalid_grant')
-                access, refresh = device.credential_pair('za', tenant)
+                access, refresh = device.credential_pair(box, tenant)
                 issued = device.now()
                 # Administrative pre-tenant device lookup; the inserted row has
                 # the verified mapped tenant, never a request body/header tenant.
                 token_id = await conn.fetchval(
                     "INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash,device_name,"
-                    "expires_at,refresh_hash,refresh_expires_at,identity_tenant_admin) "
-                    "VALUES($1,$2,'za',$3,$4,$3,$5,$6,$7,$8) RETURNING token_id",
-                    tenant, user, row['device_name'], pat.digest(access), issued + device.ACCESS_TTL,
-                    pat.digest(refresh), issued + device.REFRESH_TTL, tenant_admin)
+                    "expires_at,refresh_hash,refresh_expires_at,identity_tenant_admin,trigger_signin,trigger_signin_issuer) "
+                    "VALUES($1,$2,$3,$4,$5,$4,$6,$7,$8,$9,true,$10) RETURNING token_id",
+                    tenant, user, box, row['device_name'], pat.digest(access), issued + device.ACCESS_TTL,
+                    pat.digest(refresh), issued + device.REFRESH_TTL, tenant_admin, claims['iss'])
                 await conn.execute(
                     "UPDATE tank.device_authorizations SET status='consumed',tenant_id=$2,user_id=$3,"
                     "token_id=$4,decided_at=now() WHERE device_hash=$1", pat.digest(wrapped), tenant, user, token_id)
-    return JSONResponse(device.grant(access, refresh, token_id, 'za', issued), headers=device.NO_STORE)
+    return JSONResponse(device.grant(access, refresh, token_id, box, issued), headers=device.NO_STORE)

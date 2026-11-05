@@ -46,15 +46,11 @@ test('CLI acceptance: sign-in list renders active devices and Revoke ends the se
   assert(tree.includes('Revoked. That sign-in stopped working at once, including its refresh token.'));
   assert(tree.includes('No active CLI sign-ins')); assert(!tree.includes('placeholder-worker'));
 });
-test('CLI acceptance: approval page shows the device and both Approve and Deny outcomes', async () => {
-  const h = harness(); const page = h.load('app/cli/device/page.tsx').default;
-  const tree = nodes(await page({ searchParams: Promise.resolve({ code: 'BCDF-GHJK', region: 'us-east' }) }));
-  for (const text of ['Approve CLI sign-in?', 'BCDF-GHJK', 'placeholder-worker', 'Approve', 'Deny']) assert(tree.includes(text), text);
-  for (const [action, status, notice] of [['approve', 'approved', 'Approved. Return to your terminal; the CLI finishes signing in by itself.'], ['deny', 'denied', 'Denied. The CLI was not signed in.']]) {
-    const form = tree.find(node => node.type === 'form'); const data = new FormData(); data.set('region', 'us-east'); data.set('code', 'BCDF-GHJK'); data.set('action', action);
-    await assert.rejects(form.props.action(data), { message: 'redirect:/cli/device?result=' + status });
-    assert(nodes(await page({ searchParams: Promise.resolve({ result: status }) })).includes(notice));
-  }
+test('CLI acceptance: native approval replaces Workspace approval', () => {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const output = execFileSync(process.execPath, ['--test', 'cli/test/trigger-signin.test.mjs'], { encoding: 'utf8', env });
+  assert.match(output, /# fail 0/);
 });
 
 // Real cross-platform release archives; dependency tarballs are warmed before
@@ -92,7 +88,7 @@ test('CLI acceptance: real eight-platform tag payloads carry verified signatures
 test('CLI acceptance: verified Windows archive installs and its real Node entry reports the release', () => {
   const { folder, directory, manifest, publicKey } = releaseFixture();
   const platform = 'win32-x64-msvc';
-  assert.equal(manifest.version, '0.5.0');
+  assert.equal(manifest.version, JSON.parse(readFileSync(new URL('../../cli/package.json', import.meta.url), 'utf8')).version);
   assert.equal(verifyRelease(directory, publicKey, platform, manifest.version), 1);
   const unpack = join(folder, 'unpack'); mkdirSync(unpack);
   execFileSync('tar', ['--force-local', '-xzf', join(directory, manifest.artifacts[platform].file), '-C', unpack]);

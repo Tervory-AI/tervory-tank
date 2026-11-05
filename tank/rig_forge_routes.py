@@ -58,7 +58,7 @@ def build_router(tank) -> APIRouter:
     @router.post("/reserve")
     async def reserve(body: Reserve, request: Request):
         auth(body, request)
-        await controls.refuse_paid(task="rig.forge." + body.method, path="rig.forge.reserve")
+        await controls.refuse_paid(task="rig.forge.gpu",path="rig.forge.reserve")
         async with tank.pool().acquire() as conn:
             async with conn.transaction():
                 # A reservation has one immutable request and one launch claim.
@@ -86,10 +86,16 @@ def build_router(tank) -> APIRouter:
                 # outcomes retain their entire charge until operator reconciliation.
                 if used + upper > limit["total_budget_usd"]:
                     raise HTTPException(409, "The configured GPU budget is exhausted.")
+                import paid_steps
+                with paid_steps.run_scope(paid_steps.Run(body.tenant_id,body.job_id,paid_steps.fingerprint(body.model_dump()))):
+                    decision = await paid_steps.admit("rig.forge."+body.method,tenant_id=body.tenant_id,
+                        owner="rig",kind="gpu",source="tank/rig_forge_routes.py",task="rig.forge."+body.method)
                 result = {"tenant_id": str(body.tenant_id), "job_id": str(body.job_id),
                           "method": body.method, "image": limit["image"], "flavor": limit["flavor"],
                           "timeout_seconds": body.timeout_seconds, "reserved_usd": str(upper),
-                          "cost_basis": "upper_bound", "state": "reserved"}
+                          "cost_basis": "upper_bound", "state": "reserved",
+                          "paid_step_id": decision["step_id"], "paid_step_approval_id": str(decision["id"]),
+                          "paid_step_mode": decision["authorization_mode"]}
                 await conn.execute("""INSERT INTO tank.rig_forge_jobs
                     (tenant_id,id,method,request,grant_payload,reserved_usd,state)
                     VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6,'reserved')""",
@@ -102,21 +108,35 @@ def build_router(tank) -> APIRouter:
         auth(body, request)
         await controls.refuse_paid(task="rig.forge.gpu", path="rig.forge.claim")
         async with tank.pool().acquire() as conn:
+            reserved = await get_job(conn, body)
+        import paid_steps
+        original = json.loads(reserved["request"]) if isinstance(reserved["request"], str) else reserved["request"]
+        with paid_steps.run_scope(paid_steps.Run(body.tenant_id, body.job_id, paid_steps.fingerprint(original))):
+            decision = await paid_steps.admit("rig.forge." + reserved["method"], tenant_id=body.tenant_id,
+                owner="rig", kind="gpu", source="tank/rig_forge_routes.py", task="rig.forge." + reserved["method"])
+        paid = {"paid_step_id": decision["step_id"], "paid_step_approval_id": str(decision["id"]),
+                "paid_step_mode": decision["authorization_mode"]}
+        async with tank.pool().acquire() as conn:
             async with conn.transaction():
                 row = await get_job(conn, body)
                 if row["state"] != "reserved":
                     raise HTTPException(409, "This GPU reservation was already claimed; never relaunch it.")
-                await conn.execute("""UPDATE tank.rig_forge_jobs SET state='claimed'
-                    WHERE tenant_id=$1 AND id=$2""", body.tenant_id, body.job_id)
+                grant = json.loads(row["grant_payload"]) if isinstance(row["grant_payload"], str) else row["grant_payload"]
+                await conn.execute("""UPDATE tank.rig_forge_jobs SET state='claimed',grant_payload=$3::jsonb
+                    WHERE tenant_id=$1 AND id=$2""", body.tenant_id, body.job_id, json.dumps({**grant, **paid}))
                 ledger = uuid.uuid5(body.job_id, str(body.tenant_id) + ":gpu")
                 pending = {"tenant_id": str(body.tenant_id), "task_id": str(body.job_id), "room": "rig",
                            "region": body.home_region, "ledger_id": str(ledger), "provider_job_id": "unknown",
-                           "outcome": "unverified", "cost_usd": str(row["reserved_usd"]), "cost_basis": "upper_bound"}
+                           "outcome": "unverified", "cost_usd": str(row["reserved_usd"]), "cost_basis": "upper_bound", **paid}
                 # Account for uncertain submissions before the provider is called.
                 await conn.execute("""INSERT INTO tank.ledger
                     (id,tenant_id,region,agent,task_type,model,vendor,units,cost_usd,outcome,rung,task_id)
                     VALUES ($1,$2,$3,'rig',$4,'vendor:huggingface_jobs','huggingface_jobs',1,$5,'unverified',1,$6)""",
                     ledger, body.tenant_id, body.home_region, "rig.forge." + row["method"], row["reserved_usd"], body.job_id)
+                await conn.execute("""UPDATE tank.ledger SET paid_step_id=$3,paid_step_approval_id=$4,
+                    paid_step_mode=$5,paid_steps=$6::jsonb WHERE tenant_id=$1 AND id=$2""",
+                    body.tenant_id, ledger, decision["step_id"], decision["id"], decision["authorization_mode"],
+                    json.dumps([{"step_id": decision["step_id"], "approval_id": str(decision["id"]), "mode": decision["authorization_mode"]}]))
                 await conn.execute("""INSERT INTO tank.agent_receipts (ledger_id,tenant_id,room,receipt)
                     VALUES ($1,$2,'rig',$3::jsonb)""", ledger, body.tenant_id, json.dumps(pending))
         return {"claimed": True, "job_id": str(body.job_id)}
@@ -128,7 +148,9 @@ def build_router(tank) -> APIRouter:
             async with conn.transaction():
                 row = await get_job(conn, body)
                 ledger = uuid.uuid5(body.job_id, str(body.tenant_id) + ":gpu")
-                result = {"tenant_id": str(body.tenant_id), "task_id": str(body.job_id), "room": "rig",
+                grant = json.loads(row["grant_payload"]) if isinstance(row["grant_payload"], str) else row["grant_payload"]
+                provenance = {key: grant[key] for key in ("paid_step_id", "paid_step_approval_id", "paid_step_mode") if key in grant}
+                result = {"tenant_id": str(body.tenant_id), "task_id": str(body.job_id), "room": "rig", **provenance,
                           "region": body.home_region, "ledger_id": str(ledger),
                           "provider_job_id": body.provider_job_id, "outcome": body.outcome,
                           "cost_usd": str(row["reserved_usd"]), "cost_basis": "upper_bound"}

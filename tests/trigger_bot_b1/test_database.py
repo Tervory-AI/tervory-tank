@@ -1,4 +1,5 @@
 """Disposable-Postgres proof. Tenant boundaries are enforced by SQL and native RLS."""
+from trigger_signin_fakes import set_founders
 import json
 import os
 from pathlib import Path
@@ -118,7 +119,7 @@ async def test_real_pg_limits_rollback_rejected_counts_and_do_not_store_raw_addr
 
 @pytest.mark.asyncio
 async def test_document_preview_binds_actual_owned_attachment_not_model_text(database, monkeypatch):
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     actor = command.Actor(A, 'founder', True)
     bot = Bot(SimpleNamespace(pool=lambda: database, box_region=lambda: 'us-east'))
     bot.sources._index = Index()

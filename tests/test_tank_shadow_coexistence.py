@@ -40,7 +40,7 @@ async def test_routellm_and_cache_share_shadow_runner_and_report(real_tank, monk
         assert cached['agreement'] == routed['agreement'] == 1
         assert cached['routellm_config'] is None and cached['candidate_ledger_id'] is None
         assert routed['candidate_ledger_id'] is not None
-        headers = {'X-Tervory-Admin': 'local-founder'}
+        headers = b.founder_headers
         report = (await b.client.get('/v1/proof', params={'tenant_id': str(tenant)}, headers=headers)).json()
         task = next(t for t in report['tasks'] if t['task_type'] == 'routellm.proof')
         assert len(task['shadow_pairs']) == 2

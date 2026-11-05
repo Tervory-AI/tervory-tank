@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { activeTenant } from "@/lib/tenant";
 import { verifyReceiptsToken } from "@/lib/autumbra-undo-token";
 

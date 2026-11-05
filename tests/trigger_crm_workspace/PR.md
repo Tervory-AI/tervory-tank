@@ -131,7 +131,7 @@ Commands ran in `/home/ammosync/.codex/trigger-crm-workspace-20261031` unless no
 - `git clone --filter=blob:none https://github.com/Tervory-AI/tervory-tank.git /home/ammosync/.codex/trigger-crm-workspace-20261031`: PASS.
 - `git fetch origin main` and `git checkout -b codex/trigger-crm-workspace-20261031 origin/main`: PASS.
 - `git fetch origin codex/crm-design`: PASS, inspected design docs read-only; no branch merge.
-- `node tests/trigger_crm_workspace/contract.cjs`: PASS. Actual route, helper and tenant alias derivation run with fake Clerk and fake Tank transport. Covers unsigned/client/no-org founder denial, malformed paths, unknown/injected/duplicate pagination, detail query denial, real allowed empty list/detail envelopes, fixed target/method/cache/redirect policy, headers derived from server session only, no mutation exports, empty sanitized upstream errors, network failure, malformed/wrong-resource envelopes, helper validation before fetch.
+- `node tests/trigger_crm_workspace/contract.cjs`: PASS. Actual route, helper and tenant alias derivation run with fake Trigger sign-in and fake Tank transport. Covers unsigned/client/no-org founder denial, malformed paths, unknown/injected/duplicate pagination, detail query denial, real allowed empty list/detail envelopes, fixed target/method/cache/redirect policy, headers derived from server session only, no mutation exports, empty sanitized upstream errors, network failure, malformed/wrong-resource envelopes, helper validation before fetch.
 - `workspace/node_modules/.bin/tsc --noEmit -p workspace/tsconfig.json`: PASS, exit 0.
 - `git diff --check origin/main`: PASS.
 - `git status --short`: only untracked `workspace/node_modules` dependency symlink, never committed. Dependencies reused from `/tmp/tervory-command-workspace-20261031/workspace/node_modules`; no install on founder laptop.
@@ -152,7 +152,7 @@ No real CRM records, secrets, model/provider calls, production SQL, live mutatio
 
 ## Client integration follow-up — 2026-10-31T12:20:53.035623-07:00 / 2026-10-31T19:20:53.035623+00:00
 
-Supersedes founder-only Workspace restriction: authenticated users with an active Clerk organization are forwarded using server-derived user/tenant identity. Tank remains authoritative for persisted Trigger entitlement, revocation and attested CRM organization binding. No default grant, new UI, direct write route or browser credential is added.
+Supersedes founder-only Workspace restriction: authenticated users with an active Trigger sign-in organization are forwarded using server-derived user/tenant identity. Tank remains authoritative for persisted Trigger entitlement, revocation and attested CRM organization binding. No default grant, new UI, direct write route or browser credential is added.
 
 Changed `workspace/app/api/trigger-crm/[...path]/route.ts`: removed founder-only prefilter while preserving authentication, active organization, path/query allowlist and sanitized failures. `tests/trigger_crm_workspace/contract.cjs` verifies signed-in client forwarding and Tank permission-denial propagation alongside existing boundaries.
 

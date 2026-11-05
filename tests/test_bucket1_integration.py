@@ -1,4 +1,5 @@
 """Tank/room wiring and unchanged training exports; no live service calls."""
+from trigger_signin_fakes import set_founders
 import ast
 import asyncio
 import base64
@@ -39,7 +40,10 @@ def test_tank_storage_imports_without_chassis():
     dockerfile = (ROOT / 'tank/Dockerfile').read_text()
     assert (ROOT / 'tank/storage.py').is_file()
     assert '*.py' in next(line for line in dockerfile.splitlines() if line.startswith('COPY ') and '*.py' in line).split()
-    assert 'app.include_router(__import__("storage").router)' in (ROOT / 'tank/main.py').read_text()
+    from routes_registry import ROUTES
+    assert ('early', 'storage', 'router', None, True) in ROUTES
+    main = (ROOT / 'tank/main.py').read_text()
+    assert main.count(".register_routes(__import__(\"sys\").modules[__name__], 'early')") == 1
 
 
 def test_compose_only_passes_own_pairs_and_boston_backup_is_persistent():
@@ -92,7 +96,7 @@ def test_compose_only_passes_own_pairs_and_boston_backup_is_persistent():
 def test_usage_auth_errors_and_zero_are_distinct(monkeypatch):
     founder_key = secrets.token_hex(16)
     monkeypatch.setenv('TANK_API_KEY', founder_key)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-fixture')
+    set_founders(monkeypatch, 'founder-fixture')
     for room in storage.ROOMS:
         monkeypatch.setenv(f'TANK_KEY_{room.upper()}', secrets.token_hex(16))
     class Uploads:

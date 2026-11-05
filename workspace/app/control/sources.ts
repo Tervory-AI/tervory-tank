@@ -1,5 +1,5 @@
 import "server-only";
-import { clerkClient } from "@clerk/nextjs/server";
+import { signinDirectory } from "@/lib/trigger-signin";
 import Stripe from "stripe";
 import { calendarDays, finiteNumber, wholeNumber, type DailyValue } from "./values";
 
@@ -17,7 +17,7 @@ function requiredText(value: unknown): string {
 }
 
 export async function signupSource(now = Date.now()): Promise<Signups> {
-  const client = await clerkClient();
+  const client = await signinDirectory();
   const total = wholeNumber(await client.users.getCount());
   const days = calendarDays(now);
   const weekStart = now - 7 * 86400000;

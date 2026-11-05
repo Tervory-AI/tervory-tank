@@ -1,12 +1,12 @@
 # Reviewer test account
 
-The founder creates the Clerk user, the organization, and the sample data. This repository does not contain a password, an API key, or the test account.
+The founder creates the Trigger sign-in user, the organization, and the sample data. This repository does not contain a password, an API key, or the test account.
 
 Put the email and the password in the Anthropic submission form only. Reviewers see them there. Do not commit them.
 
 ## What the account needs before review
 
-One Clerk user who belongs to one organization. In that organization, before the reviewer signs in:
+One Trigger sign-in user who belongs to one organization. In that organization, before the reviewer signs in:
 
 - A few catalogue products the reviewer can search for by name.
 - A few enriched business records, including one batch id the reviewer can quote.

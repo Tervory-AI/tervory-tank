@@ -159,7 +159,10 @@ async def test_a_single_digit_in_a_model_code_must_be_on_that_row() -> None:
 
 
 def _word_file(name: str) -> list[str]:
-    lines = (ROOT / "agents" / "rig" / name).read_text(encoding="utf-8").splitlines()
+    import gzip
+    source = ROOT / 'agents' / 'rig' / name
+    text = source.read_text(encoding='utf-8') if source.is_file() else gzip.decompress(source.with_name(source.name + '.gz').read_bytes()).decode('utf-8')
+    lines = text.splitlines()
     return [line.split("#", 1)[0].strip().lower() for line in lines if line.strip() and not line.startswith("#")]
 
 

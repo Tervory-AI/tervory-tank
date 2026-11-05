@@ -204,9 +204,10 @@ class SkillClient:
 
     def bind(self, versions: dict[str, str], preview: bool, tenant_id: str) -> SkillCall:
         async def direct(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-            response = await self._http.post(
-                f"{self._base}/v1/skala/{skill_id}/run",
-                json={
+            from chassis.paid_steps import post as paid_post
+            response = await paid_post(
+                self._http, self._base, f"/v1/skala/{skill_id}/run",
+                body={
                     "tenant_id": tenant_id,
                     "input": payload,
                     "version": versions[skill_id],

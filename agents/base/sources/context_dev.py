@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import hashlib
+import json
 import math
 import os
 import re
@@ -106,6 +108,19 @@ class ContextDev:
         self.stopped = False
         self.lock = asyncio.Lock()
 
+    async def _paid_admission(self, payload, record_id):
+        from chassis.paid_steps import post
+        key = os.environ.get("TANK_KEY", "")
+        if not key:
+            raise RuntimeError("Paid-step admission is unavailable")
+        digest = hashlib.sha256(json.dumps([record_id,payload],sort_keys=True,separators=(",", ":")).encode()).hexdigest()
+        run_id = uuid.uuid5(uuid.UUID(str(self.run_id)), digest)
+        response = await post(self.http, os.environ.get("TANK_URL", "http://tank:8000").rstrip("/"),
+            "/v1/paid-steps/admit", {"tenant_id": str(self.tenant_id), "run_id": str(run_id),
+            "step_id": "base.context_dev.credit", "request_hash": digest}, {"X-Tank-Key": key}, timeout=30)
+        response.raise_for_status()
+        return response.json()
+
     async def lookup(self, *, name: str = "", domain: str = "", url: str = "", record_id: str | None = None) -> dict[str, Any]:
         payload = lookup_body(name=name, domain=domain, url=url)
         if self.ledger is None:
@@ -113,6 +128,9 @@ class ContextDev:
         key = os.environ.get("CONTEXT_DEV_API_KEY")
         if not key:
             return {"status": "not_configured", "fields": {}}
+        if self.stopped or self.reserved + BRAND_CREDITS > self.max_credits:
+            return {"status": "credit_limit", "message": "credit cap reached", "fields": {}}
+        approval = await self._paid_admission(payload, record_id)
         async with self.lock:
             if self.stopped or self.reserved + BRAND_CREDITS > self.max_credits:
                 return {"status": "credit_limit", "message": "credit cap reached", "fields": {}}
@@ -121,6 +139,7 @@ class ContextDev:
                 "call_id": str(uuid.uuid4()), "agent": "base",
                 "task_type": "base.context_dev", "reserved_credits": BRAND_CREDITS,
                 "record_id": record_id,
+                "paid_step_approval_id": approval["approval_id"],
             }
             try:
                 reservation = await self.ledger.reserve(event, self.max_credits)

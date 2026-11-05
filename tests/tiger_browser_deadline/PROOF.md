@@ -4,7 +4,7 @@ As of 15:12:46 PDT / 22:12:46 UTC. Branch `codex/tiger-rig-discovery-20261030`, 
 
 ## Actual operational state
 
-AmmoSync identity was independently verified through the installed Workspace server's Clerk organisation directory and the existing `workspace/lib/tenant.ts` UUIDv5/alias algorithm: organisation `org_3KtFUVOxBSh3P2JDYh23RC8e75u` named AmmoSync maps to `137bd08c-4a37-51a0-bce7-d636a196b814`. Service authentication stayed inside the installed process; no secret values were displayed or copied.
+AmmoSync identity was independently verified through the installed Workspace server's Trigger sign-in organisation directory and the existing `workspace/lib/tenant.ts` UUIDv5/alias algorithm: organisation `org_3KtFUVOxBSh3P2JDYh23RC8e75u` named AmmoSync maps to `137bd08c-4a37-51a0-bce7-d636a196b814`. Service authentication stayed inside the installed process; no secret values were displayed or copied.
 
 The founder explicitly authorized choosing any real public products and configuring watches. Fourteen real Pololu product watches were created with the existing API, after checking for duplicates. Each is enabled hourly, price/stock alerts on, G5 types off for this cohort; existing organisation email routing was not changed. Labels came from actual product pages, not invented copy. Pololu robots permits `/product/`; actual Tiger browser reads returned HTTP 200 without challenge. Adafruit returned 403 and Pimoroni challenged the browser, so neither was bypassed or used for watches. Remaining Pololu pages were validated with public HTTP 200 reads at ten-second spacing and read normally by the scheduler, without extra jobs.
 

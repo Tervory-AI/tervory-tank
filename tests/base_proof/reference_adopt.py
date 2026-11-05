@@ -2,7 +2,7 @@
 
 Run with PYTHONPATH=tank:tests and BASE_TEST_DATABASE_URL pointing at a local
 PostgreSQL server with CREATE DATABASE permission. No live reads or sign-in.
-Only external HTTP responses and Clerk in a temporary Workspace are fixtures.
+Only external HTTP responses and Trigger sign-in in a temporary Workspace are fixtures.
 """
 from __future__ import annotations
 
@@ -110,8 +110,8 @@ async def main() -> None:
         workspace = Path(subprocess.check_output([sys.executable, str(PROOF / "workspace.py")], text=True).strip())
         web = start(["node", str(workspace / "node_modules/next/dist/bin/next"), "dev", "--port", str(web_port)], workspace,
                     "workspace", {**env, "NEXT_TELEMETRY_DISABLED": "1",
-                                  "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==",
-                                  "CLERK_SECRET_KEY": "sk_test_dummy"})
+                                  "TRIGGER_SIGNIN_KEY": "<retired-build-value>",
+                                  })
         web_url = f"http://localhost:{web_port}"
         await healthy(web_url + "/base", web)
         async with async_playwright() as playwright, httpx.AsyncClient(headers={"X-Tank-Key": "local-fixture"}, timeout=30) as client:

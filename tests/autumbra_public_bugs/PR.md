@@ -17,7 +17,7 @@ Autumbra route before applying that existing helper. `/admin/autumbra` has the
 | --- | --- |
 | `workspace/app/shell.tsx:5,32` | Read Next's matched layout segments; use `/autumbra` for an Autumbra route, including the public-host rewrite. Other routes retain the browser pathname. |
 | `workspace/app/autumbra/page.tsx:1,34` | Delete the unused Link import and private-console paragraph. Keep the footer wrapper, styles, logo, colours and all other wording. |
-| `tests/autumbra_public_bugs/test_page.py:1,40,87` | Real local Next/browser test with an offline Clerk adapter in a temporary copy. Check public server HTML and DOM, admin shell and sign-in redirect. Optional screenshot capture. |
+| `tests/autumbra_public_bugs/test_page.py:1,40,87` | Real local Next/browser test with an offline Trigger sign-in adapter in a temporary copy. Check public server HTML and DOM, admin shell and sign-in redirect. Optional screenshot capture. |
 | `tests/shell_nav.test.ts:83` | Exact/nested Autumbra route boundaries, admin routes and similarly named paths. |
 | `tests/shell_popout.ts:23` | Supply the new Next hook in the existing offline shell test adapter. |
 | `tests/autumbra_public_bugs/PR.md:1` | This description and verification record. |
@@ -30,7 +30,7 @@ boundaries and is unchanged.
 ## Offline verification
 
 `test_public_host_and_direct_page_have_no_shell_admin_keeps_gate` runs the real
-Next middleware, root layout, Shell and public/admin pages locally. Only Clerk
+Next middleware, root layout, Shell and public/admin pages locally. Only Trigger sign-in
 is replaced at the import boundary, using an offline founder identity. Tank
 points to a closed loopback port; the browser blocks non-local requests. No real
 sign-in, credentials or production data are used. Host routing is exercised
@@ -46,7 +46,7 @@ through the real middleware using `x-forwarded-host`.
   `/admin/autumbra`, nested admin paths, `/autumbra-private` and `/autumbran`.
 
 This verifies application routing/rendering, not live DNS, reverse-proxy
-deployment or Clerk service behaviour.
+deployment or Trigger sign-in service behaviour.
 
 ## Exact commands and results
 

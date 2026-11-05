@@ -30,9 +30,12 @@ class WorkerHealthTests(unittest.TestCase):
 
     def test_worker_ping_is_local_and_time_bounded(self):
         probe = services("ops/trigger-crm/docker-compose.yml")["celery-worker"]["healthcheck"]
-        command = probe["test"][1]
-        self.assertIn('--destination "celery@$$HOSTNAME"', command)
-        self.assertIn("--timeout 5", command)
+        self.assertEqual(probe["test"][:3], ["CMD", "python", "-c"])
+        command = probe["test"][3]
+        self.assertIn('node = "celery@" + socket.gethostname()', command)
+        self.assertIn("destination=[node], timeout=5", command)
+        self.assertIn('replies.get(node) == {"ok": "pong"}', command)
+        self.assertIn("fixups=[]", command)
         self.assertGreater(int(probe["timeout"].removesuffix("s")), 5)
 
 
