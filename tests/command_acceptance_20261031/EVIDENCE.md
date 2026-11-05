@@ -1,5 +1,11 @@
 # COMMAND-1 / CLI-1 acceptance audit — 31 October 2026
 
+This is historical transport evidence, not the current sign-in procedure. Trigger
+sign-in replaced the Workspace device approval page and its manual runner.
+Current native device proofs are `test_cross_lane.py`, `tests/test_device_login.py`
+and rows S04/S05 in `tests/acceptance/test_trigger_signin.py`. They exercise both
+regions with offline native fakes; none establishes founder live acceptance.
+
 Initial evidence captured 2026-10-31 01:59 PDT / 08:59 UTC; final combined evidence 02:10 PDT / 09:10 UTC. PASS below means the stated offline assertion passed, never founder acceptance. GAP means an unmet requirement in the pinned source; UNVERIFIED means required proof was not executed or supplied. No live model calls, live worker operations, production SQL, ZA operations, UI additions or implementation edits were performed.
 
 ## Final frozen assembly (supersedes initial lane availability below)
@@ -39,7 +45,7 @@ This entry covers the commits added on top of the combined branch after `83c9f25
   - additive, hash-only schema
 - `cli/test/client.test.mjs` has 35 tests, all passing.
 - **proof_prices on a fresh deploy.** `test_fresh_deploy_populates_proof_prices_idempotently_before_any_tick` and the updated paused-tick test. CI runs all 21 of these tests in one job with a zero-skip gate.
-- **Local end-to-end run** (`local_e2e.cjs`). This was a real uvicorn Tank per region (us-east and ZA, separate databases) on local Postgres, with RLS roles (non-bypass app role plus BYPASSRLS admin role). The LiteLLM proxy (1.x) was real, but its upstream was a **fake provider** (`mock_response`), because no box provider key was usable: the OpenAI, Gemini and xAI keys were rejected, and DeepSeek returned "insufficient balance". Costs come from LiteLLM's own pricing of the configured per-token rates. Next could not run signed in without Clerk keys, so the Workspace adapter, the approval module and the `/chats/api` route ran as their actual TypeScript modules with an injected signed-in identity. The log is in the #496 PR body.
+- **Historical local end-to-end run** (retired manual runner). This was a real uvicorn Tank per region (us-east and ZA, separate databases) on local Postgres, with RLS roles (non-bypass app role plus BYPASSRLS admin role). The LiteLLM proxy (1.x) was real, but its upstream was a **fake provider** (`mock_response`), because no box provider key was usable: the OpenAI, Gemini and xAI keys were rejected, and DeepSeek returned "insufficient balance". Costs come from LiteLLM's own pricing of the configured per-token rates. The then-current Workspace adapter, approval module and `/chats/api` route ran as TypeScript modules with an injected signed-in identity. The log is in the #496 PR body. This does not test Trigger sign-in.
 
 Final commands (working directory `/tmp/tervory-command-assembled-20261031`):
 

@@ -46,6 +46,10 @@ async def test_decorative_overflow_preserves_viewport(real_chromium, tmp_path, w
     # then leave the clock paused throughout both observations.
     await page.clock.fast_forward(3500)
     await page.clock.run_for(32)
+    # Keep the blurred search control on the same compositor layer on both
+    # sides. Changing ancestor clipping otherwise re-rasterizes its rounded
+    # button edge (four antialiased pixels) despite identical layout and a11y.
+    await page.add_style_tag(content='.search-hero .btn-action { transform: translateZ(0); }')
     # Undo only the containment to reproduce the original shipped CSS, then
     # compare it to the repair in the same browser with identical fonts/assets.
     baseline = await page.add_style_tag(content='.landing, .idk { overflow-x: visible; }')

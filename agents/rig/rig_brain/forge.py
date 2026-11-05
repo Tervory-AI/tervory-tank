@@ -27,6 +27,10 @@ class Scope(BaseModel):
     home_region: Literal["us-east"]
 
 
+class PaidApprovalStatus(Scope):
+    approval_id: uuid.UUID
+
+
 class Approval(Scope):
     method: Literal["scan", "photogrammetry", "trellis2"]
     inputs: list[str] = Field(min_length=1, max_length=150)
@@ -128,7 +132,7 @@ async def poll(job_id: uuid.UUID, tenant_id: uuid.UUID, home_region: str,
 
 
 @router.post("/relay/{action}")
-async def relay(action: Literal["reserve", "claim", "complete", "steps"], body: dict, request: Request):
+async def relay(action: Literal["reserve", "claim", "complete", "steps", "approval"], body: dict, request: Request):
     try:
         allowed = await forge_addresses()
     except OSError:
@@ -137,7 +141,7 @@ async def relay(action: Literal["reserve", "claim", "complete", "steps"], body: 
         raise HTTPException(401, "Only Rig's forge may relay receipts.")
     key = os.environ.get("TANK_KEY", "")
     authorize(key, body.get("home_region", ""))
-    payload = parsed({"reserve": Reserve, "claim": Scope, "complete": Complete, "steps": Step}[action], body)
+    payload = parsed({"reserve": Reserve, "claim": Scope, "complete": Complete, "steps": Step, "approval": PaidApprovalStatus}[action], body)
     job = approval(payload)
     if job.home_region != payload.home_region:
         raise HTTPException(403, "Job region does not match its approval.")
@@ -149,5 +153,9 @@ async def relay(action: Literal["reserve", "claim", "complete", "steps"], body: 
     if action == "reserve" and (payload.method != job.method or payload.timeout_seconds != job.timeout_seconds
                                  or payload.cost_cap_usd != job.cost_cap_usd):
         raise HTTPException(403, "GPU request does not match the brain's approved method, timeout and cap.")
+    if action == "approval":
+        return await forward("GET", os.environ.get("TANK_URL", "http://tank:8000").rstrip("/"),
+            "/v1/paid-steps/approvals/" + str(payload.approval_id), key=key,
+            params={"tenant_id": str(payload.tenant_id)})
     return await forward("POST", os.environ.get("TANK_URL", "http://tank:8000").rstrip("/"),
                          "/v1/agents/rig/forge/" + action, key=key, json=payload.model_dump(mode="json"))

@@ -1,5 +1,5 @@
-import { SignIn } from "@clerk/nextjs";
+import { TriggerSigninButton } from "../../trigger-signin-provider";
 
 export default function Page() {
-  return <SignIn />;
+  return <section><h1>Trigger sign-in</h1><TriggerSigninButton /></section>;
 }

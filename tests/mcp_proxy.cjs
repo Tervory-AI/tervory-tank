@@ -9,8 +9,10 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
 let region = 'us-east';
 const original = Module._load;
 Module._load = function(name, ...rest) {
-  if (name === '@/app/api/zenas/tank') return {homeRegion:()=>region,regionTank:()=>null};
-  if (name === '@/lib/device-login') return {approvalTank:()=>({url:'http://tank:8000',key:'offline-approval-test'})};
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
+  if (name === '@/app/api/zenas/tank') return {homeRegion:()=>region,regionTank:()=>({url:'http://tank:8000',key:'offline-session-test'})};
+  if (name === '@/lib/signin-regions') return require('../workspace/lib/signin-regions.ts');
   if (name === '@/lib/tank') return require('../workspace/lib/tank.ts');
   return original.call(this,name,...rest);
 };
@@ -38,7 +40,7 @@ const request = (path, init={}) => new Request('https://app.tervory.com'+path,in
     await response.text();
     if (operation==='register') {
       assert.deepEqual([...calls[0].init.headers.keys()],['content-type','x-tank-key','x-tervory-oauth-source']);
-      assert.equal(calls[0].init.headers.get('x-tank-key'),'offline-approval-test');
+      assert.equal(calls[0].init.headers.get('x-tank-key'),'offline-session-test');
       assert.equal(calls[0].init.headers.get('x-tervory-oauth-source'),'203.0.113.10');
     } else assert.deepEqual([...calls[0].init.headers.keys()],['content-type']);
     assert.equal(new TextDecoder().decode(calls[0].init.body),body);

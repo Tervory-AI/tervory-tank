@@ -20,7 +20,7 @@ def build_router(tank):
         actor = request.headers.get("x-tervory-user", "")
         if operation != "capabilities" and not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", actor):
             raise HTTPException(403, "Administrator authorization is required.")
-        # The authenticated Workspace derives actor and tenant from Clerk; never
+        # The authenticated Workspace derives actor and tenant from Trigger sign-in; never
         # forward browser-provided headers, paths, credentials or an entitlement write.
         payload = body.get("payload", {})
         if not isinstance(payload, dict) or set(body) - {"tenant_id", "payload"}:

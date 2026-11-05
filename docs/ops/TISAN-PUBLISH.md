@@ -221,9 +221,9 @@ From `workspace/`:
 
 ```sh
 npm ci --no-audit --no-fund --cache /workspace/codex-tisan-publish/.publish-npm-cache
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npm run build
+NEXT_TELEMETRY_DISABLED=1 npm run build
 ```
 
 Both passed; Next compiled, type-checked, generated all 38 static pages and
-finished build traces. The build used the existing CI's synthetic Clerk values,
+finished build traces. The build used the existing CI's synthetic Trigger sign-in values,
 not credentials. No founder browser acceptance or live publish is claimed.

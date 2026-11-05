@@ -4,6 +4,7 @@ Reuse the shipped path proofs rather than duplicate their fixtures or weaken
 assertions. These run production parsers, handlers, SQL and local transports;
 Node cases exercise the exact Workspace model, not a live browser deployment.
 """
+from trigger_signin_fakes import set_founders
 import subprocess
 import sys
 from datetime import timedelta
@@ -383,7 +384,7 @@ def install_vault(database, monkeypatch):
     import vault
     import vault_routes
     import mcp_connections
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-admin')
+    set_founders(monkeypatch, 'placeholder-admin')
     monkeypatch.setattr(vault_routes, 'seal', vault.seal)
     monkeypatch.setattr(mcp_connections, 'discover', AsyncMock(return_value=[]))
     runtime = SimpleNamespace(pool=lambda: database.pool, box_region=lambda: 'us-east',

@@ -1,4 +1,5 @@
 """Offline Trigger contracts. All fixture brands stay in tests, never runtime seeds."""
+from trigger_signin_fakes import set_founders
 import hashlib
 import importlib.util
 import json
@@ -173,7 +174,7 @@ def test_future_tense_copy_is_not_a_will():
 
 @pytest.mark.asyncio
 async def test_code_plan_keeps_confirmation_without_model(monkeypatch):
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     receipt = AsyncMock(return_value=uuid4())
     monkeypatch.setattr(trigger_routes, 'code_receipt', receipt)
     runtime = SimpleNamespace(Message=lambda **k: k, RouteRequest=lambda **k: k,
@@ -321,7 +322,7 @@ async def test_real_schema_reapplication_and_voice_isolation(monkeypatch):
 
 
 def test_trigger_adapter_uses_body_scope_not_query(monkeypatch):
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east'))
     method, path, query, body = command.adapter_request(command.PlannedAction(tool='trigger.check', arguments={'text': 'Keep this unchanged.'}), command.Actor(TENANT, 'founder', True))
     assert (method, path, query) == ('POST', '/v1/trigger/check', {})

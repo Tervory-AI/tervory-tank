@@ -2,7 +2,7 @@ import "./public.css";
 
 export const dynamic = "force-dynamic";
 
-/** Public Autumbra product page — no Clerk. Founder console stays at /admin/autumbra. */
+/** Public Autumbra product page — no SigninDirectory. Founder console stays at /admin/autumbra. */
 export default function AutumbraPublicPage() {
   return (
     <main className="autumbra-public">

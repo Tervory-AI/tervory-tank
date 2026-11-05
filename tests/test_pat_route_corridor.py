@@ -6,6 +6,7 @@ sends a well-formed CLI token: outside the corridor no token lookup may happen a
 route may answer differently from an anonymous request except with a refusal. Synthetic token, fake database, no network.
 """
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import os
 import re
@@ -34,6 +35,16 @@ CORRIDOR = {
     ("POST", "/v1/command/threads/{thread_id}/code-turn"),
     ("POST", "/v1/command/threads/{thread_id}/turn"), ("POST", "/v1/command/threads/{thread_id}/actions"),
     ("POST", "/v1/command/cards/{card_id}"), ("POST", "/v1/command/build"), ("PATCH", "/v1/command/threads/{thread_id}"),
+}
+
+# Explicit window user endpoints authenticate the same CLI audience through their
+# feature-owned dependency. The worker and signed-hook routes are not included.
+WINDOW_CORRIDOR = {
+    ('GET', '/v1/window-agents/jobs'), ('POST', '/v1/window-agents/jobs'),
+    ('GET', '/v1/window-agents/jobs/{job_id}/receipt'),
+    ('POST', '/v1/window-agents/jobs/{job_id}/cancel'),
+    ('GET', '/v1/window-agents/vault/github'), ('POST', '/v1/window-agents/vault/github'),
+    ('POST', '/v1/window-agents/reviews'), ('POST', '/v1/window-agents/webhooks'),
 }
 
 # Device-login routes authenticate the code, refresh token or presented credential
@@ -66,7 +77,8 @@ def lookups(monkeypatch):
             if "tank.personal_tokens" in sql:
                 seen.append(sql)
                 # A valid, unrevoked CLI credential for an ordinary member.
-                return {"token_id": uuid.uuid4(), "user_id": "customer", "stale": False}
+                return {"token_id": uuid.uuid4(), "user_id": "customer", "stale": False,
+                        "trigger_signin_issuer": "https://auth.tervory.com"}
             raise AssertionError("no other database work past the corridor check")
 
         async def fetch(self, *_):
@@ -84,7 +96,7 @@ def lookups(monkeypatch):
 
     monkeypatch.setattr(command, "db", lambda: SimpleNamespace(acquire=acquire))
     monkeypatch.setattr(main, "box_region", lambda: "za")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder")
+    set_founders(monkeypatch, "founder")
     return seen
 
 
@@ -94,7 +106,7 @@ def test_corridor_list_matches_the_workspace_proxy_plus_founder_roster():
     assert "POST: new RegExp(`^(threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`)" in source
     assert "PATCH: new RegExp(`^threads/${id}$`)" in source
     routes = set(endpoints())
-    assert CORRIDOR <= routes
+    assert CORRIDOR | WINDOW_CORRIDOR <= routes
     for method, path in CORRIDOR:
         assert pat.cli_route(SimpleNamespace(method=method, url=SimpleNamespace(path=concrete(path))))
 
@@ -106,7 +118,7 @@ async def test_every_tank_route_outside_the_cli_corridor_refuses_a_cli_token(loo
     checked = []
     async with httpx.AsyncClient(transport=transport, base_url="http://za.tervory.com") as client:
         for method, path in sorted(set(endpoints())):
-            if (method, path) in CORRIDOR or (method, path) in DEVICE:
+            if (method, path) in CORRIDOR | WINDOW_CORRIDOR or (method, path) in DEVICE:
                 continue
             before = len(lookups)
             response = await client.request(method, concrete(path), json={},
@@ -136,3 +148,14 @@ async def test_corridor_routes_do_look_the_token_up(lookups):
         response = await client.get("/v1/command/models", headers={"Authorization": f"Bearer {token}"})
     assert len(lookups) == 1
     assert response.status_code == 404  # a customer's token: the roster is founder-only
+
+
+@pytest.mark.asyncio
+async def test_each_explicit_window_user_route_authenticates_cli_audience(lookups):
+    token = f"tv1.za.{TENANT.hex}." + "x" * 43
+    transport = httpx.ASGITransport(app=main.app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://za.tervory.com") as client:
+        for method, path in sorted(WINDOW_CORRIDOR):
+            before = len(lookups)
+            await client.request(method, concrete(path), json={}, headers={"Authorization": f"Bearer {token}"})
+            assert len(lookups) == before + 1, (method, path)

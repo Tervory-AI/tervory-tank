@@ -2,7 +2,7 @@
 
 **Current ruling: founder, 4 Nov — product name “Trigger sign-in” on every page and email frame.** The 96 original frame IDs remain. Light canvas, Inter and navy actions apply to all current previews. The earlier dark-brand and client-colour notes below are historical and superseded. Provider names are confined to technical references.
 
-Design only. No authentication implementation, runtime configuration, secrets, live data or emails are changed. Target: unmodified self-hosted the identity provider Login V2, upstream reference `0c0ee1dab9ed2fdeb8b4736641ee34d84c895f84`.
+Design only. No authentication implementation, runtime configuration, secrets, live data or emails are changed. Target: unmodified self-hosted Trigger sign-in Login V2, upstream reference `0c0ee1dab9ed2fdeb8b4736641ee34d84c895f84`.
 
 Figma file: [Workspace](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS); page **8 · Sign-in**, node `237:9`. Baseline: **Approved 3 Nov**. Post-approval changes remain **Changed after approval, awaiting founder**. Dark frames are **Unused: light only (founder, 3 Nov)**. Invented client **Trigger sign-in** is an example for Figma only.
 

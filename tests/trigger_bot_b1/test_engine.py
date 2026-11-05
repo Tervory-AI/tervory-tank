@@ -1,4 +1,5 @@
 """Offline B1 contracts. No real model, encoder inference, mail or outside HTTP."""
+from trigger_signin_fakes import set_founders
 import json
 from dataclasses import replace
 from types import SimpleNamespace
@@ -158,7 +159,7 @@ def test_public_message_limits_and_identity_injection(text):
 
 @pytest.mark.asyncio
 async def test_unconfirmed_bot_action_never_reaches_execution(monkeypatch):
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     actor = command.Actor(A, 'founder', True)
     app = FastAPI()
     app.include_router(api.router)

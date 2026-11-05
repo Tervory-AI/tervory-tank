@@ -10,6 +10,7 @@ function moduleFrom(relative, bindings, globals = {}) {
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: name => {
+    if (name === '@/lib/trigger-signin-fetch') return { signinFetch: (...args) => globals.fetch(...args) };
     assert(name in bindings, `Unexpected dependency ${name}`); return bindings[name];
   }, process: { env: {} }, URL, Uint8Array, TextDecoder, Set, Error, ...globals });
   return exports;
@@ -49,14 +50,17 @@ async function main() {
   // Only the HTTP boundary is replaced; real actions and route call the real tank.ts exports.
   const forwarded = [];
   const regionTransport = moduleFrom('workspace/app/api/zenas/tank.ts', {});
-  const tank = moduleFrom('workspace/lib/tank.ts', { '@/app/api/zenas/tank': regionTransport }, { fetch: async (url, options) => {
+  const tankFetch = async (url, options) => {
     forwarded.push({ url, options });
     return { ok: true, json: async () => url.endsWith('/mapping')
       ? { preview_id: 'server-preview', fields: ['code'], columns: { sku: 'code' }, required: ['sku'] }
       : { saved: true } };
-  } });
+  };
+  // Trigger sign-in adds its signed token inside signinFetch; offline, it passes straight to the fake.
+  const tank = moduleFrom('workspace/lib/tank.ts', { '@/app/api/zenas/tank': regionTransport,
+    '@/lib/trigger-signin-fetch': { signinFetch: tankFetch } }, { fetch: tankFetch });
   const actions = moduleFrom('workspace/app/rig/admin/actions.ts', {
-    '@clerk/nextjs/server': { auth: async () => ({ userId: 'server-user', orgRole: role }) },
+    '@/lib/trigger-signin': { auth: async () => ({ userId: 'server-user', orgRole: role }) },
     '@/lib/tenant': { activeTenant: async () => active },
     '../../review/founder': { isListedFounder: () => false },
     '@/lib/tank': tank,

@@ -39,6 +39,14 @@ class Pool:
 
 @pytest.fixture
 def setup(monkeypatch):
+    import paid_steps
+    async def checkpoint(key, invoke):
+        return await invoke()
+    async def configured_admission(*args, **kwargs):
+        await route.controls.refuse_paid(task=args[1], path="paid_steps")
+        return None
+    monkeypatch.setattr(paid_steps, "checkpoint", checkpoint)
+    monkeypatch.setattr(paid_steps, "model_admission", configured_admission)
     key = uuid.uuid4().hex
     monkeypatch.setenv("TANK_KEY_BASE", key)
     pool = Pool()
@@ -126,7 +134,7 @@ async def test_founder_pause_blocks_thinking_before_gateway(setup, unavailable):
             json={"messages": [{"role": "user", "content": "Plan"}]})
     assert result.status_code == 503
     assert len(pool.rows) == 1 and "tank.control_log" in pool.rows[0][0]
-    assert pool.rows[0][1][-2:] == ("agent.base.think", "agent.chat")
+    assert pool.rows[0][1][-2:] == ("agent.base.think", "paid_steps")
 
 
 @pytest.mark.asyncio

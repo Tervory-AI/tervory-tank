@@ -1,6 +1,6 @@
 # RIG-3 retailer feeds
 
-`/rig/admin` is available to the active tenant's Clerk organization administrator or a listed founder. Every operation resolves that identity server-side, goes through Tank, and uses a separate Tank-to-Rig retailer credential. The browser never receives a room key, stored supplier credentials, source amounts, saved price rules or exchange rates.
+`/rig/admin` is available to the active tenant's Trigger sign-in organization administrator or a listed founder. Every operation resolves that identity server-side, goes through Tank, and uses a separate Tank-to-Rig retailer credential. The browser never receives a room key, stored supplier credentials, source amounts, saved price rules or exchange rates.
 
 ## Import and refresh
 

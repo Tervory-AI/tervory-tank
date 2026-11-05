@@ -64,10 +64,15 @@ with TestClient(deployed) as client:
         assert client.post('/brain/tasks', headers=auth, json={}).status_code == 404
         for method in ['GET', 'DELETE']:
             assert client.request(method, '/brain/tasks/'+str(__import__('uuid').uuid4()), headers=auth).status_code == 404
-    pool = deployed.state.pool
-    deployed.state.pool = None
-    assert client.get('/health').status_code == 503
-    deployed.state.pool = pool
+    pool, health_pool = deployed.state.pool, deployed.state.health_pool
+    try:
+        deployed.state.pool = None
+        # Job-pool availability must not starve the independent health pool.
+        assert client.get('/health').json() == {'ok': True, 'agent': 'rig'}
+        deployed.state.health_pool = None
+        assert client.get('/health').status_code == 503
+    finally:
+        deployed.state.pool, deployed.state.health_pool = pool, health_pool
 '''
     env = {**os.environ, 'PYTHONPATH': 'tests:agents/rig:agents/_chassis', 'AGENT_NAME': 'rig',
            'DATABASE_URL': _database_url(admin, name), 'DATA_DIR': str(tmp_path),

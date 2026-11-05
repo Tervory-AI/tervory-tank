@@ -1,4 +1,5 @@
 """CORE-2: exact populations, tenant/region boundaries, pagination and safe client projections."""
+from trigger_signin_fakes import set_founders
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
@@ -163,7 +164,7 @@ async def test_reverse_job_link_does_not_duplicate_receipts(database,monkeypatch
 async def test_authentication_and_no_client_all_scope(monkeypatch):
     key=secrets.token_urlsafe(32)
     monkeypatch.setenv('TANK_API_KEY',key)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','fixture-founder')
+    set_founders(monkeypatch, 'fixture-founder')
     app=FastAPI(); app.include_router(proof.router); app.include_router(proof.client_router)
     called=[]
     async def snap(tenant,end=None,founder=False,**kwargs):
@@ -335,7 +336,7 @@ async def test_client_copy_exports_five_graphs_job_pages_and_no_founder_detail(d
         app=FastAPI();app.include_router(proof.router)
         key=secrets.token_urlsafe(32)
         monkeypatch.setenv('TANK_API_KEY',key)
-        monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','founder-copy')
+        set_founders(monkeypatch, 'founder-copy')
         headers={'x-tank-key':key,'x-tervory-admin':'founder-copy'}
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
             url='/v1/proof/savings/client-copy/csv'

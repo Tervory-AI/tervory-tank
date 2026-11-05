@@ -42,7 +42,7 @@ const query = [
       return Response.json({ settings: { enabled: false } });
     },
     mocks: {
-      "@clerk/nextjs/server": { auth: async () => ({ orgRole: "org:admin" }) },
+      "@/lib/trigger-signin": { auth: async () => ({ orgRole: "org:admin" }) },
       "@/lib/tenant": {
         activeTenant: async () => {
           identities++;

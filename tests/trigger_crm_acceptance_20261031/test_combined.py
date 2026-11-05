@@ -1,4 +1,5 @@
 """Loopback-only independent actual Workspace/Tank/fake-CRM integration."""
+from trigger_signin_fakes import set_founders
 import hashlib
 import json
 import os
@@ -37,7 +38,7 @@ def tenant_for(org):
 
 def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
     tenant = tenant_for('org_offline_crm')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'offline-founder')
+    set_founders(monkeypatch, 'offline-founder')
     monkeypatch.setenv('TRIGGER_CRM_URL', 'http://trigger-crm-backend:8000')
     monkeypatch.setenv('TRIGGER_CRM_PAT_TEST', 'dummy-crm-token')
     monkeypatch.setenv('TRIGGER_CRM_TENANT_BINDINGS', json.dumps({tenant: {'organization_id': ORG, 'token_env': 'TRIGGER_CRM_PAT_TEST'}}))

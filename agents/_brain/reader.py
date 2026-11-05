@@ -139,7 +139,7 @@ def read_page(url: str, html: str = '', *, text: str | None = None, links: list 
                 urls.add(target)
                 ranked.append({'text': label[:120], 'url': target})
     ranked.sort(key=lambda item: (not bool(PRIORITY.search(item['text'] + ' ' + item['url'])), urlsplit(item['url']).hostname != urlsplit(url).hostname))
-    for value in re.findall(r'[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}', visible):
+    for value in re.findall(r'(?<![\w.+-])[\w.+-]{1,64}@[\w.-]{1,253}\.[A-Za-z]{2,63}(?![A-Za-z])', visible):
         add('email', value, 'visible text')
     for value in re.findall(r'(?<!\w)(?:\+\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]\d{3}[ .-]\d{4}(?!\d)', visible):
         add('phone', value, 'visible text')

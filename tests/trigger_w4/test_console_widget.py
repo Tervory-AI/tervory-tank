@@ -1,4 +1,5 @@
 """Wave 4 real schema/API proof, with no model, mail or outside network."""
+from trigger_signin_fakes import set_founders
 import hashlib
 import json
 import sys
@@ -41,7 +42,7 @@ async def w4(database, monkeypatch):
     runtime = SimpleNamespace(pool=lambda: database, box_region=lambda: 'us-east', app=app,
                               TANK_API_KEY='placeholder-workspace-key', run_route=AsyncMock(side_effect=AssertionError('placeholder: model forbidden')))
     monkeypatch.setitem(sys.modules, 'main', runtime)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     monkeypatch.setenv('TRIGGER_BOT_TRUSTED_PROXY_CIDRS', '127.0.0.0/8')
     bot = Bot(runtime)
     bot.notify = AsyncMock()

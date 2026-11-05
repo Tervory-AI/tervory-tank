@@ -1,13 +1,5 @@
-// Review of #506, B3: the signed-in user's own CLI sign-ins, per region, with Revoke.
-// A phished device approval gives the attacker the victim's access for up to 30 days
-// (refresh token lifetime); this is how the victim sees it and ends it.
-// Server-side only. Each region's Tank is reached with the same key that records that
-// region's approvals (device-login.ts approvalTank): this Workspace's own Tank with its
-// Workspace key, and the ZA Tank with the dedicated TANK_DEVICE_APPROVAL_KEY_ZA, which
-// the ZA Tank accepts here for listing and revoking the user's own sign-ins only (never
-// to create one, never for a founder). Every call has a hard deadline, body included.
 import type { Region } from "@/app/api/zenas/tank";
-import { approvalTank, type DeviceIdentity } from "@/lib/device-login";
+import { signinTank, type SigninIdentity } from "@/lib/signin-regions";
 import { boundedFetch } from "@/lib/tank";
 
 export const SIGN_IN_REGIONS: readonly Region[] = ["us-east", "za"];
@@ -24,7 +16,7 @@ const MESSAGES: Record<number, string> = {
   403: "CLI sign-ins for this region are managed by Tervory support for this account.",
 };
 
-function headers(key: string, identity: DeviceIdentity): Record<string, string> {
+function headers(key: string, identity: SigninIdentity): Record<string, string> {
   // No role header: listing and revoking are scoped to this user and org only.
   return { "x-tank-key": key, "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId };
 }
@@ -49,15 +41,14 @@ export function activeSignIns(rows: unknown, region: Region, now = Date.now()): 
   return items;
 }
 
-export async function regionSignIns(identity: DeviceIdentity, region: Region): Promise<RegionSignIns> {
-  const tank = approvalTank(region);
+export async function regionSignIns(identity: SigninIdentity, region: Region): Promise<RegionSignIns> {
+  const tank = signinTank(region);
   if (!tank || !tank.key) return { region, ok: false, message: "CLI sign-ins for this region are not connected here." };
   try {
     const { status, body } = await boundedFetch(new URL("/v1/personal-tokens", tank.url), {
       method: "GET", headers: headers(tank.key, identity), cache: "no-store", signal: AbortSignal.timeout(SIGN_IN_TIMEOUT_MS),
     }, SIGN_IN_TIMEOUT_MS, async response => {
       if (!response.ok) {
-        // Drain, never cancel: Next's render dedupe fetch tees GET bodies (device-login.ts).
         await response.arrayBuffer().catch(() => undefined);
         return { status: response.status, body: null };
       }
@@ -71,14 +62,14 @@ export async function regionSignIns(identity: DeviceIdentity, region: Region): P
   }
 }
 
-export function listSignIns(identity: DeviceIdentity): Promise<RegionSignIns[]> {
+export function listSignIns(identity: SigninIdentity): Promise<RegionSignIns[]> {
   return Promise.all(SIGN_IN_REGIONS.map(region => regionSignIns(identity, region)));
 }
 
 /** Revoke one of the signed-in user's CLI sign-ins. Tank ends its access and refresh tokens at once. */
-export async function revokeSignIn(identity: DeviceIdentity, region: Region, tokenId: string): Promise<boolean> {
+export async function revokeSignIn(identity: SigninIdentity, region: Region, tokenId: string): Promise<boolean> {
   if (!TOKEN_ID.test(tokenId)) return false;
-  const tank = approvalTank(region);
+  const tank = signinTank(region);
   if (!tank || !tank.key) return false;
   try {
     return await boundedFetch(new URL(`/v1/personal-tokens/${tokenId}`, tank.url), {

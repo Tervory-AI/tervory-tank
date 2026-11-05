@@ -15,6 +15,7 @@ def log_line(
     tenant_id: str | None = None,
     job_id: str | None = None,
     level: str = "info",
+    error: str | None = None,
 ) -> None:
     row: dict[str, Any] = {
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -26,5 +27,7 @@ def log_line(
         row["tenant_id"] = str(tenant_id)
     if job_id:
         row["job_id"] = str(job_id)
+    if error:
+        row["error"] = str(error)
     sys.stdout.write(json.dumps(row, default=str) + "\n")
     sys.stdout.flush()

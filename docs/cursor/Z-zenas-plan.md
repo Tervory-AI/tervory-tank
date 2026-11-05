@@ -12,7 +12,7 @@ Depends on C6 (chassis) and C7 (Hermes).
 South African work runs on infrastructure in South Africa; US work runs in the US. Same code, same skills, deployed twice; the region is configuration (`TANK_REGION=za|us-east`), never a fork.
 - **Each region has its own** Postgres, Redis, Qdrant/Hermes, Tank, Zenas box, file storage and backups. A ZA tenant exists only in the ZA region; nothing replicates between regions.
 - **Model calls from ZA:** prompts with personal information go only to models running in South Africa (an open-weight model on our own SA server, or a provider's South African region where one offers the model). Prompts sent to providers outside SA carry placeholders, never the identifiers (see `zenas.pii`). Tank in the ZA region enforces this per tenant: a prompt still containing a detected identifier is refused for any non-SA provider.
-- **Every other vendor counts too:** sign-in (Clerk is US-hosted: ZA tenants need either consent wording that covers it or self-hosted sign-in in the ZA region), email, error tracking, logs and backups must stay in SA or carry no personal information.
+- **Every other vendor counts too:** sign-in (Trigger sign-in is US-hosted: ZA tenants need either consent wording that covers it or self-hosted sign-in in the ZA region), email, error tracking, logs and backups must stay in SA or carry no personal information.
 - **Public legal sources** (statutes, judgments, court rules) contain no client data; the ZA pool is built on the ZA server, the US pool on the US server.
 - Coolify may manage both servers from one dashboard (it stores deploy settings, not client data).
 
@@ -74,7 +74,7 @@ South African work runs on infrastructure in South Africa; US work runs in the U
 
 ## Z6 — Court rules engine and the lawyer review console
 - `zenas.deadlines@1.0.0` (pure code, no model): computes deadlines from a trigger date under FRCP 6 and the SA Uniform Rules (court days, public holidays per jurisdiction, dies induciae), with the rule cited for every step. Evals against the panel's worked examples.
-- Workspace pages: **Matters** (client) and **Review** (panel only: Clerk role `reviewer` + jurisdiction tags). Review shows the draft beside its sources, lets the lawyer edit, approve or reject, and records the sign-off. Approved edits feed Tank's golden cases so Zenas learns the panel's standard.
+- Workspace pages: **Matters** (client) and **Review** (panel only: Trigger sign-in role `reviewer` + jurisdiction tags). Review shows the draft beside its sources, lets the lawyer edit, approve or reject, and records the sign-off. Approved edits feed Tank's golden cases so Zenas learns the panel's standard.
 
 ## What the founder provides
 - Reviewer accounts for the US and SA panels (name, admission/bar number, jurisdictions).

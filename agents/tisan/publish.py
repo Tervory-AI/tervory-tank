@@ -12,7 +12,7 @@ import uuid
 from pathlib import Path, PurePosixPath
 
 import httpx
-from fastapi import Header, HTTPException, Query
+from fastapi import Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 MAX_BYTES = 24 * 1024 * 1024
@@ -68,9 +68,10 @@ def stored_build(root: Path, tenant: str, slug: str, number: int) -> dict:
 
 
 class Publisher:
-    def __init__(self, core, journal, coolify, http, root: Path, tank_url: str, key: str):
+    def __init__(self, core, journal, coolify, http, root: Path, tank_url: str, key: str, identity_proof=None):
         self.core, self.journal, self.coolify, self.http = core, journal, coolify, http
         self.root, self.tank_url, self.key = root, tank_url.rstrip('/'), key
+        self.identity_proof = dict(identity_proof or {})
 
     async def run(self, body: PublishRequest, actor: str) -> dict:
         tenant, site, operation = str(body.tenant_id), body.slug, str(body.operation_id)
@@ -98,7 +99,8 @@ class Publisher:
             self.journal.update(tenant, site, operation, 'committing', details)
             mutation = True
             response = await self.http.post(self.tank_url + '/v1/tisan/publish/git',
-                headers={'X-Tank-Key': self.key, 'X-Tervory-Admin': actor, 'X-Tervory-Tenant': tenant},
+                headers={'X-Tank-Key': self.key, 'X-Tervory-Admin': actor, 'X-Tervory-Tenant': tenant,
+                         **self.identity_proof},
                 json={**build, 'tenant_id': tenant, 'slug': site, 'repository': staging['repository']}, timeout=240)
             if response.status_code != 200:
                 raise self.core.Refused('Git commit unavailable')
@@ -173,7 +175,7 @@ def mount(app, core):
         return {'status': 'succeeded', 'build': int(number), 'commit': core.commit(details['commit']),
                 'url': core.origin(details['url'])}
 
-    async def call(body, key, actor, action):
+    async def call(body, key, actor, action, request):
         expected = os.environ.get('TANK_KEY', '')
         founders = {p.strip() for p in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if p.strip()}
         if not expected or not key or not hmac.compare_digest(key.encode(), expected.encode()) or actor not in founders:
@@ -183,7 +185,9 @@ def mount(app, core):
             async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
                 service = Publisher(core, core.Journal(root / 'promotion.sqlite3'), core.Coolify(http,
                     os.environ.get('TISAN_COOLIFY_URL', ''), os.environ.get('TISAN_COOLIFY_TOKEN', '')),
-                    http, root, os.environ.get('TANK_URL', 'http://tank:8000'), key)
+                    http, root, os.environ.get('TANK_URL', 'http://tank:8000'), key,
+                    {name: request.headers[name] for name in ('authorization', 'x-trigger-signin-token', 'x-trigger-signin-org')
+                     if name in request.headers})
                 if action == 'status':
                     return await service.status(body, actor)
                 row = await service.run(body, actor)
@@ -198,9 +202,9 @@ def mount(app, core):
             raise HTTPException(503, 'Publish could not be confirmed; inspect its operation status.') from None
 
     @app.post('/publish/build')
-    async def publish(body: PublishRequest, x_tank_key: str = Header(default=''), x_tervory_admin: str = Header(default='')):
-        return await call(body, x_tank_key, x_tervory_admin, 'build')
+    async def publish(body: PublishRequest, request: Request, x_tank_key: str = Header(default=''), x_tervory_admin: str = Header(default='')):
+        return await call(body, x_tank_key, x_tervory_admin, 'build', request)
 
     @app.post('/publish/status')
-    async def status(body: PublishRequest, x_tank_key: str = Header(default=''), x_tervory_admin: str = Header(default='')):
-        return await call(body, x_tank_key, x_tervory_admin, 'status')
+    async def status(body: PublishRequest, request: Request, x_tank_key: str = Header(default=''), x_tervory_admin: str = Header(default='')):
+        return await call(body, x_tank_key, x_tervory_admin, 'status', request)

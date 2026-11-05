@@ -86,7 +86,7 @@ async def identity(request: Request) -> Actor:
 
 
 async def signed_in_actor(request: Request) -> Actor:
-    """The Clerk-derived user and tenant headers. Call only after the service key is checked."""
+    """The Trigger sign-in-derived user and tenant headers. Call only after the service key is checked."""
     from main import box_region
     user = request.headers.get("x-tervory-user", "").strip()
     tenant = request.headers.get("x-tervory-tenant")
@@ -99,7 +99,7 @@ async def signed_in_actor(request: Request) -> Actor:
     home = request.headers.get("x-tervory-home-region", box_region())
     if home != box_region():
         raise HTTPException(403, "This conversation must stay on its home box")
-    admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
+    admins = __import__("trigger_signin_config").founders()
     return await authorized_actor(Actor(tenant_id, user, user in admins, tenant_admin=request.headers.get("x-tervory-role") == "org:admin"))
 
 
@@ -114,6 +114,8 @@ def allowed_tools(actor: Actor) -> list[str]:
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     voice_tools = TENANT_ADMIN_TOOLS if actor.tenant_admin and not actor.founder else []
     client_tools = []  # Product tenant-admin declarations already include these tools.
+    if actor.tenant_admin or actor.founder:
+        client_tools = [*client_tools, "paid_steps.approve"]
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
                    if (tool not in FOUNDER_ONLY_TOOLS or actor.founder)
@@ -157,6 +159,7 @@ class Turn(Body):
 
 class CardAction(Body):
     action: Literal["confirm", "cancel"]
+    reason: str | None = Field(default=None, min_length=1, max_length=1000)
 
 
 class SquadAccess(Body):
@@ -183,8 +186,8 @@ class Followup(Body):
 
 async def owned(conn: Any, thread_id: uuid.UUID, actor: Actor, *, lock: bool = False) -> dict:
     row = await conn.fetchrow(
-        "SELECT * FROM tank.command_threads WHERE thread_id=$1 AND tenant_id=$2 AND user_id=$3"
-        + (" FOR UPDATE" if lock else ""), thread_id, actor.tenant_id, actor.user_id,
+        "SELECT * FROM tank.command_threads WHERE thread_id=$1 AND tenant_id=$2 AND user_id=$3 AND trigger_signin_issuer=$4"
+        + (" FOR UPDATE" if lock else ""), thread_id, actor.tenant_id, actor.user_id, __import__('trigger_signin_config').issuer(),
     )
     if row is None:
         raise HTTPException(404, "Thread not found")
@@ -238,6 +241,8 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
         "saved_usd": float(baseline) - cost if not pending and cost is not None else None,
         "cost_status": "price not set" if ledger.get("cost_status") == "not_set" else "pending" if cost is None else "recorded",
         "baseline_status": "baseline pending" if pending else "recorded",
+        **({"paid_step_id": ledger["paid_step_id"], "paid_step_mode": ledger.get("paid_step_mode"),
+            "paid_step_approval_id": str(ledger["paid_step_approval_id"])} if ledger.get("paid_step_approval_id") else {}),
     }
 
 
@@ -250,7 +255,7 @@ MODEL_NAME_KEYS = frozenset({"model", "baseline_model", "auto_model", "requested
 CUSTOMER_RECEIPT_KEYS = frozenset({
     "step_id", "ledger_id", "tokens_in", "tokens_out", "cost_usd", "baseline_cost_usd", "saved_usd",
     "cost_status", "baseline_status", "auto_cost_usd", "auto_cost_status", "auto_priced_at",
-    "auto_cost_label", "auto_cost_basis",
+    "auto_cost_label", "auto_cost_basis", "paid_step_id", "paid_step_mode", "paid_step_approval_id",
 })
 CUSTOMER_STEP_DROP = frozenset({"auto_comparison", "requested_model", "model"})
 CUSTOMER_MESSAGE_KEYS = frozenset({"message_id", "role", "content", "attachments", "repeatable"})
@@ -369,8 +374,8 @@ async def create_thread(body: NewThread, actor: Actor = Depends(identity)) -> di
     state = {"messages": [], "steps": {}, "cards": {}, "receipts": [], "active_turn": None}
     async with db().acquire() as conn:
         await conn.execute(
-            "INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,$4,$5::jsonb)",
-            thread_id, actor.tenant_id, actor.user_id, body.title, dump(state),
+            "INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state,trigger_signin_issuer) VALUES($1,$2,$3,$4,$5::jsonb,$6)",
+            thread_id, actor.tenant_id, actor.user_id, body.title, dump(state), __import__('trigger_signin_config').issuer(),
         )
     return {"thread_id": str(thread_id)}
 
@@ -379,9 +384,9 @@ async def create_thread(body: NewThread, actor: Actor = Depends(identity)) -> di
 async def list_threads(q: str = Query(default="", max_length=200), actor: Actor = Depends(identity)) -> list[dict]:
     async with db().acquire() as conn:
         rows = await conn.fetch(
-            "SELECT * FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 "
+            "SELECT * FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND trigger_signin_issuer=$4 "
             "AND (strpos(lower(title),lower($3))>0 OR strpos(lower((state->'messages')::text),lower($3))>0) "
-            "ORDER BY updated_at DESC LIMIT 100", actor.tenant_id, actor.user_id, q,
+            "ORDER BY updated_at DESC LIMIT 100", actor.tenant_id, actor.user_id, q, __import__('trigger_signin_config').issuer(),
         )
     result = []
     for row in rows:
@@ -394,6 +399,7 @@ async def list_threads(q: str = Query(default="", max_length=200), actor: Actor 
 
 @router.get("/threads/{thread_id}")
 async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> dict:
+    await __import__("paid_steps").sync_cards(thread_id, actor)
     async with db().acquire() as conn:
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
@@ -569,8 +575,11 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
             raise deferred_error
         if answer is None:
             async with asyncio.timeout(150):
-                answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token,
-                                          **({"priority": priority} if priority is not None else {}))
+                import paid_steps
+                with paid_steps.run_scope(paid_steps.Run(actor.tenant_id, uuid.UUID(turn_id),
+                        paid_steps.fingerprint([messages, model]), actor.user_id, thread_id)):
+                    answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token,
+                                              **({"priority": priority} if priority is not None else {}))
         from priority_queue import QueuedResponse
         if isinstance(answer, QueuedResponse):
             async with editing(thread_id, actor) as (conn, row, state):
@@ -615,6 +624,8 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
             await event(conn, row, "done", {"message_id": turn_id})
             if state["active_turn"] == turn_id:
                 state["active_turn"] = None
+    except __import__("paid_steps").ApprovalRequired as pause:
+        await __import__("paid_steps").suspend_turn(pause, thread_id, actor, turn_id, messages, model, priority)
     except (Exception, asyncio.CancelledError) as exc:
         # Never return raw provider exceptions, URLs, headers or prompts.
         if not isinstance(exc, (HTTPException, asyncio.CancelledError)):
@@ -743,15 +754,20 @@ async def propose_build(body: Build, actor: Actor = Depends(identity)) -> dict:
 async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depends(identity)) -> dict:
     async with db().acquire() as conn:
         thread_id = await conn.fetchval(
-            "SELECT thread_id FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->'cards' ? $3",
-            actor.tenant_id, actor.user_id, str(card_id),
+            "SELECT thread_id FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->'cards' ? $3 AND trigger_signin_issuer=$4",
+            actor.tenant_id, actor.user_id, str(card_id), __import__('trigger_signin_config').issuer(),
         )
     if thread_id is None:
         raise HTTPException(404, "Card not found")
+    paid_card = await __import__("paid_steps").resolve_card(thread_id, card_id, body, actor)
+    if paid_card is not None:
+        return paid_card
     action = None
     reconcile = False
     async with editing(thread_id, actor) as (conn, row, state):
         card = state["cards"][str(card_id)]
+        if card.get("paid_approval_id"):
+            return public_card(card)
         # Recover a crashed process without replaying an uncertain side effect.
         if card["status"] == "executing":
             started = datetime.fromisoformat(card["started_at"])
@@ -1673,7 +1689,7 @@ async def propose_action(conn: Any, row: dict, state: dict, action: PlannedActio
 
 
 def current_actor(actor: Actor) -> Actor:
-    admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
+    admins = __import__("trigger_signin_config").founders()
     return replace(actor, founder=actor.user_id in admins)
 
 
@@ -1765,7 +1781,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     return adapter.method, path, scope, {**args, **scope}
 
 
-async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any]:
+async def dispatch_action(action: PlannedAction, actor: Actor, *, paid_run_id=None) -> tuple[int, Any]:
     """In-process HTTP to Tank: existing route auth/validation remains in force.
 
     There is no socket fallback, redirect, direct room address or provider call.
@@ -1778,11 +1794,14 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
         from trigger_commands import confirmation
         confirmation(actor, action.tool, action.arguments)
     method, path, params, body = adapter_request(action, actor)
+    if action.tool == "market_lab.research" and paid_run_id is not None:
+        body = {**body, "paid_run_id": str(paid_run_id)}
     if action.tool in {"radix.infra.scan", "radix.active.scan", "radix.active.consent", "radix.active.consent.withdraw"}:
         from trigger_commands import confirmation
         confirmation(actor, action.tool, action.arguments)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
+    headers.update(__import__("trigger_signin_config").proof.get())
     if action.tool in {"radix.infra.scan", "radix.active.consent", "radix.active.consent.withdraw", "radix.active.scan", "radix.domain.prove", "radix.passive.scan", "radix.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"}:
         from main import box_region
         headers.update({"X-Tervory-Squad": "radix", "X-Tervory-Region": box_region()})
@@ -1996,7 +2015,15 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
-                status, result = await dispatch_action(action, actor)
+                if action.tool == "market_lab.research":
+                    # Card identity is server-owned; the request cannot provide
+                    # an approval or select another card's paid run.
+                    status, result = await dispatch_action(action, actor, paid_run_id=uuid.UUID(card_id))
+                    detail = result.get("detail") if isinstance(result, dict) else None
+                    if status == 409 and isinstance(detail, dict) and detail.get("code") == "paid_step_approval_required":
+                        return await __import__("paid_steps").suspend_action(detail, thread_id, actor, card_id, action)
+                else:
+                    status, result = await dispatch_action(action, actor)
         ids = explicit_ledger_ids(result)
         async with editing(thread_id, actor) as (conn, row, state):
             card = state["cards"][card_id]

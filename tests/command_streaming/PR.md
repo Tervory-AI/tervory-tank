@@ -65,7 +65,7 @@ all 37 static pages. Exact command, from `workspace/` (the same inert public
 test values as CI):
 
 ```sh
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npm run build
+NEXT_TELEMETRY_DISABLED=1 npm run build
 ```
 
 It compiled successfully in 14.9 seconds and completed standalone output.

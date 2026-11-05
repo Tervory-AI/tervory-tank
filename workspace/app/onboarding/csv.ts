@@ -53,7 +53,7 @@ export const COST_LINES: CostLine[] = [
 ];
 
 export const COST_NOTE =
-  "Most steps are free. A paid step uses the cheapest option available. Pressing Start runs every step. Nothing waits for approval.";
+  "Most steps are free. A paid step uses the cheapest option available.";
 
 export type Issue = { level: "error" | "note"; message: string };
 export type Table = { headers: string[]; rows: string[][] };

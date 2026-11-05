@@ -44,7 +44,7 @@ Branch: `codex/trigger-w4`; base: `55b2e224` from `origin/main`. The pushed fina
 | [workspace/app/trigger/view.tsx](../../workspace/app/trigger/view.tsx) | 1 | Channels, calendar, Composer, post/review detail, Inbox, settings, drafts, Confirm and receipt links. |
 | [workspace/app/v1/bot/widget/\[operation\]/route.ts](../../workspace/app/v1/bot/widget/%5Boperation%5D/route.ts) | 1 | Bounded same-region public transport preserving store Origin; no private Workspace key or fallback. |
 | [workspace/lib/product-hosts.ts](../../workspace/lib/product-hosts.ts) | 28 | Map trigger.tervory.com to /trigger. |
-| [workspace/middleware.ts](../../workspace/middleware.ts) | 23 | Allow only the four origin/key-authenticated public widget operations through Clerk. |
+| [workspace/middleware.ts](../../workspace/middleware.ts) | 23 | Allow only the four origin/key-authenticated public widget operations through Trigger sign-in. |
 | [workspace/next.config.ts](../../workspace/next.config.ts) | 8 | Scoped public CORS headers for the two licensed widget font files. |
 | [workspace/public/trigger/Atkinson-OFL.txt](../../workspace/public/trigger/Atkinson-OFL.txt) | 1 | Original font licence. |
 | [workspace/public/trigger/AtkinsonHyperlegible-Regular.ttf](../../workspace/public/trigger/AtkinsonHyperlegible-Regular.ttf) | binary | Unmodified self-hosted OFL font from the official Google Fonts repository. |

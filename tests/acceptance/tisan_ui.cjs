@@ -1,5 +1,5 @@
 /* Offline browser fixtures for the actual Tisan TSX and server actions.
-   Only Clerk, Next navigation/cache and Tank HTTP boundaries are replaced. */
+   Only Trigger sign-in, Next navigation/cache and Tank HTTP boundaries are replaced. */
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');

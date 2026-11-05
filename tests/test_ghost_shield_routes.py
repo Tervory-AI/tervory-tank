@@ -21,6 +21,7 @@ PANEL = ROOT / "workspace/app/admin/ghost"
 
 @pytest.mark.asyncio
 async def test_shield_routes_are_founder_only_and_reach_only_ghost(gateway, monkeypatch):
+    founder = {**FOUNDER, **gateway.signin_headers}
     gateway.fetchrow.return_value = {"cost": Decimal("0.012500"), "receipts": 7}
     seen = []
     shield = uuid.uuid4()
@@ -39,13 +40,13 @@ async def test_shield_routes_are_founder_only_and_reach_only_ghost(gateway, monk
                 for headers in ({"X-Tank-Key": "workspace-test"}, {"X-Tank-Key": "ghost-test"}, {}):
                     assert (await client.request(method, path, headers=headers)).status_code in {403, 404}
             assert not seen
-            tile = (await client.get("/v1/ghost/shields/tile", headers=FOUNDER)).json()
+            tile = (await client.get("/v1/ghost/shields/tile", headers=founder)).json()
             assert tile["cost_this_month_usd"] == 0.0125 and tile["receipts_this_month"] == 7 and tile["open_total"] == 2
-            assert (await client.get("/v1/ghost/shields/list", headers=FOUNDER)).status_code == 200
-            assert (await client.post(f"/v1/ghost/shields/{shield}/raise", headers=FOUNDER)).status_code == 200
-            assert (await client.post(f"/v1/ghost/shields/{shield}/undo", headers=FOUNDER)).status_code == 200
-            assert (await client.post(f"/v1/ghost/shields/{shield}/delete", headers=FOUNDER)).status_code in {404, 422}
-            assert (await client.post("/v1/ghost/shields/not-a-uuid/raise", headers=FOUNDER)).status_code in {404, 422}
+            assert (await client.get("/v1/ghost/shields/list", headers=founder)).status_code == 200
+            assert (await client.post(f"/v1/ghost/shields/{shield}/raise", headers=founder)).status_code == 200
+            assert (await client.post(f"/v1/ghost/shields/{shield}/undo", headers=founder)).status_code == 200
+            assert (await client.post(f"/v1/ghost/shields/{shield}/delete", headers=founder)).status_code in {404, 422}
+            assert (await client.post("/v1/ghost/shields/not-a-uuid/raise", headers=founder)).status_code in {404, 422}
     assert [str(r.url) for r in seen] == ["http://agent-ghost:8000/ghost/summary", "http://agent-ghost:8000/ghost/shields",
                                           f"http://agent-ghost:8000/ghost/shields/{shield}/raise",
                                           f"http://agent-ghost:8000/ghost/shields/{shield}/undo"]

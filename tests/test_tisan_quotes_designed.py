@@ -1,4 +1,5 @@
 """J4 designed fields: real founder routes against disposable PostgreSQL only."""
+from trigger_signin_fakes import set_founders
 import copy
 import json
 from datetime import datetime, timedelta, timezone
@@ -37,7 +38,7 @@ def designed():
 async def api(database, monkeypatch):
     store, admin, raw = database
     monkeypatch.setenv('TANK_KEY', HEADERS['X-Tank-Key'])
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', HEADERS['X-Tervory-Admin'])
+    set_founders(monkeypatch, HEADERS['X-Tervory-Admin'])
     app = FastAPI()
     app.state.pool = store.pool
     q.mount(app, gold_sources.founder)  # The actual existing founder/room-key guard.

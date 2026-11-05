@@ -1,5 +1,5 @@
 import "server-only";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { notFound } from "next/navigation";
 import { rejectUnlessFounder, requireReviewer } from "@/app/review/access";
 import { currentTenant } from "@/lib/tenant";

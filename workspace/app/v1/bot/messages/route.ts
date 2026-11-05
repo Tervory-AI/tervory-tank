@@ -1,4 +1,4 @@
-/** Public bot transport only. No page, widget, Clerk role or Workspace key. */
+/** Public bot transport only. No page, widget, SigninDirectory role or Workspace key. */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const base = process.env.TANK_URL ?? "http://tank:8000";

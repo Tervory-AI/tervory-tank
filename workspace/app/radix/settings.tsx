@@ -1,6 +1,3 @@
-"use client";
-import { useClerk } from "@clerk/nextjs";
 export function RadixSettings() {
-  const { openUserProfile } = useClerk();
-  return <button type="button" onClick={() => openUserProfile()}>Settings</button>;
+  return <a href="https://auth.tervory.com/ui/console/users/me" target="_blank" rel="noopener noreferrer">Trigger sign-in settings</a>;
 }

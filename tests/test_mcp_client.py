@@ -1,5 +1,6 @@
 """G3: actual pinned corridor + in-process fake MCP/OAuth server; no outside network."""
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import asyncio
 import base64
@@ -130,7 +131,7 @@ def runtime(monkeypatch):
         return data['value']
     monkeypatch.setattr(vault, 'seal', seal)
     monkeypatch.setattr(vault, 'open_seal', unseal)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     actor = command.Actor(OWNER, 'client', False, frozenset({'market_lab'}))
     return SimpleNamespace(store=store, actor=actor, founder=command.Actor(OWNER, 'founder', True))
 

@@ -84,11 +84,11 @@ def collection_name(name: str) -> str:
 
 
 def identity_dump_configuration() -> tuple[dict[str, str], str]:
-    if os.environ.get('TANK_REGION') != 'za':
-        raise StorageError('Identity backups run on ZA only')
-    password = os.environ.get('POSTGRES_ZITADEL_PASSWORD', '')
+    if os.environ.get('TANK_REGION') not in {'za', 'us-east'}:
+        raise StorageError('Trigger sign-in backup region refused')
+    password = os.environ.get('TRIGGER_SIGNIN_DB_PASSWORD', '')
     if not password or not shutil.which('pg_dump') or not shutil.which('age'):
-        raise StorageError('Identity backup settings or tools are missing')
+        raise StorageError('Trigger sign-in backup settings or tools are missing')
     env = {**tool_environment(), 'PGHOST': 'identity-postgres', 'PGPORT': '5432',
            'PGDATABASE': 'zitadel', 'PGUSER': 'zitadel', 'PGPASSWORD': password,
            'PGSSLMODE': 'disable'}
@@ -136,11 +136,11 @@ def backup_public(owner: str) -> bool:
     return owner == 'zenas'
 
 
-def assert_backup_owner(owner: str) -> None:
+def assert_backup_owner(owner: str, *, identity: bool = False) -> None:
     if owner == 'uploads':
         return
     if owner == 'zenas':
-        if os.environ.get('TANK_REGION', '') != 'za':
+        if os.environ.get('TANK_REGION', '') != 'za' and not (identity and os.environ.get('TANK_REGION') == 'us-east'):
             raise StorageError('Zenas database backups require TANK_REGION=za')
         return
     raise StorageError('Database backups use UPLOADS or ZA Zenas only')
@@ -208,9 +208,9 @@ async def encrypted_qdrant_snapshot(collection: str, target: Path) -> None:
 
 
 async def backup_once(owner: str = 'uploads', *, identity: bool = False) -> dict:
-    assert_backup_owner(owner)
-    if identity and (owner != 'zenas' or os.environ.get('TANK_REGION') != 'za'):
-        raise StorageError('Identity backup owner must be ZA Zenas')
+    assert_backup_owner(owner, identity=identity)
+    if identity and (owner != 'zenas' or os.environ.get('TANK_REGION') not in {'za', 'us-east'}):
+        raise StorageError('Trigger sign-in backup owner or region refused')
     public = backup_public(owner)
     store = Storage(owner)
     try:
@@ -275,10 +275,10 @@ def _print_result(payload: dict) -> None:
 
 
 async def main(owner: str, nightly: bool, target: str = 'all', *, identity: bool = False) -> None:
-    assert_backup_owner(owner)
+    assert_backup_owner(owner, identity=identity)
     public = backup_public(owner)
-    if identity and (target != 'database' or owner != 'zenas' or os.environ.get('TANK_REGION') != 'za'):
-        raise StorageError('Identity backup requires ZA Zenas database target')
+    if identity and (target != 'database' or owner != 'zenas' or os.environ.get('TANK_REGION') not in {'za', 'us-east'}):
+        raise StorageError('Trigger sign-in backup requires a regional database target')
     if target not in {'database', 'qdrant', 'all'}:
         raise StorageError('Backup target is invalid')
     # Fail at worker start, not silently after waiting for the first night.
@@ -313,7 +313,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--owner', choices=['uploads', 'zenas'], default='uploads')
     parser.add_argument('--target', choices=['database', 'qdrant', 'all'], default='all')
-    parser.add_argument('--identity', action='store_true', help='ZA identity database only')
+    parser.add_argument('--identity', action='store_true', help='Trigger sign-in database only')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--once', action='store_true')
     mode.add_argument('--nightly', action='store_true')

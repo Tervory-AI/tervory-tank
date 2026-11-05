@@ -27,7 +27,7 @@
 ## 2. Workspace at za.tervory.com
 - With `TANK_REGION=za`, the workspace talks only to tank-za.
 - **No calls between boxes in either direction.** Test this at the fetch layer.
-- **Same Clerk login on both.** On sign-in, an account whose home is the other box goes to that box's address (`APP_URL_US`, `APP_URL_ZA`).
+- **Same Trigger sign-in login on both.** On sign-in, an account whose home is the other box goes to that box's address (`APP_URL_US`, `APP_URL_ZA`).
 - **Home region is set automatically at onboarding** from the account's country: South Africa = za, everything else = us-east. The founder can still change it in Admin > Homes. No account is left without one.
 - **Founders** (`TERVORY_ADMIN_USER_IDS`) have full access on both boxes:
   - every page;

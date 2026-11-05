@@ -11,15 +11,6 @@ export const auth: Fingerprint[] = [
     npmDep: ['^@auth0/', '^auth0-'],
   },
   {
-    name: 'Clerk',
-    categories: ['auth'],
-    website: 'https://clerk.com',
-    scriptSrc: ['clerk\\.(?:com|dev|accounts\\.dev)', '\\.clerk\\.accounts\\.dev'],
-    requestHost: ['clerk\\.[a-z0-9-]+\\.(?:com|dev)', '\\.clerk\\.accounts\\.dev'],
-    js: { Clerk: '' },
-    npmDep: ['^@clerk/'],
-  },
-  {
     name: 'WorkOS',
     categories: ['auth'],
     website: 'https://workos.com',

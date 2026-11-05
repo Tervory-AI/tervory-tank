@@ -1,0 +1,32 @@
+async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
+    async with pool().acquire() as conn:
+        await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1 AND tenant_id=$2", task_id, req.tenant_id)
+    try:
+        res = await run_route(req, task_id=task_id)
+        if isinstance(res,priority_queue.QueuedResponse):
+            async with pool().acquire() as conn:
+                await conn.execute("UPDATE tank.tasks SET status='queued',ledger_id=$3 WHERE id=$1 AND tenant_id=$2",task_id,req.tenant_id,res.ledger_id)
+            return
+        async with pool().acquire() as conn:
+            await conn.execute(
+                "UPDATE tank.tasks SET status='done', result=$2, ledger_id=$3, finished_at=now() WHERE id=$1 AND tenant_id=$4",
+                task_id, res.content, res.ledger_id, req.tenant_id,
+            )
+    except __import__("paid_steps").ApprovalRequired as pause:
+        saved=await __import__("paid_steps").save_background(pause,{"kind":"tank.task","task_id":str(task_id),"request":req.model_dump(mode="json")})
+        async with pool().acquire() as conn:
+            await conn.execute("UPDATE tank.tasks SET status='queued',error=NULL WHERE id=$1 AND tenant_id=$2 AND status='running'",task_id,req.tenant_id)
+        if saved["state"]=="approved":
+            __import__("paid_steps").kick(saved)
+    except Exception as exc:  # noqa: BLE001 — anything that stops a task is recorded on the task
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        if isinstance(detail, dict):
+            ledger_id = detail.get("ledger_id")
+            detail = json.dumps(detail)[:1000]
+        else:
+            ledger_id = None
+        async with pool().acquire() as conn:
+            await conn.execute(
+                "UPDATE tank.tasks SET status='failed', error=$2, ledger_id=$3, finished_at=now() WHERE id=$1 AND tenant_id=$4",
+                task_id, str(detail), uuid.UUID(ledger_id) if ledger_id else None, req.tenant_id,
+            )

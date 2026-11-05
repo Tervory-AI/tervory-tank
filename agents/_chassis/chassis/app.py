@@ -64,7 +64,11 @@ def create_app(
         database_url = os.environ.get("DATABASE_URL", "")
         if not database_url:
             raise RuntimeError("DATABASE_URL is not set")
-        raw_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=3)
+        # Jobs hold a connection for the whole handler and handlers take more,
+        # so a three-connection pool starved /health (Base and Tiger unhealthy).
+        raw_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=10)
+        # Health gets its own connection so it never waits behind job work.
+        health_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=1)
         pool = TenantPool(raw_pool)
         admin_url = os.environ.get("CHASSIS_ADMIN_DATABASE_URL", "")
         admin_pool = await asyncpg.create_pool(admin_url, min_size=1, max_size=2) if admin_url else None
@@ -82,6 +86,7 @@ def create_app(
                     raise RuntimeError("RLS requires a non-bypass room role and a separate admin pool")
         http = httpx.AsyncClient(timeout=60)
         app.state.pool = pool
+        app.state.health_pool = health_pool
         app.state.admin_pool = admin_pool
         app.state.http = http
         app.state.files = FileStore(os.environ.get("DATA_DIR", "/data"))
@@ -115,6 +120,7 @@ def create_app(
             await asyncio.gather(*tasks, return_exceptions=True)
             await http.aclose()
             await pool.close()
+            await health_pool.close()
             if admin_pool is not None:
                 await admin_pool.close()
 
@@ -128,12 +134,12 @@ def create_app(
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
-        pool = getattr(app.state, "pool", None)
+        pool = getattr(app.state, "health_pool", None) or getattr(app.state, "pool", None)
         if pool is None:
             raise HTTPException(status_code=503, detail="database unreachable")
         try:
-            async with pool.acquire() as conn:
-                await conn.fetchval("SELECT 1")
+            async with pool.acquire(timeout=2) as conn:
+                await conn.fetchval("SELECT 1", timeout=2)
         except Exception:  # noqa: BLE001 — do not include the database error in the response
             raise HTTPException(status_code=503, detail="database unreachable") from None
         return {"ok": True, "agent": agent}
