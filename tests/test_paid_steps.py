@@ -21,6 +21,15 @@ PRODUCT_TASKS = {'base':'base.extract','tiger':'agent.tiger.think','market_lab':
     'trigger':'trigger.write','autumbra':'agent.ghost.think','model':'command.turn'}
 
 
+def command_schema_fixture(schema):
+    # Apply the actual command tables and their later native-identity migration.
+    # These focused tests intentionally omit unrelated platform schemas.
+    tables = schema[schema.index('CREATE TABLE IF NOT EXISTS tank.command_threads'):schema.index('CREATE TABLE IF NOT EXISTS tank.command_builds')]
+    issuer_column = next(line for line in schema.splitlines()
+                         if line.startswith('ALTER TABLE tank.command_threads ADD COLUMN IF NOT EXISTS trigger_signin_issuer '))
+    return tables + '\n' + issuer_column
+
+
 @pytest_asyncio.fixture
 async def database(monkeypatch):
     url = os.environ.get('PAID_STEPS_TEST_DATABASE_URL') or os.environ.get('POOL_SCHEMA_DATABASE_URL')
@@ -239,7 +248,7 @@ async def test_chats_existing_confirm_card_approves_and_denies(database, monkeyp
     actor = command.Actor(A, 'placeholder-admin', True, tenant_admin=True)
     thread = uuid.uuid4()
     schema = (ROOT / 'tank/schema.sql').read_text()
-    schema = schema[schema.index('CREATE TABLE IF NOT EXISTS tank.command_threads'):schema.index('CREATE TABLE IF NOT EXISTS tank.command_builds')]
+    schema = command_schema_fixture(schema)
     async with pool.acquire() as conn:
         await conn.execute(schema)
     app = FastAPI()
@@ -723,7 +732,7 @@ async def test_member_request_approval_reaches_admin_without_exposing_private_tu
     monkeypatch.setattr(command,'db',lambda:pool)
     schema = (ROOT/'tank/schema.sql').read_text()
     async with pool.acquire() as conn:
-        await conn.execute(schema[schema.index('CREATE TABLE IF NOT EXISTS tank.command_threads'):schema.index('CREATE TABLE IF NOT EXISTS tank.command_builds')])
+        await conn.execute(command_schema_fixture(schema))
         await conn.execute('CREATE TABLE tank.tenant_squad(tenant_id uuid,agent text)')
     actor = command.Actor(A,'placeholder-member',False,tenant_admin=False)
     app = FastAPI()
@@ -811,7 +820,7 @@ async def test_direct_research_card_waits_and_resumes_once(database,monkeypatch,
     monkeypatch.setattr(command,'refresh_action_receipts',AsyncMock())
     schema = (ROOT/'tank/schema.sql').read_text()
     async with pool.acquire() as conn:
-        await conn.execute(schema[schema.index('CREATE TABLE IF NOT EXISTS tank.command_threads'):schema.index('CREATE TABLE IF NOT EXISTS tank.command_builds')])
+        await conn.execute(command_schema_fixture(schema))
     app = FastAPI()
     app.include_router(command.router)
     app.dependency_overrides[command.identity] = lambda:actor
@@ -928,7 +937,7 @@ async def test_resolved_card_history_does_not_hide_new_pending_approvals(databas
     actor=command.Actor(A,'placeholder-admin',False,tenant_admin=True)
     schema=(ROOT/'tank/schema.sql').read_text()
     async with pool.acquire() as conn:
-        await conn.execute(schema[schema.index('CREATE TABLE IF NOT EXISTS tank.command_threads'):schema.index('CREATE TABLE IF NOT EXISTS tank.command_builds')])
+        await conn.execute(command_schema_fixture(schema))
         await p.register(conn,'base.placeholder.paid','base','model','placeholder')
     app=FastAPI()
     app.include_router(command.router)
