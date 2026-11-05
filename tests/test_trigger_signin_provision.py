@@ -71,12 +71,17 @@ class Native:
                 self.lose_org_response = False
                 raise PROVISION['ProvisionError']('Synthetic response lost')
             return {'organizationId': ident}
-        if path.endswith('/grants/_search') and '/projects/' in path:
-            target = body['queries'][0]['grantedOrgIdQuery']['grantedOrgId']
+        if path == '/management/v1/projectgrants/_search':
+            assert body['query'] == {'limit': 2}
+            assert body['queries'][0] == {'projectIdQuery': {'projectId': '20001'}}
+            target = body['queries'][1]['grantedOrgIdQuery']['grantedOrgId']
+            assert len(body['queries']) == 2
             return {'result': [self.grants[target]] if target in self.grants else []}
         if path == '/management/v1/projects/20001/grants':
             ident = str(70001 + len(self.grants))
-            self.grants[body['grantedOrgId']] = {'id': ident, 'roleKeys': body['roleKeys']}
+            self.grants[body['grantedOrgId']] = {'grantId': ident, 'grantedRoleKeys': body['roleKeys'],
+                                                   'projectId': '20001', 'grantedOrgId': body['grantedOrgId'],
+                                                   'state': 'PROJECT_GRANT_STATE_ACTIVE'}
             return {'grantId': ident}
         if path == '/management/v1/users/grants/_search':
             assert body['queries'] == [{'projectIdQuery': {'projectId': '20001'}}, {'userIdQuery': {'userId': '50001'}}]
@@ -156,3 +161,21 @@ def test_setup_refuses_ledger_from_another_issuer(tmp_path):
     with pytest.raises(PROVISION['ProvisionError'], match='ledger refused'):
         configure(api, tank, tmp_path)
     assert not api.writes
+
+
+@pytest.mark.parametrize('field,value', [
+    ('projectId', '99999'),
+    ('grantedOrgId', '99999'),
+    ('grantId', ''),
+    ('grantId', '../another-grant'),
+    ('state', 'PROJECT_GRANT_STATE_INACTIVE'),
+])
+def test_existing_project_grant_must_match_scope_and_remain_active(tmp_path, field, value):
+    api, tank = Native(), Tank()
+    first = configure(api, tank, tmp_path)
+    org = first['organisations'][0]['org_id']
+    api.grants[org][field] = value
+    before = list(api.writes)
+    with pytest.raises(PROVISION['ProvisionError'], match='project grant refused'):
+        configure(api, tank, tmp_path)
+    assert api.writes == before
