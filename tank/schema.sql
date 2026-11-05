@@ -3306,6 +3306,65 @@ ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS model text;
 -- END PAID LADDER STEPS
 -- END platform
 
+-- BEGIN mobile
+CREATE TABLE IF NOT EXISTS tank.mobile_codes (
+    tenant_id uuid NOT NULL,
+    code_hash text NOT NULL,
+    challenge text NOT NULL,
+    identity jsonb NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '5 minutes',
+    PRIMARY KEY (tenant_id, code_hash)
+);
+CREATE TABLE IF NOT EXISTS tank.mobile_sessions (
+    tenant_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    user_id text NOT NULL,
+    identity jsonb NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '7 days',
+    revoked boolean NOT NULL DEFAULT false,
+    PRIMARY KEY (tenant_id, token_hash)
+);
+CREATE TABLE IF NOT EXISTS tank.mobile_devices (
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    token_hash text NOT NULL UNIQUE,
+    token text NOT NULL,
+    platform text NOT NULL CHECK (platform IN ('ios','android')),
+    session_hash text NOT NULL,
+    registered_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, token_hash),
+    FOREIGN KEY (tenant_id, session_hash) REFERENCES tank.mobile_sessions(tenant_id, token_hash)
+);
+CREATE INDEX IF NOT EXISTS mobile_devices_user ON tank.mobile_devices(tenant_id,user_id);
+CREATE TABLE IF NOT EXISTS tank.mobile_drafts (
+    id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    share_id text NOT NULL,
+    payload jsonb NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '24 hours',
+    PRIMARY KEY (tenant_id,id),
+    UNIQUE (tenant_id,user_id,share_id)
+);
+DO $$
+DECLARE mobile_table text;
+BEGIN
+ -- Follow an existing RLS rollout; do not turn it on for a legacy installation.
+ IF NOT EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  RETURN;
+ END IF;
+ FOREACH mobile_table IN ARRAY ARRAY['mobile_codes','mobile_sessions','mobile_devices','mobile_drafts'] LOOP
+  EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY', mobile_table);
+  EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY', mobile_table);
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=to_regclass('tank.' || mobile_table) AND polname='tenant_access') THEN
+   EXECUTE format('CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)', mobile_table);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=to_regclass('tank.' || mobile_table) AND polname='tenant_boundary') THEN
+   EXECUTE format('CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)', mobile_table);
+  END IF;
+ END LOOP;
+END $$;
+-- END mobile
 -- BEGIN trigger_signin
 ALTER TABLE tank.command_threads ADD COLUMN IF NOT EXISTS trigger_signin_issuer text NOT NULL DEFAULT '';
 ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT NULL DEFAULT false;

@@ -1,4 +1,5 @@
 import "server-only";
+import { mobileIdentity } from "./mobile";
 import { auth } from "./trigger-signin";
 import { tenantBindings } from "./trigger-signin-principal";
 import { createHash } from "node:crypto";
@@ -22,6 +23,11 @@ export function tenantIdFor(orgId: string): string {
 }
 
 export async function activeTenant(): Promise<Tenant | null> {
+  const mobile = await mobileIdentity();
+  if (mobile) {
+    await ensureCaseStudyReports(mobile);
+    return mobile;
+  }
   const identity = await auth();
   if (!identity.userId || !identity.orgId || !identity.tenantId) return null;
   const tenant = { tenantId: identity.tenantId, orgId: identity.orgId, orgName: "Your organisation", userId: identity.userId };

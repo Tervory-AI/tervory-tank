@@ -28,7 +28,7 @@ const middleware = load('workspace/middleware.ts', {
 function request(path, forwarded = true) {
   const nextUrl = new URL('http://0.0.0.0:3000' + path);
   nextUrl.clone = () => new URL(nextUrl);
-  return { nextUrl, headers: new Headers(forwarded ? { 'x-forwarded-host': 'rig.tervory.com', host: 'internal:3000' } : { host: 'rig.tervory.com' }) };
+  return { nextUrl, cookies: {get: () => undefined}, headers: new Headers(forwarded ? { 'x-forwarded-host': 'rig.tervory.com', host: 'internal:3000' } : { host: 'rig.tervory.com' }) };
 }
 (async () => {
   for (const forwarded of [true, false]) {

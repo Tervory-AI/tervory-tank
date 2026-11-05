@@ -5,6 +5,7 @@ starlette==1.10.0
 uvicorn[standard]==0.54.0
 asyncpg==0.30.0
 httpx==0.28.1
+h2==4.4.1
 # Shared with the reviewed Transformers 4.55.4 / RouteLLM CPU runtime (<1.0).
 huggingface-hub==0.34.4
 # LiteLLM's OpenAI-compatible streaming API; use the SDK's SSE decoder.

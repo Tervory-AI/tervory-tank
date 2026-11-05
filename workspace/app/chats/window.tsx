@@ -115,6 +115,22 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       // Consume before creating work so Strict Mode or reload cannot resend it.
       window.history.replaceState(null, "", "/chats");
       void newThread(ask);
+    } else if (params.get("draft")) {
+      const draft = params.get("draft")!;
+      let cancelled = false;
+      void (async () => {
+        try {
+          const response = await fetch(`/api/mobile/shares/${encodeURIComponent(draft)}`, { cache: "no-store" });
+          if (!response.ok) throw new Error("The shared item could not be opened.");
+          const saved = await response.json() as { thread_id: string; text: string; attachments: Attachment[] };
+          if (cancelled) return;
+          await choose(saved.thread_id);
+          if (cancelled) return;
+          window.history.replaceState(null, "", `/chats?draft=${encodeURIComponent(draft)}`);
+          setText(saved.text); setAttachments(saved.attachments);
+        } catch { if (!cancelled) setError("The shared item could not be opened. Please share it again."); }
+      })();
+      return () => { cancelled = true; generation.current++; streamAbort.current?.abort(); };
     } else { const id = params.get("thread"); if (id) void choose(id); }
     return () => { generation.current++; streamAbort.current?.abort(); };
     // A saved URL is loaded once; subsequent changes use choose to reject stale reads.
@@ -208,6 +224,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   async function send(event?: FormEvent, firstMessage?: string) {
     event?.preventDefault(); const requestText = firstMessage ?? text; if (!requestText.trim() || sendingRef.current || busy || cardBusy || !snapshot || !selected) return;
     const id = selected; const files = attachments;
+    window.history.replaceState(null, "", `/chats?thread=${encodeURIComponent(id)}`);
     sendingRef.current = true; setSending(true); setError("");
     // Invalidate any snapshot already in flight before the new stream starts.
     const version = ++generation.current;

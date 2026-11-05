@@ -91,6 +91,27 @@ Public project/client IDs, native founder subjects and organisation links are pr
 2. Chat bot (**D2**): the client’s privacy notice and conversation-retention wording (decision 35). The shipped retention job removes expired conversations after 12 calendar months; agree the wording against that behavior before enabling capture. Save the actual notice and its version as tenant data fields `privacy_notice` and `notice_version` using the existing confirmed `trigger.bot.settings` tool. They are not environment settings. Without both, visitor lead/quote capture stays disabled; changed versions require a fresh notice before submission.
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
+# Mobile push (general notification channel)
+
+Association setting names: `MOBILE_APPLE_TEAM_ID`, `MOBILE_ANDROID_CERT_SHA256`
+(comma-separated certificate fingerprints). Public association documents return
+empty allowlists until real signing identities are configured; no placeholders.
+
+Setting names only: `MOBILE_APNS_KEY`, `MOBILE_APNS_KEY_ID`,
+`MOBILE_APNS_TEAM_ID`, `MOBILE_APNS_ENVIRONMENT` (`sandbox` or `production`),
+`MOBILE_FCM_SERVICE_ACCOUNT_JSON`. Configure in Tank's server environment;
+never ship credentials in the apps. Uses the existing `TANK_VAULT_KEY` to encrypt
+phone tokens. No provider accounts or paid signing are created by this change.
+
+Any product may call `POST /v1/mobile/notify` with its existing Tank room key
+and `{tenant_id, user_id?, title, body, link}`. Omitting `user_id` addresses the
+tenant's registered phones. Workspace links only; no product-specific subscriptions.
+Delivery returns `sent`, `dead`, `failed`, `unavailable` counts; provider acceptance
+is not a read receipt. Callers decide retries (repeating a successful call sends again).
+APNs/FCM dead-token responses remove registrations; temporary/provider-auth failures
+do not. Expired/revoked mobile sessions do not receive pushes. Sign-out revokes the
+mobile session and deletes its registrations via `DELETE /api/mobile/session`.
+
 
 **Street Law (ZA):** ZENAS_REVIEW is the existing room-wide review setting; Street Law still requires human review while pre-launch even when that setting is off. No Street Law key or bypass switch is added.
 

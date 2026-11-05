@@ -186,7 +186,7 @@ def mount(app, core):
                 service = Publisher(core, core.Journal(root / 'promotion.sqlite3'), core.Coolify(http,
                     os.environ.get('TISAN_COOLIFY_URL', ''), os.environ.get('TISAN_COOLIFY_TOKEN', '')),
                     http, root, os.environ.get('TANK_URL', 'http://tank:8000'), key,
-                    {name: request.headers[name] for name in ('authorization', 'x-trigger-signin-token', 'x-trigger-signin-org')
+                    {name: request.headers[name] for name in ('authorization', 'x-trigger-signin-token', 'x-trigger-signin-org', 'x-mobile-session')
                      if name in request.headers})
                 if action == 'status':
                     return await service.status(body, actor)

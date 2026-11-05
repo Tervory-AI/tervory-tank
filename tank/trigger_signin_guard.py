@@ -21,7 +21,7 @@ class TriggerSigninMiddleware:
             return await self.app(scope, receive, send)
         issuer_context = registry._issuer.set('')
         proof_context = registry.proof.set({name: value for name, value in Headers(scope=scope).items()
-                                            if name in {'authorization', 'x-trigger-signin-token', 'x-trigger-signin-org'}})
+                                            if name in {'authorization', 'x-trigger-signin-token', 'x-trigger-signin-org', 'x-mobile-session'}})
         try:
             return await self.dispatch(scope, receive, send)
         finally:
@@ -40,6 +40,34 @@ class TriggerSigninMiddleware:
         identity_headers = ['x-tervory-user', 'x-tervory-admin', 'x-tervory-role', 'x-trigger-signin-token']
         if not trusted_service or not any(headers.get(name) for name in identity_headers):
             return await self.app(scope, receive, send)
+        mobile_token = headers.get('x-mobile-session', '')
+        if mobile_token and not headers.get('x-trigger-signin-token') and not headers.get('authorization'):
+            if scope['method'] == 'POST' and scope['path'] in {'/v1/mobile/handshake', '/v1/personal-tokens'}:
+                return await JSONResponse({'detail': 'Native sign-in required'}, status_code=403,
+                                          headers={'Cache-Control': 'no-store'})(scope, receive, send)
+            from mobile import session_identity
+            try:
+                principal = await session_identity(mobile_token)
+                tenant, subject, administrator = uuid.UUID(principal['tenantId']), principal['userId'], principal['tenantAdmin']
+                if any(headers.get(name) and headers[name].strip() != subject for name in ['x-tervory-user', 'x-tervory-admin']):
+                    raise ValueError
+                if headers.get('x-tervory-tenant') and uuid.UUID(headers['x-tervory-tenant']) != tenant:
+                    raise ValueError
+                role = headers.get('x-tervory-role', '')
+                if role not in {'', 'org:admin'} or ((headers.get('x-tervory-admin') or role) and not administrator):
+                    raise ValueError
+            except (HTTPException, ValueError, TypeError, KeyError):
+                return await JSONResponse({'detail': 'Mobile sign-in context refused'}, status_code=403,
+                                          headers={'Cache-Control': 'no-store'})(scope, receive, send)
+            scope.setdefault('state', {})['trigger_signin'] = {
+                'tenant_id': tenant, 'user_id': subject, 'tenant_admin': administrator, 'credential_type': 'mobile'}
+            scope['headers'] = [(name, value) for name, value in scope['headers'] if name.lower() != b'x-tervory-role'] + [
+                (b'x-tervory-role', b'org:admin' if administrator else b'')]
+            issuer_context = registry._issuer.set(principal['issuer'])
+            try:
+                return await self.app(scope, receive, send)
+            finally:
+                registry._issuer.reset(issuer_context)
         token = headers.get('x-trigger-signin-token', '')
         if not token and headers.get('authorization'):
             import personal_tokens
@@ -88,7 +116,7 @@ class TriggerSigninMiddleware:
         except (oidc.IdentityError, ValueError, TypeError, AttributeError):
             return await JSONResponse({'detail': 'Trigger sign-in context refused'}, status_code=403,
                                       headers={'Cache-Control': 'no-store'})(scope, receive, send)
-        scope.setdefault('state', {})['trigger_signin'] = {'tenant_id': tenant, 'user_id': subject, 'tenant_admin': administrator}
+        scope.setdefault('state', {})['trigger_signin'] = {'tenant_id': tenant, 'user_id': subject, 'tenant_admin': administrator, 'credential_type': 'native'}
         sanitized = [(name, value) for name, value in scope['headers'] if name.lower() != b'x-tervory-role']
         sanitized.append((b'x-tervory-role', b'org:admin' if administrator else role.encode()))
         scope['headers'] = sanitized

@@ -16,6 +16,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, 'workspace
     if (name === 'server-only') return {};
     if (name === './trigger-signin-principal') return {tenantBindings: () => bindings};
     if (name === 'node:crypto') return require(name);
+    if (name === './mobile') return {mobileIdentity: async () => null};
     if (name === './tank') return {ensureCaseStudyReports: async tenant => {reports.push(tenant);}};
     if (name === './trigger-signin') return {
       auth: async () => session,

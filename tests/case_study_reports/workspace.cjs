@@ -30,6 +30,7 @@ const signin = {
 const bindings = Object.fromEntries(['60001', '60002', '60003', ...[301,302,307,308,401,403,400,404,422].map(status => `org_denied_${status}`), ...[408,429,500,502,503,504,'network'].map(status => `org_${status}`)].map((org, index) => [org, `00000000-0000-4000-8000-${String(index + 11).padStart(12, '0')}`]));
 const originalLoad = Module._load;
 Module._load = function (name, parent, ...rest) {
+  if (name === 'next/headers') return {cookies: async () => ({get: () => undefined})};
   if (name === '@/lib/trigger-signin' || name === './trigger-signin') return signin;
   if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => global.fetch(...args)};
   if (name === './trigger-signin-principal') return {tenantBindings: () => bindings};

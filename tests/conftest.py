@@ -4,6 +4,7 @@ pytest loads this file before any test module. That lets test_smoke import
 tank.main (which imports skala) and lets the offline skill tests import skala.
 """
 import sys
+import importlib.util
 import os
 import ipaddress
 import shutil
@@ -20,6 +21,13 @@ if str(_CHASSIS) not in sys.path:
 _TANK = Path(__file__).resolve().parents[1] / "tank"
 if str(_TANK) not in sys.path:
     sys.path.insert(0, str(_TANK))
+
+# paid_http.Client inherits httpx.AsyncClient at import time. Establish its real
+# base before offline fixtures temporarily replace the shared httpx constructor;
+# otherwise an earlier room fixture permanently changes later Tank lifecycles.
+# Minimal compose-only lanes deliberately do not install the Tank HTTP stack.
+if all(importlib.util.find_spec(name) is not None for name in ("httpx", "fastapi")):
+    __import__("paid_http")
 
 
 @pytest.fixture(autouse=True)

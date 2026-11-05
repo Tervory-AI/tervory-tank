@@ -33,6 +33,10 @@ const publicRoutes = [
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/health",
+  "/mobile(.*)",
+  "/api/mobile(.*)",
+  "/.well-known/apple-app-site-association",
+  "/.well-known/assetlinks.json",
   "/api/billing/webhook",
   "/autumbra(.*)",
   "/api/autumbra/undo",
@@ -49,6 +53,25 @@ function rewriteIsPublic(path: string): boolean {
   return path === "/autumbra" || path.startsWith("/autumbra/") || path === "/moot" || path.startsWith("/moot/");
 }
 
+// Keep server-only signin/session modules out of the middleware bundle.
+async function mobileSessionIsValid(token: string): Promise<boolean> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { controller.abort(); reject(new Error("Mobile session deadline")); }, 30_000);
+  });
+  try {
+    const response = await Promise.race([fetch(`${process.env.TANK_URL ?? "http://tank:8000"}/v1/mobile/session/resolve`, {
+      method: "POST", headers: {"x-tank-key": process.env.TANK_API_KEY ?? "", "Content-Type": "application/json"},
+      body: JSON.stringify({token}), redirect: "manual", cache: "no-store", signal: controller.signal,
+    }), deadline]);
+    return response.ok;
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+}
+
 export default async function middleware(req: NextRequest) {
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   const canonical = mootCanonicalRedirectUrl(host, req.nextUrl.pathname, req.nextUrl.search);
@@ -63,6 +86,20 @@ export default async function middleware(req: NextRequest) {
     const token = await getToken({ req, secret: process.env.TRIGGER_SIGNIN_WORKSPACE_SECRET, cookieName: "__Secure-tervory-signin", secureCookie: true });
     const principal = token?.principal as { expiresAt?: number } | undefined;
     if (!principal || (principal.expiresAt ?? 0) <= Date.now()) {
+      const mobileToken = req.cookies.get("__Host-tervory-mobile")?.value;
+      let mobileSignedIn = false;
+      if (mobileToken && /^[a-f0-9-]{36}_[A-Za-z0-9_-]{43}$/.test(mobileToken)) {
+        try { mobileSignedIn = await mobileSessionIsValid(mobileToken); }
+        catch { return new NextResponse("Your workspace is unavailable. Please try again.", {status: 503}); }
+      }
+      if (mobileSignedIn) {
+        if (rewriteTo) {
+          const url = req.nextUrl.clone();
+          url.pathname = rewriteTo;
+          return NextResponse.rewrite(url);
+        }
+        return NextResponse.next();
+      }
       // Back to the public address they asked for (base.tervory.com/), never the internal
       // bind or the rewritten path (https://0.0.0.0:3000/base, seen 28 Oct).
       const signin = new URL("/sign-in", "https://app.tervory.com");
