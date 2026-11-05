@@ -1,0 +1,32 @@
+name: Rig overflow comparison proof
+on:
+  pull_request:
+    paths:
+      - tests/test_rig_landing_overflow.py
+      - agents/rig/rigbox/page/v5/**
+      - .github/workflows/rig-overflow-proof.yml
+permissions:
+  contents: read
+jobs:
+  viewport-comparison:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - run: pip install pytest==9.1.1 pytest-asyncio==1.4.1 playwright==1.64.1
+      - run: python -m playwright install --with-deps chromium
+      - name: Compare the original and contained viewport
+        run: python -m pytest -q tests/test_rig_landing_overflow.py --basetemp .tmp/rig-overflow-proof
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: rig-overflow-${{ github.sha }}
+          path: |
+            .tmp/rig-overflow-proof/**/before.png
+            .tmp/rig-overflow-proof/**/after.png
+          if-no-files-found: error
