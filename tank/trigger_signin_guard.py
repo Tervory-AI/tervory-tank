@@ -53,7 +53,11 @@ class TriggerSigninMiddleware:
                     raise ValueError
                 if headers.get('x-tervory-role', '') not in {'', 'org:admin'}:
                     raise ValueError
-            except (HTTPException, ValueError):
+            except HTTPException as exc:
+                status = 403 if exc.status_code == 403 else 401
+                return await JSONResponse({'detail': 'Trigger sign-in context refused' if status == 403 else 'Trigger sign-in required'},
+                                          status_code=status, headers={'Cache-Control': 'no-store'})(scope, receive, send)
+            except ValueError:
                 return await JSONResponse({'detail': 'Trigger sign-in required'}, status_code=401,
                                           headers={'Cache-Control': 'no-store'})(scope, receive, send)
             scope.setdefault('state', {})['trigger_signin'] = {'tenant_id': actor.tenant_id, 'user_id': actor.user_id, 'tenant_admin': actor.tenant_admin}

@@ -87,8 +87,6 @@ async def consume_on_rig_startup(database, monkeypatch, bus):
     monkeypatch.setenv('no_proxy', '127.0.0.1,localhost')
     async with database.acquire() as conn:
         name = await conn.fetchval('SELECT current_database()')
-        from trigger_signin_fakes import persisted_identity
-        credentials = await persisted_identity(conn, A, 'offline-founder', founder=True)
     parsed = urlsplit(os.environ['POOL_SCHEMA_DATABASE_URL'])
     monkeypatch.setenv('DATABASE_URL', urlunsplit(parsed._replace(path='/' + name)))
     room = _load('bus_rig_lifespan', ROOT / 'agents/rig/app.py')

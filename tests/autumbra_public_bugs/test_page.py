@@ -22,6 +22,7 @@ export function SignoutButton() { return null; }
 export function useSignin() { return {isLoaded: false, userId: null}; }
 '''
 SERVER = '''import {headers} from "next/headers";
+export async function signinToken() { return "dummy-offline-proof"; }
 export async function auth() {
   const h = await headers();
   return {userId: h.get("x-offline-user"), orgRole: null};

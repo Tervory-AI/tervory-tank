@@ -159,3 +159,14 @@ async def test_tisan_callback_key_cannot_attest_an_unsigned_founder(boundary, mo
         result = await client.get('/', headers={**callback, 'x-trigger-signin-token': provider.token()})
     assert result.status_code == 200
     assert result.json()['user_id'] == SUB
+
+
+@pytest.mark.asyncio
+async def test_personal_token_wrong_region_keeps_forbidden_status(boundary, monkeypatch):
+    app, _, _, headers = boundary
+    async def wrong_region(*args, **kwargs):
+        raise HTTPException(403, 'Personal token belongs to another box')
+    monkeypatch.setattr(personal_tokens, 'bearer_identity', wrong_region)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://offline') as client:
+        result = await client.get('/', headers={**headers, 'authorization': 'Bearer dummy-wrong-region'})
+    assert result.status_code == 403

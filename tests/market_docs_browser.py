@@ -27,9 +27,10 @@ def next_app(folder):
     (folder / 'public').symlink_to(WORKSPACE / 'public', target_is_directory=True)
     write('package.json', json.dumps({'private': True, 'dependencies': json.loads((WORKSPACE / 'package.json').read_text())['dependencies']}))
     write('fixture-tenant.ts', 'export async function activeTenant(){return {tenantId:process.env.MARKET_DOCS_TENANT!,userId:"local-owner",orgName:"Harbor Supply"};}')
+    write('fixture-signin-fetch.ts', 'import "server-only"; export async function signinFetch(input: string | URL, init: RequestInit = {}) { const headers = new Headers(init.headers); headers.set("authorization", process.env.MARKET_DOCS_AUTHORIZATION!); return fetch(input, {...init, headers}); }')
     write('tsconfig.json', json.dumps({'compilerOptions': {'baseUrl': '.', 'target': 'ES2022', 'module': 'esnext', 'moduleResolution': 'bundler', 'jsx': 'preserve', 'strict': True, 'esModuleInterop': True, 'skipLibCheck': True,
-        'paths': {'@/lib/tenant': [str(folder / 'fixture-tenant.ts')], '@/*': [str(WORKSPACE / '*')]}}}))
-    write('next.config.mjs', 'export default {experimental:{externalDir:true},devIndicators:false,webpack(config){config.resolve.alias={"@/lib/tenant$":' + json.dumps(str(folder / 'fixture-tenant.ts')) + ',"@":' + json.dumps(str(WORKSPACE)) + ',...config.resolve.alias};return config;}};')
+        'paths': {'@/lib/trigger-signin-fetch': [str(folder / 'fixture-signin-fetch.ts')], '@/lib/tenant': [str(folder / 'fixture-tenant.ts')], '@/*': [str(WORKSPACE / '*')]}}}))
+    write('next.config.mjs', 'export default {experimental:{externalDir:true},devIndicators:false,webpack(config){config.resolve.alias={"@/lib/trigger-signin-fetch$":' + json.dumps(str(folder / 'fixture-signin-fetch.ts')) + ',"@/lib/tenant$":' + json.dumps(str(folder / 'fixture-tenant.ts')) + ',"@":' + json.dumps(str(WORKSPACE)) + ',...config.resolve.alias};return config;}};')
     write('app/layout.tsx', f'''import {{jost, inter, mono}} from {json.dumps(str(WORKSPACE / 'app/fonts'))};
 import {json.dumps(str(WORKSPACE / 'app/market-lab/market-lab.css'))};
 export default function Layout({{children}}:{{children:React.ReactNode}}){{return <html lang="en" className={{`${{jost.variable}} ${{inter.variable}} ${{mono.variable}}`}}><body style={{{{margin:0}}}}>{{children}}</body></html>}}''')
@@ -116,10 +117,11 @@ def main():
     output = Path(sys.argv[1]).resolve()
     with services(output) as env, tempfile.TemporaryDirectory(prefix='market-docs-web-') as temp:
         tenant, other = str(uuid4()), str(uuid4())
-        asyncio.run(prepare(tenant, other))
+        _, credentials = asyncio.run(prepare(tenant, other, str(uuid4())))
+        time.sleep(31)  # Wait for the actual Tank directory cache, never bypass auth.
         folder = Path(temp)
         next_app(folder)
-        env.update(MARKET_DOCS_TENANT=tenant, NEXT_TELEMETRY_DISABLED='1')
+        env.update(MARKET_DOCS_TENANT=tenant, MARKET_DOCS_AUTHORIZATION=credentials[tenant]['authorization'], NEXT_TELEMETRY_DISABLED='1')
         port = 3053
         with (output / 'next.log').open('w') as log:
             web = subprocess.Popen(['node', str(WORKSPACE / 'node_modules/next/dist/bin/next'), 'dev', '--hostname', '127.0.0.1', '--port', str(port)], cwd=folder, env=env, stdout=log, stderr=log)

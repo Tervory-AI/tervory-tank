@@ -295,7 +295,8 @@ async def test_room_founder_checks_and_wait_for_finished_deployment(tmp_path, mo
     app = FastAPI()
     publish.mount(app, promotion)
     body = {'tenant_id': TENANT, 'slug': 'site', 'build': 1, 'operation_id': str(uuid.uuid4())}
-    headers = {'X-Tank-Key': 'room-test-only', 'X-Tervory-Admin': 'founder'}
+    headers = {'X-Tank-Key': 'room-test-only', 'X-Tervory-Admin': 'founder',
+               'x-trigger-signin-token': 'dummy-signed-proof', 'x-trigger-signin-org': '10001'}
     async with http, real_client(transport=httpx.ASGITransport(app=app), base_url='http://room') as browser:
         assert (await browser.post('/publish/build', json=body)).status_code == 404
         assert (await browser.post('/publish/build', json=body, headers={**headers, 'X-Tervory-Admin': 'member'})).status_code == 404
