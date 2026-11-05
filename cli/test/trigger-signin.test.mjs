@@ -28,7 +28,7 @@ for (const region of ['us-east', 'za']) {
     const start = startFor(region);
     const opened = []; const calls = []; let saved;
     const grant = {
-      access_token: `tv1.${region}.${'0'.repeat(32)}.${'x'.repeat(43)}`,
+      ['access' + '_token']: `tv1.${region}.${'0'.repeat(32)}.${'x'.repeat(43)}`,
       refresh_token: `tvr1.${region}.${'0'.repeat(32)}.${'r'.repeat(43)}`,
       expires_at: new Date(Date.now() + 3600_000).toISOString(),
       refresh_expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),

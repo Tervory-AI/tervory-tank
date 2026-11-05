@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 CLIENT = '''"use client";
 export function TriggerSigninProvider({children}) { return children; }
-export function OrganizationSwitcher() { return null; }
-export function UserButton() { return null; }
-export function useAuth() { return {isLoaded: false, userId: null}; }
+export function OrganisationSwitcher() { return null; }
+export function SignoutButton() { return null; }
+export function useSignin() { return {isLoaded: false, userId: null}; }
 '''
 SERVER = '''import {headers} from "next/headers";
 export async function auth() {
@@ -46,10 +46,16 @@ async def local_workspace(tmp_path):
     (local / 'node_modules').symlink_to(ROOT / 'workspace/node_modules', target_is_directory=True)
     (local / 'offline-signin-client.js').write_text(CLIENT)
     (local / 'offline-signin-server.js').write_text(SERVER)
+    (local / 'lib/trigger-signin.ts').write_text(SERVER)
+    (local / 'middleware.ts').write_text((ROOT / 'workspace/middleware.ts').read_text().replace(
+        'from "next-auth/jwt"', 'from "./offline-signin-jwt"'))
+    (local / 'app/trigger-signin-provider.tsx').write_text(CLIENT)
+    (local / 'offline-signin-jwt.js').write_text('export async function getToken({req}) { const userId=req.headers.get("x-offline-user"); return userId ? {principal:{userId,expiresAt:Date.now()+60000}} : null; }')
     (local / 'next.config.ts').write_text('''import path from "node:path";
 export default { devIndicators: false, webpack(config) {
   config.resolve.alias["@/app/trigger-signin-provider$"] = path.resolve("offline-signin-client.js");
   config.resolve.alias["@/lib/trigger-signin$"] = path.resolve("offline-signin-server.js");
+  config.resolve.alias["next-auth/jwt$"] = path.resolve("offline-signin-jwt.js");
   return config;
 } };
 ''')
@@ -113,7 +119,7 @@ async def test_public_host_and_direct_page_have_no_shell_admin_keeps_gate(local_
         for host in ('app.tervory.com', 'protect.tervory.com'):
             response = await client.get(local_workspace + '/admin/autumbra', headers={'x-forwarded-host': host})
             assert response.status_code == 307
-            assert response.headers['location'].endswith('/sign-in')
+            assert '/sign-in?callbackUrl=' in response.headers['location']
 
     await context.set_extra_http_headers({'x-forwarded-host': 'app.tervory.com', 'x-offline-user': 'offline-founder'})
     response = await page.goto(local_workspace + '/admin/autumbra')

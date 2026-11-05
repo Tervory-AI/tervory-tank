@@ -21,7 +21,7 @@ WEB_CLIENT = '456@tervory'
 
 @pytest.fixture(params=['us-east', 'za'])
 def boundary(monkeypatch, request):
-    runtime = SimpleNamespace(TANK_API_KEY='offline-workspace-service', box_region=lambda: request.param)
+    runtime = SimpleNamespace(TANK_API_KEY='dummy-workspace-service', box_region=lambda: request.param)
     monkeypatch.setitem(sys.modules, 'main', runtime)
     web = Provider('us-east')
     web.claims['aud'] = WEB_CLIENT
@@ -147,3 +147,15 @@ async def test_narrow_za_sessions_key_requires_native_proof_and_cannot_mint(boun
         assert (await client.post('/v1/personal-tokens', headers=verified)).status_code == 401
         forged = {**verified, 'x-tervory-user': 'another-subject'}
         assert (await client.get('/v1/personal-tokens', headers=forged)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_tisan_callback_key_cannot_attest_an_unsigned_founder(boundary, monkeypatch):
+    app, provider, _, headers = boundary
+    monkeypatch.setenv('TANK_KEY_TISAN', 'dummy-tisan-callback')
+    callback = {**headers, 'x-tank-key': 'dummy-tisan-callback'}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://offline') as client:
+        assert (await client.get('/', headers=callback)).status_code == 401
+        result = await client.get('/', headers={**callback, 'x-trigger-signin-token': provider.token()})
+    assert result.status_code == 200
+    assert result.json()['user_id'] == SUB

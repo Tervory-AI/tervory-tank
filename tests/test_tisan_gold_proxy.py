@@ -1,5 +1,5 @@
 """A room key or a customer id must never reach the founder approval proxy."""
-from trigger_signin_fakes import set_founders
+from trigger_signin_fakes import set_founders, native_provider, ORG
 import secrets
 
 from fastapi.testclient import TestClient
@@ -13,11 +13,13 @@ def test_proxy_checks_founder_before_contacting_room(monkeypatch):
     workspace_key, room_key = secrets.token_hex(24), secrets.token_hex(24)
     monkeypatch.setenv("LITELLM_MASTER_KEY", secrets.token_hex(24))
     monkeypatch.setenv("TANK_API_KEY", workspace_key)
-    import tank.main as main
+    import main
     monkeypatch.setattr(main, "TANK_API_KEY", workspace_key)
     monkeypatch.setenv("TANK_API_KEY", workspace_key)
     monkeypatch.setenv("TANK_KEY_TISAN", room_key)
     set_founders(monkeypatch, "founder-user")
+    provider = native_provider(monkeypatch, {ORG: '00000000-0000-0000-0000-000000000001'})
+    signed = provider.workspace_headers('founder-user', '00000000-0000-0000-0000-000000000001')
     calls = []
 
     class HTTP:
@@ -31,6 +33,6 @@ def test_proxy_checks_founder_before_contacting_room(monkeypatch):
     for key, user in ((room_key, "founder-user"), (workspace_key, "customer")):
         assert client.get(path, headers={"X-Tank-Key": key, "X-Tervory-Admin": user}).status_code in (401, 404)
     assert calls == []
-    assert client.get(path, headers={"X-Tank-Key": workspace_key, "X-Tervory-Admin": "founder-user"}).status_code == 200
+    assert client.get(path, headers={**signed, "X-Tank-Key": workspace_key}).status_code == 200
     assert calls[0][1] == "http://agent-tisan:8000/gold/pages"
     assert calls[0][2]["headers"]["X-Tank-Key"] == room_key

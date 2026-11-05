@@ -71,7 +71,7 @@ else{const data=kind==='channels'?{facebook:{status:'connected',page_id:'placeho
             path: "link",
             namespace: "placeholder",
           }));
-          b.onResolve({ filter: /^@\/app\/trigger-signin-provider$/ }, () => ({
+          b.onResolve({ filter: /^(?:@\/app\/|\.\.\/)trigger-signin-provider$/ }, () => ({
             path: "signin",
             namespace: "placeholder",
           }));

@@ -34,7 +34,7 @@ class TriggerSigninMiddleware:
         headers = Headers(scope=scope)
         from main import TANK_API_KEY
         keys = [TANK_API_KEY, *(os.environ.get(name, '') for name in (
-            'TANK_HOMES_KEY', 'TRIGGER_SIGNIN_SESSIONS_KEY', 'TANK_CONTENT_API_KEY_US', 'TANK_CONTENT_API_KEY_ZA'))]
+            'TANK_HOMES_KEY', 'TRIGGER_SIGNIN_SESSIONS_KEY', 'TANK_CONTENT_API_KEY_US', 'TANK_CONTENT_API_KEY_ZA', 'TANK_KEY_TISAN'))]
         presented = headers.get('x-tank-key', '')
         trusted_service = bool(presented) and any(key and hmac.compare_digest(presented.encode(), key.encode()) for key in keys)
         identity_headers = ['x-tervory-user', 'x-tervory-admin', 'x-tervory-role', 'x-trigger-signin-token']

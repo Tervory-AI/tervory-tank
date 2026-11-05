@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,11 @@ USER_CODE = re.compile(r"[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}\Z")
 DEVICE_CODE = re.compile(r"tvd1\.(us-east|za)\.([A-Za-z0-9_-]{43})\Z")
 REFRESH = re.compile(r"tvr1\.(us-east|za)\.([0-9a-f]{32})\.([A-Za-z0-9_-]{43})\Z")
 NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+
+
+def workspace_url() -> str:
+    """Shared public Workspace origin, also used by private report links."""
+    return (os.environ.get("TERVORY_WORKSPACE_URL") or "https://app.tervory.com").rstrip("/")
 
 
 class NewCode(BaseModel):

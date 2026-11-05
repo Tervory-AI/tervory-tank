@@ -105,7 +105,7 @@ def services(output):
             thread.join(timeout=2)
 
 
-async def prepare(owner, other):
+async def prepare(owner, other, denied):
     from core.ledger import PostgresLedger
     from core.jobs import perform_refresh
     from chassis.db import ensure_schema
@@ -121,19 +121,23 @@ async def prepare(owner, other):
         for tenant in (owner, other):
             for room in ('market_lab', 'base'):
                 await conn.execute('INSERT INTO tank.tenant_squad(tenant_id,agent,enabled_by) VALUES($1,$2,$3)', UUID(tenant), room, 'local-owner')
+        from trigger_signin_fakes import persisted_identity
+        credentials = {tenant: await persisted_identity(conn, tenant, 'local-owner') for tenant in (owner, other, denied)}
         job = await perform_refresh(tenant_id=owner, engine='ffl', ledger=ledger, fixtures=str(ROOT / 'tests/fixtures/feeds'))
-        return {'job': 'refresh', 'sources_with_rows': sum(r['rows'] > 0 for r in job['feeds'])}
+        return {'job': 'refresh', 'sources_with_rows': sum(r['rows'] > 0 for r in job['feeds'])}, credentials
     finally:
         await conn.close()
 
 
 def check(env, output):
     owner, other, denied = (str(uuid4()) for _ in range(3))
-    job = asyncio.run(prepare(owner, other))
+    job, credentials = asyncio.run(prepare(owner, other, denied))
+    import time
+    time.sleep(31)  # Native registry has a 30-second deployment-owned cache.
     with httpx.Client(base_url=env['TANK_URL'], trust_env=False, timeout=120) as client:
         def vault(method, suffix, *, tenant=owner, room='market_lab', value=None, files=None):
             name = 'lab.vault' if room == 'market_lab' else room + '.vault'
-            headers = {'x-tank-key': env['TANK_API_KEY'], 'x-tervory-user': 'local-owner', 'x-tervory-squad': room}
+            headers = {**credentials[tenant], 'x-tank-key': env['TANK_API_KEY'], 'x-tervory-user': 'local-owner', 'x-tervory-squad': room}
             kwargs = {'headers': headers}
             if value is not None:
                 kwargs['json'] = {'tenant_id': tenant, **value}
@@ -150,7 +154,7 @@ def check(env, output):
             return client.post('/v1/market-lab/' + operation, json={'tenant_id': tenant, **fields}, headers={'x-tank-key': env['TANK_API_KEY']})
         assert vault('GET', 'plugins', tenant=denied).status_code == 403
         assert client.get(f'/v1/vaults/lab.vault/plugins?tenant_id={owner}').status_code == 401
-        wrong = client.get(f'/v1/vaults/lab.vault/plugins?tenant_id={owner}', headers={'x-tank-key': env['TANK_API_KEY'], 'x-tervory-user': 'local-owner', 'x-tervory-squad': 'base'})
+        wrong = client.get(f'/v1/vaults/lab.vault/plugins?tenant_id={owner}', headers={**credentials[owner], 'x-tank-key': env['TANK_API_KEY'], 'x-tervory-user': 'local-owner', 'x-tervory-squad': 'base'})
         assert wrong.status_code == 403
         value = secrets.token_hex(32)
         assert vault('POST', 'secrets', value={'name': 'REPORT_KEY', 'purpose': 'Reports', 'value': value}).status_code == 200

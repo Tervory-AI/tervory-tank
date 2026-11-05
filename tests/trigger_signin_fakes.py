@@ -7,6 +7,8 @@ import jwt
 
 import identity_oidc as oidc
 
+_IDENTITY_HTTP_CLIENT = httpx.AsyncClient
+
 CLIENT = '123@tervory'
 ORG = '10001'
 SUB = '20001'
@@ -44,7 +46,7 @@ def native_provider(monkeypatch, bindings):
     provider = Provider('us-east')
     install_registry(monkeypatch, [provider], bindings)
     set_founders(monkeypatch, ','.join(founders))
-    original_client = httpx.AsyncClient
+    original_client = _IDENTITY_HTTP_CLIENT
     monkeypatch.setattr(oidc, 'http_client', lambda: original_client(transport=httpx.MockTransport(provider)))
     oidc._cache.clear()
     return provider
@@ -61,6 +63,16 @@ class Provider:
         self.claims = {'iss': self.issuer, 'aud': CLIENT, 'sub': SUB, 'exp': int(time.time()) + 600,
                        'iat': int(time.time()), oidc.ORG_CLAIM: ORG,
                        oidc.ROLES_CLAIM: {'org_admin': {ORG: 'tervory'}}}
+
+    def workspace_headers(self, subject, tenant, role='org_admin'):
+        import trigger_signin_config as registry
+        organisations = registry._records['us-east']['organisations']
+        org = next(org for org, owner in organisations.items() if str(owner) == str(tenant))
+        return {'X-Tervory-User': subject, 'X-Tervory-Tenant': str(tenant),
+                'x-trigger-signin-org': org,
+                'x-trigger-signin-token': self.token(sub=subject, **{
+                    oidc.ORG_CLAIM: org, oidc.ROLES_CLAIM: {role: {org: 'Fixture'}}}),
+                **({'X-Tervory-Admin': subject} if role == 'org_admin' else {})}
 
     def jwk(self):
         return {**jwt.algorithms.RSAAlgorithm.to_jwk(self.private.public_key(), as_dict=True),
@@ -90,3 +102,27 @@ class Provider:
         assert form['device_code'] == ['synthetic-provider-code']
         assert form['grant_type'] == ['urn:ietf:params:oauth:grant-type:device_code']
         return httpx.Response(200, json={'id_token': self.token(), 'access_token': 'unused-synthetic-upstream-token'})
+
+
+async def persisted_identity(conn, tenant, subject, *, founder=False):
+    """A real, hash-only native grant in an explicitly disposable fixture DB."""
+    import hashlib
+    import secrets
+    import uuid
+    tenant = uuid.UUID(str(tenant))
+    org = str(tenant.int % (10 ** 25))
+    issuer = 'https://auth.tervory.com'
+    await conn.execute("""INSERT INTO tank.trigger_signin_config
+        (region,issuer,client_id,workspace_client_id,project_id)
+        VALUES('us-east',$1,'123@tervory','123@tervory','30001') ON CONFLICT DO NOTHING""", issuer)
+    await conn.execute("""INSERT INTO tank.trigger_signin_organisations(region,org_id,tenant_id)
+        VALUES('us-east',$1,$2) ON CONFLICT DO NOTHING""", org, tenant)
+    if founder:
+        await conn.execute("""INSERT INTO tank.trigger_signin_founders(region,subject)
+            VALUES('us-east',$1) ON CONFLICT DO NOTHING""", subject)
+    token = f'tv1.us-east.{tenant.hex}.' + secrets.token_urlsafe(32)
+    await conn.execute("""INSERT INTO tank.personal_tokens
+        (tenant_id,user_id,region,name,token_hash,trigger_signin,trigger_signin_issuer,identity_tenant_admin)
+        VALUES($1,$2,'us-east','placeholder-fixture',$3,true,$4,true)""",
+        tenant, subject, hashlib.sha256(token.encode('ascii')).hexdigest(), issuer)
+    return {'authorization': 'Bearer ' + token}

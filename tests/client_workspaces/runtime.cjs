@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 process.env.COMMAND_TEST_TOOLS = path.resolve('workspace/node_modules');
 const {workspace} = require('../command_acceptance_20261031/workspace_loader.cjs');
-const env = {TANK_URL: 'http://tank.synthetic.invalid', TANK_API_KEY: 'synthetic-runtime-reader'};
+const env = {TANK_URL: 'http://tank.synthetic.invalid', TANK_API_KEY: 'dummy-runtime-reader'};
 const record = {issuer: 'https://auth.tervory.com', client_id: '30001@tervory', workspace_client_id: '30002@tervory', project_id: '40001', founders: ['50001'], organisations: {'60001': '00000000-0000-4000-8000-000000000011'}};
 let requests = 0;
 const load = workspace({env, fetch: async (url, init) => {

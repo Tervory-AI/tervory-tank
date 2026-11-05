@@ -21,6 +21,7 @@ function load(filename) {
   const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX}}).outputText;
   function local(spec) {
     if (spec === '@/lib/tank') return {rigThreeDRequest: read};
+    if (spec === '@/lib/tenant') return {tenantIdFor: org => 'fixture-tenant-' + org};
     if (spec === '@/lib/trigger-signin') return {auth: async () => session};
     if (spec === 'next/navigation') return {redirect: value => {throw {redirect: value};}};
     if (spec === 'next/cache') return {revalidatePath: () => {}};

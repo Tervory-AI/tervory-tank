@@ -31,6 +31,9 @@ function harness(fetch, env = {}) {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     function requireSource(spec) {
+      if (spec === '@/lib/trigger-signin-fetch') return {signinFetch: async (url, options) => {
+        calls.push({url: String(url), method: options?.method}); return fetch(url, options);
+      }};
       if (spec === 'server-only' || spec.endsWith('.css')) return {};
       if (spec === 'next/link') return { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) };
       if (spec === 'next/navigation') return { notFound };

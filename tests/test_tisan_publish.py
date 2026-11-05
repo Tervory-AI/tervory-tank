@@ -152,6 +152,8 @@ class FakeServices:
 
 @pytest.fixture
 def configured(monkeypatch):
+    from trigger_signin_fakes import set_founders
+    set_founders(monkeypatch, 'founder')
     for key, value in {'TISAN_SITES_REPO': REPO, 'TISAN_GITHUB_TOKEN': 'credential-marker-test-only',
                        'TANK_KEY_TISAN': 'room-test-only', 'TANK_KEY': 'room-test-only',
                        'TERVORY_ADMIN_USER_IDS': 'founder', 'TISAN_COOLIFY_URL': 'https://coolify.test',
@@ -161,6 +163,7 @@ def configured(monkeypatch):
 
 async def exercise(root, monkeypatch, fake):
     namespace = tank_namespace(monkeypatch)
+    identity_proof = {'x-trigger-signin-token': 'dummy-signed-proof', 'x-trigger-signin-org': '10001'}
     real_client = httpx.AsyncClient
     def client(**kwargs):
         assert kwargs.get('trust_env') is False and kwargs.get('follow_redirects') is False
@@ -169,13 +172,15 @@ async def exercise(root, monkeypatch, fake):
     namespace['httpx'] = types.SimpleNamespace(AsyncClient=client, HTTPError=httpx.HTTPError)
     async def corridor(request):
         if request.url.host == 'tank':
+            assert request.headers['x-trigger-signin-token'] == identity_proof['x-trigger-signin-token']
+            assert request.headers['x-trigger-signin-org'] == identity_proof['x-trigger-signin-org']
             return await httpx.ASGITransport(app=namespace['app']).handle_async_request(request)
         return await fake.transport(request)
     journal = promotion.Journal(root / 'promotion.sqlite3')
     journal.register(TENANT, 'site', {'staging': 'stage', 'production': 'prod', 'url': 'https://stage.test/'})
     http = real_client(transport=httpx.MockTransport(corridor))
     service = publish.Publisher(promotion, journal, promotion.Coolify(http, 'https://coolify.test', 'coolify-marker-test-only'),
-                                http, root, 'http://tank:8000', 'room-test-only')
+                                http, root, 'http://tank:8000', 'room-test-only', identity_proof)
     return service, http, namespace
 
 
@@ -305,7 +310,13 @@ async def test_room_founder_checks_and_wait_for_finished_deployment(tmp_path, mo
 async def test_tank_corridor_founder_room_tenant_and_action_checks(monkeypatch, configured):
     ns = tank_namespace(monkeypatch)
     calls = []
+    from contextvars import ContextVar
+    import trigger_signin_config as registry
+    identity_proof = {'x-trigger-signin-token': 'dummy-proxy-proof', 'x-trigger-signin-org': '10001'}
+    monkeypatch.setattr(registry, 'proof', ContextVar('fixture_proxy_proof', default=identity_proof))
     async def upstream(request):
+        assert request.headers['x-trigger-signin-token'] == identity_proof['x-trigger-signin-token']
+        assert request.headers['x-trigger-signin-org'] == identity_proof['x-trigger-signin-org']
         calls.append(request)
         return httpx.Response(200, json={'result': 'pending'})
     headers = {'X-Tank-Key': 'workspace-test-only', 'X-Tervory-Admin': 'founder'}

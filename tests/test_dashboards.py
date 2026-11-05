@@ -291,7 +291,7 @@ def test_existing_switch_route_refuses_non_founder(monkeypatch):
     monkeypatch.setattr(main, 'TANK_API_KEY', 'test')
     set_founders(monkeypatch, 'founder-fixture')
     client = TestClient(main.app)
-    assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 404
+    assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 401
 
 @pytest.mark.asyncio
 async def test_unresponsive_state_is_bounded_and_fails_closed(conn, monkeypatch):

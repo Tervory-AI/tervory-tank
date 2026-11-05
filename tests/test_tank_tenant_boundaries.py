@@ -41,16 +41,14 @@ async def boundary(monkeypatch, tmp_path):
         monkeypatch.setattr(tank, "_agent_keys_synced", True)
         tenants = (uuid.uuid4(), uuid.uuid4())
         provider = Provider('us-east')
-        install_registry(monkeypatch, [provider], {ORG: str(tenants[0])})
+        install_registry(monkeypatch, [provider], {ORG: str(tenants[0]), '10002': str(tenants[1])})
         set_founders(monkeypatch, 'founder-fixture')
-        monkeypatch.setattr(oidc, 'http_client', lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
+        identity_client = httpx.AsyncClient
+        monkeypatch.setattr(oidc, 'http_client', lambda: identity_client(transport=httpx.MockTransport(provider)))
         oidc._cache.clear()
 
-        def native_headers(subject, role='member'):
-            claims = {oidc.ROLES_CLAIM: {role: {ORG: 'Display only'}}}
-            return {'X-Tervory-User': subject, 'x-trigger-signin-org': ORG,
-                    'x-trigger-signin-token': provider.token(sub=subject, **claims),
-                    **({'X-Tervory-Admin': subject} if role == 'org_admin' else {})}
+        def native_headers(subject, role='member', tenant=None):
+            return provider.workspace_headers(subject, tenant or tenants[0], role)
         packages = {}
         calls = []
 

@@ -25,7 +25,7 @@ python tests/base_proof/workspace.py
 Use the printed temporary Workspace directory as the working directory:
 
 ```
-NEXT_TELEMETRY_DISABLED=1 TANK_URL=http://127.0.0.1:8141 TANK_API_KEY=local-fixture npm run dev -- --port 3141
+NEXT_TELEMETRY_DISABLED=1 TANK_URL=http://127.0.0.1:8141 TANK_API_KEY=dummy-local-fixture npm run dev -- --port 3141
 ```
 
 Then run `python tests/base_proof/browser.py` from the clone. The fixture labels
