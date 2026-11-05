@@ -10,6 +10,7 @@ import math
 import os
 import re
 import uuid
+from datetime import date
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
@@ -101,7 +102,7 @@ class ContextDev:
         self.ledger = ledger
         self.tenant_id = str(uuid.UUID(tenant_id))
         self.run_id = str(uuid.UUID(run_id))
-        self.max_credits = int(os.environ.get("CONTEXT_DEV_MAX_CREDITS") or "500")
+        self.max_credits = int(os.environ.get("BASE_CTX_MAX_CREDITS") or os.environ.get("CONTEXT_DEV_MAX_CREDITS") or "500")
         if self.max_credits < 0:
             raise ValueError("credit limit must not be negative")
         self.reserved = 0
@@ -147,7 +148,8 @@ class ContextDev:
                 self.stopped = True
                 return {"status": "credit_limit", "message": "credit cap reached", "fields": {}}
             self.reserved += BRAND_CREDITS
-            result: dict[str, Any] = {"status": "unknown", "fields": {}, "credits": None}
+            result: dict[str, Any] = {"status": "unknown", "fields": {}, "credits": None,
+                                      "observed_on": date.today().isoformat()}
             try:
                 response = await self.http.post(
                     ENDPOINT, json=payload, headers={"Authorization": f"Bearer {key}"},

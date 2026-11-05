@@ -627,9 +627,10 @@ async def enrich_queued(
     limit: int,
     refs: dict[str, str] | None = None,
     engine_version: str | None = None,
+    on_result: Callable[[int, Outcome], Awaitable[None]] | None = None,
 ) -> list[tuple[int, Outcome | None]]:
     """Run the still-queued indexes. A paused model leaves the record untouched (None)."""
-    sem = asyncio.Semaphore(limit)
+    sem = asyncio.Semaphore(concurrency_limit(limit))
     results: list[tuple[int, Outcome | None]] = []
 
     async def one(index: int) -> None:
@@ -642,8 +643,17 @@ async def enrich_queued(
             else:
                 reg = [row for row in registry if row.get("id") != str(rec_ids[index])]
             outcome = await enrich_one({**inputs[index], "_base_record_id": str(rec_ids[index])}, engine_rows[index], reg, engine, call, refs, engine_version)
+            if on_result is not None:
+                await on_result(index, outcome)
             results.append((index, outcome))
 
-    await asyncio.gather(*(one(index) for index in indexes))
+    tasks = [asyncio.create_task(one(index)) for index in indexes]
+    try:
+        await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
     results.sort(key=lambda item: item[0])
     return results

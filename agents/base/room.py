@@ -259,7 +259,7 @@ class UnknownEngine(Exception):
         super().__init__(engine)
 
 
-async def ensure_tables(conn: Any) -> None:
+async def ensure_tables(conn: Any, *, recover: bool = True) -> None:
     try:
         await conn.execute(RECORDS_SQL)
         await conn.execute(
@@ -284,11 +284,17 @@ async def ensure_tables(conn: Any) -> None:
             present = None
         if present != 1:
             raise
+    if not recover:
+        return
     await conn.execute(
         "UPDATE agent_base.records SET status='queued', updated_at=now() WHERE status='running'"
     )
     await conn.execute(
         "UPDATE agent_base.tasks SET status='queued' WHERE status='running' AND task_type='base.enrich'"
+    )
+    await conn.execute(
+        "UPDATE agent_base.tasks SET status='queued' WHERE task_type='base.enrich' "
+        "AND status IN ('done','failed') AND input->>'context_pending'='true'"
     )
 
 
@@ -303,6 +309,7 @@ async def insert_batch(
     engine: str | None,
     concurrency: int,
     registry: list[dict[str, Any]] | None,
+    *, task_id: uuid.UUID | None = None,
 ) -> Any:
     cfg = {
         "batch": label,
@@ -320,25 +327,26 @@ async def insert_batch(
         f"Base passes 1-7{' + ' + engine + ' engine' if engine else ''}: "
         f"{label} ({len(records)} records){note}"
     )
-    task_id = uuid.uuid4()
-    row = await conn.fetchrow(
-        """
-        INSERT INTO agent_base.tasks
-            (id, tenant_id, created_by, agent, task_type, title, input)
-        VALUES ($1,$2,$3,'base','base.enrich',$4,$5::jsonb)
-        RETURNING id, tenant_id, created_by, agent, task_type, title, status, result, error,
-                  ledger_id, created_at, started_at, finished_at
-        """,
-        task_id,
-        tenant_id,
-        created_by,
-        title,
-        json.dumps(cfg),
-    )
-    await conn.executemany(
-        "INSERT INTO agent_base.records (tenant_id, task_id, batch, raw) VALUES ($1,$2,$3,$4::jsonb)",
-        [(tenant_id, task_id, label, json.dumps(record)) for record in records],
-    )
+    task_id = task_id or uuid.uuid4()
+    async with conn.transaction():
+        row = await conn.fetchrow(
+            """
+            INSERT INTO agent_base.tasks
+                (id, tenant_id, created_by, agent, task_type, title, input)
+            VALUES ($1,$2,$3,'base','base.enrich',$4,$5::jsonb)
+            RETURNING id, tenant_id, created_by, agent, task_type, title, status, result, error,
+                      ledger_id, created_at, started_at, finished_at
+            """,
+            task_id,
+            tenant_id,
+            created_by,
+            title,
+            json.dumps(cfg),
+        )
+        await conn.executemany(
+            "INSERT INTO agent_base.records (tenant_id, task_id, batch, raw) VALUES ($1,$2,$3,$4::jsonb)",
+            [(tenant_id, task_id, label, json.dumps(record)) for record in records],
+        )
     return row
 
 
@@ -366,58 +374,64 @@ async def _run_batch(pool: Any, task_id: uuid.UUID, cfg: dict[str, Any], call: S
         raws, rec_ids, engine, cfg.get("registry"), call
     )
     spent = float(cfg.get("model_spend") or 0) + prep_cost
-    outcomes = await enrich_queued(
-        todo,
-        rec_ids,
-        inputs,
-        engine_rows,
-        registry,
-        supplied,
-        engine,
-        call,
-        models_paused,
+    save_lock = asyncio.Lock()
+
+    async def checkpoint(index: int, outcome: Any) -> None:
+        nonlocal spent
+        rec_id = uuid.UUID(rec_ids[index])
+        saved_at = None
+        async with save_lock:
+            async with pool.acquire() as conn, conn.transaction():
+                spent += outcome.cost_usd
+                if outcome.status == "queued":
+                    pause_models(outcome.error or "")
+                    await conn.execute(
+                        "UPDATE agent_base.records SET status='queued', updated_at=now() "
+                        "WHERE id=$1 AND tenant_id=$2",
+                        rec_id,
+                        tenant_id,
+                    )
+                elif outcome.status == "failed":
+                    await conn.execute(
+                        "UPDATE agent_base.records SET status='failed', error=$3, profile=$4::jsonb, "
+                        "passes=$5::jsonb, updated_at=now() WHERE id=$1 AND tenant_id=$2",
+                        rec_id,
+                        tenant_id,
+                        outcome.error,
+                        json.dumps(outcome.profile),
+                        json.dumps(outcome.passes),
+                    )
+                else:
+                    saved_at = await conn.fetchval(
+                        "UPDATE agent_base.records SET status='done', profile=$3::jsonb, passes=$4::jsonb, "
+                        "confidence=$5, updated_at=now() WHERE id=$1 AND tenant_id=$2 RETURNING updated_at",
+                        rec_id,
+                        tenant_id,
+                        json.dumps(outcome.profile),
+                        json.dumps(outcome.passes),
+                        outcome.confidence,
+                    )
+                cfg["model_spend"] = spent
+                await conn.execute(
+                    "UPDATE agent_base.tasks SET input=$3::jsonb WHERE id=$1 AND tenant_id=$2",
+                    task_id, tenant_id, json.dumps(cfg),
+                )
+        if saved_at is not None:
+            try:
+                await publish(str(tenant_id), "base.record.enriched", f"{task_id}:{rec_id}", {
+                    "record_id": str(rec_id), "task_id": str(task_id), "confidence": outcome.confidence,
+                    "observed_at": saved_at.isoformat()})
+            except Exception as exc:
+                log.warning("enriched event deferred (%s)", type(exc).__name__)
+
+    await enrich_queued(
+        todo, rec_ids, inputs, engine_rows, registry, supplied, engine, call, models_paused,
         int(cfg.get("concurrency") or 8),
         cfg.get("refs") if isinstance(cfg.get("refs"), dict) else None,
         cfg.get("engine_data_version") if isinstance(cfg.get("engine_data_version"), str) else None,
+        on_result=checkpoint,
     )
     async with pool.acquire() as conn:
-        for index, outcome in outcomes:
-            if outcome is None:
-                continue
-            spent += outcome.cost_usd
-            rec_id = uuid.UUID(rec_ids[index])
-            if outcome.status == "queued":
-                pause_models(outcome.error or "")
-                await conn.execute(
-                    "UPDATE agent_base.records SET status='queued', updated_at=now() "
-                    "WHERE id=$1 AND tenant_id=$2",
-                    rec_id,
-                    tenant_id,
-                )
-            elif outcome.status == "failed":
-                await conn.execute(
-                    "UPDATE agent_base.records SET status='failed', error=$3, profile=$4::jsonb, "
-                    "passes=$5::jsonb, updated_at=now() WHERE id=$1 AND tenant_id=$2",
-                    rec_id,
-                    tenant_id,
-                    outcome.error,
-                    json.dumps(outcome.profile),
-                    json.dumps(outcome.passes),
-                )
-            else:
-                saved_at = await conn.fetchval(
-                    "UPDATE agent_base.records SET status='done', profile=$3::jsonb, passes=$4::jsonb, "
-                    "confidence=$5, updated_at=now() WHERE id=$1 AND tenant_id=$2 RETURNING updated_at",
-                    rec_id,
-                    tenant_id,
-                    json.dumps(outcome.profile),
-                    json.dumps(outcome.passes),
-                    outcome.confidence,
-                )
-                if saved_at is not None:
-                    await publish(str(tenant_id), "base.record.enriched", f"{task_id}:{rec_id}", {
-                        "record_id": str(rec_id), "task_id": str(task_id), "confidence": outcome.confidence,
-                        "observed_at": saved_at.isoformat()})
         cfg["model_spend"] = spent
         waiting = await conn.fetchval(
             "SELECT count(*) FROM agent_base.records WHERE task_id=$1 AND tenant_id=$2 AND status='queued'",
@@ -497,6 +511,8 @@ async def base_loop(pool: Any, skills: SkillClient) -> None:
                         await run_code_first(pool, skills, row["id"], cfg, call)
                     else:
                         await _run_batch(pool, row["id"], cfg, call)
+                        from sources.continuation import finish_context
+                        await finish_context(pool, skills._http, row["id"], cfg)
                 except Exception as exc:  # noqa: BLE001 — one bad batch must not stop the queue
                     log.error("base worker: %s", type(exc).__name__)
                     async with pool.acquire() as conn:

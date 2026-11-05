@@ -114,9 +114,13 @@ async def gold_candidates(
     if not expected or not x_tank_key or not hmac.compare_digest(x_tank_key.encode(), expected.encode()):
         raise HTTPException(status_code=401, detail="room key required")
     try:
-        return await asyncio.to_thread(
+        official = await asyncio.to_thread(
             read_candidates, limit=limit, region=os.environ.get("TANK_REGION", "us-east"),
         )
+        from sources.learning import read_lessons
+        pool = getattr(app.state, 'pool', None)
+        learned = await read_lessons(pool, limit, os.environ.get("TANK_REGION", "us-east")) if pool is not None else []
+        return (learned + official)[:limit]
     except (OSError, ValueError):
         raise HTTPException(status_code=503, detail="gold evidence unavailable") from None
 
