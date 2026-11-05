@@ -85,10 +85,7 @@ def test_no_committed_secrets() -> None:
 def test_scanner_flags_a_live_key_and_allows_the_ci_dummy() -> None:
     live = "API_KEY=" + "sk_live_" + "abcdefghijklmnop"
     assert findings_in_text("sample.env", live)
-    dummy = (
-        "CLERK_SECRET_KEY=sk_test_dummy\n"
-        "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==\n"
-    )
+    dummy = "TRIGGER_SIGNIN_WORKSPACE_SECRET=${TRIGGER_SIGNIN_WORKSPACE_SECRET}\n"
     assert findings_in_text("ci.yml", dummy) == []
     assert findings_in_text("compose.yml", "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}") == []
     assert findings_in_text("tank.ts", 'const TANK_API_KEY = process.env.TANK_API_KEY ?? "";') == []

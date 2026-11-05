@@ -1,8 +1,22 @@
+## 0.6.1 — 2026-11-04
+
+Add Ask/Auto controls for paid steps and retain approval state when a command resumes.
+
+## 0.6.0
+
+Approved commands run on Windows and on hosts without Bubblewrap or Seatbelt, with a restricted environment, 120-second timeout and 64 KB output bound.
+
 # Changelog
+
+## 0.7.0 — 2026-11-04
+
+- Trigger sign-in is the only sign-in in the US and ZA, using the existing native device flow.
+- Setup generates app IDs and links organisations to existing Tank tenants; identities use raw subjects, not email.
+- Credentials from before the cutover and old approval selectors are refused. Install this release alongside the Workspace/Tank cutover.
 
 ## 0.5.0 — 2026-11-03
 
-- ZA login selects Zitadel by default; ZA code mode keeps all requests on ZA.
+- ZA login uses the native device flow by default; ZA code mode keeps all requests on ZA.
 - Windows release builds and CI; commands refuse without an equivalent sandbox.
 - Tag release archives carry checksums and Ed25519 signatures.
 
@@ -26,7 +40,7 @@
 - Command threads retain tool names/sizes, steps and actual receipts, without source or patch bodies. Model transcripts retain Tank's existing masking, tenant and regional handling. No sign-in or provider routing implementation is added.
 ## 0.1.2 — 2026-11-01
 
-- ZA can opt in to the self-hosted Zitadel device sign-in with `tervory login --region za --sign-in zitadel`, including founders. Both verification URLs must use https://auth-za.tervory.com.
+- Historical ZA device-flow preview, superseded by Trigger sign-in in both regions in 0.6.0. Preview selectors are no longer accepted.
 - Existing us-east and default ZA Boston/Workspace approval (including older CLIs) are unchanged even when the ZA issuer is set. Tank access/refresh credentials and logout/revoke are unchanged.
 
 ## 0.1.1 — 2026-10-31

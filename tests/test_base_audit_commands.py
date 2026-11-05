@@ -1,4 +1,5 @@
 """Offline founder/Confirm/attachment boundaries for the existing audit store."""
+from trigger_signin_fakes import set_founders
 from contextlib import asynccontextmanager
 import csv
 import io
@@ -167,7 +168,7 @@ async def test_review_binding_attachment_owner_and_unchanged_csv(corridor):
 
 def test_adapters_supply_actor_identity_without_body_scope(monkeypatch):
     monkeypatch.setitem(sys.modules, "main", SimpleNamespace(box_region=lambda: "us-east"))
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", USER)
+    set_founders(monkeypatch, USER)
     for tool, args in (("base.audit.start", {"campaign_id": str(CAMPAIGN), "seed": 42}),
                        ("base.audit.review", {"campaign_id": str(CAMPAIGN), "audit_id": str(AUDIT), "attachment_id": str(ATTACHMENT)})):
         action = command.validate_action(command.PlannedAction(tool=tool, arguments=args), ACTOR)
@@ -191,7 +192,7 @@ async def test_start_same_seed_uses_real_saved_audit(request, monkeypatch):
     campaign_id, _ = await campaign(pool, tenant=TENANT)
     monkeypatch.setattr(command, "db", lambda: pool)
     monkeypatch.setenv("TANK_API_KEY", "placeholder")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", USER)
+    set_founders(monkeypatch, USER)
     async def receipt(tenant, tool):
         assert (tenant, tool) == (TENANT, "base.audit.start")
         return str(uuid4())

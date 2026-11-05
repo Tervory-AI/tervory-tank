@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { isFounder } from "@/lib/admin";
 import { activeTenant } from "@/lib/tenant";
 import { refreshBase } from "./actions";

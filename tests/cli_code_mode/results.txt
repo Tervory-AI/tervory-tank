@@ -395,14 +395,14 @@ ok 64 - a stream that finishes normally is not aborted
   duration_ms: 13.632611
   type: 'test'
   ...
-# Subtest: ZA accepts only the fixed Zitadel origin for both verification URLs
-ok 65 - ZA accepts only the fixed Zitadel origin for both verification URLs
+# Subtest: ZA accepts only the fixed Trigger sign-in origin for both verification URLs
+ok 65 - ZA accepts only the fixed Trigger sign-in origin for both verification URLs
   ---
   duration_ms: 26.201148
   type: 'test'
   ...
-# Subtest: ZA login opens Zitadel and stores only the unchanged Tank credential pair
-ok 66 - ZA login opens Zitadel and stores only the unchanged Tank credential pair
+# Subtest: ZA login opens Trigger sign-in and stores only the unchanged Tank credential pair
+ok 66 - ZA login opens Trigger sign-in and stores only the unchanged Tank credential pair
   ---
   duration_ms: 300.162483
   type: 'test'
@@ -419,8 +419,8 @@ ok 68 - ZA default login sends the old request and opens Boston approval
   duration_ms: 14.650227
   type: 'test'
   ...
-# Subtest: Zitadel flag is accepted only for ZA login
-ok 69 - Zitadel flag is accepted only for ZA login
+# Subtest: Trigger sign-in flag is accepted only for ZA login
+ok 69 - Trigger sign-in flag is accepted only for ZA login
   ---
   duration_ms: 2.10441
   type: 'test'

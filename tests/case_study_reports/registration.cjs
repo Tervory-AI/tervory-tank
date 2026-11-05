@@ -1,4 +1,4 @@
-// Execute the actual Workspace tenant, Tank helper and API route with Clerk/fetch stubs.
+// Execute the actual Workspace tenant, Tank helper and API route with Trigger sign-in/fetch stubs.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,11 +13,11 @@ Module._resolveFilename = function (name, parent, ...rest) {
 require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true},
 }).outputText, filename);
-let session = { userId: 'alice', orgId: 'org_a' }, orgError, authError, membershipError, creations = 0;
-const clerk = {
-  auth: async () => { if (authError) throw authError; return session; },
+let session = { userId: 'alice', orgId: '60001' }, orgError, authError, membershipError, creations = 0;
+const signin = {
+  auth: async () => { if (authError) throw authError; return {...session, tenantId: session.orgId ? bindings[session.orgId] : null}; },
   currentUser: async () => ({ firstName: 'Alice' }),
-  clerkClient: async () => ({
+  signinDirectory: async () => ({
     organizations: {
       getOrganization: async ({ organizationId }) => { if (orgError) throw orgError; return { id: organizationId, name: 'Workspace' }; },
       createOrganization: async () => { creations++; return { id: 'org_personal', name: 'Alice workspace' }; },
@@ -25,9 +25,14 @@ const clerk = {
     users: { getOrganizationMembershipList: async () => { if (membershipError) throw membershipError; return { data: [] }; } },
   }),
 };
+const bindings = Object.fromEntries(['60001', '60002', '60003', ...[301,302,307,308,401,403,400,404,422].map(status => `org_denied_${status}`), ...[408,429,500,502,503,504,'network'].map(status => `org_${status}`)].map((org, index) => [org, `00000000-0000-4000-8000-${String(index + 11).padStart(12, '0')}`]));
 const originalLoad = Module._load;
 Module._load = function (name, parent, ...rest) {
-  return name === '@clerk/nextjs/server' ? clerk : originalLoad.call(this, name, parent, ...rest);
+  if (name === '@/lib/trigger-signin' || name === './trigger-signin') return signin;
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => global.fetch(...args)};
+  if (name === './trigger-signin-principal') return {tenantBindings: () => bindings};
+  if (name === 'server-only') return {};
+  return originalLoad.call(this, name, parent, ...rest);
 };
 process.env.TANK_URL = 'http://tank.offline.invalid';
 process.env.TANK_API_KEY = 'dummy-offline';
@@ -52,7 +57,7 @@ const tenant = require('../../workspace/lib/tenant.ts');
 const tank = require('../../workspace/lib/tank.ts');
 (async () => {
   const a = await tenant.currentTenant();
-  assert.equal(a.tenantId, tenant.tenantIdFor('org_a'));
+  assert.equal(a.tenantId, tenant.tenantIdFor('60001'));
   assert.deepEqual(await tenant.activeTenant(), a);
   assert.equal(calls.length, 1); // Outage backoff.
   now += 1000;
@@ -76,7 +81,7 @@ const tank = require('../../workspace/lib/tank.ts');
   release();
   await Promise.all([first, second]);
   // A different actor in the same tenant never inherits a success cooldown.
-  session = { userId: 'bob', orgId: 'org_a' };
+  session = { userId: 'bob', orgId: '60001' };
   mode = 403;
   await assert.rejects(tenant.activeTenant);
   for (const status of [301, 302, 307, 308, 401, 403, 400, 404, 422]) {
@@ -85,26 +90,21 @@ const tank = require('../../workspace/lib/tank.ts');
     await assert.rejects(tenant.activeTenant);
     await assert.rejects(tenant.activeTenant); // Failure never becomes cached approval.
   }
-  orgError = new Error('Clerk denied');
-  await assert.rejects(tenant.currentTenant, /Clerk denied/);
-  orgError = undefined;
-  authError = new Error('Clerk auth failed');
-  await assert.rejects(tenant.currentTenant, /Clerk auth failed/);
-  await assert.rejects(tenant.activeTenant, /Clerk auth failed/);
+  authError = new Error('Trigger sign-in auth failed');
+  await assert.rejects(tenant.currentTenant, /Trigger sign-in auth failed/);
+  await assert.rejects(tenant.activeTenant, /Trigger sign-in auth failed/);
   authError = undefined;
   session = { userId: 'alice', orgId: null };
-  membershipError = new Error('Clerk membership failed');
-  await assert.rejects(tenant.currentTenant, /Clerk membership failed/);
-  membershipError = undefined;
+  await assert.rejects(tenant.currentTenant, /Trigger sign-in required/);
   session = { userId: null, orgId: null };
   assert.equal(await tenant.activeTenant(), null);
-  await assert.rejects(tenant.currentTenant, /not signed in/);
+  await assert.rejects(tenant.currentTenant, /Trigger sign-in required/);
   session = { userId: 'alice', orgId: null };
   assert.equal(await tenant.activeTenant(), null);
   assert.equal(creations, 0);
   mode = 'network';
-  assert.equal((await tenant.currentTenant()).orgId, 'org_personal');
-  assert.equal(creations, 1);
+  await assert.rejects(tenant.currentTenant, /Trigger sign-in required/);
+  assert.equal(creations, 0);
   for (const modeValue of [408, 429, 500, 502, 503, 504, 'network']) {
     mode = modeValue;
     session = { userId: 'bob', orgId: `org_${modeValue}` };
@@ -131,5 +131,5 @@ const tank = require('../../workspace/lib/tank.ts');
   clearInterval(keepAlive);
   assert.ok(performance.now() - started < 2500);
   assert.ok(!JSON.stringify(events).includes('private transport detail'));
-  console.log('PASS: reporting outage recovery/backoff/single-flight, timeout, strict errors, Clerk denial, personal/no-org behavior and tenant/actor isolation');
+  console.log('PASS: reporting outage recovery/backoff/single-flight, timeout, strict errors, Trigger sign-in denial, personal/no-org behavior and tenant/actor isolation');
 })().catch(error => { console.error(error); process.exitCode = 1; });

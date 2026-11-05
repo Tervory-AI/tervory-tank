@@ -1,0 +1,158 @@
+import copy
+import json
+import runpy
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+PROVISION = runpy.run_path(str(ROOT / 'ops/trigger-signin/provision.py'))
+FIRST = '00000000-0000-4000-8000-000000000011'
+SECOND = '00000000-0000-4000-8000-000000000012'
+
+
+class Reply:
+    is_success = True
+
+    def __init__(self, body):
+        self.body = body
+
+    def json(self):
+        return self.body
+
+
+class Tank:
+    def __init__(self):
+        self.clients = [FIRST]
+        self.regions = {}
+
+    def request(self, method, path, **kwargs):
+        if path == '/v1/case-studies/clients':
+            assert method == 'GET'
+            offset = kwargs['params']['offset']
+            return Reply({'clients': [{'tenant_id': tenant} for tenant in self.clients[offset:offset + 500]], 'has_more': False})
+        assert path == '/v1/trigger-signin/config'
+        if method == 'GET':
+            return Reply({'regions': copy.deepcopy(self.regions)})
+        assert method == 'PUT'
+        body = kwargs['json']
+        self.regions[body['region']] = {**body, 'founders': [body['founder_subject']],
+                                      'organisations': {binding['org_id']: binding['tenant_id'] for binding in body['organisations']}}
+        return Reply({'configured': True})
+
+
+class Native:
+    def __init__(self):
+        self.organisations = {}
+        self.grants = {}
+        self.assignments = {}
+        self.writes = []
+        self.lose_org_response = False
+
+    def request(self, method, path, **kwargs):
+        body = kwargs.get('json', {})
+        org = kwargs.get('headers', {}).get('x-zitadel-orgid')
+        if method in {'POST', 'PUT'} and not path.endswith('/_search'):
+            self.writes.append((method, path))
+        if path == '/admin/v1/members/_search':
+            return {'result': [{'userId': '50001', 'roles': ['IAM_OWNER']}, {'userId': '50002', 'roles': ['IAM_OWNER']}]}
+        if path.startswith('/management/v1/users/5000') and method == 'GET':
+            subject = path.rsplit('/', 1)[-1]
+            return {'user': {'id': subject, 'details': {'resourceOwner': '10001'},
+                             **({'human': {'email': {'email': 'display-only@example.test'}}} if subject == '50001' else {'machine': {}})}}
+        if path == '/v2/organizations/_search':
+            ident = body['queries'][0]['idQuery']['id']
+            return {'result': [{'id': ident}] if ident in self.organisations else []}
+        if path == '/v2/organizations':
+            ident = body['organizationId']
+            assert ident not in self.organisations
+            self.organisations[ident] = body['name']
+            if self.lose_org_response:
+                self.lose_org_response = False
+                raise PROVISION['ProvisionError']('Synthetic response lost')
+            return {'organizationId': ident}
+        if path.endswith('/grants/_search') and '/projects/' in path:
+            target = body['queries'][0]['grantedOrgIdQuery']['grantedOrgId']
+            return {'result': [self.grants[target]] if target in self.grants else []}
+        if path == '/management/v1/projects/20001/grants':
+            ident = str(70001 + len(self.grants))
+            self.grants[body['grantedOrgId']] = {'id': ident, 'roleKeys': body['roleKeys']}
+            return {'grantId': ident}
+        if path == '/management/v1/users/grants/_search':
+            assert body['queries'] == [{'projectIdQuery': {'projectId': '20001'}}, {'userIdQuery': {'userId': '50001'}}]
+            return {'result': [self.assignments[org]] if org in self.assignments else []}
+        if path == '/management/v1/users/50001/grants':
+            assert body['roleKeys'] == ['org_admin']
+            assert 'email' not in body
+            self.assignments[org] = {'id': '80001', 'roleKeys': body['roleKeys'], 'details': {'resourceOwner': org}}
+            return {'userGrantId': '80001'}
+        raise AssertionError((method, path, kwargs))
+
+
+def configure(api, tank, bootstrap):
+    record = {'owner_org_id': '10001', 'project_id': '20001', 'client_id': '30001@tervory', 'workspace_client_id': '30002@tervory'}
+    return PROVISION['provision'](api, tank, record, 'us-east', 'https://auth.tervory.com', bootstrap)
+
+
+def test_setup_redeploy_is_idempotent_and_new_tenant_is_next_run_only(tmp_path):
+    api, tank = Native(), Tank()
+    first = configure(api, tank, tmp_path)
+    writes = list(api.writes)
+    assert first['founder_subject'] == '50001'
+    org = first['organisations'][0]['org_id']
+    assert first['organisations'] == [{'org_id': org, 'tenant_id': FIRST}]
+    assert org.isdecimal() and len(org) == 30
+    assert (tmp_path / 'tenant-organisations-us-east.json').stat().st_mode & 0o777 == 0o600
+    assert configure(api, tank, tmp_path) == first
+    assert api.writes == writes
+    tank.clients.append(SECOND)
+    result = configure(api, tank, tmp_path)
+    assert len(result['organisations']) == len(api.organisations) == 2
+    assert result['organisations'][0] == first['organisations'][0]
+    assert len(api.writes) == len(writes) + 3
+
+
+def test_setup_recovers_created_org_without_response_and_never_relinks_email(tmp_path):
+    api, tank = Native(), Tank()
+    api.lose_org_response = True
+    with pytest.raises(PROVISION['ProvisionError'], match='response lost'):
+        configure(api, tank, tmp_path)
+    result = configure(api, tank, tmp_path)
+    assert result['founder_subject'] == '50001'
+    assert len(api.organisations) == 1
+    api.assignments[result['organisations'][0]['org_id']]['roleKeys'] = ['member']
+    before = list(api.writes)
+    with pytest.raises(PROVISION['ProvisionError'], match='grant was changed'):
+        configure(api, tank, tmp_path)
+    assert api.writes == before
+
+
+def test_one_setup_links_both_work_regions_without_writing_to_za(tmp_path):
+    api, tank, regional = Native(), Tank(), Tank()
+    regional.clients = [FIRST, SECOND]
+    record = {'owner_org_id': '10001', 'project_id': '20001', 'client_id': '30001@tervory', 'workspace_client_id': '30002@tervory'}
+    payload = PROVISION['provision'](api, tank, record, 'us-east', 'https://auth.tervory.com', tmp_path,
+                                     regional_tanks=(regional,))
+    assert {binding['tenant_id'] for binding in payload['organisations']} == {FIRST, SECOND}
+    assert len(api.organisations) == 2
+    assert set(tank.regions) == {'us-east'}
+    assert regional.regions == {}
+
+
+def test_setup_never_adopts_an_organisation_by_display_name(tmp_path):
+    api, tank = Native(), Tank()
+    api.organisations['60001'] = 'Tervory tenant ' + FIRST
+    result = configure(api, tank, tmp_path)
+    assert result['organisations'][0]['org_id'] != '60001'
+    assert '60001' not in api.grants
+    assert '60001' not in api.assignments
+
+
+def test_setup_refuses_ledger_from_another_issuer(tmp_path):
+    (tmp_path / 'tenant-organisations-us-east.json').write_text(json.dumps({
+        'issuer': 'https://retired.example.invalid', 'organisations': {},
+    }))
+    api, tank = Native(), Tank()
+    with pytest.raises(PROVISION['ProvisionError'], match='ledger refused'):
+        configure(api, tank, tmp_path)
+    assert not api.writes

@@ -1,0 +1,12 @@
+{
+  "text": "Skip to content\nDashboard\nProjects\nChats\nSquad\nLedger\nBilling\nTasks\nData\nPrices\nSettings\nCLI sign-ins\nSupport\n(opens a new tab)\nLedger · Example · last 30 days\n0\nmodel calls\n0\ndelivered\n0 / 0\naccepted / rejected\n$0.00000000\nRecorded spend · 0 calls excluded: price not set\n—\nper delivered answer\n—\nper accepted answer\nWhere the work ran\nRung\tMeans\tCalls\tShare\n1\tFrontier model\t0\t0%\n2\tOwned small model\t0\t0%\n3\tCode\t0\t0%\n4\tCache\t0\t0%\nBy model\nModel\tRung\tCalls\tAccepted\tRejected\tTokens in\tTokens out\tCost\nNo calls yet. Ask something in Chat.",
+  "title": "Ledger",
+  "width": 1440,
+  "height": 907,
+  "controls": [],
+  "fonts": [
+    "Inter, Inter, sans-serif",
+    "Jost, Jost, sans-serif",
+    "\"JetBrains Mono\", \"JetBrains Mono\", ui-monospace, monospace"
+  ]
+}

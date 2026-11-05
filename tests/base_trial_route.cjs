@@ -11,7 +11,7 @@ let userId = null;
 let calls = [];
 let fail = false;
 const mocks = {
-  "@clerk/nextjs/server": { auth: async () => ({ userId }) },
+  "@/lib/trigger-signin": { auth: async () => ({ userId }) },
   "@/lib/admin": { isFounder: (value) => value === "founder-placeholder" },
   "@/lib/tank": { runContextTrial: async (value) => {
     calls.push(value);

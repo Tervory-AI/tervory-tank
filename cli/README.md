@@ -25,11 +25,11 @@ Add <home>/.local/bin to your PATH, for example: export PATH="<home>/.local/bin:
 Next: tervory login
 ```
 
-Pin by running `curl -fsSL https://app.tervory.com/cli/install.sh | TERVORY_CLI_VERSION=0.5.0 sh`.
+Pin by running `curl -fsSL https://app.tervory.com/cli/install.sh | TERVORY_CLI_VERSION=0.6.0 sh`.
 It prints the same lines for that version. `tervory version` then prints, for
-example, `tervory 0.5.0 (linux-x64-gnu)` followed by a newline. The installed
+example, `tervory 0.6.0 (linux-x64-gnu)` followed by a newline. The installed
 platform appears in parentheses. A source checkout prints
-`tervory 0.5.0 (development checkout)` instead.
+`tervory 0.6.0 (development checkout)` instead.
 
 The installer and `tervory update` verify SHA-256 against the HTTPS manifest.
 They do not verify the detached tag-release signatures. For an independently
@@ -38,12 +38,12 @@ verified installation, use the signed archive procedure below on every OS.
 Windows has x64 and arm64 MSVC archives with the Credential Manager binding and
 `tervory.cmd`. Download the appropriate archive, its `.sig`, `manifest.json`,
 `manifest.json.sig`, `SHA256SUMS` and `SHA256SUMS.sig` from the founder-published
-`cli-v0.5.0` workflow artifact. Obtain the SPKI PEM public key independently from
+`cli-v0.6.0` workflow artifact. Obtain the SPKI PEM public key independently from
 the founder, corresponding to `CLI_RELEASE_SIGNING_PUBLIC_KEY`. From a trusted
 checkout, verify before extracting (the same verifier works on macOS/Linux):
 
 ```powershell
-node cli/scripts/verify-release.mjs ./download ./trusted-release-public.pem win32-x64-msvc 0.5.0
+node cli/scripts/verify-release.mjs ./download ./trusted-release-public.pem win32-x64-msvc 0.6.0
 ```
 
 Exact successful output:
@@ -57,10 +57,10 @@ to stderr and exits 1. Do not extract on failure. To install a verified Windows
 x64 archive in PowerShell:
 
 ```powershell
-tar -xzf ./download/tervory-cli-0.5.0-win32-x64-msvc.tar.gz
+tar -xzf ./download/tervory-cli-0.6.0-win32-x64-msvc.tar.gz
 New-Item -ItemType Directory -Force "$HOME/.tervory/cli" | Out-Null
-Move-Item ./tervory-cli-0.5.0 "$HOME/.tervory/cli/0.5.0"
-$env:PATH = "$HOME/.tervory/cli/0.5.0;$env:PATH"
+Move-Item ./tervory-cli-0.6.0 "$HOME/.tervory/cli/0.6.0"
+$env:PATH = "$HOME/.tervory/cli/0.6.0;$env:PATH"
 tervory version
 ```
 
@@ -68,7 +68,7 @@ The extraction, directory creation, move and PATH assignment are silent on
 success. The version command prints exactly:
 
 ```text
-tervory 0.5.0 (win32-x64-msvc)
+tervory 0.6.0 (win32-x64-msvc)
 ```
 
 Use `win32-arm64-msvc` for Windows arm64. Keep Node 22 on PATH. To update Windows,
@@ -79,20 +79,21 @@ folder in PATH. `tervory update` on Windows fails with:
 Update refused: on Windows, verify and extract the signed release archive again.
 ```
 
-Linux/macOS update commands are `tervory update` or `tervory update --version 0.5.0`.
-An unchanged installation prints `Tervory CLI 0.5.0 is already installed.`.
+Linux/macOS update commands are `tervory update` or `tervory update --version 0.6.0`.
+An unchanged installation prints `Tervory CLI 0.6.0 is already installed.`.
 A successful change prints `Downloading Tervory CLI <version> (<platform>)`,
 `SHA-256 verified: <sha256>` and `Updated Tervory CLI <old-version> -> <version>.` on separate
 lines. Versioned builds currently live in the Workspace image; older pins can
 stop resolving after a new image deploy. Linux/macOS installed copies check for updates at
 most daily with a 1.5-second budget; `TERVORY_NO_UPDATE_CHECK=1` disables notices.
 
-## Login: US and ZA
+## Trigger sign-in: US and ZA
 
 `tervory login` defaults to US; `tervory login --region us-east` is explicit.
-US approval uses the Clerk-backed Workspace. ZA uses Zitadel on the ZA box:
-`tervory login --region za` (the older explicit `--sign-in zitadel` is also
-accepted). The browser launcher accepts the pinned ZA identity host. Compare
+Every country uses Trigger sign-in at auth.tervory.com on Boston.
+Region selects where work runs, never where a user signs in.
+Use `tervory login --region za` for ZA. No approval selector or fallback is
+accepted. The browser launcher accepts only the single global host. Compare
 the printed code with the page before approving. There is no token argument,
 credential environment variable or URL override.
 
@@ -103,33 +104,34 @@ protocol examples, not evidence of a production sign-in.
 ```text
 $ tervory login --region us-east
 Approve this device in your browser (placeholder-worker, us-east):
-  https://app.tervory.com/cli/device?code=BCDF-GHJK&region=us-east
-Confirm the page shows code BCDF-GHJK.
+  https://auth.tervory.com/ui/v2/login/device?user_code=1234-5678
+Confirm the page shows code 1234-5678.
 Signed in on us-east. Credential saved in the OS keychain; it refreshes automatically.
 ```
 
 ```text
 $ tervory login --region za
 Approve this device in your browser (placeholder-worker, za):
-  https://auth-za.tervory.com/device?user_code=1234-5678
+  https://auth.tervory.com/ui/v2/login/device?user_code=1234-5678
 Confirm the page shows code 1234-5678.
 Signed in on za. Credential saved in the OS keychain; it refreshes automatically.
 ```
 
-ZA requires the existing #589 identity resource and configured issuer/client and
-organisation mapping. See [IDENTITY-ZA.md](../docs/ops/IDENTITY-ZA.md). Missing
-identity or a legacy Boston approval response is refused; this CLI never falls
-back to Boston for ZA login. Older CLI versions keep their backend compatibility.
+Both regions use Trigger sign-in and the existing #589 native device flow.
+Setup generates the client IDs and links organisations to existing Tank tenants;
+nobody copies IDs or JSON mappings. See [Trigger sign-in](../docs/ops/TRIGGER-SIGNIN.md).
+Missing setup or a legacy approval response is refused. There is no fallback,
+and credentials minted before the cutover cannot authenticate.
 ZA device, refresh, revoke, chat and code requests use `https://za.tervory.com`;
 they do not cross through US Workspace. US requests use `https://app.tervory.com`.
 The browser talks to the identity provider; only Tank exchanges OIDC credentials.
 
 The keychain stores the Tank access/refresh pair, not provider tokens. Access
 lasts one hour; refresh lasts 30 days and rotates on use. A reused or revoked
-refresh token is refused. Zitadel organisation-to-tenant mapping and verified
+refresh token is refused. Trigger sign-in organisation-to-tenant mapping and verified
 subject/roles determine access, never email or editable metadata. Roles remain a
 snapshot until revocation/expiry, including refresh. After a role change, logout
-and sign in again. US Workspace CLI sign-ins do not list Zitadel identities.
+and sign in again. The Workspace lists this same native identity’s CLI sessions in both work regions.
 
 ```text
 $ tervory logout
@@ -254,17 +256,13 @@ empty sandbox; macOS allows only their selected executable targets and verified 
 directories remain unavailable. Secret paths inside runtimes are hidden.
 `$HOME`, `~/.config`, `~/.ssh` and keychain directories are never mounted. Other
 host folders remain unavailable. Use a leading executable, rather than hiding
-an external runtime behind a shell wrapper or an environment assignment. There is no
-unsandboxed fallback. If Bubblewrap is unavailable or cannot create the sandbox,
-commands are refused. macOS probes its Seatbelt profile before executing a
-command and refuses a missing executable or invalid profile. Its temporary files
+an external runtime behind a shell wrapper or an environment assignment. When Bubblewrap or Seatbelt is absent, approved commands run with your user permissions and the same restricted environment, timeout and output cap. Windows uses cmd.exe with AutoRun disabled. This host fallback can access files and networking permitted to your account; approval is the boundary. An installed sandbox with an invalid profile still refuses execution. macOS probes its Seatbelt profile before executing a command. Its temporary files
 stay inside the selected folder; system libraries and explicitly selected
 runtimes are read-only. Secret paths, home configuration, SSH and keychain/keyring paths
 remain inaccessible and networking is denied. The CLI kills the command's process
 group when it exits, including background children. A child calling `setsid()`
 can still escape that process-group cleanup on macOS and remain alive inside
-the sandbox; Seatbelt does not provide a die-with-parent guarantee. Windows
-commands remain refused.
+the sandbox; Seatbelt does not provide a die-with-parent guarantee. Windows commands use the same Run approval. Timeout and cancellation terminate the Windows process tree with taskkill /T /F.
 
 The unchanged Seatbelt base is from [OpenAI Codex, commit
 6b2a2757de696c2506ee460c49c66a8e2bed65e0](https://github.com/openai/codex/blob/6b2a2757de696c2506ee460c49c66a8e2bed65e0/codex-rs/sandboxing/src/seatbelt_base_policy.sbpl),
@@ -321,12 +319,7 @@ HTTPS distribution remains checksum-only until signed files are published.
 
 `cli.yml` runs `npm test` on Linux, macOS and Windows. Windows also builds both
 native archives twice and runs the x64 launcher. POSIX installer and POSIX
-sandbox-success cases have explicit platform skips on Windows; command refusal,
-login, ZA routing, file edits, undo, cards and signature checks run natively.
-Windows commands are refused because no Windows filesystem/network confinement
-backend is implemented here. A Job Object alone would limit processes without
-providing Bubblewrap's read/write and network boundary. There is no insecure
-fallback; file tools, edits, undo and remote Tervory cards remain available.
+sandbox-success cases have explicit platform skips on Windows; approved command execution, denial, output limits, timeout, login, ZA routing, file edits, undo, cards and signature checks run natively. Windows approved commands use the host shell; Linux/macOS retain their sandbox when installed.
 
 Offline verification uses a fake OIDC server and fake Tank. The Python identity
 suite also verifies real signed JWTs against fake discovery/JWKS and checks

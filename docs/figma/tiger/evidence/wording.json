@@ -1,0 +1,1098 @@
+[
+  {
+    "text": "5",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Account",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "Add a product",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:205",
+      "628:376"
+    ]
+  },
+  {
+    "text": "Alert kinds",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Alerts",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "All",
+    "status": "Proposed",
+    "frame_ids": [
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "All watched competitors are out of stock. You are in stock.",
+    "status": "Proposed",
+    "frame_ids": [
+      "642:443",
+      "642:662"
+    ]
+  },
+  {
+    "text": "Below cost",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Business",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "Chats",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "Check details",
+    "status": "Proposed",
+    "frame_ids": [
+      "627:158",
+      "627:317"
+    ]
+  },
+  {
+    "text": "Check interval",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Competitor price \u00a380.00 is below your cost \u00a390.00",
+    "status": "Proposed",
+    "frame_ids": [
+      "642:443",
+      "642:662"
+    ]
+  },
+  {
+    "text": "Competitor sites",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "Confirm",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764",
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "Confirm the product before it affects price position.",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "Confirmed changes from completed product checks.",
+    "status": "Proposed",
+    "frame_ids": [
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Dashboard",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "Every 15 minutes \u00b7 Every hour \u00b7 Every 6 hours \u00b7 Every 12 hours \u00b7 Every day",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Every hour",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "FL-DL01 \u00b7 North shop",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Fieldlight desk lamp",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Fieldlight desk lamp \u00b7 FL-DL01",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:470",
+      "628:623",
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Fieldlight desk lamp \u00b7 North shop",
+    "status": "Proposed",
+    "frame_ids": [
+      "642:443",
+      "642:662"
+    ]
+  },
+  {
+    "text": "GTIN not recorded",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "GTIN review",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "History",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "Illustrative values \u00b7 Figma only.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623",
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Last attempt: \u2014",
+    "status": "Proposed",
+    "frame_ids": [
+      "627:158",
+      "627:317"
+    ]
+  },
+  {
+    "text": "Loading\u2026",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "645:782",
+      "645:962"
+    ]
+  },
+  {
+    "text": "Market gap",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Matches to review",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "Menu",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:216",
+      "622:499",
+      "622:764",
+      "627:317",
+      "628:376",
+      "628:623",
+      "629:510",
+      "629:868",
+      "642:662",
+      "645:676",
+      "645:962",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "New product",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "New product listed: Fieldlight desk lamp",
+    "status": "Proposed",
+    "frame_ids": [
+      "642:443",
+      "642:662"
+    ]
+  },
+  {
+    "text": "No alerts yet.",
+    "status": "Proposed",
+    "frame_ids": [
+      "645:496",
+      "645:676"
+    ]
+  },
+  {
+    "text": "No barcode match.",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "No price position is available.",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:205",
+      "628:376"
+    ]
+  },
+  {
+    "text": "No products in your catalogue.",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:205",
+      "628:376"
+    ]
+  },
+  {
+    "text": "North shop",
+    "status": "Proposed",
+    "frame_ids": [
+      "627:158",
+      "627:317"
+    ]
+  },
+  {
+    "text": "North shop \u00b7 GTIN: [competitor GTIN]",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "North shop \u00b7 north-shop.example/products/desk-lamp",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Not checked \u2014 the latest check couldn't be loaded",
+    "status": "Proposed",
+    "frame_ids": [
+      "627:158",
+      "627:317"
+    ]
+  },
+  {
+    "text": "Off",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Off stops scheduled checks. Alert preferences are kept.",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "On",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Overview",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "Price",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Price change must be greater than 5%.",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Price position",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "Price position could not be loaded.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:309",
+      "622:499"
+    ]
+  },
+  {
+    "text": "Price threshold (%)",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Price went down from \u00a3100.00 to \u00a380.00",
+    "status": "Proposed",
+    "frame_ids": [
+      "642:443",
+      "642:662"
+    ]
+  },
+  {
+    "text": "Price: \u2014\nStock: \u2014\nMethod: \u2014\nChecked at: \u2014",
+    "status": "Proposed",
+    "frame_ids": [
+      "627:158",
+      "627:317"
+    ]
+  },
+  {
+    "text": "Prices and position are unavailable while loading.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216"
+    ]
+  },
+  {
+    "text": "Proposed",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623",
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Proposed wording and example data",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623",
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Reject",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764",
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "Review the brand and maker part number before confirming.",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "Same brand and maker part number. No barcode match. Confirm the product before it affects price position.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Save",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Scheduled checks of public product pages.",
+    "status": "Proposed",
+    "frame_ids": [
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Scheduled checks of public product pages. Alerts for confirmed price and stock changes.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623",
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Search watched products, readings and alerts",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623",
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Squad",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "Stock",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Stock changed from In stock to Out of stock.",
+    "status": "Proposed",
+    "frame_ids": [
+      "642:443",
+      "642:662"
+    ]
+  },
+  {
+    "text": "Support",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "Tasks",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "That could not be saved. Try again.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "This is unavailable check history, not a completed check or an empty site.",
+    "status": "Proposed",
+    "frame_ids": [
+      "627:158",
+      "627:317"
+    ]
+  },
+  {
+    "text": "Tiger",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623",
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Tiger is not reachable right now.",
+    "status": "Proposed",
+    "frame_ids": [
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Tiger is not reachable right now. No products are shown.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:309",
+      "622:499"
+    ]
+  },
+  {
+    "text": "Track product prices and stock availability across your watched stores.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:216",
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "628:205",
+      "628:376",
+      "628:470",
+      "628:623",
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "642:662",
+      "645:496",
+      "645:676",
+      "645:782",
+      "645:962",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Try again",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:309",
+      "622:499",
+      "622:594",
+      "622:764",
+      "627:158",
+      "627:317",
+      "645:1068",
+      "645:1250"
+    ]
+  },
+  {
+    "text": "Unavailable",
+    "status": "Proposed",
+    "frame_ids": [
+      "627:158",
+      "627:317"
+    ]
+  },
+  {
+    "text": "Watch",
+    "status": "Proposed",
+    "frame_ids": [
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868"
+    ]
+  },
+  {
+    "text": "Watch list",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:510",
+      "629:650",
+      "629:868",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  },
+  {
+    "text": "Your decision was not saved. This match is still awaiting review.",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764"
+    ]
+  },
+  {
+    "text": "Your product \u00b7 GTIN: [catalogue GTIN]",
+    "status": "Proposed",
+    "frame_ids": [
+      "628:470",
+      "628:623"
+    ]
+  },
+  {
+    "text": "north-shop.example",
+    "status": "Proposed",
+    "frame_ids": [
+      "627:158",
+      "627:317"
+    ]
+  },
+  {
+    "text": "north-shop.example/products/desk-lamp",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:594",
+      "622:764",
+      "628:470",
+      "628:623",
+      "642:443",
+      "642:662"
+    ]
+  },
+  {
+    "text": "\u2304",
+    "status": "Proposed",
+    "frame_ids": [
+      "622:10",
+      "622:309",
+      "622:594",
+      "627:158",
+      "628:205",
+      "628:470",
+      "629:293",
+      "629:650",
+      "642:443",
+      "645:496",
+      "645:782",
+      "645:1068"
+    ]
+  }
+]

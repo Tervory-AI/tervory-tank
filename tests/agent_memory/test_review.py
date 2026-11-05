@@ -1,4 +1,5 @@
 """PR #410 review: disposable SQL, local tokenizer, no model or external calls."""
+from trigger_signin_fakes import set_founders
 import uuid
 
 import httpx
@@ -17,7 +18,7 @@ memory = memory_fixture
 
 def credentials(monkeypatch, agent):
     monkeypatch.setenv("TANK_API_KEY", "offline-workspace")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "offline-founder")
+    set_founders(monkeypatch, "offline-founder")
     monkeypatch.setenv("TANK_KEY_" + agent.upper(), "offline-room")
     return {"X-Tank-Key": "offline-workspace", "X-Tervory-Admin": "offline-founder"}
 

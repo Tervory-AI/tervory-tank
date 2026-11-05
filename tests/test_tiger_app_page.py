@@ -64,7 +64,9 @@ def test_tiger_tabs_exclude_unavailable_controls():
     assert "Can't read" not in source
     assert "Can’t read" not in source
     assert "Can&apos;t read" not in source
-    assert "plugins" not in source.lower()
+    # TG2 adds the approved Source links entry inside the Watch list views.
+    assert "PositionViews" in source
+    assert "plugins={comparison.plugins ?? null}" in source
     assert "vault" not in source.lower()
     assert "Integrations" not in source
     # The unfinished Ask UI and its promise of sourced answers are removed.

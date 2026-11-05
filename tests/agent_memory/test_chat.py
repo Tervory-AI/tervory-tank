@@ -1,4 +1,5 @@
 """The existing chat SSE endpoint saves the memory ID and real zero-cost receipt."""
+from trigger_signin_fakes import set_founders
 import json
 import sys
 import uuid
@@ -23,7 +24,7 @@ memory = memory_fixture
 async def test_remember_chat_sse_saves_id_receipt_and_inspectable_record(memory, command_pool, monkeypatch):
     m = memory
     monkeypatch.setenv("TANK_API_KEY", "dummy-offline")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "offline-founder")
+    set_founders(monkeypatch, "offline-founder")
 
     async def forbidden(*args, **kwargs):
         pytest.fail("Remember must not call a model")

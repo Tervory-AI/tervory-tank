@@ -1,6 +1,6 @@
 """Real Tank/Base/Workspace proof of first download, saved-set protection and 403.
 
-Only external HTTP and Clerk in a temporary Workspace are fixtures. The complete
+Only external HTTP and Trigger sign-in in a temporary Workspace are fixtures. The complete
 saved ATF file is served unchanged; no application route or repository is mocked.
 """
 from __future__ import annotations
@@ -111,8 +111,8 @@ async def run_case(case: str, playwright, output: Path) -> dict:
         workspace = Path(subprocess.check_output([sys.executable, str(PROOF / "workspace.py")], text=True).strip())
         web = start(["node", str(workspace / "node_modules/next/dist/bin/next"), "dev", "--port", str(web_port)], workspace,
                     "workspace", {**env, "NEXT_TELEMETRY_DISABLED": "1",
-                                  "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==",
-                                  "CLERK_SECRET_KEY": "sk_test_dummy"})
+                                  "TRIGGER_SIGNIN_KEY": "<retired-build-value>",
+                                  })
         web_url = f"http://localhost:{web_port}"
         await healthy(web_url + "/base", web)
         browser = await playwright.chromium.launch(executable_path="/usr/bin/chromium", args=["--no-sandbox"])

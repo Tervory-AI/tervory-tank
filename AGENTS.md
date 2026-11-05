@@ -8,7 +8,7 @@ One Docker Compose stack, deployed by Coolify on a Boston VPS:
 | Service | Path | What it does |
 | --- | --- | --- |
 | Tank | `tank/` (Python 3.12, FastAPI, asyncpg) | The only path to any AI model. Policy table, ledger, cache, shadow/graduation, skills registry (Skala), Base pipeline, queue worker. |
-| Workspace | `workspace/` (Next.js 15, App Router, Clerk) | The client app at app.tervory.com. Clerk organizations = tenants. |
+| Workspace | `workspace/` (Next.js 15, App Router, Trigger sign-in) | The client app at app.tervory.com. Trigger sign-in organizations = tenants. |
 | LiteLLM | `litellm/` | Holds every model key. Only Tank talks to it. |
 | SearXNG | `searxng/` | Self-hosted search, internal only. |
 | Postgres / Redis / Qdrant | images | Shared stores. |
@@ -41,3 +41,14 @@ Spec: Build Pack v2 (Claude Doc) and `README.md`.
 - `tests/` holds pytest tests that run without a database or network. Add to them.
 - CI (GitHub Actions, task C4) runs the tests and `next build` on every PR.
 - Production checks after merge are done by Claude through Coolify.
+
+## Where your product's lines go
+
+- Declare tools in `tank/command_tools/<product>.py`. Keep product declarations in their own module; the ordered assembler preserves existing entries.
+- Register routers and lifecycle hooks in your product's entries in `tank/routes_registry.py`. Preserve the `early`/`late` phase and registration order.
+- Add new SQL inside your `-- BEGIN <product>` / `-- END <product>` region in `tank/schema.sql`, above generated agent memory. Existing SQL stays in place.
+- Add setting names only in your product's existing block in `.env.example` and the compose file specified by your brief. Never include values.
+
+To add one tool: define or reuse its strict argument model in the product module, add its squad/founder/tenant-admin declaration, return its Adapter from that module's `adapters(command)` function, and add a side-effecting tool to that module's `CONFIRMED` declaration. Reads stay out. Do not edit the shared assembly order. Existing argument classes remain exported from `command` for compatibility. For explicit code-only syntax, export `async code_plan(actor, messages, task_id)` from the product module; `plan_products` discovers it. Append declarations to preserve existing order.
+
+To add one router: define it in the product's backend module, then add its module, router attribute/build function, argument bindings, and phase to that product's entries in `ROUTES`. Use `None` for a router attribute, `()` for a no-argument builder, or `('tank',)` for a builder receiving Tank. Add product task slots/functions to `PRODUCT_HOOKS`; the common hooks create, cancel and gather tasks. No new registration line goes in `main.py`.

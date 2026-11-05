@@ -1,12 +1,11 @@
 "use client";
 
-import { OrganizationList, useOrganization } from "@clerk/nextjs";
+import { OrganisationSwitcher, useSignin } from "../trigger-signin-provider";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { plainRunError, type BatchCounts, type PassRecord, type StartRequest } from "./csv";
 import { Wizard, type RunProgress } from "./wizard";
 
-const clerkLook = { variables: { colorPrimary: "#E80008", colorText: "#001840", fontFamily: "Inter, sans-serif" } };
 
 export default function Page() {
   return (
@@ -18,7 +17,8 @@ export default function Page() {
 
 function Flow() {
   const params = useSearchParams();
-  const { isLoaded, organization } = useOrganization();
+  const { isLoaded, orgId: signedInOrg } = useSignin();
+  const organization = signedInOrg ? { id: signedInOrg, name: "Your organisation" } : null;
   const orgId = organization?.id ?? null;
   const [engines, setEngines] = useState<string[] | null>(null);
   const [enginesError, setEnginesError] = useState<string | null>(null);
@@ -103,13 +103,7 @@ function Flow() {
       key={organization?.id ?? "none"}
       orgName={organization?.name ?? null}
       orgSlot={(
-        <OrganizationList
-          hidePersonal
-          skipInvitationScreen
-          afterCreateOrganizationUrl="/onboarding?step=industry"
-          afterSelectOrganizationUrl="/onboarding?step=industry"
-          appearance={organization ? { variables: { colorPrimary: "#001840", colorText: "#001840", fontFamily: "Inter, sans-serif" } } : clerkLook}
-        />
+        <OrganisationSwitcher />
       )}
       engines={organization ? engines : null}
       enginesError={organization ? enginesError : null}

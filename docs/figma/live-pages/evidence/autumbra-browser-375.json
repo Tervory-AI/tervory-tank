@@ -1,0 +1,242 @@
+{
+  "boxes": [
+    {
+      "tag": "MAIN",
+      "classes": "autumbra-public",
+      "rect": {
+        "x": 16,
+        "y": 24,
+        "width": 343,
+        "height": 900,
+        "top": 24,
+        "right": 359,
+        "bottom": 924,
+        "left": 16
+      },
+      "background": "rgb(15, 18, 16)",
+      "border": "rgb(232, 230, 227)",
+      "borderWidth": 0,
+      "radius": 0
+    },
+    {
+      "tag": "IMG",
+      "classes": "",
+      "rect": {
+        "x": 36,
+        "y": 64,
+        "width": 160,
+        "height": 36,
+        "top": 64,
+        "right": 196,
+        "bottom": 100,
+        "left": 36
+      },
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(232, 230, 227)",
+      "borderWidth": 0,
+      "radius": 0
+    },
+    {
+      "tag": "ARTICLE",
+      "classes": "",
+      "rect": {
+        "x": 36,
+        "y": 438.96875,
+        "width": 303,
+        "height": 95.40625,
+        "top": 438.96875,
+        "right": 339,
+        "bottom": 534.375,
+        "left": 36
+      },
+      "background": "rgb(22, 26, 23)",
+      "border": "rgb(42, 48, 44)",
+      "borderWidth": 1,
+      "radius": 10
+    },
+    {
+      "tag": "ARTICLE",
+      "classes": "",
+      "rect": {
+        "x": 36,
+        "y": 550.375,
+        "width": 303,
+        "height": 200.40625,
+        "top": 550.375,
+        "right": 339,
+        "bottom": 750.78125,
+        "left": 36
+      },
+      "background": "rgb(22, 26, 23)",
+      "border": "rgb(42, 48, 44)",
+      "borderWidth": 1,
+      "radius": 10
+    }
+  ],
+  "background": "rgb(255, 255, 255)",
+  "blocks": [
+    {
+      "text": "AUTUMBRA",
+      "tag": "P",
+      "rect": {
+        "x": 36,
+        "y": 124.5,
+        "width": 303,
+        "height": 18,
+        "top": 124.5,
+        "right": 339,
+        "bottom": 142.5,
+        "left": 36
+      },
+      "font": "ui-sans-serif, system-ui, sans-serif",
+      "size": 12,
+      "weight": "400",
+      "lineHeight": "18px",
+      "color": "rgb(155, 196, 168)",
+      "letterSpacing": "1.44px",
+      "decoration": "none",
+      "href": null
+    },
+    {
+      "text": "Watch the edge.\nKeep the proof.",
+      "tag": "H1",
+      "rect": {
+        "x": 36,
+        "y": 148.09375,
+        "width": 303,
+        "height": 70.375,
+        "top": 148.09375,
+        "right": 339,
+        "bottom": 218.46875,
+        "left": 36
+      },
+      "font": "ui-sans-serif, system-ui, sans-serif",
+      "size": 32,
+      "weight": "650",
+      "lineHeight": "35.2px",
+      "color": "rgb(232, 230, 227)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    },
+    {
+      "text": "Autumbra Watch finds availability, DNS, certificate, and header problems across your Tervory products. Autumbra Enforce proposes recoveries for a founder to approve — never silent auto-fix from this page.",
+      "tag": "P",
+      "rect": {
+        "x": 36,
+        "y": 234.46875,
+        "width": 303,
+        "height": 157.5,
+        "top": 234.46875,
+        "right": 339,
+        "bottom": 391.96875,
+        "left": 36
+      },
+      "font": "ui-sans-serif, system-ui, sans-serif",
+      "size": 15,
+      "weight": "400",
+      "lineHeight": "22.5px",
+      "color": "rgb(185, 182, 176)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    },
+    {
+      "text": "Watch and Enforce",
+      "tag": "H2",
+      "rect": {
+        "x": 36,
+        "y": 406.96875,
+        "width": 303,
+        "height": 24,
+        "top": 406.96875,
+        "right": 339,
+        "bottom": 430.96875,
+        "left": 36
+      },
+      "font": "ui-sans-serif, system-ui, sans-serif",
+      "size": 16,
+      "weight": "700",
+      "lineHeight": "24px",
+      "color": "rgb(155, 196, 168)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    },
+    {
+      "text": "Autumbra Watch",
+      "tag": "H3",
+      "rect": {
+        "x": 54.59375,
+        "y": 473.515625,
+        "width": 265.8125,
+        "height": 26.3125,
+        "top": 473.515625,
+        "right": 320.40625,
+        "bottom": 499.828125,
+        "left": 54.59375
+      },
+      "font": "ui-sans-serif, system-ui, sans-serif",
+      "size": 17.55,
+      "weight": "700",
+      "lineHeight": "26.325px",
+      "color": "rgb(232, 230, 227)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    },
+    {
+      "text": "Autumbra Enforce",
+      "tag": "H3",
+      "rect": {
+        "x": 54.59375,
+        "y": 584.921875,
+        "width": 265.8125,
+        "height": 26.3125,
+        "top": 584.921875,
+        "right": 320.40625,
+        "bottom": 611.234375,
+        "left": 54.59375
+      },
+      "font": "ui-sans-serif, system-ui, sans-serif",
+      "size": 17.55,
+      "weight": "700",
+      "lineHeight": "26.325px",
+      "color": "rgb(232, 230, 227)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    },
+    {
+      "text": "Founder-gated proposals only. No keys, merges, or production changes from an unattended path.",
+      "tag": "P",
+      "rect": {
+        "x": 54.59375,
+        "y": 628.78125,
+        "width": 265.8125,
+        "height": 90,
+        "top": 628.78125,
+        "right": 320.40625,
+        "bottom": 718.78125,
+        "left": 54.59375
+      },
+      "font": "ui-sans-serif, system-ui, sans-serif",
+      "size": 15,
+      "weight": "400",
+      "lineHeight": "22.5px",
+      "color": "rgb(232, 230, 227)",
+      "letterSpacing": "normal",
+      "decoration": "none",
+      "href": null
+    }
+  ],
+  "text": "AUTUMBRA\n\nWatch the edge.\nKeep the proof.\n\nAutumbra Watch finds availability, DNS, certificate, and header problems across your Tervory products. Autumbra Enforce proposes recoveries for a founder to approve — never silent auto-fix from this page.\n\nWatch and Enforce\nAutumbra Watch\nAutumbra Enforce\n\nFounder-gated proposals only. No keys, merges, or production changes from an unattended path.",
+  "title": "Autumbra",
+  "width": 375,
+  "height": 1044,
+  "controls": [],
+  "fonts": [
+    "Inter, Inter, sans-serif",
+    "ui-sans-serif, system-ui, sans-serif"
+  ]
+}

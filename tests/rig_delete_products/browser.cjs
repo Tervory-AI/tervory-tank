@@ -1,5 +1,5 @@
 // Production component, Workspace route/actions/helper, real Tank and Rig/Postgres.
-// Only external Clerk identity is supplied locally; nothing signs in remotely.
+// Only external Trigger sign-in identity is supplied locally; nothing signs in remotely.
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
@@ -22,7 +22,7 @@ async function main() {
   const out=path.resolve(process.argv[2]);
   const tank=load('workspace/lib/tank.ts',{'@/app/api/zenas/tank':load('workspace/app/api/zenas/tank.ts')});
   const actions=load('workspace/app/rig/admin/actions.ts',{
-    '@clerk/nextjs/server':{auth:async()=>({userId:actor.userId,orgRole:'org:member'})},
+    '@/lib/trigger-signin':{auth:async()=>({userId:actor.userId,orgRole:'org:member'})},
     '@/lib/tenant':{activeTenant:async()=>actor},
     '../../review/founder':load('workspace/app/review/founder.ts'), '@/lib/tank':tank,
   });

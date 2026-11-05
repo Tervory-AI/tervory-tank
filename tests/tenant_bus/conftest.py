@@ -1,4 +1,5 @@
 """Disposable local stores only; no production connections or model services."""
+from trigger_signin_fakes import set_founders
 import asyncio
 import os
 from pathlib import Path
@@ -107,7 +108,7 @@ async def corridor(bus, database, monkeypatch):
             monkeypatch.delenv(key)
     for agent in {*event_bus.EVENTS.values(), 'rig'}:
         monkeypatch.setenv('TANK_KEY_' + agent.upper(), 'offline-' + agent)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'offline-founder')
+    set_founders(monkeypatch, 'offline-founder')
     monkeypatch.setenv('TANK_REGION', 'us-east')
     monkeypatch.setenv('TANK_URL', 'http://tank')
     monkeypatch.setattr(main, '_pool', database)

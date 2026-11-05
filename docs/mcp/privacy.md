@@ -4,9 +4,9 @@ This policy covers the Tervory connector at `https://mcp.tervory.com/mcp`. It is
 
 ## What we collect
 
-We collect the Clerk user id and the organization id of the account you sign in with. We collect the arguments of each tool call you make from Claude, and we receive the result Tank produces for that call.
+We collect the Trigger sign-in user id and the organization id of the account you sign in with. We collect the arguments of each tool call you make from Claude, and we receive the result Tank produces for that call.
 
-We do not ask you for an API key. The keys that reach Tank and Clerk stay on the Tervory server.
+We do not ask you for an API key. The keys that reach Tank and Trigger sign-in stay on the Tervory server.
 
 ## How we use it, and storage
 
@@ -16,7 +16,7 @@ Sign-in state is stored so Claude can stay connected: an authorization code for 
 
 ## Third parties
 
-Clerk confirms your identity. Claude, the product you connected, sends the tool call and receives the answer. Tank, operated by Tervory, runs the catalogue search, the record lookup, the enrichment, the legal scope check and retrieval, the market brief, and the price watch. Answering a market brief or a legal question may cause Tank to read a public page or call a model that Tervory has configured.
+Trigger sign-in confirms your identity. Claude, the product you connected, sends the tool call and receives the answer. Tank, operated by Tervory, runs the catalogue search, the record lookup, the enrichment, the legal scope check and retrieval, the market brief, and the price watch. Answering a market brief or a legal question may cause Tank to read a public page or call a model that Tervory has configured.
 
 We do not sell this data.
 

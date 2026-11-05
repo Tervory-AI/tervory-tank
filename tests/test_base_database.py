@@ -1,4 +1,5 @@
 """Optional local PostgreSQL fixture proof. See tests/base_proof/README.md."""
+from trigger_signin_fakes import set_founders
 from contextlib import asynccontextmanager
 from datetime import datetime
 from decimal import Decimal
@@ -41,7 +42,7 @@ async def database(monkeypatch):
     monkeypatch.setattr(meter, "runtime", lambda: rt)
     monkeypatch.setenv("TANK_API_KEY", "local-fixture")
     monkeypatch.setenv("TANK_KEY_BASE", "local-room-fixture")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "fixture-founder")
+    set_founders(monkeypatch, "fixture-founder")
     try:
         yield conn, rt
     finally:

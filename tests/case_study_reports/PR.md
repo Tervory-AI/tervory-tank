@@ -22,7 +22,7 @@ Branch: `codex/case-study-reports`, started from `origin/main` at `9769998`. Cla
 
 ## Registration and API
 
-The existing Clerk organization creation path registers the tenant before returning it. Existing organizations are reconciled on tenant selection. Products in `tank.tenant_squad` get identities with `ON CONFLICT DO NOTHING`; adding a product through the existing founder squad endpoint inserts its report in the same database transaction. Reapplying schema and repeating registration do not duplicate reports. A report never grants product access.
+The existing Trigger sign-in organization creation path registers the tenant before returning it. Existing organizations are reconciled on tenant selection. Products in `tank.tenant_squad` get identities with `ON CONFLICT DO NOTHING`; adding a product through the existing founder squad endpoint inserts its report in the same database transaction. Reapplying schema and repeating registration do not duplicate reports. A report never grants product access.
 
 Trigger uses its saved voice as provisioning evidence. When its table exists at Tank startup, a trigger registers immediately. If the room creates its table later, Tank reconciles voices every 30 seconds; tenant selection also reconciles immediately. The room still cannot read/write Tank tables directly. The narrow trigger runs under its owner with a fixed search path and only inserts identities from the triggering row.
 
@@ -93,10 +93,10 @@ From `workspace/`:
 
 ```sh
 node node_modules/typescript/bin/tsc --noEmit
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy node node_modules/next/dist/bin/next build
+NEXT_TELEMETRY_DISABLED=1 node node_modules/next/dist/bin/next build
 ```
 
-Typecheck: **exit 0**. Next build: **exit 0**, including `/api/case-studies/[[...path]]`. [Build output](workspace-build.txt). Clerk uses the repository CI's dummy configuration, not real credentials.
+Typecheck: **exit 0**. Next build: **exit 0**, including `/api/case-studies/[[...path]]`. [Build output](workspace-build.txt). Trigger sign-in uses the repository CI's dummy configuration, not real credentials.
 
 ```sh
 POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55442/postgres /tmp/command-repo-venv/bin/python tests/case_study_reports/local_proof.py

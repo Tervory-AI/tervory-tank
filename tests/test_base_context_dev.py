@@ -16,6 +16,13 @@ TENANT = "00000000-0000-0000-0000-000000000001"
 RUN = "00000000-0000-0000-0000-000000000002"
 
 
+@pytest.fixture(autouse=True)
+def configured_paid_step(monkeypatch):
+    # Provider protocol tests run with an explicit Auto admission fixture.
+    # Actual Ask/approve/deny transports are covered in test_paid_steps.py.
+    monkeypatch.setattr(adapter.ContextDev, "_paid_admission", AsyncMock(return_value={"approval_id":None,"mode":"automatic"}))
+
+
 @pytest.mark.parametrize("value", [
     "http://localhost", "http://127.0.0.1", "http://[::1]", "https://user:pass@example.com",
     "https://example.com?token=private", "https://example.com#private", "http://service.internal",

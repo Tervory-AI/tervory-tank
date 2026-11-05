@@ -92,7 +92,7 @@ const token = "tb1.za." + "a".repeat(32) + ".rk_pub_" + "b".repeat(48),
       throw Error("placeholder unexpected fetch");
     },
     mocks: {
-      "@clerk/nextjs/server": { auth: async () => ({ orgRole: "org:admin" }) },
+      "@/lib/trigger-signin": { auth: async () => ({ orgRole: "org:admin" }) },
       "@/lib/tenant": {
         activeTenant: async () => ({
           tenantId: id,

@@ -37,16 +37,31 @@ async def real_tank(database, redis_url, root, tmp_path):
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
     output = tmp_path / 'tank.log'
+    identity_file = tmp_path / 'synthetic-workspace-identity.json'
+    # Exercise the Workspace corridor with a real signed native token. CLI PATs
+    # intentionally cannot access founder-only routes outside their allowlist.
+    bootstrap = """
+import json, sys
+from pathlib import Path
+from pytest import MonkeyPatch
+from trigger_signin_fakes import native_provider, set_founders, ORG
+patch = MonkeyPatch()
+provider = native_provider(patch, {ORG: sys.argv[2]})
+set_founders(patch, 'offline-founder')
+Path(sys.argv[1]).write_text(json.dumps(provider.workspace_headers('offline-founder', sys.argv[2])))
+import uvicorn
+uvicorn.run('main:app', host='127.0.0.1', port=int(sys.argv[3]))
+"""
     with output.open('w+') as stream:
         env = {**os.environ, 'DATABASE_URL': dsn, 'REDIS_URL': redis_url,
                'LITELLM_URL': 'http://127.0.0.1:9', 'TANK_API_KEY': 'offline-workspace',
                'LITELLM_MASTER_KEY': 'offline-only', 'PYTHONUNBUFFERED': '1',
+               'PYTHONPATH': os.pathsep.join([str(root / 'tests'), str(root / 'agents/_chassis'), os.environ.get('PYTHONPATH', '')]),
                'HTTP_PROXY': 'http://127.0.0.1:9', 'HTTPS_PROXY': 'http://127.0.0.1:9',
                'ALL_PROXY': 'http://127.0.0.1:9', 'NO_PROXY': '127.0.0.1,localhost'}
         for key in ('http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'):
             env.pop(key, None)
-        process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1',
-                                    '--port', str(port)], cwd=root / 'tank', env=env, stdout=stream, stderr=stream)
+        process = subprocess.Popen([sys.executable, '-c', bootstrap, str(identity_file), A, str(port)], cwd=root / 'tank', env=env, stdout=stream, stderr=stream)
         try:
             async with httpx.AsyncClient(base_url=f'http://127.0.0.1:{port}', trust_env=False) as http:
                 for _ in range(120):
@@ -63,6 +78,7 @@ async def real_tank(database, redis_url, root, tmp_path):
                 lines = output.read_text().splitlines()
                 start = next(i for i, line in enumerate(lines) if 'Waiting for application startup' in line)
                 print('REAL TANK STARTUP TAIL\n' + '\n'.join(lines[start:]))
+                http.headers.update(json.loads(identity_file.read_text()))
                 yield http
         finally:
             process.terminate()

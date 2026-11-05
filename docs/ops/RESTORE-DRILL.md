@@ -127,7 +127,7 @@ After deploying the separate `identity-za` resource, its worker uses the existin
 streaming encrypted Postgres backup/archive path with the label
 `identity/database.dump.age`, inside the existing ZA regional platform backup
 prefix. It has its own database role and named Postgres volume; it does not dump
-through the main ZA database connection. See [IDENTITY-ZA.md](IDENTITY-ZA.md).
+through the main ZA database connection. See [TRIGGER-SIGNIN.md](TRIGGER-SIGNIN.md).
 
 Use the same secure ZA operator environment, existing private identity **file
 path**, checkout/tools and completed Tank/Qdrant archives described above. On the

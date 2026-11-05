@@ -65,8 +65,9 @@ async def google_signing_keys(kid: str = Query(default="", max_length=200)):
 
 
 async def call_room(method: str, room: str, path: str, *, body=None, params=None, tenant=None, timeout=60):
-    lifecycle = room == "ghost" and path.startswith("/ghost/autumbra/enforce/")
-    key = os.environ.get("AUTUMBRA_LIFECYCLE_KEY" if lifecycle else f"TANK_KEY_{room.upper()}", "")
+    rig_lifecycle = room == "ghost" and path.startswith("/rig/rooms/")
+    lifecycle = rig_lifecycle or (room == "ghost" and path.startswith("/ghost/autumbra/enforce/"))
+    key = os.environ.get("RIG_LIFECYCLE_KEY" if rig_lifecycle else "AUTUMBRA_LIFECYCLE_KEY" if lifecycle else f"TANK_KEY_{room.upper()}", "")
     http = runtime()._http
     if not key or http is None:
         raise HTTPException(503, "The room is unavailable.")
@@ -360,7 +361,7 @@ async def ghost_block_withdrawal(body: BlockWithdrawal):
     row = await runtime().pool().fetchrow(
         "SELECT actor FROM agent_ghost.memory_publish_log WHERE tenant_id=$1 AND source_row=$2 AND published_row=$3 AND result IN ('published','already_published') ORDER BY happened_at DESC LIMIT 1",
         body.tenant_id, body.source_row, body.published_row)
-    if row is None or row["actor"] not in {p.strip() for p in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if p.strip()}:
+    if row is None or row["actor"] not in __import__("trigger_signin_config").founders():
         raise HTTPException(404, "not found")
     from memory_routes import hermes
     return await hermes("POST", "/founder/records/" + str(body.published_row) + "/withdraw", row["actor"],

@@ -1,4 +1,5 @@
 """Offline Rig confirmation through the existing Command Confirm corridor."""
+from trigger_signin_fakes import set_founders
 from contextlib import asynccontextmanager
 import sys
 from types import SimpleNamespace
@@ -18,7 +19,7 @@ TOOL = "rig.quote.confirm_payment"
 
 
 def test_confirmation_tool_is_admin_or_founder_only(monkeypatch):
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "placeholder-founder")
+    set_founders(monkeypatch, "placeholder-founder")
     member = command.Actor(TENANT, "placeholder-member", False, frozenset({"rig"}))
     admin = command.Actor(TENANT, "placeholder-admin", False, tenant_admin=True)
     founder = command.Actor(TENANT, "placeholder-founder", True)
@@ -45,7 +46,7 @@ async def test_confirm_card_binds_actor_quote_and_writes_zero_code_receipt(monke
     store, service, _, _, body = await auto_shop(monkeypatch, tmp_path)
     quote_id = (await service.locate_accept(ROOM_TENANT, body))["request_id"]
     actor = command.Actor(UUID(ROOM_TENANT), "placeholder-admin", False, frozenset({"rig"}), True)
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "placeholder-founder")
+    set_founders(monkeypatch, "placeholder-founder")
     action = command.PlannedAction(tool=TOOL, arguments={"quote_id": quote_id})
     app = FastAPI()
     app.include_router(access.router)

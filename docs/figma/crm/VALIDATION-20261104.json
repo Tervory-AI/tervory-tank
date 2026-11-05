@@ -1,0 +1,19 @@
+{
+  "result": "pass",
+  "pr": 436,
+  "source_head": "314bf2737c49a69c651412c9b339a196225a8f01",
+  "main_snapshot": "fa34a9f0d9e8323358ebb47c82ba5e9f2eed9fab",
+  "canonical_crm_prefix": "byte-identical",
+  "canonical_case_study": "byte-identical",
+  "historical_snapshots": 2,
+  "png_files_crc_and_hash_verified": 10,
+  "csv_unique_ids": {
+    "changed-nodes.csv": 10981,
+    "created-nodes.csv": 1120
+  },
+  "pending_proposed_labels": 15,
+  "declared_spacing_exceptions": 16,
+  "relative_references_checked": 30,
+  "live_canvas_writes": 0,
+  "application_tests_run": false
+}

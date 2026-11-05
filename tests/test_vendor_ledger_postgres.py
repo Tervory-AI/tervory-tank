@@ -21,6 +21,11 @@ from sources.vendor_ledger import SCHEMA, TankVendorLedger, flush_pending  # noq
 @pytest.mark.asyncio
 @pytest.mark.parametrize("upgrade", [False, True])
 async def test_schema_and_durable_trial(monkeypatch, upgrade):
+    # This durable-outbox protocol fixture uses an explicit automatic permit;
+    # actual paid-step admission is proved against Postgres in test_paid_steps.
+    from unittest.mock import AsyncMock
+    from sources.context_dev import ContextDev
+    monkeypatch.setattr(ContextDev,"_paid_admission",AsyncMock(return_value={"approval_id":None,"mode":"automatic"}))
     url = os.environ.get("POOL_SCHEMA_DATABASE_URL")
     if not url:
         pytest.skip("POOL_SCHEMA_DATABASE_URL is not set")

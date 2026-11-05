@@ -1,0 +1,1230 @@
+[
+  {
+    "id": "556:3054",
+    "name": "Feedback / Base / Note / 1440 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Base",
+    "file": "base.csv",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "save": "556:3188",
+    "download": "556:3175",
+    "screenshot": "feedback-base-note-1440.png",
+    "sha256": "014932b89550adecd61c3102fbc2946d8a9df1ddb8b1fd1c1de334530412b155"
+  },
+  {
+    "id": "556:3190",
+    "name": "Feedback / Base / Saved / 1440 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Base",
+    "file": "base.csv",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "download": "556:3311",
+    "screenshot": "feedback-base-saved-1440.png",
+    "sha256": "6aa9a2e5caee1e00da7fac1c1729599df2d34e1fcad0ba9015ca8c4d9be8bf6e"
+  },
+  {
+    "id": "556:3319",
+    "name": "Feedback / Tiger / Note / 1440 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Tiger",
+    "file": "tiger.json",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "save": "556:3453",
+    "download": "556:3440",
+    "screenshot": "feedback-tiger-note-1440.png",
+    "sha256": "d645c31d7e02b75d700b2180aab2716d3efdc7183ca747bd223d75963db3929c"
+  },
+  {
+    "id": "556:3455",
+    "name": "Feedback / Tiger / Saved / 1440 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Tiger",
+    "file": "tiger.json",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "download": "556:3576",
+    "screenshot": "feedback-tiger-saved-1440.png",
+    "sha256": "da32d86e6369a6b89b51287638387b9f51047285e21ca95787902bf45c045cf1"
+  },
+  {
+    "id": "557:5147",
+    "name": "Feedback / Market Lab / Note / 1440 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Market Lab",
+    "file": "market-lab.md",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "save": "557:5281",
+    "download": "557:5268",
+    "screenshot": "feedback-market-lab-note-1440.png",
+    "sha256": "2a3ff91bc1aa44a107c4bf4f76536fce44ed43e8a03dea0f02fdee61564bcd50"
+  },
+  {
+    "id": "557:5283",
+    "name": "Feedback / Market Lab / Saved / 1440 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Market Lab",
+    "file": "market-lab.md",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "download": "557:5404",
+    "screenshot": "feedback-market-lab-saved-1440.png",
+    "sha256": "ecee3285a104fd3692da7e76d53fd3f0b1c795838f4438ae77b802cbd3d5c108"
+  },
+  {
+    "id": "557:5412",
+    "name": "Feedback / Rig / Note / 1440 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Rig",
+    "file": "rig.txt",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "save": "557:5546",
+    "download": "557:5533",
+    "screenshot": "feedback-rig-note-1440.png",
+    "sha256": "46d53006e8f6a781502463c3a95f8e85a1e1a7bc1472abc3615dec2cda99a5b0"
+  },
+  {
+    "id": "557:5548",
+    "name": "Feedback / Rig / Saved / 1440 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Rig",
+    "file": "rig.txt",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "download": "557:5669",
+    "screenshot": "feedback-rig-saved-1440.png",
+    "sha256": "6fdf3eebe273512a4b4ba245fd02e7a447715ff0ff14f7d69b76088b693ffa2c"
+  },
+  {
+    "id": "557:5679",
+    "name": "Feedback / Tisan / Note / 1440 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Tisan",
+    "file": "tisan.txt",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "save": "557:5813",
+    "download": "557:5800",
+    "screenshot": "feedback-tisan-note-1440.png",
+    "sha256": "b5913b69ac6c932888b664d004fe077cb7764e43b5f7253187025d02745cc0ca"
+  },
+  {
+    "id": "557:5815",
+    "name": "Feedback / Tisan / Saved / 1440 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Tisan",
+    "file": "tisan.txt",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "download": "557:5936",
+    "screenshot": "feedback-tisan-saved-1440.png",
+    "sha256": "590b31fb61d7de03fece9da69fbd9052a99fff8343ca216c1848bd538c34526f"
+  },
+  {
+    "id": "557:5944",
+    "name": "Feedback / Radix / Note / 1440 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Radix",
+    "file": "radix.md",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "save": "557:6078",
+    "download": "557:6065",
+    "screenshot": "feedback-radix-note-1440.png",
+    "sha256": "829f2ff4f31f11ffa243376e0a8320f1dad09aef14122d56b29f10a3b29dd17a"
+  },
+  {
+    "id": "557:6080",
+    "name": "Feedback / Radix / Saved / 1440 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Radix",
+    "file": "radix.md",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "download": "557:6201",
+    "screenshot": "feedback-radix-saved-1440.png",
+    "sha256": "bf9361b73820a47f51786c29cb4bc3c6dc08f58a7cbea980b091164d897b2aba"
+  },
+  {
+    "id": "557:6417",
+    "name": "Feedback / Zenas / Note / 1440 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Zenas",
+    "file": "zenas.md",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "save": "557:6551",
+    "download": "557:6538",
+    "screenshot": "feedback-zenas-note-1440.png",
+    "sha256": "f1687f954f9f2f5d62e605781a80f648f40e476eae5c1992ea2717d09b4a59a9"
+  },
+  {
+    "id": "557:6553",
+    "name": "Feedback / Zenas / Saved / 1440 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Zenas",
+    "file": "zenas.md",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "download": "557:6674",
+    "screenshot": "feedback-zenas-saved-1440.png",
+    "sha256": "79b9cb58cd63b3f95808c8c251737c5be119cc1dac00dd7bc2c491ce55a631df"
+  },
+  {
+    "id": "557:6682",
+    "name": "Feedback / Trigger / Note / 1440 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Trigger",
+    "file": "trigger.csv",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "save": "557:6816",
+    "download": "557:6803",
+    "screenshot": "feedback-trigger-note-1440.png",
+    "sha256": "da4e30d2f844d76308ec1c63128eee4c66f5bca15fed2ec4e2ff0db7397b37eb"
+  },
+  {
+    "id": "557:6818",
+    "name": "Feedback / Trigger / Saved / 1440 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Trigger",
+    "file": "trigger.csv",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "download": "557:6939",
+    "screenshot": "feedback-trigger-saved-1440.png",
+    "sha256": "e1bd0a489af4b3808ad1f55dc2f8c31876c18619260ee02864b990bca339955c"
+  },
+  {
+    "id": "557:7633",
+    "name": "Feedback / Result / Empty / 1440 \u00b7 Proposed",
+    "state": "Empty",
+    "product": "Result",
+    "file": "base.csv",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "screenshot": "feedback-result-empty-1440.png",
+    "sha256": "253719228e6abf07d00f117f37b9da55caed574e06fa59c380bc69f34be12968"
+  },
+  {
+    "id": "557:7753",
+    "name": "Feedback / Result / Loading / 1440 \u00b7 Proposed",
+    "state": "Loading",
+    "product": "Result",
+    "file": "base.csv",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "screenshot": "feedback-result-loading-1440.png",
+    "sha256": "d27bd1babccf6a25ef999d372337f6ab5314ede02e57828c3540bfc9a297cb32"
+  },
+  {
+    "id": "557:7875",
+    "name": "Feedback / Result / Error / 1440 \u00b7 Proposed",
+    "state": "Error",
+    "product": "Result",
+    "file": "base.csv",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "retry": "557:7994",
+    "screenshot": "feedback-result-error-1440.png",
+    "sha256": "2c95d8c59855b9893aeed8ff10d02619dbf1eb10f7894ab21a2d6ed1604fbd93"
+  },
+  {
+    "id": "557:4919",
+    "name": "Feedback / Base / Note / 375 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Base",
+    "file": "base.csv",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "save": "557:4977",
+    "download": "557:4964",
+    "screenshot": "feedback-base-note-375.png",
+    "sha256": "fa6b53dcf2fba5cc58a12a34de4fc078d636b40855d6b5228e1e5d4b7ce04efe"
+  },
+  {
+    "id": "557:4979",
+    "name": "Feedback / Base / Saved / 375 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Base",
+    "file": "base.csv",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "download": "557:5024",
+    "screenshot": "feedback-base-saved-375.png",
+    "sha256": "f259bdbd6d12074e8b81528425538ca1233e8ca99a3ed0e3c30610df3a889035"
+  },
+  {
+    "id": "557:5032",
+    "name": "Feedback / Tiger / Note / 375 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Tiger",
+    "file": "tiger.json",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "save": "557:5090",
+    "download": "557:5077",
+    "screenshot": "feedback-tiger-note-375.png",
+    "sha256": "9b2be227849b1ac15854626f1e2d5154c2d7ffd0ef78d7db896c0d4d3f53ed22"
+  },
+  {
+    "id": "557:5092",
+    "name": "Feedback / Tiger / Saved / 375 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Tiger",
+    "file": "tiger.json",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "download": "557:5137",
+    "screenshot": "feedback-tiger-saved-375.png",
+    "sha256": "f18a1592ab17ee16ac489005fc3f3a111ce1f74d1dafe1286396bb49aa1eca28"
+  },
+  {
+    "id": "557:6949",
+    "name": "Feedback / Market Lab / Note / 375 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Market Lab",
+    "file": "market-lab.md",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "save": "557:7007",
+    "download": "557:6994",
+    "screenshot": "feedback-market-lab-note-375.png",
+    "sha256": "5d71d9bfecb67f21d43ffe1a52f9f359580aae4fb266e316c5548bc86e7398d8"
+  },
+  {
+    "id": "557:7009",
+    "name": "Feedback / Market Lab / Saved / 375 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Market Lab",
+    "file": "market-lab.md",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "download": "557:7054",
+    "screenshot": "feedback-market-lab-saved-375.png",
+    "sha256": "186f1201e0a012ea211334a265858bf3545f0bd7129a58d2fadc1784f67feb1b"
+  },
+  {
+    "id": "557:7062",
+    "name": "Feedback / Rig / Note / 375 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Rig",
+    "file": "rig.txt",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "save": "557:7120",
+    "download": "557:7107",
+    "screenshot": "feedback-rig-note-375.png",
+    "sha256": "6c83bad7b9e211ceb0ec1950ecaa5791bdc1c61154e09e43f6c9e9ccf37dd1fd"
+  },
+  {
+    "id": "557:7122",
+    "name": "Feedback / Rig / Saved / 375 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Rig",
+    "file": "rig.txt",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "download": "557:7167",
+    "screenshot": "feedback-rig-saved-375.png",
+    "sha256": "acc98fed1d57a06ee2ffb3622d58f753bbbc4821a158cd5769efd7e06201e077"
+  },
+  {
+    "id": "557:7177",
+    "name": "Feedback / Tisan / Note / 375 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Tisan",
+    "file": "tisan.txt",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "save": "557:7235",
+    "download": "557:7222",
+    "screenshot": "feedback-tisan-note-375.png",
+    "sha256": "e0bb4094ee82473e6e90e78ef400d86ea0a89c3054778ec4d478fb564a0b4088"
+  },
+  {
+    "id": "557:7237",
+    "name": "Feedback / Tisan / Saved / 375 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Tisan",
+    "file": "tisan.txt",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "download": "557:7282",
+    "screenshot": "feedback-tisan-saved-375.png",
+    "sha256": "2128727315d161f3279b5405bfd4b049dd2391a900d05f7ea15f26ba88c689c1"
+  },
+  {
+    "id": "557:7290",
+    "name": "Feedback / Radix / Note / 375 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Radix",
+    "file": "radix.md",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "save": "557:7348",
+    "download": "557:7335",
+    "screenshot": "feedback-radix-note-375.png",
+    "sha256": "3748acbceeef79a046a0884d2218f4440a0a23a80ee8e7b5688a3c388f05edca"
+  },
+  {
+    "id": "557:7350",
+    "name": "Feedback / Radix / Saved / 375 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Radix",
+    "file": "radix.md",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "download": "557:7395",
+    "screenshot": "feedback-radix-saved-375.png",
+    "sha256": "35ad42a30292553eecc2d131ba9072bd2fcb67625092c17d5e4dcc7b7073731b"
+  },
+  {
+    "id": "557:7405",
+    "name": "Feedback / Zenas / Note / 375 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Zenas",
+    "file": "zenas.md",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "save": "557:7463",
+    "download": "557:7450",
+    "screenshot": "feedback-zenas-note-375.png",
+    "sha256": "b181d81679b48d73691f20ea063e7aabd7590fa051e210b274d5860871f36dac"
+  },
+  {
+    "id": "557:7465",
+    "name": "Feedback / Zenas / Saved / 375 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Zenas",
+    "file": "zenas.md",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "download": "557:7510",
+    "screenshot": "feedback-zenas-saved-375.png",
+    "sha256": "575858ee839d5ec02593b6208bc3545ccc1d35e7019870f5629d65b9eb6d16e2"
+  },
+  {
+    "id": "557:7518",
+    "name": "Feedback / Trigger / Note / 375 \u00b7 Proposed",
+    "state": "Note",
+    "product": "Trigger",
+    "file": "trigger.csv",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "save": "557:7576",
+    "download": "557:7563",
+    "screenshot": "feedback-trigger-note-375.png",
+    "sha256": "e0147531944296db2abbbf638abe05a9a40809eb146b1cb3c6ee2ce8ef1be1fe"
+  },
+  {
+    "id": "557:7578",
+    "name": "Feedback / Trigger / Saved / 375 \u00b7 Proposed",
+    "state": "Saved",
+    "product": "Trigger",
+    "file": "trigger.csv",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "download": "557:7623",
+    "screenshot": "feedback-trigger-saved-375.png",
+    "sha256": "4ca04641132fddb944483f3eddd46f1bd10092594a09962df56ef382c5046e5a"
+  },
+  {
+    "id": "557:7996",
+    "name": "Feedback / Result / Empty / 375 \u00b7 Proposed",
+    "state": "Empty",
+    "product": "Result",
+    "file": "base.csv",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "screenshot": "feedback-result-empty-375.png",
+    "sha256": "3c1c2d3eb0251be833363ccc587d913386d1594e7c904522c46b8534d42a1c08"
+  },
+  {
+    "id": "557:8040",
+    "name": "Feedback / Result / Loading / 375 \u00b7 Proposed",
+    "state": "Loading",
+    "product": "Result",
+    "file": "base.csv",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "screenshot": "feedback-result-loading-375.png",
+    "sha256": "c849b22c04b898c5b458d222ac9706a67ea6eef07773496c7d86e89158795ec8"
+  },
+  {
+    "id": "557:8086",
+    "name": "Feedback / Result / Error / 375 \u00b7 Proposed",
+    "state": "Error",
+    "product": "Result",
+    "file": "base.csv",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "retry": "557:8129",
+    "screenshot": "feedback-result-error-375.png",
+    "sha256": "ae47f0d46d0158daf0f776c9ebf90c75f6644c5a42312cb96adf537b09479a4d"
+  },
+  {
+    "id": "559:3085",
+    "name": "Paid steps settings / Default / 1440 \u00b7 Proposed",
+    "state": "Default",
+    "mobile": false,
+    "width": 1440,
+    "height": 946,
+    "pause": "559:3199",
+    "save": "559:3247",
+    "controls": [
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Auto",
+        "id": "559:3205",
+        "buttons": [
+          {
+            "id": "I559:3205;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3205;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Ask",
+        "id": "559:3213",
+        "buttons": [
+          {
+            "id": "I559:3213;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3213;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 3]",
+        "stepIndex": 2,
+        "mode": "Auto",
+        "id": "559:3221",
+        "buttons": [
+          {
+            "id": "I559:3221;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3221;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Ask",
+        "id": "559:3231",
+        "buttons": [
+          {
+            "id": "I559:3231;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3231;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Auto",
+        "id": "559:3239",
+        "buttons": [
+          {
+            "id": "I559:3239;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3239;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      }
+    ],
+    "screenshot": "paid-steps-default-1440.png",
+    "sha256": "2f4a649603a2d8ab8756a22bab249e4d24ddf10a62ba1d28ae42221248b0771b"
+  },
+  {
+    "id": "559:3249",
+    "name": "Paid steps settings / Paused / 1440 \u00b7 Proposed",
+    "state": "Paused",
+    "mobile": false,
+    "width": 1440,
+    "height": 982,
+    "pause": "559:3363",
+    "save": "559:3412",
+    "controls": [
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Auto",
+        "id": "559:3370",
+        "buttons": [
+          {
+            "id": "I559:3370;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3370;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Ask",
+        "id": "559:3378",
+        "buttons": [
+          {
+            "id": "I559:3378;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3378;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 3]",
+        "stepIndex": 2,
+        "mode": "Auto",
+        "id": "559:3386",
+        "buttons": [
+          {
+            "id": "I559:3386;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3386;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Ask",
+        "id": "559:3396",
+        "buttons": [
+          {
+            "id": "I559:3396;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3396;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Auto",
+        "id": "559:3404",
+        "buttons": [
+          {
+            "id": "I559:3404;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3404;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      }
+    ],
+    "screenshot": "paid-steps-paused-1440.png",
+    "sha256": "d83b5d4614caf6901bb52a8eae0b1ec967cdf923b78d4339e1313107f627d2df"
+  },
+  {
+    "id": "559:3414",
+    "name": "Paid steps settings / Saved / 1440 \u00b7 Proposed",
+    "state": "Saved",
+    "mobile": false,
+    "width": 1440,
+    "height": 988,
+    "pause": "559:3528",
+    "save": "559:3577",
+    "controls": [
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Auto",
+        "id": "559:3535",
+        "buttons": [
+          {
+            "id": "I559:3535;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3535;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Ask",
+        "id": "559:3543",
+        "buttons": [
+          {
+            "id": "I559:3543;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3543;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 3]",
+        "stepIndex": 2,
+        "mode": "Auto",
+        "id": "559:3551",
+        "buttons": [
+          {
+            "id": "I559:3551;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3551;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Ask",
+        "id": "559:3561",
+        "buttons": [
+          {
+            "id": "I559:3561;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3561;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Auto",
+        "id": "559:3569",
+        "buttons": [
+          {
+            "id": "I559:3569;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I559:3569;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      }
+    ],
+    "screenshot": "paid-steps-saved-1440.png",
+    "sha256": "64f6ed3dbb1e311ae94db418da57e69ea795b1915004cdcc3502c8a6666a3176"
+  },
+  {
+    "id": "562:3565",
+    "name": "Paid steps settings / Empty / 1440 \u00b7 Proposed",
+    "state": "Empty",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "controls": [],
+    "screenshot": "paid-steps-empty-1440.png",
+    "sha256": "4d31c2841b24495bf7f0abcc45c16432c0fe8dfada30911363682fa3eb410665"
+  },
+  {
+    "id": "562:3679",
+    "name": "Paid steps settings / Loading / 1440 \u00b7 Proposed",
+    "state": "Loading",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "controls": [],
+    "screenshot": "paid-steps-loading-1440.png",
+    "sha256": "e4aa5d64c3c64f304864c24de8d38bfc666f43e3669b76c065dc9b93ed83e863"
+  },
+  {
+    "id": "562:3795",
+    "name": "Paid steps settings / Error / 1440 \u00b7 Proposed",
+    "state": "Error",
+    "mobile": false,
+    "width": 1440,
+    "height": 900,
+    "retry": "562:3908",
+    "controls": [],
+    "screenshot": "paid-steps-error-1440.png",
+    "sha256": "2a6a65e77cdba48bd243680bd23af2842ab31b2e92db853d901189bb49b362eb"
+  },
+  {
+    "id": "561:3445",
+    "name": "Paid steps settings / Default / 375 \u00b7 Proposed",
+    "state": "Default",
+    "mobile": true,
+    "width": 375,
+    "height": 1375,
+    "pause": "561:3483",
+    "save": "561:3531",
+    "controls": [
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Auto",
+        "id": "561:3489",
+        "buttons": [
+          {
+            "id": "I561:3489;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3489;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Ask",
+        "id": "561:3497",
+        "buttons": [
+          {
+            "id": "I561:3497;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3497;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 3]",
+        "stepIndex": 2,
+        "mode": "Auto",
+        "id": "561:3505",
+        "buttons": [
+          {
+            "id": "I561:3505;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3505;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Ask",
+        "id": "561:3515",
+        "buttons": [
+          {
+            "id": "I561:3515;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3515;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Auto",
+        "id": "561:3523",
+        "buttons": [
+          {
+            "id": "I561:3523;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3523;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      }
+    ],
+    "screenshot": "paid-steps-default-375.png",
+    "sha256": "41136aaed7e7932466dd650f564bd2aee5c1d63554f860d2cf7c5169932f8454"
+  },
+  {
+    "id": "561:3533",
+    "name": "Paid steps settings / Paused / 375 \u00b7 Proposed",
+    "state": "Paused",
+    "mobile": true,
+    "width": 375,
+    "height": 1411,
+    "pause": "561:3571",
+    "save": "561:3620",
+    "controls": [
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Auto",
+        "id": "561:3578",
+        "buttons": [
+          {
+            "id": "I561:3578;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3578;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Ask",
+        "id": "561:3586",
+        "buttons": [
+          {
+            "id": "I561:3586;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3586;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 3]",
+        "stepIndex": 2,
+        "mode": "Auto",
+        "id": "561:3594",
+        "buttons": [
+          {
+            "id": "I561:3594;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3594;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Ask",
+        "id": "561:3604",
+        "buttons": [
+          {
+            "id": "I561:3604;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3604;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Auto",
+        "id": "561:3612",
+        "buttons": [
+          {
+            "id": "I561:3612;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3612;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": true
+      }
+    ],
+    "screenshot": "paid-steps-paused-375.png",
+    "sha256": "b468ea31ee1a993fbb9e11ce4551d707c986c2ecfb9864122853594f7c2f4dc6"
+  },
+  {
+    "id": "561:3622",
+    "name": "Paid steps settings / Saved / 375 \u00b7 Proposed",
+    "state": "Saved",
+    "mobile": true,
+    "width": 375,
+    "height": 1417,
+    "pause": "561:3660",
+    "save": "561:3709",
+    "controls": [
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Auto",
+        "id": "561:3667",
+        "buttons": [
+          {
+            "id": "I561:3667;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3667;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Ask",
+        "id": "561:3675",
+        "buttons": [
+          {
+            "id": "I561:3675;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3675;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task A]",
+        "taskIndex": 0,
+        "step": "[Paid step 3]",
+        "stepIndex": 2,
+        "mode": "Auto",
+        "id": "561:3683",
+        "buttons": [
+          {
+            "id": "I561:3683;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3683;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 1]",
+        "stepIndex": 0,
+        "mode": "Ask",
+        "id": "561:3693",
+        "buttons": [
+          {
+            "id": "I561:3693;514:3150",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3693;514:3152",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      },
+      {
+        "task": "[Task B]",
+        "taskIndex": 1,
+        "step": "[Paid step 2]",
+        "stepIndex": 1,
+        "mode": "Auto",
+        "id": "561:3701",
+        "buttons": [
+          {
+            "id": "I561:3701;514:3158",
+            "label": "Ask"
+          },
+          {
+            "id": "I561:3701;514:3160",
+            "label": "Auto"
+          }
+        ],
+        "paused": false
+      }
+    ],
+    "screenshot": "paid-steps-saved-375.png",
+    "sha256": "c6f004655025f9bf29530b3d157a373c938db26d7e03b71a117a273f316ed018"
+  },
+  {
+    "id": "562:3910",
+    "name": "Paid steps settings / Empty / 375 \u00b7 Proposed",
+    "state": "Empty",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "controls": [],
+    "screenshot": "paid-steps-empty-375.png",
+    "sha256": "724a6349e8589d1342c3ff988f3c00f4d77a61afa7cf0330aee69acbd37ab362"
+  },
+  {
+    "id": "562:3948",
+    "name": "Paid steps settings / Loading / 375 \u00b7 Proposed",
+    "state": "Loading",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "controls": [],
+    "screenshot": "paid-steps-loading-375.png",
+    "sha256": "ba7735ca0f7e81109e8f60f515d6d78e10df143ccac81080d3d768374fdde664"
+  },
+  {
+    "id": "562:3988",
+    "name": "Paid steps settings / Error / 375 \u00b7 Proposed",
+    "state": "Error",
+    "mobile": true,
+    "width": 375,
+    "height": 900,
+    "retry": "562:4025",
+    "controls": [],
+    "screenshot": "paid-steps-error-375.png",
+    "sha256": "b038d39d7cdc89228b20f37974550a8cc260462aa52625bb43ed0978b45d1544"
+  }
+]

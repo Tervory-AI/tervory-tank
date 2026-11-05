@@ -4,6 +4,7 @@ Reuse the shipped path proofs rather than duplicate their fixtures or weaken
 assertions. These run production parsers, handlers, SQL and local transports;
 Node cases exercise the exact Workspace model, not a live browser deployment.
 """
+from trigger_signin_fakes import set_founders
 import subprocess
 import sys
 from datetime import timedelta
@@ -383,7 +384,7 @@ def install_vault(database, monkeypatch):
     import vault
     import vault_routes
     import mcp_connections
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-admin')
+    set_founders(monkeypatch, 'placeholder-admin')
     monkeypatch.setattr(vault_routes, 'seal', vault.seal)
     monkeypatch.setattr(mcp_connections, 'discover', AsyncMock(return_value=[]))
     runtime = SimpleNamespace(pool=lambda: database.pool, box_region=lambda: 'us-east',
@@ -392,3 +393,26 @@ def install_vault(database, monkeypatch):
     database.app.include_router(vault_routes.build_router(runtime))
     return {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-user': 'placeholder-admin',
             'x-tervory-squad': 'market_lab', 'x-tervory-tenant': str(ml3.OWNER)}
+
+
+@pytest.mark.asyncio
+async def test_R44(database, monkeypatch):
+    import test_market_lab_h7 as h7
+    await h7.test_detail_uses_existing_tenant_read_and_opens_exact_saved_passage(database, monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_R45(database, monkeypatch):
+    import test_market_lab_h7 as h7
+    await h7.test_calibration_groups_and_curve_share_measured_code_data(database, monkeypatch)
+
+
+def test_R46():
+    import test_market_lab_h7_pages as h7_pages
+    h7_pages.test_h7_views_and_tenant_loaders_offline()
+
+
+@pytest.mark.asyncio
+async def test_R47(real_chromium, tmp_path):
+    import test_market_lab_h7_browser as h7_browser
+    await h7_browser.test_both_pages_states_menu_and_cohort_selection(real_chromium, tmp_path)

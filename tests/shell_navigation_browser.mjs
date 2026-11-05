@@ -1,4 +1,4 @@
-// Offline acceptance: real Shell + SquadLinks + CSS; only Clerk and Next routing are mocked.
+// Offline acceptance: real Shell + SquadLinks + CSS; only Trigger sign-in and Next routing are mocked.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -13,8 +13,8 @@ const entry=`import React from 'react';import {createRoot} from 'react-dom/clien
 const readAccess=async()=>({founder:false,reviewer:false});
 createRoot(document.getElementById('root')).render(<Shell founder={false} reviewer={false} readAccess={readAccess}><a id="content-link" href="#content">Content fixture</a></Shell>);`;
 const bundle=await build({stdin:{contents:entry,resolveDir:path.join(root,'workspace'),loader:'tsx'},bundle:true,write:false,format:'esm',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'},plugins:[{name:'offline-routing',setup(b){
- b.onResolve({filter:/^(@clerk\/nextjs|next\/link|next\/navigation)$/},args=>({path:args.path,namespace:'mock'}));
- b.onLoad({filter:/.*/,namespace:'mock'},args=>({loader:'js',resolveDir:path.join(root,'workspace'),contents:args.path==='@clerk/nextjs'?`export const useAuth=()=>({isLoaded:true,isSignedIn:false,userId:null});export const OrganizationSwitcher=()=>null;export const UserButton=()=>null;`:args.path==='next/link'?`import React from 'react';export default function Link(props){return React.createElement('a',props);}`:`export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(location.search);export const useSelectedLayoutSegments=()=>[new URLSearchParams(location.search).get('room')||location.pathname.split('/')[1]];` }));
+ b.onResolve({filter:/^(@\/app\/trigger-signin-provider|next\/link|next\/navigation)$/},args=>({path:args.path,namespace:'mock'}));
+ b.onLoad({filter:/.*/,namespace:'mock'},args=>({loader:'js',resolveDir:path.join(root,'workspace'),contents:args.path==='@/app/trigger-signin-provider'?`export const useSignin=()=>({isLoaded:true,isSignedIn:false,userId:null});export const OrganisationSwitcher=()=>null;export const SignoutButton=()=>null;`:args.path==='next/link'?`import React from 'react';export default function Link(props){return React.createElement('a',props);}`:`export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(location.search);export const useSelectedLayoutSegments=()=>[new URLSearchParams(location.search).get('room')||location.pathname.split('/')[1]];` }));
 }}]});
 const css=await fs.readFile(path.join(root,'workspace/app/globals.css'),'utf8')+`
 @font-face{font-family:Inter;src:url(/fonts/Inter-latin.woff2);font-weight:100 900}

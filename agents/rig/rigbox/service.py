@@ -264,6 +264,8 @@ class Service:
         if row is None or row.get("kind") != "publishable":
             raise RigError("unauthorized", "That key is not valid.", 401)
         self.failed_keys.release(reservation)
+        from rigbox.rooms import require_owner
+        require_owner(row["tenant_id"])
         return row
 
     async def authenticate_admin(self, raw_key: str) -> dict[str, Any]:
@@ -276,6 +278,8 @@ class Service:
             raise RigError("unauthorized", "That key is not valid.", 401)
         row = await self.store.key(digest)
         if row is not None:
+            from rigbox.rooms import require_owner
+            require_owner(row["tenant_id"])
             if row.get("kind") != "admin":
                 raise RigError("forbidden", "That key cannot manage fits.", 403)
             return row

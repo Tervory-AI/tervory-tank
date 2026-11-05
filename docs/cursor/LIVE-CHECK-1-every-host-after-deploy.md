@@ -2,7 +2,7 @@
 
 > Written by Claude, 27 Oct 2026, 16:20 PT, at the founder's request. Plan: `docs/build/BUILD-PLAN-2026-10-27.md`.
 >
-> **Why this exists.** On 27 Oct, #341 passed every merge check, including the Workspace build. Every product page still showed "Application error" live from 07:05 to after 09:16 PT. The cause was a runtime error in the browser (Clerk 7 removed `<SignedIn>`).
+> **Why this exists.** On 27 Oct, #341 passed every merge check, including the Workspace build. Every product page still showed "Application error" live from 07:05 to after 09:16 PT. The cause was a runtime error in the browser (Trigger sign-in 7 removed `<SignedIn>`).
 > - The build can't see a runtime error.
 > - The 10-minute watchdog (`.github/scripts/watchdog.py`) can't see it either: the page still returns HTTP 200.
 >
@@ -50,8 +50,8 @@
    - And every 30 minutes on a schedule, in its own workflow `live-check.yml`.
 5. **On a failure:** the job fails, red on main, naming the host and the reason. It also opens one GitHub issue titled `Live check failed: <host>`, or updates the open one, with the screenshot linked. No email or Slack; that's a later decision.
 6. **Signed-in pages (step 2, after the founder adds the secrets):**
-   - The founder creates one test user in Clerk with no client data and adds two repo secrets by name: `LIVE_CHECK_EMAIL` and `LIVE_CHECK_PASSWORD`.
-   - Use Clerk's documented testing support for automated sign-in. Don't solve captchas.
+   - The founder creates one test user in Trigger sign-in with no client data and adds two repo secrets by name: `LIVE_CHECK_EMAIL` and `LIVE_CHECK_PASSWORD`.
+   - Use Trigger sign-in's documented testing support for automated sign-in. Don't solve captchas.
    - With those set, the script also opens:
      - app.tervory.com/
      - /chats

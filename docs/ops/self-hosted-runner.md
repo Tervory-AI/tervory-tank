@@ -84,7 +84,7 @@ Treat the machine as untrusted and disposable.
   That's Docker running as `gha` itself, with no root daemon.
 - **No production secrets.** No Coolify tokens, no Tank keys (`TANK_KEY_*`), no
   `.env` from production, no SSH keys to other servers, no GitHub App private key and
-  no cloud credentials. CI needs none of them: its Postgres and Clerk values are test
+  no cloud credentials. CI needs none of them: its Postgres and Trigger sign-in values are test
   dummies.
 - **Ephemeral is preferred.** `--ephemeral` makes the runner take one job and then
   unregister, so nothing is left behind from one job to the next. See step 5.

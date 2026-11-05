@@ -47,6 +47,7 @@ let proposed = [],
   sends = 0,
   capture = false,
   contacts = [];
+let releaseMessage;
 const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import Shell from './app/trigger/shell';import CRMView from './app/trigger/records';import View from './app/trigger/view';const params=new URLSearchParams(location.search),kind=params.get('kind')||'leads',detail=params.has('detail');const record=${JSON.stringify(record)},post=${JSON.stringify(post)};let child;
 if(['leads','contacts','estimates','invoices'].includes(kind))child=<CRMView resource={kind} detail={detail} data={detail?{item:record}:{items:[record]}}/>;
 else{const data=kind==='channels'?{facebook:{status:'connected',page_id:'placeholder-page',page_name:'placeholder page',choices:[{page_id:'placeholder-page',name:'placeholder page'}]}}:kind==='settings'?{settings:{name:'placeholder store',enabled:true,time_zone:'Africa/Johannesburg',greeting:'placeholder greeting'},sources:[]}:kind==='inbox'?{conversations:[{...record,visitor_id:'placeholder visitor',last_message:'placeholder message',updated_at:'2026-11-03'}],conversation:{id:record.id,visitor_id:'placeholder visitor',status:'handed_over'},messages:[{id:record.id,question:'placeholder question',answer:'placeholder answer',cited:[],outcome:'sources'}]}:kind==='reviews'?{reviews:[{id:record.id,review_id:'placeholder-review',text:'placeholder review',rating:'FIVE',location:'placeholder profile'}]}:{posts:[post],post:detail?post:undefined};child=<View area={['inbox','settings'].includes(kind)?'bot':'marketing'} section={kind} id={detail?record.id:undefined} data={data}/>;}createRoot(document.getElementById('root')).render(<Shell>{child}</Shell>);`;
@@ -70,8 +71,8 @@ else{const data=kind==='channels'?{facebook:{status:'connected',page_id:'placeho
             path: "link",
             namespace: "placeholder",
           }));
-          b.onResolve({ filter: /^@clerk\/nextjs$/ }, () => ({
-            path: "clerk",
+          b.onResolve({ filter: /^(?:@\/app\/|\.\.\/)trigger-signin-provider$/ }, () => ({
+            path: "signin",
             namespace: "placeholder",
           }));
           b.onResolve({ filter: /^\.\/actions$/ }, () => ({
@@ -86,8 +87,8 @@ else{const data=kind==='channels'?{facebook:{status:'connected',page_id:'placeho
                 ? `export const usePathname=()=>'/trigger/crm/leads';export const useRouter=()=>({push:href=>location.assign(href),refresh:()=>{}});`
                 : args.path === "link"
                   ? `import React from 'react';export default function Link({children,...props}){return <a {...props}>{children}</a>}`
-                  : args.path === "clerk"
-                    ? `import React from 'react';export function OrganizationSwitcher(){return <span aria-label="placeholder business">⌄</span>}`
+                  : args.path === "signin"
+                    ? `import React from 'react';export function OrganisationSwitcher(){return <span aria-label="placeholder business">⌄</span>}`
                     : `export async function proposeTrigger(tool,arguments_){return(await fetch('/placeholder/propose',{method:'POST',body:JSON.stringify({tool,arguments_})})).json()}export async function confirmTrigger(thread,card,action='confirm'){return(await fetch('/placeholder/confirm',{method:'POST',body:JSON.stringify({action})})).json()}`,
           }));
         },
@@ -183,7 +184,7 @@ else{const data=kind==='channels'?{facebook:{status:'connected',page_id:'placeho
               : { lead_draft_id: id }),
           });
         }
-        await new Promise((r) => setTimeout(r, 200));
+        await new Promise((resolve) => { releaseMessage = resolve; });
         return json({
           conversation_id: id,
           visitor_id: visitor,
@@ -311,6 +312,9 @@ else{const data=kind==='channels'?{facebook:{status:'connected',page_id:'placeho
           .isDisabled(),
         true,
       );
+      assert.equal(typeof releaseMessage, "function");
+      releaseMessage();
+      releaseMessage = undefined;
       await page
         .getByText("placeholder grounded answer", { exact: true })
         .waitFor();

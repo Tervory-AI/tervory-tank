@@ -7,7 +7,7 @@
 **Files you may change:** `tank/admin.py` (new module, mounted in `tank/main.py` with ONE `include_router` line), `tank/schema.sql` (additive), `workspace/app/admin/*` (new), `workspace/lib/admin.ts` (new — do not edit `workspace/lib/tank.ts`), `tests/`.
 
 ## Who can see it
-- Tank: every `/v1/admin/*` endpoint requires the Workspace key AND header `X-Tervory-Admin: <clerk user id>` matching env `TERVORY_ADMIN_USER_IDS` (comma-separated). Otherwise 404 (not 403: the page should not be discoverable).
+- Tank: every `/v1/admin/*` endpoint requires the Workspace key AND header `X-Tervory-Admin: <signin user id>` matching env `TERVORY_ADMIN_USER_IDS` (comma-separated). Otherwise 404 (not 403: the page should not be discoverable).
 - Workspace: `/admin` renders only for those user ids; everyone else gets the normal 404.
 
 ## Data (Tank, additive)

@@ -1,21 +1,3 @@
-/* Regression: the /cli/device page hung forever under `next start` when Tank answered
- * a code lookup with an error (unknown, expired or used code -> 404).
- *
- * Why: in a server-component render, Next wraps fetch with createDedupeFetch, which
- * tees every GET response (one branch is kept in React's request cache). Cancelling
- * one branch of a tee only settles once the other branch is cancelled too, so
- * `await response.body?.cancel()` never returned and the render never finished.
- *
- * This runs the actual workspace/lib/device-login.ts (and lib/tank.ts) with Next's own
- * dedupe fetch from workspace/node_modules/next in front of a real loopback HTTP Tank
- * stub, i.e. the same fetch layer `next start` uses for a page render. Clerk is not
- * needed: the page's Clerk check runs before this call and is not what hung.
- *
- * Section 5 (review of #506, B1) runs in this same process after the lib/tank.ts adapter
- * tests: Tank stalls (no headers, or headers then a stalled body) and a GC runs mid-stall.
- * On Node 22 / undici 6.29.1 a redirect:"error" fetch then ignores its abort; every
- * CLI corridor must still end at its bound. Run with: node --expose-gc <this file>.
- * Synthetic only: dummy keys, loopback, no network. */
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const path = require('node:path');
@@ -52,31 +34,6 @@ const within = (promise, ms, label) => Promise.race([
     env: { TANK_URL: origin, TANK_API_KEY: 'dummy-workspace-key', TANK_REGION: 'us-east' },
     fetch: nextFetch,
   });
-  const { deviceApproval } = load('lib/device-login.ts');
-  const identity = { tenantId: '00000000-0000-4000-8000-000000000001', userId: 'user_e2e', tenantAdmin: false };
-
-  // 1. Error answers to the page's lookup render promptly with the right message.
-  for (const [status, text] of [[404, 'expired, was already used, or does not exist'], [401, 'Your Workspace session is fine'],
-                                [500, 'could not be completed'], [403, 'Founder accounts cannot sign the CLI in to this region; there is no other place to approve it']]) {
-    answers.set(`GET /v1/command/device/approval/${CODE}`, { status, body: '{"detail":"x"}' });
-    const shown = await within(deviceApproval(identity, 'us-east', CODE), 2000, `lookup ${status}`);
-    assert.equal(shown.ok, false); assert.equal(shown.status, status); assert(shown.message.includes(text), shown.message);
-  }
-  // Non-JSON error bodies too (a proxy page in front of Tank).
-  answers.set(`GET /v1/command/device/approval/${CODE}`, { status: 502, type: 'text/html', body: '<html>bad gateway</html>' });
-  assert.equal((await within(deviceApproval(identity, 'us-east', CODE), 2000, 'lookup 502 html')).status, 502);
-
-  // 2. Approve/deny (server action, POST) error answers also return.
-  answers.set(`POST /v1/command/device/approval/${CODE}`, { status: 404, body: '{"detail":"x"}' });
-  assert.equal((await within(deviceApproval(identity, 'us-east', CODE, 'approve'), 2000, 'approve 404')).status, 404);
-
-  // 3. Happy path is unchanged.
-  const pending = { user_code: CODE, device_name: 'laptop', region: 'us-east', status: 'pending' };
-  answers.set(`GET /v1/command/device/approval/${CODE}`, { status: 200, body: JSON.stringify(pending) });
-  const ok = await within(deviceApproval(identity, 'us-east', CODE), 2000, 'lookup 200');
-  assert(ok.ok); assert.equal(ok.device.device_name, 'laptop');
-
-  // 4. lib/tank.ts's CLI adapter (route handler) error paths also answer under the same fetch.
   const { personalCommandRequest } = load('lib/tank.ts');
   const token = `tv1.us-east.${'0'.repeat(32)}.${'A'.repeat(43)}`;
   const call = (target, status, type, body) => {
@@ -108,19 +65,8 @@ const within = (promise, ms, label) => Promise.race([
     env: { TANK_URL: stalled, TANK_API_KEY: 'dummy-workspace-key', TANK_REGION: 'us-east' },
     fetch: nextFetch,
   });
-  const quietLogin = quiet('lib/device-login.ts');
   const quietTank = quiet('lib/tank.ts');
-  assert.equal(quietLogin.DEVICE_TIMEOUT_MS, 10_000);
   const collect = setInterval(() => globalThis.gc(), 500);
-  const began = Date.now();
-  const [lookup, decide] = await within(Promise.all([
-    quietLogin.deviceApproval(identity, 'us-east', CODE),
-    quietLogin.deviceApproval(identity, 'us-east', CODE, 'approve'),
-  ]), 13_000, 'silent/stalled Tank + gc');
-  assert.equal(lookup.ok, false); assert.equal(lookup.status, 502); assert.match(lookup.message, /could not be reached/);
-  assert.equal(decide.ok, false); assert.equal(decide.status, 502);
-  assert(Date.now() - began >= 9_000, 'the bound is the 10 s timeout, not an early failure');
-
   // The CLI corridor through lib/tank.ts: device poll with a stalled body, a command whose
   // headers never come, and a turn stream that stalls after its first event.
   const limits = { deviceMs: 1500, headersMs: 1500, idleMs: 1500 };
