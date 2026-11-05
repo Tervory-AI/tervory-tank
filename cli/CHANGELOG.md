@@ -1,3 +1,7 @@
+## 0.7.1 — 2026-11-05
+
+- Wait for bounded search-worker startup before applying the existing one-second per-file regex execution limit, avoiding false refusals on busy Windows hosts.
+
 ## 0.6.1 — 2026-11-04
 
 Add Ask/Auto controls for paid steps and retain approval state when a command resumes.
