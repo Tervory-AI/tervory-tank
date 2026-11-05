@@ -115,17 +115,27 @@ def provision_locked(api, tank, record, region, issuer, ledger: Path, regional_t
         org = by_tenant.get(tenant)
         if not org:
             org = reserved_organisation(api, tenant, issuer, ledger)
-        grants = api.request('POST', project + '/grants/_search', json={
-            'query': {'limit': 2}, 'queries': [{'grantedOrgIdQuery': {'grantedOrgId': org}}],
+        # Only the all-project-grants endpoint accepts project and grantee filters.
+        grants = api.request('POST', '/management/v1/projectgrants/_search', json={
+            'query': {'limit': 2}, 'queries': [
+                {'projectIdQuery': {'projectId': record['project_id']}},
+                {'grantedOrgIdQuery': {'grantedOrgId': org}},
+            ],
         }).get('result', [])
         if len(grants) > 1:
             raise ProvisionError('Trigger sign-in project grant is ambiguous')
         roles = ['org_admin', 'member', 'reviewer']
         if grants:
             grant = grants[0]
-            if not set(roles).issubset(grant.get('roleKeys', [])):
-                api.request('PUT', project + '/grants/' + grant['id'], json={'roleKeys': sorted(set(roles + grant.get('roleKeys', [])))})
-            grant_id = grant['id']
+            if (grant.get('projectId') != record['project_id'] or grant.get('grantedOrgId') != org
+                    or grant.get('state') != 'PROJECT_GRANT_STATE_ACTIVE'
+                    or not isinstance(grant.get('grantId'), str)
+                    or not re.fullmatch(r'[0-9]{1,30}', grant['grantId'])):
+                raise ProvisionError('Trigger sign-in project grant refused')
+            if not set(roles).issubset(grant.get('grantedRoleKeys', [])):
+                api.request('PUT', project + '/grants/' + grant['grantId'],
+                            json={'roleKeys': sorted(set(roles + grant.get('grantedRoleKeys', [])))})
+            grant_id = grant['grantId']
         else:
             grant_id = api.request('POST', project + '/grants', json={'grantedOrgId': org, 'roleKeys': roles})['grantId']
         headers = {'x-zitadel-orgid': org}
