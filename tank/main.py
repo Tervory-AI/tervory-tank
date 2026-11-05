@@ -5002,6 +5002,8 @@ from memory_routes import router as memory_router  # noqa: F401 -- compatibility
 
 app.include_router(__import__("paid_steps").build_router())
 app.add_middleware(__import__("paid_steps").ApprovalMiddleware)
+# Window agents: reuse the existing authenticated command corridor.
+__import__("window_agents").install(app, __import__("sys").modules[__name__])
 
 # Bind only accepted endpoint arguments after existing authentication dependencies.
 bind_tenant_endpoints(app)

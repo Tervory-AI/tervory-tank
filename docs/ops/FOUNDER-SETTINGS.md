@@ -84,6 +84,17 @@ Public project/client IDs, native founder subjects and organisation links are pr
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
 
+## WINDOW-AGENTS (user settings; no new Coolify variables)
+
+`credential_name` selects a GitHub token saved by the user in their own existing
+Tank vault. `repo` selects their GitHub repository. `enabled` is the user's
+per-repository PR review webhook opt-in. The window gives them the callback URL
+and a generated webhook secret for GitHub's webhook form; the secret stays sealed
+in their vault. The founder never collects users' GitHub tokens in chat.
+
+The worker continues to use the existing Tank worker key, pause, region, resource
+limits and code directory. There is no new model provider or paid route setting.
+
 ## Paid ladder decisions (tenant settings; no Coolify value)
 
 `paid_step_settings.mode`: `ask` (default) or `auto`, stored separately for each tenant and exact `step_id`. The authenticated founder or tenant administrator can list steps at `GET /v1/command/paid-steps` and save one at `PUT /v1/command/paid-steps/{step_id}`. Workspace backend: `GET/PUT /settings/paid-steps/api`. These are database preferences, not new environment variables or paid-service keys. Pending approvals use existing /chats Confirm/Cancel cards. The platform control `paid_paused` (“Pause all paid work”) overrides every Auto setting and every prior approval. Settings screens await the Proposed paid-step frames in `codex/figma-w5`; see `docs/paid-steps/FRAMES.md`.
