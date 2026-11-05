@@ -100,7 +100,7 @@ jobs:
         run: |
           failed=0
           node --expose-gc tests/chats_command_stall.cjs || failed=1
-          for fixture in tests/command-squads-ui.cjs tests/base_works.cjs tests/case_study_reports/registration.cjs tests/trigger_w4/ssrf.cjs; do
+          for fixture in tests/command-squads-ui.cjs tests/base_works.cjs tests/case_study_reports/registration.cjs tests/case_study_reports/workspace.cjs tests/trigger_w4/ssrf.cjs; do
             node "$fixture" || failed=1
           done
           python -m pytest -q tests/command_acceptance_20261031/test_cross_lane.py::test_existing_founder_token_cli_answer_is_visible_in_chats_with_same_receipt tests/test_tiger_watch_commands.py tests/test_bf2_tank_guards.py tests/test_mcp_client.py::test_planned_mcp_action_finishes_as_a_visible_existing_card tests/moot_hearing/test_api.py::test_actual_workspace_transport_accepts_create_commands_and_preserves_region_guard || failed=1
