@@ -39,7 +39,7 @@
 **Files you may change:** `tank/skills/zenas.deadlines/1.0.0/`, `tank/main.py` (a `/v1/zenas/*` proxy to the Zenas room only, like `/v1/base/*`), `workspace/app/matters/`, `workspace/app/review/`, `workspace/app/admin/` (a new "Zenas feeds" section only), `workspace/app/api/zenas/`, new tests.
 - `zenas.deadlines` as the plan says (pure code; FRCP 6 and SA Uniform Rules; court days and public holidays per jurisdiction; rule cited for every step).
 - **Matters** page (clients): open a matter, upload documents, see drafts and memos only after release.
-- **Review** page (Clerk role `reviewer` + jurisdiction tag): draft beside its sources and matched worked matters, edit, approve or reject; approval records reviewer, admission number and changes; approved rule cards and matters feed phase 4's reuse and training pairs.
+- **Review** page (Trigger sign-in role `reviewer` + jurisdiction tag): draft beside its sources and matched worked matters, edit, approve or reject; approval records reviewer, admission number and changes; approved rule cards and matters feed phase 4's reuse and training pairs.
 - **Zenas feeds** (founder console): every source per region with: key name, key set yes/no (never the value), documents loaded, last load, errors, and a "Load now" button that starts the pool-loader for that source. This is where the founder plugs in the feeds.
 
 ## Founder, by tomorrow

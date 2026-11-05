@@ -1,5 +1,6 @@
 """Real isolated PostgreSQL and the existing offline Tank gateway/router fixture."""
 import json
+from trigger_signin_fakes import set_founders, native_provider, ORG
 from types import SimpleNamespace
 import uuid
 
@@ -19,7 +20,12 @@ FOUNDER = {'X-Tervory-Admin': 'placeholder-founder'}
 @pytest_asyncio.fixture
 async def serving(real_tank, monkeypatch):
     real = real_tank
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
+    signin = native_provider(monkeypatch, {ORG: str(real.tenants[0]), '10002': str(real.tenants[1])})
+    real.native_headers = signin.workspace_headers
+    signed = {'x-trigger-signin-org': ORG, 'x-trigger-signin-token': signin.token(sub='placeholder-founder')}
+    monkeypatch.setitem(FOUNDER, 'x-trigger-signin-org', signed['x-trigger-signin-org'])
+    monkeypatch.setitem(FOUNDER, 'x-trigger-signin-token', signed['x-trigger-signin-token'])
     # Keep the real startup/SQL, but stop this fixture's worker so explicitly
     # inserted revalidation jobs cannot race its deterministic eval assertions.
     for handler in real.tank.app.router.on_shutdown:
@@ -218,7 +224,7 @@ async def test_teachers_sources_counts_receipt_and_tenant_isolation(serving, mon
         truth = await conn.fetch("""SELECT teacher_model,count(*) AS count,max(created_at) AS newest_created_at
             FROM tank.training_pairs WHERE tenant_id=$1 AND active AND polarity='positive'
             GROUP BY teacher_model""", tenant)
-    headers = {'X-Tervory-User': 'placeholder-founder', 'X-Tervory-Tenant': str(tenant)}
+    headers = {**FOUNDER, 'X-Tervory-User': 'placeholder-founder', 'X-Tervory-Tenant': str(tenant)}
     response = await real.client.get('/v1/training/teachers', headers=headers,
         params={'skill_id': 'placeholder.skill', 'tenant_id': str(foreign)})
     assert response.status_code == 200, response.text
@@ -254,11 +260,11 @@ async def test_teachers_sources_counts_receipt_and_tenant_isolation(serving, mon
     assert scoped.status_code == 200
     assert {row['name'] for row in scoped.json()['items']} == {'1.0.0'}
     other = await real.client.get('/v1/training/teachers', params={'skill_id': 'placeholder.skill'},
-        headers={**headers, 'X-Tervory-Tenant': str(foreign)})
+        headers=real.native_headers('placeholder-founder', foreign))
     assert other.status_code == 200 and {row['name'] for row in other.json()['items']} == {'1.0.0', '2.0.0'}
     assert 'placeholder-teacher-1' not in other.text and 'placeholder-teacher-2' not in other.text
     denied = await real.client.get('/v1/training/teachers', params={'skill_id': 'placeholder.skill'},
-        headers={'X-Tervory-User': 'placeholder-reviewer', 'X-Tervory-Tenant': str(tenant), 'X-Tervory-Role': 'reviewer'})
+        headers={**real.native_headers('placeholder-reviewer', tenant, 'reviewer'), 'X-Tervory-Role': 'reviewer'})
     assert denied.status_code == 404
     with pytest.raises(ValueError):
         TeachersArgs(skill_id='placeholder.skill', tenant_id=str(foreign))

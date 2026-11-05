@@ -54,8 +54,8 @@ async def main():
            'LITELLM_URL': 'http://127.0.0.1:1', 'REDIS_URL': 'redis://127.0.0.1:1',
            'TANK_REGION': 'us-east', 'DOMAIN_INTERVAL_S': '0', 'AGENT_NAME': 'tiger',
            'TIGER_URL': f'http://127.0.0.1:{browser_port}', 'NEXT_TELEMETRY_DISABLED': '1',
-           'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY': 'pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==',
-           'CLERK_SECRET_KEY': 'sk_test_dummy', 'NO_PROXY': os.environ.get('NO_PROXY', '') + ',localhost,127.0.0.1'}
+           'TRIGGER_SIGNIN_KEY': '<retired-build-value>',
+            'NO_PROXY': os.environ.get('NO_PROXY', '') + ',localhost,127.0.0.1'}
     async def start(name, args, cwd, extra=None):
         handle = (output / f'{name}.log').open('w'); handles.append(handle)
         process = await asyncio.create_subprocess_exec(*args, cwd=cwd, env={**env, **(extra or {})}, stdout=handle, stderr=asyncio.subprocess.STDOUT)
@@ -123,14 +123,14 @@ async def main():
                     assert first['observation']['last_product_name'] is None
                     print('PASS nameless first check: issue=missing_name; price=null; alerts=0; URL and attempt time retained', flush=True)
 
-                    # Workspace uses the actual Tank process. Clerk is replaced only
+                    # Workspace uses the actual Tank process. Trigger sign-in is replaced only
                     # in this throwaway copy; repository authentication is unchanged.
                     local = temp / 'workspace'
                     shutil.copytree(ROOT / 'workspace', local, ignore=shutil.ignore_patterns('node_modules', '.next', '.env*', '*.tsbuildinfo'))
                     (local / 'node_modules').symlink_to(ROOT / 'workspace/node_modules', target_is_directory=True)
-                    (local / 'fixture-clerk-client.js').write_text(CLIENT)
-                    (local / 'fixture-clerk-server.js').write_text(SERVER.replace('org_tiger_local_fixture', 'org_tiger_name_fixture'))
-                    (local / 'next.config.ts').write_text('import path from "node:path"; export default {devIndicators:false,webpack(config){config.resolve.alias["@clerk/nextjs$"]=path.resolve("fixture-clerk-client.js");config.resolve.alias["@clerk/nextjs/server$"]=path.resolve("fixture-clerk-server.js");return config;}};')
+                    (local / 'fixture-signin-client.js').write_text(CLIENT)
+                    (local / 'fixture-signin-server.js').write_text(SERVER.replace('org_tiger_local_fixture', 'org_tiger_name_fixture'))
+                    (local / 'next.config.ts').write_text('import path from "node:path"; export default {devIndicators:false,webpack(config){config.resolve.alias["@/app/trigger-signin-provider$"]=path.resolve("fixture-signin-client.js");config.resolve.alias["@/lib/trigger-signin$"]=path.resolve("fixture-signin-server.js");return config;}};')
                     ui = await start('workspace', ['node', str(local / 'node_modules/next/dist/bin/next'), 'dev', '--hostname', 'localhost', '--port', str(workspace_port)], local)
                     await ready(origin + '/tiger', ui)
                     context = await chrome.new_context(viewport={'width': 1440, 'height': 1100})

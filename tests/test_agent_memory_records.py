@@ -5,6 +5,7 @@ Every test creates unique schemas; no production migration/backfill is exercised
 """
 
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import json
 import os
@@ -525,7 +526,7 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
 
     m = memory
     monkeypatch.setenv("TANK_API_KEY", "memory-workspace-fixture")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-fixture")
+    set_founders(monkeypatch, "founder-fixture")
     monkeypatch.setenv("TANK_KEY_" + m.agent.upper(), "memory-agent-fixture")
     app = create_app(InMemoryStore(), Encoder(), records=m.records)
     async with httpx.AsyncClient(

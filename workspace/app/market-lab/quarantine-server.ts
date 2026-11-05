@@ -1,5 +1,6 @@
+import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
 import "server-only";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { isListedFounder } from "../review/founder";
 import { quarantineFromResponse, type QuarantineLoad } from "./quarantine";
 

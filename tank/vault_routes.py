@@ -98,7 +98,7 @@ def build_router(tank):
         if request.headers.get('x-tervory-home-region', tank.box_region()) != tank.box_region():
             fail(403, 'This request must stay on its home server.')
         activate_tenant(owner)
-        admins = {x.strip() for x in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if x.strip()}
+        admins = __import__("trigger_signin_config").founders()
         if room == 'ghost':
             # Autumbra has no tenant_squad grant on main. Connect is an explicit
             # opt-in by this workspace's administrator, never a grant of tools.

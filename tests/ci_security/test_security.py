@@ -807,18 +807,13 @@ class ComparisonBaseTests(unittest.TestCase):
             self.assertNotIn("--event-context", line)
 
 
-class GitleaksAllowlistTests(unittest.TestCase):
-    """Exercise the pinned free CLI; never print the dummy value or scan matches."""
-
-    def setUp(self):
-        lines = (ROOT / ".github/workflows/ci.yml").read_text().splitlines()
-        self.dummy = next(line.split(":", 1)[1].strip() for line in lines
-                          if line.strip().startswith("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:"))
+class GitleaksCredentialTests(unittest.TestCase):
+    """Exercise the pinned free CLI without a credential-prefix exemption."""
 
     def check_value(self, value, expected_code, expected_count):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "copy.txt").write_text("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=" + value + "\n")
+            (root / "copy.txt").write_text("TRIGGER_SIGNIN_WORKSPACE_SECRET=" + value + "\n")
             report = root / "report.json"
             result = subprocess.run([
                 "gitleaks", "dir", str(root), "--no-banner", "--redact=100",
@@ -829,18 +824,17 @@ class GitleaksAllowlistTests(unittest.TestCase):
             self.assertEqual(result.returncode, expected_code)
             self.assertEqual(len(json.loads(report.read_text())), expected_count)
 
-    def test_new_copy_of_exact_ci_dummy_is_allowed(self):
-        self.check_value(self.dummy, 0, 0)
+    def test_empty_setting_is_not_a_secret(self):
+        self.check_value('', 0, 0)
 
-    def test_other_value_with_same_clerk_prefix_still_blocks(self):
-        offset = len("pk_test_")
-        replacement = "A" if self.dummy[offset] != "A" else "B"
-        self.check_value(self.dummy[:offset] + replacement + self.dummy[offset + 1:], 1, 1)
+    def test_new_session_credential_is_blocked(self):
+        import secrets
+        self.check_value(secrets.token_hex(32), 1, 1)
 
-    def test_changed_ending_with_same_clerk_prefix_still_blocks(self):
-        offset = len(self.dummy.rstrip("=")) - 1
-        replacement = "A" if self.dummy[offset] != "A" else "B"
-        self.check_value(self.dummy[:offset] + replacement + self.dummy[offset + 1:], 1, 1)
+    def test_changing_a_credential_does_not_exempt_it(self):
+        import secrets
+        original = secrets.token_hex(32)
+        self.check_value(('a' if original[0] != 'a' else 'b') + original[1:], 1, 1)
 
 
 if __name__ == "__main__":

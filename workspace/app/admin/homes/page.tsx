@@ -1,4 +1,4 @@
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth, signinDirectory } from "@/lib/trigger-signin";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isFounder } from "@/lib/admin";
@@ -9,7 +9,7 @@ import "./homes.css";
 export const dynamic = "force-dynamic";
 
 async function listOrganisations(): Promise<OrgHome[]> {
-  const client = await clerkClient();
+  const client = await signinDirectory();
   const found: OrgHome[] = [];
   const limit = 100;
   let offset = 0;

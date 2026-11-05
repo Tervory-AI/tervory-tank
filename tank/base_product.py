@@ -75,6 +75,7 @@ class PriceChange(BaseModel):
 
 class CreditReceipt(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    paid_step_approval_id: uuid.UUID | None = None
     id: uuid.UUID
     tenant_id: uuid.UUID
     record_id: uuid.UUID
@@ -423,27 +424,38 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
     async def context_receipt(body: CreditReceipt) -> dict[str, Any]:
         if body.tenant_id != PLATFORM or body.region != rt.box_region():
             raise HTTPException(403, "Context trials belong to this platform region.")
+        if body.paid_step_approval_id:
+            import paid_steps
+            async with rt.pool().acquire() as conn:
+                decision = await conn.fetchrow("""SELECT * FROM tank.paid_step_approvals
+                    WHERE tenant_id=$1 AND id=$2 AND step_id='base.context_dev.credit' AND state='approved'""",
+                    body.tenant_id, body.paid_step_approval_id)
+            if decision is None:
+                raise HTTPException(403, "Paid credit receipt has no matching approval")
         async with rt.pool().acquire() as conn:
             async with conn.transaction():
                 old = await conn.fetchrow("SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2", body.id, body.tenant_id)
                 if old:
                     if old["vendor"] != "context.dev" or old["units"] != body.units or old["outcome"] != body.outcome:
                         raise HTTPException(409, "This credit receipt already records another call.")
-                    return {"ledger_id": str(body.id), "recorded": True}
-                quote = await price(conn, "context.dev.credit", datetime.now(timezone.utc))
-                rate = quote["unit_price"] if quote and quote["price_status"] == "set" else None
-                list_cost = rate * body.units if rate is not None else None
-                free = bool(quote and quote["free_pass"])
-                actual = None if body.outcome == "unverified" else Decimal(0) if free else list_cost
-                await conn.execute("""INSERT INTO tank.ledger
-                    (id,tenant_id,region,agent,task_type,task_id,model,vendor,units,rung,cost_usd,outcome,
-                     vendor_cost_status,vendor_unit_price,vendor_price_id,vendor_list_cost_usd,cost_status)
-                    VALUES($1,$2,$3,'base','base.context_dev',$4,'vendor:context.dev','context.dev',$5,1,$6,$7,$8,$9,$10,$11,$12)""",
-                    body.id, body.tenant_id, body.region, body.run_id, body.units, actual or Decimal(0), body.outcome,
-                    "free_pass" if free else "unpriced" if rate is None else "priced", rate, quote["id"] if quote else None, list_cost,
-                    "not_set" if actual is None or body.outcome == "unverified" else "set")
-                await conn.execute("INSERT INTO tank.base_ledger_links(tenant_id,record_id,ledger_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
-                                   body.tenant_id, body.record_id, body.id)
+                else:
+                    quote = await price(conn, "context.dev.credit", datetime.now(timezone.utc))
+                    rate = quote["unit_price"] if quote and quote["price_status"] == "set" else None
+                    list_cost = rate * body.units if rate is not None else None
+                    free = bool(quote and quote["free_pass"])
+                    actual = None if body.outcome == "unverified" else Decimal(0) if free else list_cost
+                    await conn.execute("""INSERT INTO tank.ledger
+                        (id,tenant_id,region,agent,task_type,task_id,model,vendor,units,rung,cost_usd,outcome,
+                         vendor_cost_status,vendor_unit_price,vendor_price_id,vendor_list_cost_usd,cost_status)
+                        VALUES($1,$2,$3,'base','base.context_dev',$4,'vendor:context.dev','context.dev',$5,1,$6,$7,$8,$9,$10,$11,$12)""",
+                        body.id, body.tenant_id, body.region, body.run_id, body.units, actual or Decimal(0), body.outcome,
+                        "free_pass" if free else "unpriced" if rate is None else "priced", rate, quote["id"] if quote else None, list_cost,
+                        "not_set" if actual is None or body.outcome == "unverified" else "set")
+                    await conn.execute("INSERT INTO tank.base_ledger_links(tenant_id,record_id,ledger_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+                                       body.tenant_id, body.record_id, body.id)
+        if body.paid_step_approval_id:
+            with paid_steps.run_scope(paid_steps.Run(body.tenant_id, decision["run_id"], decision["request_hash"])):
+                await paid_steps.attach_receipt(body.id, decision)
         return {"ledger_id": str(body.id), "recorded": True}
 
     async def run_background() -> None:

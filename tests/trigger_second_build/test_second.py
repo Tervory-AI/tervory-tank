@@ -1,4 +1,5 @@
 """Offline second-build contracts; fixtures never enter production."""
+from trigger_signin_fakes import set_founders
 import importlib.util
 import json
 import os
@@ -85,7 +86,7 @@ async def env(monkeypatch):
                               TANK_API_KEY='dummy-workspace-key', Message=lambda **k: k, RouteRequest=lambda **k: k,
                               run_route=AsyncMock(side_effect=AssertionError('No planner model allowed')))
     monkeypatch.setitem(sys.modules, 'main', runtime)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    set_founders(monkeypatch, 'founder')
     monkeypatch.setenv('TANK_KEY', 'dummy-room-key')
     monkeypatch.setattr(room_app.state, 'pool', pool, raising=False)
     lt = httpx.AsyncClient(transport=httpx.MockTransport(lambda req: httpx.Response(200, json={'matches': []})))

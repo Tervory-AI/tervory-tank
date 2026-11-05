@@ -9,10 +9,12 @@ const original=Module._load;
 let founder=false,tools=['tiger.watch'],toolsFail=false,rosterReads=0,tasks=0;
 const identity={tenantId:'owned',userId:'owned-user',orgName:'Example'};
 Module._load=function(name,parent,isMain){
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
  if(name==='@/lib/trigger')return {triggerIdentity:async tenant=>({...tenant,tenantAdmin:false})};
  if(name==='@/lib/tenant')return {activeTenant:async()=>identity};
  if(name==='@/lib/admin')return {isFounder:()=>founder};
- if(name==='@clerk/nextjs/server')return {currentUser:async()=>({firstName:'Alex'})};
+ if(name==='@/lib/trigger-signin')return {currentUser:async()=>({firstName:'Alex'})};
  if(name==='next/navigation')return {redirect:location=>{throw Object.assign(new Error('redirect'),{location})}};
  if(name==='./window'&&parent.filename.endsWith('/chats/page.tsx'))return {CommandWindow:'command-fixture'};
  if(name==='@/lib/tank')return {

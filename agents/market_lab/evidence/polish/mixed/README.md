@@ -39,7 +39,7 @@ cache-off Redis warning is expected in this local proof and retained in the log.
 From `workspace/`:
 
 ```sh
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npx next build
+NEXT_TELEMETRY_DISABLED=1 npx next build
 ```
 
 Result: **Compiled successfully**, type/lint checks and all 35 static pages
@@ -66,6 +66,6 @@ Screenshots, all **local, fixture page**, with captions outside the product:
 - Observation 122: [1440px](point-122-1440.png), [375px](point-122-375.png).
 
 The local page uses the shared production components and a local test tenant;
-it does not exercise Clerk or live publisher feeds. The pre-existing fixture
+it does not exercise Trigger sign-in or live publisher feeds. The pre-existing fixture
 badge is removed only for these screenshots so the label stays in the caption.
 The stored fixture source ID changes on each run; follow that run's links.

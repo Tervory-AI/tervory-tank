@@ -1,4 +1,4 @@
-"""Exercise the actual tenant and report helpers with offline Clerk/Tank doubles."""
+"""Exercise the actual tenant and report helpers with offline Trigger sign-in/Tank doubles."""
 import subprocess
 from pathlib import Path
 

@@ -419,10 +419,6 @@ jobs:
         run: npx next build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
-          # Clerk rejects pk_test_ZHVtbXk (it decodes to "dummy", and a publishable
-          # key must decode to "<host>$"). This dummy decodes to dummy.clerk.accounts.dev$.
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==
-          CLERK_SECRET_KEY: sk_test_dummy
 
   # Chat CLI cross-lane acceptance (#467, extended on #496). Runs the six tests in
   # tests/command_acceptance_20261031/test_cross_lane.py with COMMAND_ACCEPTANCE_CLIENTS=1:

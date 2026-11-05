@@ -1,11 +1,11 @@
 // COMMAND-1 Lane A wire contract; server-free so streaming can be tested offline.
 export type Money = number | null;
 export type Totals = { cost_usd: Money; baseline_cost_usd: Money; saved_usd: Money; auto_cost_usd?: Money };
-export type ReceiptRow = Totals & { step_id: string; model?: string; baseline_model?: string; tokens_in?: number; tokens_out?: number; ledger_id: string; cost_status?: string; baseline_status?: string; requested_model?: string; auto_model?: string | null; auto_cost_status?: string; auto_priced_at?: string | null; auto_cost_label?: string; auto_cost_basis?: string };
+export type ReceiptRow = Totals & { paid_step_id?: string; paid_step_mode?: "approved" | "automatic"; paid_step_approval_id?: string; step_id: string; model?: string; baseline_model?: string; tokens_in?: number; tokens_out?: number; ledger_id: string; cost_status?: string; baseline_status?: string; requested_model?: string; auto_model?: string | null; auto_cost_status?: string; auto_priced_at?: string | null; auto_cost_label?: string; auto_cost_basis?: string };
 export type Receipt = { rows: ReceiptRow[]; totals: Totals; status?: string; step_id?: string };
 export type Attachment = { name: string; content_type: string; text?: string; attachment_id?: string; size?: number; model_readable?: boolean };
 export type Message = { message_id: string; role: "user" | "assistant"; content: string; receipt?: Receipt; attachments?: Attachment[] };
-export type Step = { step_id: string; label: string; actor: string; status: "planned" | "running" | "done" | "failed"; link?: string; receipt_status?: string };
+export type Step = { phase_finished?: boolean; paused?: boolean; step_id: string; label: string; actor: string; status: "planned" | "running" | "done" | "failed"; link?: string; receipt_status?: string };
 export type CardDetail = { label: string; value: string; href?: string };
 export type RadixFinding = { tool?: string; severity?: string; rule?: string; file?: string; line?: number; explanation?: string; remediation?: string };
 export type RadixView = { kind: "proof" | "scan" | "findings"; domain?: string; name?: string; value?: string; expires_at?: string; scan_id?: string; target?: string; status?: string; completed_at?: string; high?: number; critical?: number; findings?: RadixFinding[] };

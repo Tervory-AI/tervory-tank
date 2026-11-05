@@ -1,3 +1,4 @@
+import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
 // Server-side only (uses TANK_API_KEY). WORKERS-2: the host workers' check-in and the founder's workers pause.
 export type WorkerBeat = {
   worker: string; state: "running" | "paused"; issue: number | null; commit: string;

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 # After the compose health checks are deployed, this exception can go.
 MAIN_APP = "xnmc0jkz8j9i5jh1jwanbsfv"
 
-# The site root returns 404 to a signed-out caller (Clerk protects it).
+# The site root returns 404 to a signed-out caller (Trigger sign-in protects it).
 # /api/health is the public probe and returns 200 when the app is up.
 SITES = (
     ("app.tervory.com", "https://app.tervory.com/api/health"),

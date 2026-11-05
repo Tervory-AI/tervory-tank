@@ -1,4 +1,5 @@
 """CORE-2c: commit-time invalidation, client boundaries and Unicode exports."""
+from trigger_signin_fakes import set_founders
 import asyncio
 from contextlib import suppress
 from io import BytesIO
@@ -134,7 +135,7 @@ async def test_price_change_finds_every_stored_model_reference(database):
 @pytest.mark.asyncio
 async def test_platform_is_refused_before_client_reads_or_exports(monkeypatch):
     key=secrets.token_urlsafe(32)
-    monkeypatch.setenv('TANK_API_KEY',key);monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','fixture-founder')
+    monkeypatch.setenv('TANK_API_KEY',key);set_founders(monkeypatch, 'fixture-founder')
     def unavailable(): raise AssertionError('A platform client request reached the database')
     monkeypatch.setattr(proof,'runtime',unavailable);monkeypatch.setattr(dashboards,'db',unavailable)
     app=FastAPI();app.include_router(proof.router);app.include_router(proof.client_router);app.include_router(dashboards.router)

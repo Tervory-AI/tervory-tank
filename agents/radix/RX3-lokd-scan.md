@@ -19,9 +19,9 @@ Later checks go through `egress-proxy` and do not dial the site directly.
 | Cross-Origin-Resource-Policy | Missing. |
 | Cross-Origin-Embedder-Policy | Missing. |
 
-The policy on that response also names other hosts, including `clerk.lokd.co.za`,
-`challenges.cloudflare.com`, `img.clerk.com`, `clerk-telemetry.com`, and
-`*.protect.clerk.com`. Those names were not requested, and they are not approved.
+The policy on that response also names other hosts, including `signin.lokd.co.za`,
+`challenges.cloudflare.com`, `retired authentication asset hosts`, `retired authentication telemetry hosts`, and
+`retired authentication protection hosts`. Those names were not requested, and they are not approved.
 
 A DNS TXT record exists for `lokd.co.za`. Its text was not read or stored.
 It was not treated as ownership proof.

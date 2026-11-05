@@ -33,6 +33,20 @@ async def pass_policy_swaps(b):
 @pytest_asyncio.fixture
 async def ladder(boundary, monkeypatch):  # noqa: F811 -- pytest fixture injection
     b = boundary
+    # These pre-existing ladder/batch protocol cases explicitly exercise Auto.
+    # Default Ask and real approval/card behavior live in test_paid_steps.py.
+    import paid_steps
+    original_admit = paid_steps.admit
+    monkeypatch.setattr(paid_steps, "db", lambda:b.pool)
+    async def configured_auto(step_id, **kwargs):
+        if kwargs.get("paid",True):
+            async with paid_steps.connection(kwargs["tenant_id"]) as conn:
+                await paid_steps.register(conn,step_id,kwargs["owner"],kwargs["kind"],kwargs["source"])
+                await conn.execute("""INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by)
+                    VALUES($1,$2,'auto','placeholder-fixture-admin') ON CONFLICT(tenant_id,step_id)
+                    DO UPDATE SET mode='auto'""",kwargs["tenant_id"],step_id)
+        return await original_admit(step_id,**kwargs)
+    monkeypatch.setattr(paid_steps,"admit",configured_auto)
     monkeypatch.setattr(skala, "run_skill", REAL_RUN)
     monkeypatch.setattr(b.tank, "_packages", skala.load_packages())
     await b.tank.register_packages()
@@ -238,7 +252,7 @@ async def test_fixture_graduation_requires_founder_then_serves_two_tenants(ladde
     for tenant in b.tenants:
         denied = await b.client.post(route, json={}, headers={"X-Tervory-Tenant": str(tenant)})
         assert denied.status_code == 404
-    approved = await b.client.post(route, json={"by": "founder-fixture"}, headers={"X-Tervory-Admin": "founder-fixture"})
+    approved = await b.client.post(route, json={"by": "founder-fixture"}, headers=b.native_headers('founder-fixture', 'org_admin'))
     assert approved.status_code == 200, approved.text
     async with b.pool.acquire() as conn:
         policy_row = await conn.fetchrow("SELECT * FROM tank.policy WHERE task_type='base.normalize' AND tenant_id IS NULL")

@@ -1,4 +1,5 @@
 """DC campaign -> recorded worker evidence -> human audit -> report, offline only."""
+from trigger_signin_fakes import set_founders
 import csv
 from datetime import datetime
 import io
@@ -142,7 +143,7 @@ async def test_dc_campaign_through_confirmed_cards_collection_audit_and_download
                 reviewed = output.getvalue()
                 async with pool.acquire() as conn:
                     thread = uuid4()
-                    await conn.execute("INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,'Placeholder','{}'::jsonb)", thread, TENANT, actor.user_id)
+                    await conn.execute("INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state,trigger_signin_issuer) VALUES($1,$2,$3,'Placeholder','{}'::jsonb,$4)", thread, TENANT, actor.user_id, __import__('trigger_signin_config').issuer())
                     await conn.execute("INSERT INTO tank.command_attachments(attachment_id,thread_id,tenant_id,user_id,name,sha256,content) VALUES($1,$2,$3,$4,'placeholder.csv','placeholder',$5)", upload, thread, TENANT, actor.user_id, reviewed.encode())
                 response = await post(client, 'base.audit.review', '/v1/command/base/audits/review', {**query, 'attachment_id': str(upload)})
                 assert response.status_code == 200, response.text
@@ -174,7 +175,7 @@ async def test_dc_campaign_through_confirmed_cards_collection_audit_and_download
 def test_campaign_download_and_confirmed_start_adapter(monkeypatch):
     import subprocess
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east'))
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'fixture-founder')
+    set_founders(monkeypatch, 'fixture-founder')
     actor = command.Actor(TENANT, 'fixture-founder', True, frozenset({'base'}))
     action = command.validate_action(command.PlannedAction(tool='base.campaign.start', arguments={'name': 'Placeholder DC', 'states': ['DC']}), actor)
     method, path, params, body = command.adapter_request(action, actor)

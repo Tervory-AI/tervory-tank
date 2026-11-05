@@ -20,7 +20,7 @@ function edge(upstream) {
 function request(path, { token = TOKEN, host = 'app.tervory.com', method = 'GET', body, extra = {} } = {}) {
   return new Request(`https://${host}/v1/command/${path}`, { method, headers: {
     authorization: `Bearer ${token}`, host, 'content-type': 'application/json',
-    'x-tervory-user': 'founder', 'x-tervory-tenant': 'forged', 'x-tank-key': 'forged', cookie: 'clerk=forged', ...extra,
+    'x-tervory-user': 'founder', 'x-tervory-tenant': 'forged', 'x-tank-key': 'forged', cookie: 'signin=forged', ...extra,
   }, ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }) });
 }
 function call(proxy, path, options) { return proxy(request(path, options), path.split('?')[0].split('/')); }

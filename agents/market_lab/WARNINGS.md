@@ -177,7 +177,7 @@ Screenshot labels belong in captions only, never in the product or account name.
 See [the reproduction guide](warning_proof/README.md) and
 [local evidence](evidence/warnings/README.md). The proof exercises the actual
 Tank startup, real room and Tiger routes, real Postgres, and the existing daily
-job worker. It does not prove Clerk or real customer history. Browser evidence
+job worker. It does not prove Trigger sign-in or real customer history. Browser evidence
 uses locally supplied tenant identities and synthetic external histories, as
 requested; its captions say **local, fixture page**. No live sign-in was attempted.
 

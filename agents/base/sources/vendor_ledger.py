@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS agent_base.context_dev_calls (
     result jsonb,
     posted boolean NOT NULL DEFAULT false,
     UNIQUE (tenant_id, run_id, record_id)
-)
+);
+ALTER TABLE agent_base.context_dev_calls ADD COLUMN IF NOT EXISTS paid_step_approval_id uuid;
 """
 
 
@@ -52,12 +53,13 @@ class TankVendorLedger:
             inserted = await self.conn.fetchval(
                 """
                 INSERT INTO agent_base.context_dev_calls
-                    (call_id,tenant_id,run_id,record_id,region,reserved_credits)
-                VALUES ($1,$2,$3,$4,$5,$6)
+                    (call_id,tenant_id,run_id,record_id,region,reserved_credits,paid_step_approval_id)
+                VALUES ($1,$2,$3,$4,$5,$6,$7)
                 ON CONFLICT (tenant_id,run_id,record_id) DO NOTHING RETURNING call_id
                 """,
                 uuid.UUID(event["call_id"]), self.tenant_id, self.run_id,
                 uuid.UUID(event["record_id"]), os.environ.get("TANK_REGION", "us-east"), event["reserved_credits"],
+                uuid.UUID(event["paid_step_approval_id"]) if event.get("paid_step_approval_id") else None,
             )
             if inserted is None:
                 raise CreditLimit
@@ -74,7 +76,7 @@ class TankVendorLedger:
 
     async def flush(self) -> None:
         rows = await self.conn.fetch(
-            "SELECT call_id,record_id,region,result,reserved_credits FROM agent_base.context_dev_calls "
+            "SELECT call_id,record_id,region,result,reserved_credits,paid_step_approval_id FROM agent_base.context_dev_calls "
             "WHERE tenant_id=$1 AND run_id=$2 AND posted=false AND result IS NOT NULL",
             self.tenant_id, self.run_id,
         )
@@ -91,6 +93,7 @@ class TankVendorLedger:
                     "record_id": str(row["record_id"]), "run_id": str(self.run_id),
                     "units": credits if verified_units else row["reserved_credits"],
                     "outcome": outcome, "region": row["region"],
+                    "paid_step_approval_id": str(row["paid_step_approval_id"]) if row["paid_step_approval_id"] else None,
                 },
                 timeout=30, follow_redirects=False,
             )

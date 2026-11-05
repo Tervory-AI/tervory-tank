@@ -1,4 +1,5 @@
 """Offline Enforce API contract: MockTransport only, no Docker or provider calls."""
+from trigger_signin_fakes import set_founders
 import json
 import re
 import sys
@@ -197,7 +198,7 @@ def test_unset_settings_fixture_routes_unchanged(tmp_path, monkeypatch):
 @pytest.mark.parametrize('tool', ['list', 'create', 'destroy'])
 async def test_founder_only_tools_propose_confirm_without_model(tool, monkeypatch):
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east'))
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
     monkeypatch.setattr(command, 'authorized_actor', AsyncMock(side_effect=lambda a: a))
     monkeypatch.setattr(trigger_routes, 'code_receipt', AsyncMock(return_value=uuid.UUID(B)))
@@ -219,7 +220,7 @@ async def test_tank_admin_boundary_and_list_receipt(monkeypatch):
     app = FastAPI()
     app.include_router(ghost_routes.router)
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-workspace-key')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     room = AsyncMock(return_value=httpx.Response(200, json={'applications': []}))
     actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
     monkeypatch.setattr(command, 'identity', AsyncMock(return_value=actor))
@@ -379,7 +380,7 @@ async def test_missing_provenance_field_refuses_delete(field):
 async def test_mutation_dispatch_uses_confirmed_card_path(verb, monkeypatch):
     from contextlib import asynccontextmanager
     import trigger_commands
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
     action = command.PlannedAction(tool='autumbra.enforce.' + verb, arguments={'tenant_id': B})
     card_id = str(uuid.uuid4())

@@ -2,7 +2,7 @@
 
 This proof uses the real Tank, real Base app/FFL route, real PostgreSQL and real
 Workspace proxy/page. Every screenshot is labelled **local, fixture page**.
-Only outbound external HTTP and Clerk in a temporary Workspace copy are fixtures.
+Only outbound external HTTP and Trigger sign-in in a temporary Workspace copy are fixtures.
 No production reads, sign-in, account, paid call or source-list reload is needed.
 
 The reference fixture is four platform-owned `base.records` rows, plus one other
@@ -38,7 +38,7 @@ Results from 27 October 2026, cloud only:
 | CI Ruff command | All checks passed |
 | Focused pytest with real PostgreSQL | 78 passed in 27.33s; no skips |
 | CI secret scan and real Tank startup twice | 3 passed in 37.93s |
-| `next build` with CI's dummy Clerk settings | Exit 0; compiled; types checked; 37/37 pages |
+| `next build` with CI's dummy Trigger sign-in settings | Exit 0; compiled; types checked; 37/37 pages |
 | Actual background adoption and browser check | Exit 0; HTTP 401 visible, then 3 licences / 1 duplicate |
 
 ```sh
@@ -48,7 +48,7 @@ python -m pytest -q tests/test_base_reference_adopt.py tests/test_base_product.p
 PYTHONPATH=tank:tests TANK_BOOT_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
 python -m pytest -q tests/test_secrets.py tests/test_tank_boots.py
 cd workspace
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npx next build
+NEXT_TELEMETRY_DISABLED=1 npx next build
 ```
 
 The focused tests also cover duplicate identities across the 2,000-row projection

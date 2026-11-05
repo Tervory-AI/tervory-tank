@@ -1,4 +1,4 @@
-// Renders the Skala library with fixture skills. No Clerk session and no customer data.
+// Renders the Skala library with fixture skills. No Trigger sign-in session and no customer data.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { readFile, mkdir } from "node:fs/promises";
