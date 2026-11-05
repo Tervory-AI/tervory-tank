@@ -186,6 +186,22 @@ export class CodeFolder {
           rows.push({line:i+1,text:lines[i]});if(rows.length===200)break;}
         parentPort.postMessage({rows});});`, { eval: true, workerData: { pattern, regex } });
     try {
+      // Worker boot is separate from the strict per-file regex execution budget.
+      // A busy Windows runner can take longer to start a thread than to search.
+      await new Promise((resolveReady, rejectReady) => {
+        const cleanup = () => {
+          clearTimeout(timer);
+          worker.off('online', ready);
+          worker.off('error', fail);
+          worker.off('exit', fail);
+        };
+        const ready = () => { cleanup(); resolveReady(); };
+        const fail = () => { cleanup(); rejectReady(refused()); };
+        const timer = setTimeout(fail, 5000);
+        worker.once('online', ready);
+        worker.once('error', fail);
+        worker.once('exit', fail);
+      });
       for (const file of files) {
         let text; try { text = (await this.read(file)).text; } catch { continue; }
         const result = await new Promise((resolveResult, reject) => {
