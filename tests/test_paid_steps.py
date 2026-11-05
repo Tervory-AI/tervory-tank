@@ -6,6 +6,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import asyncpg
+from trigger_signin_fakes import set_founders
+
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
@@ -244,7 +246,7 @@ async def test_chats_existing_confirm_card_approves_and_denies(database, monkeyp
     from fastapi import FastAPI
     pool, _ = database
     monkeypatch.setattr(command, 'db', lambda: pool)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-admin')
+    set_founders(monkeypatch, 'placeholder-admin')
     actor = command.Actor(A, 'placeholder-admin', True, tenant_admin=True)
     thread = uuid.uuid4()
     schema = (ROOT / 'tank/schema.sql').read_text()
@@ -277,7 +279,7 @@ async def test_chats_existing_confirm_card_approves_and_denies(database, monkeyp
     assert result['result']['reason'] == 'placeholder budget reserved'
     # A non-admin in the same tenant cannot use this card as authority.
     actor = command.Actor(A, 'placeholder-admin', False, tenant_admin=False)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
+    set_founders(monkeypatch, '')
     async with pool.acquire() as conn:
         await conn.execute('CREATE TABLE tank.tenant_squad(tenant_id uuid,agent text)')
     with pytest.raises(HTTPException) as denied:
@@ -814,7 +816,7 @@ async def test_direct_research_card_waits_and_resumes_once(database,monkeypatch,
     from unittest.mock import AsyncMock
     pool,_ = database
     monkeypatch.setattr(command,'db',lambda:pool)
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','placeholder-admin')
+    set_founders(monkeypatch,'placeholder-admin')
     actor = command.Actor(A,'placeholder-admin',True,tenant_admin=True)
     monkeypatch.setattr(command,'authorized_actor',AsyncMock(return_value=actor))
     monkeypatch.setattr(command,'refresh_action_receipts',AsyncMock())
