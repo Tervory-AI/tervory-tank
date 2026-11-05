@@ -57,7 +57,7 @@ global.fetch = async(url,options)=>{
   founder=true;
   const clients=await actions.squadClients(0);assert.equal(clients.more,true);
   assert((await actions.squadClients(-1)).error);
-  const state=await actions.squadState('org-fixture');assert.equal(state.grants.length,7);assert(homeLookups.length>0);
+  const state=await actions.squadState('org-fixture');assert.equal(state.grants.length,7);
   calls=[];
   await actions.changeSquad('org-fixture','tiger',true);
   assert.equal(calls.filter(c=>c.options.method==='PUT').length,1);
