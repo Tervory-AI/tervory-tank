@@ -15,7 +15,7 @@ from uuid import UUID
 import httpx
 from fastapi import Header, HTTPException, Query
 from gold_sources import candidates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from alert_email import deliver_pending
 from rig_watch import RigWatches, TankRig, check_now, CatalogueDiscovery, DiscoveryGate
@@ -168,6 +168,8 @@ async def check(ctx: JobContext) -> dict:
         return await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_extract", {"html": html, "url": page_url})
 
     async def ocr(png_base64: str, page_url: str) -> dict[str, Any]:
+        if ctx.input.get('code_only'):
+            return {'items': []}
         return await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_ocr", {"png_base64": png_base64, "url": page_url})
 
     async def render(url, session, agent, tenant):
@@ -359,6 +361,41 @@ class WatchPatch(BaseModel):
     alert_new_product: bool | None = None
     alert_below_cost: bool | None = None
     alert_market_gap: bool | None = None
+
+
+class BatchCheckIn(BaseModel):
+    tenant_id: UUID
+    batch_id: UUID
+    record_id: str = Field(min_length=1)
+    url: str
+
+
+@app.post('/batch/check', status_code=201)
+async def batch_check(body: BatchCheckIn):
+    from batch import job_id
+    tenant = str(body.tenant_id)
+    try:
+        url = await asyncio.to_thread(check_url, body.url)
+    except BadWatch as exc:
+        raise _watch_http(exc) from None
+    ident = job_id(tenant, str(body.batch_id), body.record_id, url)
+    store = _store()
+    if not await store.get_watch(tenant, url):
+        try:
+            await store.create_watch(dict(tenant_id=tenant, url=url, label='', engine='', every='1d',
+                                          enabled=True, threshold=0))
+        except DuplicateWatch:
+            pass
+    async with app.state.pool.acquire() as conn:
+        await conn.execute("""INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input)
+            VALUES($1,$2,'check',$3::jsonb) ON CONFLICT(id) DO NOTHING""", ident, body.tenant_id,
+            json.dumps({'url': url, 'code_only': True, 'batch_id': str(body.batch_id), 'record_id': body.record_id}))
+        row = await conn.fetchrow('SELECT id,tenant_id,status,result FROM agent_tiger.jobs WHERE id=$1 AND tenant_id=$2',
+                                  ident, body.tenant_id)
+    if row is None:
+        raise HTTPException(409, 'Check the fields. Nothing was changed.')
+    result = json.loads(row['result']) if isinstance(row['result'], str) else row['result']
+    return {'id': str(row['id']), 'tenant_id': tenant, 'status': row['status'], 'result': result}
 
 
 def _store() -> PgStore:
