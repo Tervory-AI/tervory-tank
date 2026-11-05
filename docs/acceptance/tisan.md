@@ -109,7 +109,7 @@ Only the founder handles private key/token inputs in those rows.
 Each `test_tNN_*` executes its shipped UI, route, orchestration, scanner or
 publisher path on existing fixtures. Imported scenario helpers retain their own
 assertions; there is no copy of product logic in this sheet's tests. T01–T06 use
-actual TSX, React and Chromium, with Clerk/Next/Tank server boundaries stubbed;
+actual TSX, React and Chromium, with Trigger sign-in/Next/Tank server boundaries stubbed;
 raw keys/tokens are placeholder fixture strings only. Browser requests are
 blocked. Gold server actions are also executed with the existing identity fixture.
 Request/quote routes use throwaway PostgreSQL, existing guards and tenant binding.

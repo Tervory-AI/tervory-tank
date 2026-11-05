@@ -1,5 +1,6 @@
 """Offline API and PostgreSQL proof; every record is an isolated test fixture."""
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import asyncio
 import csv
@@ -47,7 +48,7 @@ async def audit_db(monkeypatch):
             await conn.execute(schema)
             await conn.execute(schema)
         monkeypatch.setenv("TANK_API_KEY", "local-fixture")
-        monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "fixture-founder")
+        set_founders(monkeypatch, "fixture-founder")
         rt = SimpleNamespace(pool=lambda: pool, box_region=lambda: "us-east")
         app = FastAPI()
         app.include_router(build_router(rt, background=False))

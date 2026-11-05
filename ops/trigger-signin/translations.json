@@ -1,0 +1,93 @@
+{
+  "loginname": {
+    "title": "Trigger sign-in",
+    "description": "Use your email address or username.",
+    "labels": {
+      "usernameOrEmail": "Email or username"
+    },
+    "submit": "Continue"
+  },
+  "password": {
+    "verify": {
+      "title": "Password",
+      "description": "Enter the password for your account.",
+      "labels": {
+        "password": "Password"
+      },
+      "resetPassword": "Forgot password?",
+      "submit": "Continue"
+    },
+    "set": {
+      "title": "Reset your password",
+      "description": "Enter the code from your email and choose a new password.",
+      "codeSent": "A reset code has been sent to your email address.",
+      "labels": {
+        "code": "Email code",
+        "newPassword": "New password",
+        "confirmPassword": "Confirm password"
+      },
+      "noCodeReceived": "Didn’t receive a code?",
+      "resend": "Resend code",
+      "submit": "Continue"
+    }
+  },
+  "common": {
+    "back": "Back"
+  },
+  "passkey": {
+    "verify": {
+      "title": "Sign in with a passkey",
+      "description": "Use the fingerprint, face or screen lock set up on your device.",
+      "usePassword": "Use password",
+      "submit": "Continue"
+    }
+  },
+  "otp": {
+    "verify": {
+      "title": "Two-factor verification",
+      "totpDescription": "Enter the code from your authenticator app.",
+      "labels": {
+        "code": "Authentication code"
+      },
+      "submit": "Continue"
+    }
+  },
+  "device": {
+    "usercode": {
+      "title": "Enter the code shown in your terminal",
+      "description": "Use the code displayed by the Tervory CLI.",
+      "labels": {
+        "code": "Device code"
+      },
+      "submit": "Continue"
+    },
+    "request": {
+      "title": "{appName} would like to connect",
+      "description": "{appName} will have access to:",
+      "usercode": "Code displayed on your device:",
+      "disclaimer": "Allow {appName} to use these details under its terms and privacy policy. You can revoke this access later.",
+      "deny": "Deny",
+      "submit": "Allow"
+    },
+    "scope": {
+      "openid": "Verify your identity.",
+      "email": "View your email address."
+    }
+  },
+  "signedin": {
+    "title": "You’re signed in",
+    "description": "Your Trigger sign-in is complete."
+  },
+  "verify": {
+    "verify": {
+      "title": "Verify your email",
+      "description": "Enter the code sent to your email address.",
+      "labels": {
+        "code": "Email code"
+      },
+      "noCodeReceived": "Didn’t receive a code?",
+      "resendCode": "Resend code",
+      "submit": "Continue"
+    }
+  }
+}

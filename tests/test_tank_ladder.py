@@ -252,7 +252,7 @@ async def test_fixture_graduation_requires_founder_then_serves_two_tenants(ladde
     for tenant in b.tenants:
         denied = await b.client.post(route, json={}, headers={"X-Tervory-Tenant": str(tenant)})
         assert denied.status_code == 404
-    approved = await b.client.post(route, json={"by": "founder-fixture"}, headers={"X-Tervory-Admin": "founder-fixture"})
+    approved = await b.client.post(route, json={"by": "founder-fixture"}, headers=b.native_headers('founder-fixture', 'org_admin'))
     assert approved.status_code == 200, approved.text
     async with b.pool.acquire() as conn:
         policy_row = await conn.fetchrow("SELECT * FROM tank.policy WHERE task_type='base.normalize' AND tenant_id IS NULL")

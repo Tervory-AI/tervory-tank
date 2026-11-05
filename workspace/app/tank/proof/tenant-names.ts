@@ -55,7 +55,7 @@ export async function resolveTenantNames(
       names[id] += ` (${slug || `workspace ${index + 1}`})`;
     });
   }
-  // A deleted organisation or direct API tenant has no verifiable Clerk name.
+  // A deleted organisation or direct API tenant has no verifiable SigninDirectory name.
   // Keep its evidence reachable without pretending it is a known client.
   const missing = ids.filter(id => !names[id]);
   missing.forEach((id,index) => { names[id] = `Unlinked account ${index + 1}`; });

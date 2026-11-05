@@ -1,4 +1,5 @@
 """Bundled plugin validation and Command/RLS tests; isolated SQL, no external calls."""
+from trigger_signin_fakes import set_founders
 import json
 import subprocess
 import uuid
@@ -103,7 +104,7 @@ async def test_skill_and_connection_status_and_no_credentials(api, monkeypatch):
 async def test_code_mode_requires_install_and_never_offers_another_tenants_tools(api, monkeypatch, runtime):  # noqa: F811
     client, pool = api
     runtime.pool = lambda: pool
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder,placeholder-founder')
+    set_founders(monkeypatch, 'founder,placeholder-founder')
     await approve(pool)
     tools = [{'name': 'list_pull_requests', 'description': 'placeholder read', 'inputSchema': {'type': 'object'}}]
     for tenant, ident in [(TENANT, IDENT), (OTHER, str(uuid.UUID(int=456)))]:

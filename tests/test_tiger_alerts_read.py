@@ -1,4 +1,5 @@
 """Offline Tiger alert reads: placeholder-only data, memory and disposable SQL."""
+from trigger_signin_fakes import set_founders
 import importlib.util
 import json
 import sys
@@ -33,7 +34,7 @@ async def runtime(request, database, monkeypatch):
     monkeypatch.setenv('DATABASE_URL', 'postgresql://placeholder@127.0.0.1/placeholder')
     monkeypatch.setenv('LITELLM_MASTER_KEY', 'placeholder-litellm-key')
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-tank-key')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    set_founders(monkeypatch, 'placeholder-founder')
     import main
     spec = importlib.util.spec_from_file_location('placeholder_tiger_alerts_room', ROOT/'agents/tiger/app.py')
     room = importlib.util.module_from_spec(spec)

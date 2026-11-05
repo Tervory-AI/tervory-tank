@@ -1,4 +1,5 @@
 """Synthetic CRM transport only: no production requests, tokens, fixtures or database writes."""
+from trigger_signin_fakes import set_founders
 import json
 import sys
 from types import SimpleNamespace
@@ -21,7 +22,7 @@ FOUNDER = command.Actor(T, 'offline-founder', True)
 
 @pytest.fixture
 def setup(monkeypatch):
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'offline-founder')
+    set_founders(monkeypatch, 'offline-founder')
     monkeypatch.setenv('TRIGGER_CRM_URL', 'http://trigger-crm-backend:8000')
     monkeypatch.setenv('TRIGGER_CRM_PAT_CONNECTOR', 'dummy-crm-token')
     monkeypatch.setenv('TRIGGER_CRM_TENANT_BINDINGS', json.dumps({str(T): {'organization_id': ORG, 'token_env': 'TRIGGER_CRM_PAT_CONNECTOR'}}))

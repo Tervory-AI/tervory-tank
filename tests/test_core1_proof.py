@@ -1,4 +1,5 @@
 """CORE-1: offline decisions plus disposable-Postgres receipts, isolation and caps."""
+from trigger_signin_fakes import set_founders
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
@@ -70,7 +71,7 @@ def test_automatic_promotion_always_waits_for_founder():
 @pytest.mark.asyncio
 async def test_founder_gate_including_exports(monkeypatch):
     key=secrets.token_urlsafe(32)
-    monkeypatch.setenv('TANK_API_KEY',key); monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','founder-fixture')
+    monkeypatch.setenv('TANK_API_KEY',key); set_founders(monkeypatch, 'founder-fixture')
     app=FastAPI(); app.include_router(proof.router)
     async def snap(*args):
         return dict(tenant_id=str(PLATFORM_TENANT),region='us-east',**{k:[] for k in ['tasks','ledger','shadows','runs','cases','promotions','policies','state']})

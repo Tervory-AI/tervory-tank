@@ -1,7 +1,7 @@
 # First ATF download — local fixture proof
 
 This runs real Tank, the real Base app and `/reference/ffl` engine, PostgreSQL,
-and Workspace. Only outbound external HTTP and Clerk in a temporary Workspace
+and Workspace. Only outbound external HTTP and Trigger sign-in in a temporary Workspace
 copy are fixtures. Every screenshot says **local, fixture page**. There is no
 production sign-in, deploy, or live ATF request in the proof.
 
@@ -23,7 +23,7 @@ Workspace dependencies from main `c752e59`:
 | CI Ruff command | All checks passed |
 | Focused pytest, PostgreSQL enabled | 91 passed in 56.12s; no skips |
 | CI secret tests and real Tank startup twice | 3 passed in 41.68s |
-| `next build` with CI dummy Clerk settings | Exit 0, compilation/types pass, 38/38 pages |
+| `next build` with CI dummy Trigger sign-in settings | Exit 0, compilation/types pass, 38/38 pages |
 | Real Tank → Base → Workspace proof | All three cases pass |
 
 | Case | ATF requests | File downloads | Result |
@@ -80,7 +80,7 @@ python -m pytest -q tests/test_tank_boots.py tests/test_secrets.py
 PYTHONPATH=.:tank:tests BASE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
 BASE_PROOF_OUTPUT=/tmp/base-atf-download-proof python tests/base_proof/atf_download.py
 cd workspace
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npx next build
+NEXT_TELEMETRY_DISABLED=1 npx next build
 ```
 
 After deploying **Tank and Base**, inspect `https://base.tervory.com/base` in the

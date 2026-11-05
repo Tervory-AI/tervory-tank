@@ -2,7 +2,7 @@
 // identity headers. No provider calls or client-selected upstream addresses.
 import { boundedBody, boundedFetch } from "@/lib/tank";
 import { homeRegion } from "@/app/api/zenas/tank";
-import { approvalTank, type DeviceIdentity } from "@/lib/device-login";
+import { signinTank, type SigninIdentity } from "@/lib/signin-regions";
 import { isIP } from "node:net";
 
 const PATHS = {
@@ -65,7 +65,7 @@ export async function mcpPublicRequest(request: Request, operation: keyof typeof
       // Coolify's Traefik strips untrusted X-Real-IP and sets it from the peer.
       // Do not read caller X-Forwarded-For or copy an incoming assertion/key.
       const source = request.headers.get("x-real-ip") ?? "";
-      const tank = approvalTank("us-east");
+      const tank = signinTank("us-east");
       if (!isIP(source)) return refused(400);
       if (!tank?.key) return refused(503);
       headers.set("x-tervory-oauth-source", source);
@@ -95,9 +95,9 @@ export type AuthorizationInput = {
 /** Same authenticated us-east approval path as /cli/device, server-side only.
  * UI wiring waits for approved Figma frame 1; this never accepts a browser identity.
  */
-export async function mcpApproval(identity: DeviceIdentity, input: AuthorizationInput,
+export async function mcpApproval(identity: SigninIdentity, input: AuthorizationInput,
                                   action?: "approve" | "deny"): Promise<{ status: number; body: unknown }> {
-  const tank = approvalTank("us-east");
+  const tank = signinTank("us-east");
   if (!tank || homeRegion() !== "us-east") return { status: 404, body: null };
   const url = new URL("/oauth/authorize", tank.url);
   if (!action) for (const [key, value] of Object.entries(input)) url.searchParams.set(key, value);

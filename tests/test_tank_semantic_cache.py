@@ -25,7 +25,12 @@ class EncoderStub:
 
 async def drain(b):
     while b.tank._background:
-        await asyncio.gather(*list(b.tank._background))
+        tasks = tuple(b.tank._background)
+        await asyncio.gather(*tasks)
+        # A completed task can remain until its scheduled discard callback runs.
+        # Explicitly retire the completed snapshot so gathering already-done tasks
+        # cannot spin without yielding the event loop to those callbacks.
+        b.tank._background.difference_update(tasks)
 
 
 @pytest_asyncio.fixture
@@ -152,7 +157,7 @@ async def test_command_turn_exact_only_even_with_legacy_semantic_flag(semantic):
     assert not b.encoder.calls
     async with b.pool.acquire() as conn:
         assert not await conn.fetchval('SELECT count(*) FROM tank.semantic_observations WHERE tenant_id=$1', b.tenants[0])
-    result = await b.client.post('/v1/semantic-cache/command.turn/approval', headers={'X-Tervory-Admin': 'founder-fixture'},
+    result = await b.client.post('/v1/semantic-cache/command.turn/approval', headers=b.native_headers('founder-fixture', 'org_admin'),
                                 json={'tenant_id': str(b.tenants[0]), 'encoder_id': ENCODER_ID, 'policy_hash': 'unused'})
     assert result.status_code == 409
 
@@ -174,7 +179,7 @@ async def seed_evidence(b, count, score=1.0, *, tenant=None, task='base.normaliz
 
 async def approval(b, pol, *, tenant=None, approved=True, headers=None):
     return await b.client.post('/v1/semantic-cache/base.normalize/approval',
-        headers=headers if headers is not None else {'X-Tervory-Admin': 'founder-fixture'},
+        headers=headers if headers is not None else b.native_headers('founder-fixture', 'org_admin'),
         json={'tenant_id': str(tenant or b.tenants[0]), 'encoder_id': ENCODER_ID,
               'policy_hash': cache.digest(pol), 'approved': approved})
 
@@ -196,7 +201,7 @@ async def test_requires_founder_approval_per_tenant_then_can_serve_and_revoke(se
     second = await run(b, 'Describe how rainfall develops.')
     assert second.rung == 1
     assert (await approval(b, pol, headers={})).status_code == 404
-    assert (await approval(b, pol, headers={'X-Tervory-Admin': 'ordinary-user'})).status_code == 404
+    assert (await approval(b, pol, headers=b.native_headers('ordinary-user', 'org_admin'))).status_code == 404
     assert (await approval(b, pol)).status_code == 200
     hit = await run(b, 'How does rain come about?')
     assert hit.rung == 4 and hit.model == cache.CANDIDATE

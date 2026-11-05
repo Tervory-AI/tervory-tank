@@ -10,7 +10,9 @@ let data = {jobs_done:1234,granted_squads:['base','market_lab','zenas'],recent:[
 const savings = {as_of:'2026-11-01T12:00:00Z',month:{saved:'8557.1'}};
 const load = Module._load;
 Module._load = function(name,parent,main){
- if(name==='@clerk/nextjs/server')return {currentUser:async()=>({firstName:'Alex'})};
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
+ if(name==='@/lib/trigger-signin')return {currentUser:async()=>({firstName:'Alex'})};
  if(name==='@/lib/tenant')return {activeTenant:async()=>({tenantId:'own-tenant',orgName:'Own organisation'})};
  if(name==='@/lib/tank')return {readClientDashboard:async tenant=>{assert.equal(tenant,'own-tenant');if(fail)throw Error('offline');return data;}};
  if(name==='./tank/proof/savings-actions')return {readClientSavings:async()=>fail?null:savings};

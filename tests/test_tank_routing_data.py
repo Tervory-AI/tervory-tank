@@ -1,4 +1,5 @@
 """Offline routing data contracts: disposable SQL and a gateway stub only."""
+from trigger_signin_fakes import set_founders, native_provider, ORG
 import json
 import os
 from pathlib import Path
@@ -403,9 +404,11 @@ async def test_restricted_foreground_body_cannot_select_the_second_host(routing,
 
 @pytest.mark.asyncio
 async def test_policy_confirm_card_shows_exact_data_through_existing_fields(routing, monkeypatch):
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-placeholder")
+    set_founders(monkeypatch, "founder-placeholder")
     monkeypatch.setattr(main, "TANK_API_KEY", "placeholder")
     headers = {"x-tank-key": "placeholder", "x-tervory-tenant": str(TENANT), "x-tervory-user": "founder-placeholder"}
+    provider = native_provider(monkeypatch, {ORG: str(TENANT)})
+    headers.update({'x-trigger-signin-token': provider.token(sub='founder-placeholder'), 'x-trigger-signin-org': ORG})
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://placeholder", headers=headers) as client:
         thread = (await client.post("/v1/command/threads", json={})).json()["thread_id"]
         args = {"task_type": TASK, "fallbacks": ["haiku"], "default": True}

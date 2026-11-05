@@ -1,3 +1,4 @@
+from trigger_signin_fakes import set_founders
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -94,7 +95,7 @@ async def test_founder_gate_quality_note_exports_and_cross_family_refusal(databa
     tenant=await fixture(pool)
     import secrets
     key=secrets.token_urlsafe(32)
-    monkeypatch.setenv('TANK_API_KEY',key);monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','founder-fixture')
+    monkeypatch.setenv('TANK_API_KEY',key);set_founders(monkeypatch, 'founder-fixture')
     app=FastAPI();app.include_router(proof.router)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://fixture') as client:
         for method in ['GET','POST']:
@@ -199,7 +200,7 @@ async def test_successful_http_override_audits_actor_and_only_reprices_its_task(
         VALUES($1,'base','other.task','luna',100,.1) RETURNING id""",tenant)
     import secrets
     key=secrets.token_urlsafe(32)
-    monkeypatch.setenv('TANK_API_KEY',key);monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','founder-fixture')
+    monkeypatch.setenv('TANK_API_KEY',key);set_founders(monkeypatch, 'founder-fixture')
     app=FastAPI();app.include_router(proof.router)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://fixture') as client:
         response=await client.post('/v1/proof/baselines',headers={'x-tank-key':key,'x-tervory-admin':'founder-fixture'},json={'task':'baseline.fixture','model':'astra'})

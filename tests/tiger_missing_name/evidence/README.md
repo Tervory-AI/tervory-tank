@@ -60,7 +60,7 @@ HTTP browser boundary renders saved fixture HTML in real Chromium. No live store
 login, captcha or model is contacted. Only that external fetch is replaced; the
 worker calls the installed extraction skill through Tank's real HTTP route.
 
-The Workspace runs against that Tank. A throwaway copy aliases Clerk to a fixture
+The Workspace runs against that Tank. A throwaway copy aliases Trigger sign-in to a fixture
 organization using CI's dummy publishable key; repository authentication and tenant
 derivation stay intact. Each fixture job is queued explicitly on Tiger's existing
 job endpoint. The fixture tenants' automatic schedules are disabled to prevent an
@@ -96,7 +96,7 @@ incomplete reading. No fixture HTML, score threshold or baseline was weakened.
 
 - Local regression suite: **251 passed, 1 skipped** (the existing 100-page gold test awaits human-labelled answers), including `test_smoke.py` with `PYTHONPATH=tank`.
 - Workspace model/actions/React rendering: **19 tests passed**.
-- Final Workspace production build: **passed**, using CI's dummy Clerk keys.
+- Final Workspace production build: **passed**, using CI's dummy Trigger sign-in keys.
 - Ruff E9/F checks and secret scan: **passed**.
 - Real Tank/Tiger/PgStore/Chromium/Workspace job: **all seven proof checks passed**.
 
@@ -110,5 +110,5 @@ node tests/tiger_works/workspace.test.cjs
 
 `test_agent_chassis.py` precedes the smoke import, as in full-suite collection.
 The final production build used a temporary Workspace copy and `next build` with
-CI's dummy Clerk keys; no repository authentication file was changed. GitHub
+CI's dummy Trigger sign-in keys; no repository authentication file was changed. GitHub
 Actions was not manually dispatched or retried; these are local results.

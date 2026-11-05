@@ -3,6 +3,7 @@
 No database and no network. Policy reads stay on the tenant in the request.
 """
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import os
 import uuid
@@ -411,7 +412,7 @@ async def test_graduation_totals_for_one_tenant_are_not_mixed(monkeypatch: pytes
 @pytest.mark.asyncio
 async def test_a_founder_still_receives_platform_totals(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TANK_API_KEY", "test")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "user_founder")
+    set_founders(monkeypatch, "user_founder")
     conn = _Conn(rows=[_policy_row()], ranks=_rank_rows())
     monkeypatch.setattr(main, "pool", lambda: _Pool(conn))
     rows = await main.graduation(x_tank_key="test", x_tervory_admin="user_founder")

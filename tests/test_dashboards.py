@@ -1,4 +1,5 @@
 """DASH-1: real source projections, isolation, auth, and paid-work enforcement."""
+from trigger_signin_fakes import set_founders
 import os
 import uuid
 from pathlib import Path
@@ -76,7 +77,7 @@ def conn(monkeypatch):
 @pytest.fixture
 def client(monkeypatch, conn):
     monkeypatch.setenv('TANK_API_KEY', 'offline-workspace-key')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-one')
+    set_founders(monkeypatch, 'founder-one')
     app = FastAPI()
     app.include_router(controls.router)
     app.include_router(dashboards.router)
@@ -292,9 +293,9 @@ def test_existing_switch_route_refuses_non_founder(monkeypatch):
     monkeypatch.setenv('TANK_API_KEY', 'test')
     # main reads TANK_API_KEY once at import; another module may have imported it first.
     monkeypatch.setattr(main, 'TANK_API_KEY', 'test')
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-fixture')
+    set_founders(monkeypatch, 'founder-fixture')
     client = TestClient(main.app)
-    assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 404
+    assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 401
 
 @pytest.mark.asyncio
 async def test_unresponsive_state_is_bounded_and_fails_closed(conn, monkeypatch):

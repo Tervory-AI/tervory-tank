@@ -11,6 +11,8 @@ const React = local('react');
 const {renderToStaticMarkup} = local('react-dom/server');
 const original = Module._load;
 Module._load = function(name, parent, isMain) {
+  if (name === 'server-only') return {};
+  if (name === '@/lib/trigger-signin-fetch') return {signinFetch: (...args) => globalThis.fetch(...args)};
   if (name === 'next/link') return props => React.createElement('a', props);
   if (name === 'next/navigation') return {
     usePathname: () => '/chats', useRouter: () => ({refresh() {throw Error('Unexpected refresh');}}),

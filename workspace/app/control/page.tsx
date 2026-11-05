@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { notFound } from "next/navigation";
 import { isFounder } from "@/lib/admin";
 import { goldSummary, readFounderDashboard, readPaidPause, readDashboardCandidates } from "@/lib/tank";

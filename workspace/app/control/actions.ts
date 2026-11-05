@@ -1,5 +1,5 @@
 "use server";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/trigger-signin";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { isFounder } from "@/lib/admin";

@@ -9,6 +9,9 @@ const root = path.resolve(__dirname, '..');
 const ts = require(path.join(root, 'workspace/node_modules/typescript'));
 // Match the alias resolution used by command_1b_contract.cjs. Load the real
 // regional adapter too; do not replace commandTools or its imports with mocks.
+const signinFetchFile = path.join(root, 'workspace/lib/trigger-signin-fetch.ts');
+require.cache[signinFetchFile] = {id: signinFetchFile, filename: signinFetchFile, loaded: true,
+  exports: {signinFetch: (...args) => globalThis.fetch(...args)}};
 const originalResolve = Module._resolveFilename;
 Module._resolveFilename = function(name, parent, ...rest) {
   if (name.startsWith('@/')) name = path.join(root, 'workspace', name.slice(2));

@@ -1,5 +1,6 @@
 """TRAIN-1 isolation, review, collection and export tests. All credentials ephemeral."""
 from __future__ import annotations
+from trigger_signin_fakes import set_founders
 
 import asyncio
 import json
@@ -149,7 +150,7 @@ async def test_import_review_correction_and_tenant_seal(database):
 async def test_auth_missing_agent_keys_and_reviewer_boundary(monkeypatch):
     key = secrets.token_urlsafe(32)
     monkeypatch.setenv("TANK_API_KEY", key)
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder")
+    set_founders(monkeypatch, "founder")
     app = FastAPI()
     app.include_router(gold.router)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture") as client:

@@ -2,6 +2,8 @@
 
 The actual SDK consumes chunked SSE. No model, GitHub or other remote API calls.
 """
+from trigger_signin_fakes import set_founders, native_provider, ORG
+import identity_oidc as oidc
 import asyncio
 import json
 import socket
@@ -117,7 +119,7 @@ async def streaming(monkeypatch, command_pool):
     monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/unused")
     monkeypatch.setenv("TANK_API_KEY", "dummy-workspace-key")
     monkeypatch.setenv("LITELLM_MASTER_KEY", "dummy-gateway-key")
-    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder")
+    set_founders(monkeypatch, "founder")
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.delenv("TANK_PROVIDER_ALLOW", raising=False)
     import main as tank
@@ -149,6 +151,21 @@ async def streaming(monkeypatch, command_pool):
     # transport instead of inheriting a client closed by another app fixture.
     gateway_http = client()
     monkeypatch.setattr(tank, "_http", gateway_http)
+    organisations = {str(TENANT): ORG, str(OTHER): '10002'}
+    signin = native_provider(monkeypatch, {org: tenant for tenant, org in organisations.items()})
+
+    async def sign_browser_request(request):
+        # The fixture browser obtains signed native identity; PAT callers retain
+        # their own bearer path, including region/revocation checks.
+        if request.headers.get('authorization'):
+            return
+        subject = request.headers.get('x-tervory-user')
+        org = organisations.get(request.headers.get('x-tervory-tenant'))
+        if subject not in {'founder', 'client', 'placeholder-member'} or org is None:
+            return
+        request.headers['x-trigger-signin-org'] = org
+        request.headers['x-trigger-signin-token'] = signin.token(sub=subject, **{
+            oidc.ORG_CLAIM: org, oidc.ROLES_CLAIM: ({'org_member': {org: 'Fixture'}} if subject == 'placeholder-member' else {'org_admin': {org: 'Fixture'}})})
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     port = listener.getsockname()[1]
@@ -161,6 +178,7 @@ async def streaming(monkeypatch, command_pool):
     assert server.started
     try:
         async with original_client(base_url=f"http://127.0.0.1:{port}", timeout=10, trust_env=False,
+            event_hooks={"request": [sign_browser_request]},
             headers={"X-Tank-Key": "dummy-workspace-key", "X-Tervory-User": "founder", "X-Tervory-Tenant": str(TENANT)}) as api:
             yield SimpleNamespace(api=api, tank=tank, pool=command_pool, gateway=gateway, policy=policy,paid_admission=original_admit)
     finally:

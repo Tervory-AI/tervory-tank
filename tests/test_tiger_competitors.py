@@ -1,4 +1,5 @@
 """Tiger catalogue matching: synthetic identifiers and offline pages only."""
+from trigger_signin_fakes import set_founders
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -143,7 +144,7 @@ async def corridor(database, monkeypatch):
     spec.loader.exec_module(agent)
     agent.app.state.pool = database
     # Test DNS never queries the outside network.
-    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
+    set_founders(monkeypatch, '')
     for tenant in (TENANT, OTHER):
         await database.execute("INSERT INTO tank.tenant_squad(tenant_id,agent,enabled_by) VALUES($1,'tiger','offline')", tenant)
         await database.execute("INSERT INTO tank.vault_items(tenant_id,vault,kind,name,metadata) VALUES($1,'tiger.vault','links','source',$2::jsonb)", tenant, json.dumps({'url': SITE}))

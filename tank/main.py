@@ -99,6 +99,8 @@ _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_
 
 app = FastAPI(title="Tervory Tank", version="0.2.0")
 app.add_middleware(TenantContextMiddleware)
+from trigger_signin_guard import TriggerSigninMiddleware
+app.add_middleware(TriggerSigninMiddleware)
 _pool: Any = None
 _admin_pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
@@ -458,7 +460,7 @@ def model_call_refusal(
 
 # ---------- auth ----------
 
-# SHA-256 digests of TANK_KEY_<AGENT>. Authentication reads this map, never the table.
+# SHA-256 fingerprints of TANK_KEY_<AGENT> for metadata sync, never a credential source.
 # The table is written once per process so a removed env var is deleted, then left alone.
 _agent_key_hashes: dict[str, bytes] = {}
 _agent_keys_synced = False
@@ -566,8 +568,8 @@ async def _homes_key_scope(request: Request) -> None:
     errors and scores. It may read explicitly published ZA Moot hearings only;
     drafts, matters, unpublished hearings and client data stay refused.
     The Boston Workspace holds this key. It never holds the ZA TANK_API_KEY.
-    It cannot approve CLI device sign-ins: those use the separate
-    TANK_DEVICE_APPROVAL_KEY (personal_tokens.device_approval_actor).
+    CLI device approval happens only on Trigger sign-in. The separate
+    TRIGGER_SIGNIN_SESSIONS_KEY permits own-session listing and revocation.
     """
     if box_region() != ZA_REGION:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
@@ -585,7 +587,7 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
 
     Returns None for the Workspace (TANK_API_KEY, unchanged) and the agent id
     for an agent key. Agent keys are taken from the environment only, compared
-    as SHA-256 bytes. A removed TANK_KEY_* stops matching. The table is synced
+    as exact configured bytes in constant time. A removed TANK_KEY_* stops matching. The table is synced
     once; it is never used to authenticate. The raw key is never logged.
     Agent keys use explicit room corridors, plus their own paid-approval state.
     They cannot change paid-step settings or approve an expense.
@@ -600,6 +602,7 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         return hmac.compare_digest(left, right)
 
     found: dict[str, bytes] = {}
+    configured_agent_bytes: dict[str, bytes] = {}
     for env_name, env_val in os.environ.items():
         if not env_name.startswith("TANK_KEY_"):
             continue
@@ -609,7 +612,9 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         agent = env_name[len("TANK_KEY_"):].lower()
         if not agent or not all(ch.isalnum() or ch == "_" for ch in agent):
             continue
-        found[agent] = hashlib.sha256(value.encode()).digest()
+        configured = value.encode()
+        configured_agent_bytes[agent] = configured
+        found[agent] = hashlib.sha256(configured).digest()
     _agent_key_hashes = found
 
     if not _agent_keys_synced and _pool is not None:
@@ -652,9 +657,10 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
 
     matched: str | None = None
     if presented_bytes:
-        presented_hash = hashlib.sha256(presented_bytes).digest()
-        for agent_name, digest in _agent_key_hashes.items():
-            if same(digest, presented_hash):
+        # Match the actual configured API token; fingerprints are metadata only.
+        # Keep raw bytes local to this request, never in the DB or a global map.
+        for agent_name, configured in configured_agent_bytes.items():
+            if same(configured, presented_bytes):
                 matched = agent_name
                 break
     if matched is None:
@@ -4027,7 +4033,7 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     if path.startswith("regulations/"):
         headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
     if path == "moot/hearing-sources" or path == "moot/hearings" or path.startswith("moot/hearings/"):
-        # Only the Workspace service can attest Clerk-derived actor/tenant identity.
+        # Only the Workspace service can attest Trigger sign-in-derived actor/tenant identity.
         # Discard caller-supplied founder flags; Tank derives that capability.
         import hmac
         supplied_key = request.headers.get("x-tank-key", "")
@@ -4593,7 +4599,7 @@ async def tisan_publish_git(request: Request) -> dict:
     import hmac
     expected = os.environ.get('TANK_KEY_TISAN', '')
     key, actor = request.headers.get('x-tank-key', ''), request.headers.get('x-tervory-admin', '')
-    founders = {p.strip() for p in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if p.strip()}
+    founders = __import__("trigger_signin_config").founders()
     if not expected or not key or not hmac.compare_digest(key.encode(), expected.encode()) or actor not in founders:
         raise HTTPException(404, 'not found')
     raw = bytearray()
@@ -4627,7 +4633,8 @@ async def tisan_publish_proxy(action: str, request: Request) -> Response:
     try:
         response = await _http.request('POST', 'http://agent-tisan:8000/publish/' + action,
             content=bytes(raw), headers={'X-Tank-Key': key,
-                'X-Tervory-Admin': request.headers.get('x-tervory-admin', ''), 'Content-Type': 'application/json'}, timeout=900)
+                'X-Tervory-Admin': request.headers.get('x-tervory-admin', ''), 'Content-Type': 'application/json',
+                **__import__('trigger_signin_config').proof.get()}, timeout=900)
     except httpx.HTTPError:
         raise HTTPException(503, 'Publish unavailable; inspect its operation status before retrying') from None
     return Response(content=response.content, status_code=response.status_code, media_type='application/json')

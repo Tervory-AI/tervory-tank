@@ -71,8 +71,8 @@ else{const data=kind==='channels'?{facebook:{status:'connected',page_id:'placeho
             path: "link",
             namespace: "placeholder",
           }));
-          b.onResolve({ filter: /^@clerk\/nextjs$/ }, () => ({
-            path: "clerk",
+          b.onResolve({ filter: /^(?:@\/app\/|\.\.\/)trigger-signin-provider$/ }, () => ({
+            path: "signin",
             namespace: "placeholder",
           }));
           b.onResolve({ filter: /^\.\/actions$/ }, () => ({
@@ -87,8 +87,8 @@ else{const data=kind==='channels'?{facebook:{status:'connected',page_id:'placeho
                 ? `export const usePathname=()=>'/trigger/crm/leads';export const useRouter=()=>({push:href=>location.assign(href),refresh:()=>{}});`
                 : args.path === "link"
                   ? `import React from 'react';export default function Link({children,...props}){return <a {...props}>{children}</a>}`
-                  : args.path === "clerk"
-                    ? `import React from 'react';export function OrganizationSwitcher(){return <span aria-label="placeholder business">⌄</span>}`
+                  : args.path === "signin"
+                    ? `import React from 'react';export function OrganisationSwitcher(){return <span aria-label="placeholder business">⌄</span>}`
                     : `export async function proposeTrigger(tool,arguments_){return(await fetch('/placeholder/propose',{method:'POST',body:JSON.stringify({tool,arguments_})})).json()}export async function confirmTrigger(thread,card,action='confirm'){return(await fetch('/placeholder/confirm',{method:'POST',body:JSON.stringify({action})})).json()}`,
           }));
         },

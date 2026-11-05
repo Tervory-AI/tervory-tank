@@ -13,7 +13,7 @@ Chats-to-generated-site journey works.
 
 | File and line | Result |
 | --- | --- |
-| `tank/command.py:102` | Reuse `Actor.tenant_admin`, already derived by the existing Clerk user/org/tenant binding, to expose all Trigger tools to that tenant's verified admin. No new squad or grant. Ordinary members retain their existing restrictions. |
+| `tank/command.py:102` | Reuse `Actor.tenant_admin`, already derived by the existing Trigger sign-in user/org/tenant binding, to expose all Trigger tools to that tenant's verified admin. No new squad or grant. Ordinary members retain their existing restrictions. |
 | `tank/command.py:900` | Optional page objects carry a page name and a `copy` write UUID. Existing page-name strings remain valid. No raw body copy is accepted in that field. |
 | `tank/command.py:937`, `agents/trigger/service.py:16` | Long checks fit the existing 32,000-byte Command action envelope. The room additionally bounds the whole document at 32,000 characters; writing stays at 20,000. UTF-8/JSON envelope size remains enforced by `validate_action`. |
 | `agents/trigger/checkers.py:164` | Lossless splitting at headings, then paragraphs, then word boundaries, with a hard fallback for an uninterrupted word. Every piece is less than 20,000 characters. No model splits or checks text. |
@@ -29,7 +29,7 @@ Chats-to-generated-site journey works.
 | `tests/trigger_gate2/test_gate2.py:118`, `:148`, `:172`, `:191`, `:339` | One confirmed long-document request, source offsets, UTF-16/line/column locations, byte/character bounds, lossless pieces, aggregate 200-finding truncation, partial results, whole-document required terms/fences and the private checker input bound. |
 | `tests/trigger_gate2/test_gate2.py:202`, `:236`, `:274`, `:303`, `:321` | Actual accepted-write lookup through the authenticated route into a generated archive; escaping, tenant isolation, preserved default pages, retained form, duplicate/raw-copy refusal and fail-closed lookup failures before build creation. |
 | `tests/trigger_gate2/test_gate2.py:256` | A write is generated through a deterministic test substitute, confirmed and accepted through the real flow. Its draft, acceptance and checker figures appear for that tenant/region only. |
-| `tests/trigger_gate2/admin_contract.cjs:1` | Exercise the unchanged real Clerk binding and Workspace header writer: user, org and mapped tenant must match; injected role/user/tenant/squad headers cannot supply admin authority. |
+| `tests/trigger_gate2/admin_contract.cjs:1` | Exercise the unchanged real Trigger sign-in binding and Workspace header writer: user, org and mapped tenant must match; injected role/user/tenant/squad headers cannot supply admin authority. |
 
 The earlier first/second-build tests now use confirmed writing/checking where
 required and expect the requested admin entitlement. Their existing isolation,
@@ -50,9 +50,9 @@ proves lookup and generated source, not a real npm build or live browser result.
 
 ```bash
 node tests/trigger_second_build/admin_contract.cjs
-# PASS: existing Clerk session user/org/tenant binding and forged-header refusal.
+# PASS: existing Trigger sign-in session user/org/tenant binding and forged-header refusal.
 node tests/trigger_gate2/admin_contract.cjs
-# PASS: verified Clerk user/org/tenant admin binding; forged role/user/tenant/squad headers cannot grant Trigger authority.
+# PASS: verified Trigger sign-in user/org/tenant admin binding; forged role/user/tenant/squad headers cannot grant Trigger authority.
 
 TMPDIR=/home/ammosync/.codex/trigger-gate2/tmp \
 POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32782/trigger_gate2 \

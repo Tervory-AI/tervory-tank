@@ -52,7 +52,7 @@ Result: exit 0; no output
 
 
 Command (working directory workspace):
-NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy node node_modules/next/dist/bin/next build
+NEXT_TELEMETRY_DISABLED=1 node node_modules/next/dist/bin/next build
 Result: exit 0
    ▲ Next.js 15.5.28
 
