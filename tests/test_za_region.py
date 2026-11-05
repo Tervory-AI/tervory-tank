@@ -62,7 +62,8 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
     assert "tervory-gw-zenas" in data["services"]["hermes"]["networks"]
     assert data["services"]["tank"]["environment"]["ZENAS_AGENT_URL"] == "http://agent-zenas:8000"
     assert "/app/config.za.yaml" in data["services"]["litellm"]["command"]
-    assert "za.tervory.com" in COMPOSE
+    assert COMPOSE.splitlines().count("    # Coolify attaches za.tervory.com to this service only.") == 1
+    assert data["services"]["tank"]["expose"] == ["8000"]
     for service in data["services"].values():
         assert "ports" not in service
 
