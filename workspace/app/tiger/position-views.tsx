@@ -117,7 +117,7 @@ function Decision({ row, onChange }: { row: TigerMatch; onChange: (match: TigerM
 
 function Matches({ rows, onChange }: { rows: TigerMatch[] | null; onChange: (match: TigerMatch) => void }) {
   if (rows === null) return null;
-  if (!rows.length) return <div><p className="empty comparison-empty">No matches to review.</p><p className="fine">Tiger Plugins → Source links</p></div>;
+  if (!rows.length) return <div className="comparison-empty-state"><p className="empty comparison-empty">No matches to review.</p><p className="fine">Tiger Plugins → Source links</p></div>;
   // The approved review frame describes brand/part-number suggestions only.
   rows = rows.filter(row => row.method === "brand_mpn");
   if (!rows.length) return null;

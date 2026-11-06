@@ -61,7 +61,7 @@ def test_complete_requires_successful_reports_from_every_scanner(reports):
     ('static', b'{"results":[]}'),
 ])
 def test_missing_malformed_or_partial_report_cannot_certify_clean(reports, tool, report):
-    reports[tool] = report
+    reports['findings_json' if tool == 'secret' else tool] = report
     scanned = result()
     assert scanned['scan_complete'] is False
     assert scanned['tool_status']['scan.secrets' if tool == 'secret' else 'scan.static'] == 'not run'

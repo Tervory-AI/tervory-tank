@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+from test_b3_base_room import ROOT as ROOT
 from base_product_fixtures import raw
 from sources import continuation, learning
 from sources.context_dev import ContextDev

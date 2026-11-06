@@ -70,10 +70,11 @@ async def erase(conn, *, tenant_id, region, matter_id=None):
             (SELECT id FROM agent_zenas.documents WHERE tenant_id=$1 AND matter_id=ANY($2::uuid[]))""",
             tenant, ids,
         )
-        for table in ("pii", "documents"):
-            await conn.execute(
-                f"DELETE FROM agent_zenas.{table} WHERE tenant_id=$1 AND matter_id=ANY($2::uuid[])", tenant, ids
-            )
+        for statement in (
+            "DELETE FROM agent_zenas.pii WHERE tenant_id=$1 AND matter_id=ANY($2::uuid[])",
+            "DELETE FROM agent_zenas.documents WHERE tenant_id=$1 AND matter_id=ANY($2::uuid[])",
+        ):
+            await conn.execute(statement, tenant, ids)
         await conn.execute("DELETE FROM agent_zenas.matters WHERE tenant_id=$1 AND id=ANY($2::uuid[])", tenant, ids)
         if matter is None:
             # Catalogue discovery covers optional alert tables and future tenant tables.
@@ -87,6 +88,8 @@ async def erase(conn, *, tenant_id, region, matter_id=None):
                 c.relname"""
             )
             for row in tables:
-                table = row["name"].replace('"', '""')
-                await conn.execute(f'DELETE FROM agent_zenas."{table}" WHERE tenant_id=$1', tenant)
+                statement = await conn.fetchval(
+                    "SELECT format('DELETE FROM agent_zenas.%I WHERE tenant_id=$1', $1::text)", row["name"]
+                )
+                await conn.execute(statement, tenant)
         return {"deleted": True}

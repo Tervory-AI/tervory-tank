@@ -820,3 +820,6 @@ main:has(.tiger) {
   .tiger.position-view .site-status .pill { width: 100%; }
 }
 .tiger.position-view .panel-top { width: 208px; }
+
+.tiger.position-view .comparison-empty-state { position: relative; }
+.tiger.position-view .comparison-empty-state > .fine { position: absolute; top: 24px; margin: 0; font-size: 12px; line-height: 16px; }
