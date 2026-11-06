@@ -375,6 +375,7 @@ def test_room_ci_always_selects_boundary_check() -> None:
 def base_bridge(monkeypatch):
     import importlib.util
     import sys
+    monkeypatch.syspath_prepend(str(ROOT / "agents/base"))
     spec = importlib.util.spec_from_file_location("one_door_base_bridge", ROOT / "agents/base/base_brain.py")
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, spec.name, module)

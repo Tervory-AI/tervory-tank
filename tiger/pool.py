@@ -116,13 +116,20 @@ def session_file(root: str | Path, agent: str, tenant: str, session: str) -> Pat
     base = Path(root)
     parts = (_part(agent), _part(tenant), _part(session))
     path = base / "sessions" / parts[0] / parts[1] / f"{parts[2]}.json"
-    if any(candidate.is_symlink() for candidate in (path, *list(path.parents)[:4])):
+    root_dir = os.path.realpath(base)
+    resolved = os.path.realpath(path)
+    if not resolved.startswith(os.path.join(root_dir, "")):
         raise SessionKeyError("bad session key")
-    root_dir = base.resolve()
-    resolved = path.resolve()
-    if resolved != root_dir and root_dir not in resolved.parents:
+    # Validate each lexical path before inspecting symlinks. Resolving first
+    # alone would hide a link that redirects to another tenant inside root.
+    prefix = os.path.join(os.path.abspath(base), "")
+    for candidate in (path, *list(path.parents)[:3]):
+        name = os.path.abspath(candidate)
+        if not name.startswith(prefix) or Path(name).is_symlink():
+            raise SessionKeyError("bad session key")
+    if base.is_symlink():
         raise SessionKeyError("bad session key")
-    return path
+    return Path(resolved)
 
 
 def _part(value: str) -> str:
