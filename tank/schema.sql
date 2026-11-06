@@ -3209,7 +3209,8 @@ DO $$
 DECLARE relation text;
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
-        FOREACH relation IN ARRAY ARRAY['tenants','roster_observations','platform_releases','founder_morning_reports']
+        FOREACH relation IN ARRAY ARRAY['tenants','roster_observations','platform_releases','founder_morning_reports',
+            'engine_state','engine_candidates','engine_proofs','engine_graduations','engine_evals','engine_receipts']
         LOOP
             EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',relation);
             EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',relation);

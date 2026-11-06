@@ -225,6 +225,9 @@ async def test_roster_price_book_and_quotes_keep_first_deployment(routing):
 
 @pytest.fixture
 def gateway(monkeypatch):
+    # Exercise the selected paid provider's settings, holds and restrictions.
+    from test_tank_ladder import selected_policy_protocol
+    selected_policy_protocol(monkeypatch)
     bodies = []
     class Gateway:
         def __init__(self, **kwargs):

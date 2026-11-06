@@ -10,7 +10,7 @@ from test_engine_ladder import setup_engine, local_gateway
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not os.environ.get('ENGINE_LOCAL_URL'), reason='real cloud-local llama.cpp server required')
-async def test_near_repeat_cache_with_real_memory_and_local_model(remembered, monkeypatch):
+async def test_near_repeat_cache_with_real_memory_and_local_model(remembered, monkeypatch):  # noqa: F811
     b = remembered
     req = await setup_engine(b, monkeypatch)
     calls = local_gateway(b, monkeypatch)

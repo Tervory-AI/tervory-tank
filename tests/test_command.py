@@ -814,6 +814,8 @@ async def test_pinned_turn_receipt_uses_actual_model_and_pending_auto(api, runti
 @pytest.fixture
 def shared_router(monkeypatch):
     from contextlib import asynccontextmanager
+    from test_tank_ladder import selected_policy_protocol
+    selected_policy_protocol(monkeypatch)
     monkeypatch.setenv('DATABASE_URL', 'postgresql://localhost/unused')
     monkeypatch.setenv('LITELLM_MASTER_KEY', 'dummy-router-key')
     monkeypatch.setenv('TANK_API_KEY', 'dummy-workspace-key')

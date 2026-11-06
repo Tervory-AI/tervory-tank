@@ -55,7 +55,11 @@ async def engine_status(rt, tenant_id):
         costs = await conn.fetch('''SELECT split_part(task_type,'#engine-',1) AS task_type,
             coalesce(sum(cost_usd),0) AS cost_usd,
             coalesce(sum(cost_usd) FILTER(WHERE task_type LIKE '%#engine-%'),0) AS evaluation_cost_usd
-            FROM tank.ledger WHERE tenant_id=$1 AND region=$2 GROUP BY split_part(task_type,'#engine-',1)''',
+            FROM tank.ledger l WHERE l.tenant_id=$1 AND l.region=$2
+              AND (l.task_type LIKE '%#engine-eval' OR l.task_type LIKE '%#engine-shadow'
+                   OR EXISTS (SELECT 1 FROM tank.engine_receipts r
+                       WHERE r.tenant_id=l.tenant_id AND r.region=l.region AND r.ledger_id=l.id))
+            GROUP BY split_part(task_type,'#engine-',1)''',
             tenant_id, rt.box_region())
         moves = await conn.fetch('''SELECT task_type,count(*) AS graduations FROM tank.engine_graduations
             WHERE tenant_id=$1 AND region=$2 GROUP BY task_type''', tenant_id, rt.box_region())

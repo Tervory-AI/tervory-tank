@@ -1,6 +1,7 @@
 """Founder status starts at zero and includes proof spend without crossing tenants."""
 import json
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +13,10 @@ from test_tank_tenant_boundaries import boundary  # noqa: F401
 async def test_engine_status_day_zero_costs_and_tenant_scope(boundary, monkeypatch):  # noqa: F811
     b = boundary
     req = await setup_engine(b, monkeypatch)
+    async with b.pool.acquire() as conn:
+        # Earlier paid traffic is not part of this engine's measured cohort.
+        await conn.execute('''INSERT INTO tank.ledger(tenant_id,region,agent,task_type,model,cost_usd)
+            VALUES($1,'us-east','tank',$2,'luna',42)''', req.tenant_id, req.task_type)
     headers = b.native_headers('founder-fixture', 'org_admin')
     async def status(tenant):
         response = await b.client.get('/v1/engine/status', params={'tenant_id': str(tenant)}, headers=headers)
@@ -30,10 +35,10 @@ async def test_engine_status_day_zero_costs_and_tenant_scope(boundary, monkeypat
             ident = uuid.uuid4()
             await conn.execute('''INSERT INTO tank.ledger(id,tenant_id,region,agent,task_type,model,cost_usd,cache_hit)
                 VALUES($1,$2,'us-east','tank',$3,'local',$4,$5)''', ident, tenant, task, cost, i == 0)
-            if i == 0:
+            if i in (0, 2):
                 await conn.execute('''INSERT INTO tank.engine_receipts(tenant_id,region,task_type,ledger_id,detail)
                     VALUES($1,'us-east',$2,$3,$4::jsonb)''', tenant, task, ident,
-                    json.dumps({'memory_hits': 2, 'would_have_cost_usd': .1}))
+                    json.dumps({'memory_hits': 2 if i == 0 else 0, 'would_have_cost_usd': .1}))
         await conn.execute('''INSERT INTO tank.engine_graduations
             (tenant_id,region,task_type,model,revision,previous_model,samples,agreement)
             VALUES($1,'us-east',$2,'local','fixture','luna',200,1)''', req.tenant_id, req.task_type)
@@ -44,3 +49,14 @@ async def test_engine_status_day_zero_costs_and_tenant_scope(boundary, monkeypat
     assert row['would_have_cost_usd'] == .1 and row['saved_usd'] == pytest.approx(.07)
     foreign = await status(b.tenants[1])
     assert foreign['cost_usd'] == 100 and foreign['memory_hits'] == foreign['cache_hits'] == foreign['graduations'] == 0
+
+
+@pytest.mark.asyncio
+async def test_new_engine_tables_inherit_an_existing_rls_rollout(boundary):  # noqa: F811
+    async with boundary.pool.acquire() as conn:
+        await conn.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
+        await conn.execute(Path('tank/schema.sql').read_text())
+        rows = await conn.fetch("""SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class
+            WHERE relnamespace='tank'::regnamespace AND relname=ANY($1::text[])""",
+            ['engine_state','engine_candidates','engine_proofs','engine_graduations','engine_evals','engine_receipts'])
+        assert len(rows) == 6 and all(r['relrowsecurity'] and r['relforcerowsecurity'] for r in rows)
