@@ -3129,6 +3129,32 @@ CREATE TABLE IF NOT EXISTS tank.rig_rooms (
 -- BEGIN worker (new blocks for worker go here)
 -- END worker
 -- BEGIN platform (new blocks for platform go here)
+CREATE TABLE IF NOT EXISTS tank.engine_state (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type)
+);
+CREATE TABLE IF NOT EXISTS tank.engine_candidates (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, checkpoint text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model)
+);
+CREATE TABLE IF NOT EXISTS tank.engine_proofs (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL, input_hash text NOT NULL,
+    ledger_id uuid NOT NULL, candidate_ledger_id uuid NOT NULL, agreement numeric NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model,revision,input_hash)
+);
+CREATE TABLE IF NOT EXISTS tank.engine_graduations (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL, previous_model text NOT NULL,
+    samples integer NOT NULL, agreement numeric NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model,revision)
+);
 CREATE TABLE IF NOT EXISTS tank.engine_evals (
     tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
     model text NOT NULL, revision text NOT NULL, agreement numeric NOT NULL,

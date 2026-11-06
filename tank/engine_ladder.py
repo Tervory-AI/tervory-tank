@@ -132,13 +132,24 @@ async def select(rt, req, policy, caller=None) -> dict:
         agreement = await evaluate(rt, req, policy, model, samples, revision, caller)
         attempts.append({'model': model, 'agreement': agreement})
         if agreement is None or agreement >= max(.99, float(policy.get('eval_threshold') or .99)):
-            return {**policy, 'model': model, 'rung': 3 if graduate.is_skill(model) else 2 if model in LOCAL else 1,
+            selected = {**policy, 'model': model, 'rung': 3 if graduate.is_skill(model) else 2 if model in LOCAL else 1,
                     # DECISION default to the existing conservative equivalence
                     # cache only where the task explicitly permits caching.
                     'semantic_cache': policy.get('cache_scope') in {'tenant', 'platform', 'region'} and req.task_type != 'command.turn' if req else False,
                     'escalation_model': 'local' if graduate.is_skill(model) else None,
-                    'fallbacks': [], '_engine': {'revision': revision, 'attempts': attempts,
+                    'fallbacks': [], '_engine': {'revision': revision, 'attempts': attempts, 'ladder': order(policy),
+                    'free': model in LOCAL or graduate.is_skill(model),
                     'baseline_model': policy.get('escalation_model') if graduate.is_skill(policy['model']) else policy['model']}}
+            if hasattr(rt, 'pool'):
+                from engine_proof import retain_proven_rung, winner
+                selected = await retain_proven_rung(rt, req, selected, caller)
+                selected = await winner(rt, req, selected, caller)
+                async with rt.pool().acquire() as conn:
+                    await conn.execute('''INSERT INTO tank.engine_state(tenant_id,region,task_type,model,revision)
+                        VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,region,task_type)
+                        DO UPDATE SET model=excluded.model,revision=excluded.revision,updated_at=now()''',
+                        req.tenant_id, rt.box_region(), req.task_type, selected['model'], revision)
+            return selected
     raise HTTPException(422, 'No engine rung passed this task type’s evals')
 
 
@@ -166,4 +177,10 @@ async def receipt(rt, req, policy, answer):
         await conn.execute("""INSERT INTO tank.engine_receipts(tenant_id,region,task_type,ledger_id,detail)
             VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(tenant_id,ledger_id) DO NOTHING""",
             req.tenant_id, rt.box_region(), req.task_type, answer.ledger_id, json.dumps(value))
+    # The response remains valid if an optional candidate is unavailable. Every
+    # successful replay still uses Tank's privacy, admission and ledger path.
+    try:
+        value['graduation'] = await graduate.engine_tick(rt, req, policy)
+    except (HTTPException, RuntimeError, ValueError) as exc:
+        value['graduation'] = {'state': 'held', 'reason': type(exc).__name__}
     return answer.model_copy(update={'engine': value})

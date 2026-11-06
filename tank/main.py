@@ -1413,7 +1413,7 @@ async def _run_route(
     if graduate.router_cannot_serve(model):
         raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
     priority = req.priority or policy["priority"]
-    if policy.get('_engine') and model in {'local', 'local-large'} and priority == 'offpeak':
+    if policy.get('_engine', {}).get('free') and priority == 'offpeak':
         # There is no provider discount to wait for on the zero-token-cost rung.
         priority = 'standard'
 
@@ -1560,7 +1560,7 @@ async def _run_route(
                                              caller=caller, task_id=task_id, model_override=model_override)
         await __import__("paid_steps").attach_receipt(queued.id, paid_authorization)
         return queued
-    if _defer_paid and priority != "urgent" and not holds_identifier and model not in {'local', 'local-large'}:
+    if _defer_paid and priority != "urgent" and not holds_identifier and not policy.get('_engine', {}).get('free') and model not in {'local', 'local-large'}:
         raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
                              semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
