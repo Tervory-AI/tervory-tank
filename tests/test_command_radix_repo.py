@@ -266,7 +266,7 @@ async def test_tank_room_eval_uses_radix_key_and_existing_executor(repo_api, mon
         result = await runtime.tank.run_room_eval(pkg, {'files': []}, ctx)
         assert result == {'status': 'not run', 'refused': True}
         monkeypatch.delenv('TANK_KEY_RADIX')
-        with pytest.raises(RuntimeError, match='eval room is unavailable'):
+        with pytest.raises(RuntimeError, match='Missing setting: TANK_KEY_RADIX'):
             await runtime.tank.run_room_eval(pkg, {'files': []}, ctx)
         assert len(requests) == 1
 

@@ -301,7 +301,8 @@ def test_export_storage_failure_isolated_and_retries_only_unfinished_agent(monke
     monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(hf), **kw))
     async def scenario():
         day = date(2026, 10, 21)
-        assert await training.export_once(day=day) == {'status': 'incomplete', 'exported': 2}
+        assert await training.export_once(day=day) == {'status': 'incomplete', 'exported': 2,
+            'issues': [{'agent': failed_agent, 'message': 'Missing storage configuration'}]}
         assert done == set(agents) - {failed_agent}
         assert batches == done
         assert hf_agents == [agent for agent in agents if agent != failed_agent]

@@ -1,4 +1,3 @@
-import { fetchWithDeadline as fetch } from "../../../lib/request";
 /** Server-side calls to Tank. The key never reaches the browser. */
 
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";

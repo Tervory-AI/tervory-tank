@@ -1,0 +1,648 @@
+diff --git a/tank/main.py b/tank/main.py
+index 0feb5600de885c1db5a476c7006ad5e1d5c3a712..c77b70694ae6a8ada6cf3fbb641d036443210ba8 100644
+--- a/tank/main.py
++++ b/tank/main.py
+@@ -3603,6 +3603,7 @@
+ 
+ 
+ @app.post("/v1/skala/{skill_id}/{version}/evals", dependencies=[Depends(require_key)])
++@__import__("skala_jobs").single_evaluation
+ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = None) -> dict[str, Any]:
+     pkg = get_package(skill_id, version)
+     if not pkg.cases:
+diff --git a/tank/skala.py b/tank/skala.py
+index 53869ecbb4acfbed9abd65a9f465d51577b3407d..009197730cb0ee4e846c236dced2f546406ad2fa 100644
+--- a/tank/skala.py
++++ b/tank/skala.py
+@@ -25,6 +25,7 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
+ import importlib.util
+ import copy
+ import hashlib
+@@ -123,8 +124,8 @@
+         pkg_dir = yaml_path.parent
+         try:
+             pkg = _parse_package(yaml_path, pkg_dir)
+-        except Exception as exc:  # noqa: BLE001 — one broken package must never stop Tank
+-            log.error("skala: skipping %s: %s", yaml_path, exc)
++        except Exception:  # noqa: BLE001 — one broken package must never stop Tank
++            log.error("skala: invalid package skipped")
+             continue
+         found[(pkg.id, pkg.version)] = pkg
+     return found
+@@ -133,7 +134,13 @@
+ log = logging.getLogger("tank.skala")
+ 
+ 
++def _safe_package(path: Path) -> None:
++    if any(part.is_symlink() for part in (path, *path.parents)) or any(p.is_symlink() for p in path.rglob('*')):
++        raise ValueError('Skill packages cannot contain symbolic links.')
++
++
+ def _parse_package(yaml_path: Path, pkg_dir: Path) -> SkillPackage:
++    _safe_package(pkg_dir)
+     meta = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+     if True:
+         pkg = SkillPackage(
+@@ -168,6 +175,7 @@
+ 
+ 
+ def _import_run_uncached(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"], Awaitable[dict[str, Any]]]:
++    _safe_package(pkg.path)
+     spec = importlib.util.spec_from_file_location(f"skill_{pkg.id}_{pkg.version}".replace(".", "_").replace("-", "_"), pkg.path / "run.py")
+     assert spec and spec.loader
+     mod = importlib.util.module_from_spec(spec)
+@@ -279,13 +287,20 @@
+ 
+ # ---------- running ----------
+ 
++SKILL_TIMEOUT_SECONDS = 660  # Existing room-evaluation deadline. No automatic replay.
++
++
+ async def run_skill(pkg: SkillPackage, payload: dict[str, Any], ctx: SkillContext) -> dict[str, Any]:
+     if getattr(pkg, 'id', None) == 'trigger.languagetool' and not os.environ.get('TANK_KEY_TRIGGER', '').strip():
+         raise ValueError('Missing setting: TANK_KEY_TRIGGER')
+     _maybe_sweep_skill_temp()
+     run = _import_run(pkg)
+     started = time.perf_counter()
+-    out = await run(payload, ctx)
++    try:
++        async with asyncio.timeout(SKILL_TIMEOUT_SECONDS):
++            out = await run(payload, ctx)
++    except TimeoutError:
++        raise RuntimeError("The skill did not finish in time. Reload before trying again.") from None
+     if not isinstance(out, dict):
+         raise ValueError(f"{pkg.ref}: run() must return a dict")
+     out.setdefault("_skill", pkg.ref)
+@@ -445,7 +460,7 @@
+                 configured = getattr(ctx, "live_evaluation", False) or case.get("model_configured", "model" in case or bool(pkg.task_type))
+                 ok, why = eval_properties(case, out, configured and getattr(ctx, "calls", 0) > 0)
+         except Exception as exc:  # noqa: BLE001 — an exception is a failed case, recorded
+-            ok, why, out = False, f"error: {exc}", {}
++            ok, why, out = False, "error: The evaluation could not complete. Reload before trying again.", {}
+             expected_error = case.get("expected_error") or {}
+             if (case.get("must_refuse") and type(exc).__name__ == expected_error.get("type")
+                     and str(exc) == expected_error.get("message")):
+@@ -491,11 +506,13 @@
+ 
+ def source_files(pkg: SkillPackage) -> list[dict[str, str]]:
+     """The complete Python source, including helpers in nested directories."""
++    _safe_package(pkg.path)
+     return [{"path": path.relative_to(pkg.path).as_posix(), "source": path.read_text(encoding="utf-8")}
+             for path in sorted(pkg.path.rglob("*.py")) if path.is_file()]
+ 
+ 
+ def package_hash(pkg: SkillPackage, files: list[dict[str, str]] | None = None) -> str:
++    _safe_package(pkg.path)
+     assets = []
+     for path in sorted(pkg.path.rglob("*")):
+         relative = path.relative_to(pkg.path)
+diff --git a/tank/skala_jobs.py b/tank/skala_jobs.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..cc703528c3c1938bafd82f180090c76501cba820
+--- /dev/null
++++ b/tank/skala_jobs.py
+@@ -0,0 +1,54 @@
++"""Serialize evaluation work and replay a completed browser request's receipt."""
++from contextvars import ContextVar
++from functools import wraps
++import hashlib
++import inspect
++import json
++import re
++
++from fastapi import HTTPException
++
++request_key = ContextVar('skala_request_key', default='')
++
++
++def single_evaluation(function):
++    @wraps(function)
++    async def run(skill_id, version, body=None):
++        import main
++        key = request_key.get()
++        if key and not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', key):
++            raise HTTPException(400, 'Request refused.')
++        owner = body.by if body else None
++        fingerprint = hashlib.sha256(json.dumps([skill_id, version, owner]).encode()).hexdigest()
++        # One platform evaluation holds a session connection; serializing also
++        # leaves the existing pool available for its evidence and model receipts.
++        lock = int.from_bytes(hashlib.sha256(b'skala.evaluation').digest()[:8], 'big', signed=True)
++        async with main.pool().acquire() as conn:
++            if not await conn.fetchval('SELECT pg_try_advisory_lock($1::bigint)', lock):
++                raise HTTPException(409, 'An evaluation is already running. Reload before trying again.')
++            try:
++                if key:
++                    previous = await conn.fetchrow("""SELECT action,detail FROM tank.policy_log
++                        WHERE task_type='skala.evaluation' AND detail->>'key'=$1
++                        ORDER BY created_at DESC LIMIT 1""", key)
++                    if previous:
++                        detail = previous['detail']
++                        detail = json.loads(detail) if isinstance(detail, str) else detail
++                        if detail['fingerprint'] != fingerprint or previous['action'] != 'complete':
++                            raise HTTPException(409, 'An evaluation is already running. Reload before trying again.')
++                        return detail['result']
++                    # Reserve before work. A lost worker leaves an uncertain request
++                    # blocked instead of replaying model calls or evidence writes.
++                    await conn.execute("""INSERT INTO tank.policy_log(task_type,action,by_user,detail)
++                        VALUES('skala.evaluation','pending',$1,$2::jsonb)""", owner,
++                        json.dumps({'key': key, 'fingerprint': fingerprint}))
++                result = await function(skill_id, version, body)
++                if key:
++                    await conn.execute("""UPDATE tank.policy_log SET action='complete', detail=$2::jsonb
++                        WHERE task_type='skala.evaluation' AND action='pending' AND detail->>'key'=$1""", key,
++                        json.dumps({'key': key, 'fingerprint': fingerprint, 'result': result}, default=str))
++                return result
++            finally:
++                await conn.execute('SELECT pg_advisory_unlock($1::bigint)', lock)
++    run.__signature__ = inspect.signature(function, eval_str=True)
++    return run
+diff --git a/tank/skala_runtime.py b/tank/skala_runtime.py
+index a98f9b5457baa619854d86f6f8c878305ff70879..6a86b3f7ed71721c72371ff130248a124958ead3 100644
+--- a/tank/skala_runtime.py
++++ b/tank/skala_runtime.py
+@@ -46,4 +46,9 @@
+         problem = unavailable(CORE_SETTINGS, settings())
+         if problem:
+             return JSONResponse(problem, status_code=503)
+-        return await call_next(request)
++        from skala_jobs import request_key
++        token = request_key.set(request.headers.get('idempotency-key', '') if request.url.path.startswith('/v1/skala/') and request.url.path.endswith('/evals') else '')
++        try:
++            return await call_next(request)
++        finally:
++            request_key.reset(token)
+diff --git a/tank/training.py b/tank/training.py
+index 262ab5ea23c33b25eb6c84c0945e2c706c3d753a..72537186973ec45572bece672a0c05adbece7198 100644
+--- a/tank/training.py
++++ b/tank/training.py
+@@ -666,6 +666,9 @@
+     return await _training_subprocess("--agent", body.agent, "--minutes", str(body.minutes))
+ 
+ 
++TRAINING_COMMAND_TIMEOUT_SECONDS = 180  # Reuse the archive transport deadline.
++
++
+ async def _training_subprocess(*arguments: str) -> dict[str, Any]:
+     """Run the narrowly scoped HF client without changing Tank's offline environment."""
+     child_env = os.environ.copy()
+@@ -675,7 +678,17 @@
+         sys.executable, str(script), *arguments, "--json",
+         env=child_env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+     )
+-    stdout, _ = await process.communicate()
++    try:
++        stdout, _ = await asyncio.wait_for(process.communicate(), TRAINING_COMMAND_TIMEOUT_SECONDS)
++    except (TimeoutError, asyncio.CancelledError) as exc:
++        try:
++            process.kill()
++        except ProcessLookupError:
++            pass
++        await process.communicate()
++        if isinstance(exc, asyncio.CancelledError):
++            raise
++        return {"status": "Training operation failed; check configuration, budget and provenance."}
+     if process.returncode != 0:
+         return {"status": "Training operation failed; check configuration, budget and provenance."}
+     try:
+diff --git a/workspace/app/api/skala/route.ts b/workspace/app/api/skala/route.ts
+index 32e3c093c4a3d6ecb6b9ca47dc322dea7ceaac7f..9c6d3a03a20626265eb73a6efbcac40672fb143a 100644
+--- a/workspace/app/api/skala/route.ts
++++ b/workspace/app/api/skala/route.ts
+@@ -21,7 +21,7 @@
+     const [skills, status] = await Promise.all([listSkills(), skillApprovalStatus()]);
+     return NextResponse.json(skills.map(skill => ({...skill, ...status.find(s => s.id === skill.id && s.version === skill.version)})));
+   } catch (err) {
+-    return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
++    return NextResponse.json({ error: "The library could not be reached. Try again in a moment." }, { status: 502 });
+   }
+ }
+ 
+@@ -44,6 +44,7 @@
+   if (crossOrigin) return crossOrigin;
+   const body = (await req.json().catch(() => null)) as { id?: string; version?: string; action?: string; confirmed?: boolean; token?: string; review_token?: string; input?: Record<string, unknown> } | null;
+   const { id, version, action } = body ?? {};
++  if (body !== null && (typeof body !== "object" || Array.isArray(body))) return NextResponse.json({error: "action required"}, {status: 400});
+   if (!action) return NextResponse.json({ error: "action required" }, { status: 400 });
+   try {
+     const { userId, tenantId } = await currentTenant();
+@@ -53,13 +54,14 @@
+       return NextResponse.json(await confirmSkillApprovals(userId, body.token, body.confirmed === true));
+     }
+     if (typeof id !== "string" || !id || typeof version !== "string" || !version) return NextResponse.json({ error: "id and version required" }, { status: 400 });
++    if (!/^[a-z][a-z0-9_.-]*$/.test(id) || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) return NextResponse.json({error: "id and version required"}, {status: 400});
+     if (action === "source-review") return NextResponse.json(await reviewSkillSource(id, version, userId));
+     if (action === "rollback") return NextResponse.json(await rollbackSkill(id, version, userId, body?.confirmed === true));
+     if (action === "try") {
+-      if (!body?.input || typeof body.input !== "object") return NextResponse.json({ error: "input required" }, { status: 400 });
++      if (!body?.input || typeof body.input !== "object" || Array.isArray(body.input)) return NextResponse.json({ error: "input required" }, { status: 400 });
+       return NextResponse.json(await trySkill(tenantId, id, version, body.input));
+     }
+-    if (action === "evals") return NextResponse.json(await runSkillEvals(id, version, userId));
++    if (action === "evals") return NextResponse.json(await runSkillEvals(id, version, userId, req.headers.get("idempotency-key") ?? undefined));
+     if (action === "approve") {
+       if (typeof body?.review_token === "string") return NextResponse.json(await approveReviewedSkill(id, version, userId, body.review_token, body.confirmed === true));
+       return NextResponse.json(await approveSkill(id, version, userId));
+@@ -69,6 +71,6 @@
+   } catch (err) {
+     const refused = err instanceof Error ? tankRefusal(err.message) : null;
+     if (refused) return NextResponse.json({ error: refused.error }, { status: refused.status });
+-    return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
++    return NextResponse.json({ error: "The library could not be reached. Try again in a moment." }, { status: 502 });
+   }
+ }
+diff --git a/workspace/app/skala/approve-all.tsx b/workspace/app/skala/approve-all.tsx
+index 726fd2716696996e68468003cb7dc8bcf008ce4c..db2f0f534a63201d7b505e30f3eabf62e42d9c99 100644
+--- a/workspace/app/skala/approve-all.tsx
++++ b/workspace/app/skala/approve-all.tsx
+@@ -1,18 +1,22 @@
+ "use client";
++import { skalaFetch } from "./request";
+ import { useRef, useState } from "react";
+ 
+ type Preview = { token: string; items: { id: string; version: string; score: number; runs: number; model: boolean }[] };
+ 
+ export function ApproveAllReady({ onApproved, className, label = "Approve all ready", disabled = false }: { label?: string; onApproved?: () => Promise<void>; className?: string; disabled?: boolean }) {
++  const submitting = useRef(false);
+   const dialog = useRef<HTMLDialogElement>(null);
+   const [preview, setPreview] = useState<Preview | null>(null);
+   const [busy, setBusy] = useState(false);
+   const [message, setMessage] = useState("");
+   async function request(confirm: boolean) {
++    if (submitting.current) return;
++    submitting.current = true;
+     setBusy(true);
+     setMessage("");
+     try {
+-      const res = await fetch("/api/skala", {method: "POST", headers: {"content-type": "application/json"},
++      const res = await skalaFetch("/api/skala", {method: "POST", headers: {"content-type": "application/json"},
+         body: JSON.stringify({ action: confirm ? "bulk-confirm" : "bulk-preview", token: preview?.token, confirmed: confirm })});
+       const data = await res.json();
+       if (!res.ok) throw new Error(data.error || "Approval could not be confirmed. Reload the list.");
+@@ -26,10 +30,10 @@
+         dialog.current?.showModal();
+       }
+     } catch (err) {
+-      setMessage(err instanceof Error ? err.message : "Approval could not be reached.");
++      setMessage("Approval could not be confirmed. Reload the list.");
+       dialog.current?.close();
+       setPreview(null);
+-    } finally { setBusy(false); }
++    } finally { submitting.current = false; setBusy(false); }
+   }
+   return <div className="sk-bulk">
+     <button className={className} type="button" disabled={busy || disabled} onClick={() => request(false)}>{busy ? "Checking…" : label}</button>
+diff --git a/workspace/app/skala/gold/gold.css b/workspace/app/skala/gold/gold.css
+index 06e049f12d0e801c1a090d49ff46500e44e7745b..2bd8358f468b78f824ce5775c136553fb92f95aa 100644
+--- a/workspace/app/skala/gold/gold.css
++++ b/workspace/app/skala/gold/gold.css
+@@ -271,3 +271,14 @@
+     font-size:9px;
+   }
+ }
++
++.gold-page, .gold-page * { box-sizing: border-box; }
++.gold-page { overflow-wrap: anywhere; }
++.gold-page button, .gold-page select { min-height: 44px; }
++.gold-card { min-height: 308px; }
++.gold-card .gold-meta { min-height: 40px; }
++.gold-filters { min-width: 0; }
++.gold-filters label, .gold-filters select { min-width: 0; }
++.gold-review[aria-busy="true"] { min-height: 570px; }
++
++.gold-review nav.gold-filters { height: 84px; overflow: auto; flex-wrap: nowrap; align-items: center; }
+diff --git a/workspace/app/skala/gold/view.tsx b/workspace/app/skala/gold/view.tsx
+index c85e177f0c1c5269d4d87e137b4c0f1b58388c7f..f3144ef86f2d8ef54f6972f289a1405184346a3c 100644
+--- a/workspace/app/skala/gold/view.tsx
++++ b/workspace/app/skala/gold/view.tsx
+@@ -1,4 +1,5 @@
+ "use client";
++import { skalaFetch } from "../request";
+ 
+ import { useCallback, useEffect, useRef, useState } from "react";
+ 
+@@ -30,12 +31,12 @@
+     if (configurationError) return;
+     const controller = new AbortController();
+     setSummary(null);
+-    fetch(`/api/skala/gold?scope=${scope}`, { signal: controller.signal }).then(async response => {
++    skalaFetch(`/api/skala/gold?scope=${scope}`, { signal: controller.signal }).then(async response => {
+       if (!response.ok) throw new Error();
+       const value = await response.json();
+       if (!value || !Array.isArray(value.skills) || !value.pairs || typeof value.pairs !== "object"
+           || !["us-east", "za"].includes(value.region)) throw new Error();
+-      setSummary(value);
++      if (!controller.signal.aborted) setSummary(value);
+     }).catch(() => { if (!controller.signal.aborted) setError("Training totals are unavailable. Try reloading."); });
+     return () => controller.abort();
+   }, [scope, revision, configurationError]);
+@@ -56,9 +57,10 @@
+     setLoading(true);
+     const query = new URLSearchParams({ scope, view: "next", agent, skill });
+     if (after) query.set("after", after);
+-    fetch(`/api/skala/gold?${query}`, { signal: controller.signal }).then(async response => {
++    skalaFetch(`/api/skala/gold?${query}`, { signal: controller.signal }).then(async response => {
+       if (!response.ok) throw new Error();
+-      setExample(await response.json());
++      const value = await response.json();
++      if (!controller.signal.aborted) setExample(value);
+     }).catch(() => { if (!controller.signal.aborted) setError("The next example could not be loaded."); })
+       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+     return () => controller.abort();
+@@ -80,7 +82,7 @@
+     }
+     saving.current = true; setBusy(true); setError("");
+     try {
+-      const response = await fetch(`/api/skala/gold?scope=${scope}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: example.id, action, correction: corrected }) });
++      const response = await skalaFetch(`/api/skala/gold?scope=${scope}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: example.id, action, correction: corrected }) });
+       if (!response.ok) throw new Error();
+       setNotice(action === "right" ? "Checked. Thank you." : "Wrong answer rejected. The correction is queued for a separate check.");
+       setAfter(""); setExample(null); setRevision(v => v + 1);
+@@ -107,10 +109,10 @@
+       <p>Check real examples, follow re-test scores, and build the squad’s training collection.</p>
+       <label className="gold-scope">Examples <select value={scope} disabled={busy} onChange={e => { setScope(e.target.value); setSkill(""); setAfter(""); setError(""); }}>
+         <option value="platform">Shared skill examples</option><option value="tenant">Current workspace examples</option>
+-      </select></label><p className="gold-meta">{summary ? `Stored in ${summary.region === "za" ? "South Africa" : "United States"}` : "Loading training totals…"}</p>
++      </select></label><p className="gold-meta">{summary ? `Stored in ${summary.region === "za" ? "South Africa" : "United States"}` : (error ? "—" : "Loading training totals…")}</p>
+     </section>
+     <TrainingSummary summary={summary} founder={founder} />
+-    <section className="gold-review" aria-labelledby="review-title"><div className="gold-review-heading"><div><p className="gold-eyebrow">ONE EXAMPLE AT A TIME</p><h2 id="review-title">Sample queue</h2></div>
++    <section aria-busy={loading || busy} className="gold-review" aria-labelledby="review-title"><div className="gold-review-heading"><div><p className="gold-eyebrow">ONE EXAMPLE AT A TIME</p><h2 id="review-title">Sample queue</h2></div>
+       <p className="gold-meta">Ten machine-labelled examples per source for each skill, plus every judgement example.<br />A source counts after 9 of 10 checks agree.</p></div>
+       <nav aria-label="Skills closest to 100" className="gold-filters">
+         {summary?.skills.filter(s => s.candidates > 0).map(s => <button key={s.skill_id} disabled={busy}
+@@ -126,7 +128,7 @@
+       </div>
+       {error && <p role="alert" className="gold-error">{error} {!configurationError && <button onClick={() => { setError(""); setRevision(v => v + 1); }}>Reload</button>}</p>}
+       <p role="status" className="gold-notice">{notice}</p>
+-      {configurationError ? null : loading ? <p className="gold-empty">Loading the next example…</p> : example ? <>
++      {configurationError || (error && !example) ? null : loading ? <p className="gold-empty">Loading the next example…</p> : example ? <>
+         <div className="gold-example"><section><h3>Input</h3><pre>{JSON.stringify(example.input, null, 2)}</pre></section>
+           <section><h3>Expected answer</h3><pre>{JSON.stringify(example.expected, null, 2)}</pre></section></div>
+         {correcting && <label className="gold-correction">Corrected answer (JSON)<textarea ref={correctionRef} value={correction} onChange={e => setCorrection(e.target.value)} rows={8} disabled={busy} /><span>The original will be rejected. This correction needs a separate check.</span></label>}
+diff --git a/workspace/app/skala/request.ts b/workspace/app/skala/request.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..283747dff7eb1efe024ebe6a69fc1c1f0ad3e54a
+--- /dev/null
++++ b/workspace/app/skala/request.ts
+@@ -0,0 +1,25 @@
++// Bounded reads include the response body. Mutations are never retried here.
++export const SKALA_CLIENT_TIMEOUT_MS = 30_000;
++export async function skalaFetch(url: string, init: RequestInit = {}, timeoutMs = SKALA_CLIENT_TIMEOUT_MS): Promise<Response> {
++  const reads = (init.method ?? 'GET').toUpperCase() === 'GET';
++  for (let attempt = 0; ; attempt++) {
++    const controller = new AbortController();
++    let timer: ReturnType<typeof setTimeout>;
++    const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
++    const failure = new Promise<never>((_, reject) => {
++      timer = setTimeout(() => { controller.abort(); reject(new Error('The library could not be reached. Try again in a moment.')); }, timeoutMs);
++    });
++    const work = (async () => {
++      const response = await fetch(url, {...init, signal, redirect: 'error', cache: 'no-store'});
++      const body = await response.arrayBuffer();
++      return new Response(body, {status: response.status, headers: response.headers});
++    })();
++    try {
++      const response = await Promise.race([work, failure]);
++      if (reads && attempt === 0 && [502, 503, 504].includes(response.status)) continue;
++      return response;
++    } catch (error) {
++      if (!reads || attempt > 0 || signal.aborted) throw error;
++    } finally { clearTimeout(timer!); }
++  }
++}
+diff --git a/workspace/app/skala/skala.css b/workspace/app/skala/skala.css
+index c654b5b9b037df0a19d992884171749c3963bb59..1b748c3d81b9bc9247f75f76ae82f9fc5fb6dc2d 100644
+--- a/workspace/app/skala/skala.css
++++ b/workspace/app/skala/skala.css
+@@ -494,3 +494,14 @@
+ .sk-dialog { max-width: min(850px, calc(100vw - 32px)); box-sizing: border-box; }
+ .sk-bulk { margin: 8px 0; }
+ .sk-bulk-list { max-height: 45vh; overflow: auto; overflow-wrap: anywhere; }
++
++/* Keep navigation reachable and reserve the status line during requests. */
++.skala .sk-note, .skala .sk-err { min-height: 24px; }
++.skala .sk-body { overflow-wrap: anywhere; }
++.skala .sk-versions pre { max-width: 100%; }
++@media (max-width: 800px) {
++  .skala:not(.menu-open) .sk-panel { visibility: hidden; }
++}
++@media (prefers-reduced-motion: reduce) {
++  .skala *, .skala *::before, .skala *::after { scroll-behavior: auto; transition: none; }
++}
+diff --git a/workspace/app/skala/view.tsx b/workspace/app/skala/view.tsx
+index 801c89b9747621ddc18e63c5d71e4b1d5dd2dab7..8c1c1c623fc2d6a84603e84f2158526c34eaba61 100644
+--- a/workspace/app/skala/view.tsx
++++ b/workspace/app/skala/view.tsx
+@@ -1,4 +1,5 @@
+ "use client";
++import { skalaFetch } from "./request";
+ 
+ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+ import { SquadLinks } from "../squad-links";
+@@ -47,10 +48,10 @@
+ }
+ 
+ async function readSkills(): Promise<LibrarySkill[] | null> {
+-  const response = await fetch("/api/skala");
+-  if (!response.ok) return null;
++  const response = await skalaFetch("/api/skala");
++  if (!response.ok) throw new Error("The library could not be reached. Try again in a moment.");
+   const data: unknown = await response.json().catch(() => null);
+-  if (!Array.isArray(data)) return null;
++  if (!Array.isArray(data)) throw new Error("The library could not be reached. Try again in a moment.");
+   return data as LibrarySkill[];
+ }
+ 
+@@ -81,6 +82,10 @@
+   const agentFilterId = useId();
+   const stateFilterId = useId();
+   const dialogRef = useRef<HTMLDialogElement>(null);
++  const running = useRef(false);
++  const operationKeys = useRef(new Map<string, string>());
++  const sourceRequest = useRef<AbortController | null>(null);
++  const menuRef = useRef<HTMLButtonElement>(null);
+   const closeRef = useRef<HTMLButtonElement>(null);
+   const account = accountName?.trim() || "Your account";
+ 
+@@ -94,7 +99,7 @@
+ 
+   useEffect(() => {
+     function onKey(event: KeyboardEvent) {
+-      if (event.key === "Escape") setMenu(false);
++      if (event.key === "Escape") { setMenu(false); menuRef.current?.focus(); }
+     }
+     window.addEventListener("keydown", onKey);
+     return () => window.removeEventListener("keydown", onKey);
+@@ -105,18 +110,21 @@
+   }, [menu, narrow]);
+ 
+   async function openApprove(skill: LibrarySkill, action: "approve" | "rollback" = "approve") {
++    sourceRequest.current?.abort();
++    const controller = new AbortController();
++    sourceRequest.current = controller;
+     setPendingAction(action);
+     setSourceReview(null);
+     setSourceError(null);
+     setPending(skill);
+     if (action === "approve" && skill.id.split(".")[1] === "learned") {
+       try {
+-        const res = await fetch("/api/skala", { method: "POST", headers: {"content-type": "application/json"},
++        const res = await skalaFetch("/api/skala", { signal: controller.signal, method: "POST", headers: {"content-type": "application/json"},
+           body: JSON.stringify({id: skill.id, version: skill.version, action: "source-review"}) });
+         const data = await res.json();
+         if (!res.ok) throw new Error(data.error || "Source could not be loaded.");
+-        setSourceReview(data);
+-      } catch { setSourceError("Source could not be loaded. Close this dialog and try again."); }
++        if (!controller.signal.aborted) setSourceReview(data);
++      } catch { if (!controller.signal.aborted) setSourceError("Source could not be loaded. Close this dialog and try again."); }
+     }
+   }
+ 
+@@ -127,6 +135,7 @@
+   }, [pending]);
+ 
+   function closeApprove() {
++    sourceRequest.current?.abort();
+     dialogRef.current?.close();
+     setPending(null);
+   }
+@@ -138,13 +147,17 @@
+   }
+ 
+   async function run(skill: LibrarySkill, action: "evals" | "approve" | "retire" | "rollback") {
++    if (running.current) return;
++    running.current = true;
+     const key = `${skill.id}@${skill.version}:${action}`;
++    const requestId = operationKeys.current.get(key) ?? crypto.randomUUID();
++    operationKeys.current.set(key, requestId);
+     setBusyKey(key);
+     setNotice(null);
+     try {
+-      const response = await fetch("/api/skala", {
++      const response = await skalaFetch("/api/skala", {
+         method: "POST",
+-        headers: { "content-type": "application/json" },
++        headers: { "content-type": "application/json", "idempotency-key": requestId },
+         body: JSON.stringify({ id: skill.id, version: skill.version, action, confirmed: action === "rollback" || Boolean(sourceReview), review_token: sourceReview?.review_token }),
+       });
+       const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+@@ -167,13 +180,17 @@
+         return;
+       }
+       if (action === "approve" || action === "rollback") {
++        if (payload.ok !== true) throw new Error("Approval could not be confirmed. Reload the list.");
++        operationKeys.current.delete(key);
+         setRowRefusal(null);
++        closeApprove();
+         await refreshAfter(applyApproval(skills, skill.id, skill.version));
+         setNotice({ tone: "ok", text: `${skill.id} ${skill.version} is approved. The previous approved version is retired.` });
+-        closeApprove();
+         return;
+       }
+       if (action === "retire") {
++        if (payload.ok !== true) throw new Error("The library could not be reached. Try again in a moment.");
++        operationKeys.current.delete(key);
+         await refreshAfter(skills.map((row) => (
+           row.id === skill.id && row.version === skill.version ? { ...row, state: "retired" } : row
+         )));
+@@ -185,10 +202,11 @@
+         setNotice({ tone: "err", text: "Evals could not be run. Reload the page and try again." });
+         return;
+       }
++      operationKeys.current.delete(key);
+       const evalResult = result as EvalResult;
+       const at = new Date().toISOString();
++      setRecord({ key: `${skill.id}@${skill.version}`, result: evalResult });
+       await refreshAfter(applyEval(skills, skill.id, skill.version, evalResult.score, evalResult.state, at));
+-      setRecord({ key: `${skill.id}@${skill.version}`, result: evalResult });
+       const passed = evalResult.gate === "passed";
+       setNotice({
+         tone: passed ? "ok" : "err",
+@@ -199,6 +217,7 @@
+     } catch {
+       setNotice({ tone: "err", text: "The library could not be reached. Try again in a moment." });
+     } finally {
++      running.current = false;
+       setBusyKey(null);
+     }
+   }
+@@ -213,6 +232,7 @@
+         <img src={SKALA_MARK.src} alt="Skala" width={SKALA_MARK.width} height={SKALA_MARK.height} />
+         <button
+           type="button"
++          ref={menuRef}
+           className="sk-menu"
+           aria-expanded={menu}
+           aria-controls="sk-panel"
+@@ -248,7 +268,7 @@
+         </div>
+       </aside>
+ 
+-      <div className="sk-main" data-scroll-root>
++      <div className="sk-main" data-scroll-root inert={menu && narrow ? true : undefined}>
+         <div className="sk-body">
+           <header className="sk-header">
+             <div>
+@@ -292,7 +312,7 @@
+             </label>
+           </div>
+ 
+-          {notice ? <p className={notice.tone === "err" ? "sk-err" : "sk-note"} role={notice.tone === "err" ? "alert" : "status"}>{notice.text}</p> : null}
++          <p className={notice?.tone === "err" ? "sk-err" : "sk-note"} role={notice?.tone === "err" ? "alert" : "status"}>{notice?.text ?? ""}</p>
+ 
+           {loadError ? null : groups.length === 0 ? (
+             <div className="sk-empty">
+diff --git a/workspace/lib/tank.ts b/workspace/lib/tank.ts
+index 4a147b08257b61d9b8ad858dd168af5003dd3093..a67e467114543bc2b5bf2b65519a2ce4b89a0c91 100644
+--- a/workspace/lib/tank.ts
++++ b/workspace/lib/tank.ts
+@@ -406,15 +406,27 @@
+   latency_ms: number;
+ };
+ 
++export const SKALA_SERVER_TIMEOUT_MS = { value: 25_000 };
+ async function tank<T>(path: string, init: RequestInit): Promise<T> {
+   const headers = new Headers(init.headers);
+   headers.set("content-type", "application/json");
+-  const res = await tenantFetch(requestTenant(path, init), new URL(path, TANK_URL), {...init, headers});
+-  if (!res.ok) {
+-    const text = await res.text();
+-    throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 300)}`);
+-  }
+-  return (await res.json()) as T;
++  const goldTenant = path.startsWith("/v1/gold/") ? headers.get("x-tervory-tenant") : null;
++  const tenant = requestTenant(path, init) || (goldTenant !== "00000000-0000-0000-0000-000000000001" ? goldTenant : null);
++  const read = async (res: Response): Promise<T> => {
++    if (!res.ok) {
++      const text = await res.text();
++      throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 300)}`);
++    }
++    return await res.json() as T;
++  };
++  if (/^\/v1\/(skala|gold)(?:\/|$)/.test(path)) {
++    if (!TANK_API_KEY.trim()) throw new Error("Missing setting: TANK_API_KEY.");
++    // One attempt for both reads and writes; the client may explicitly retry.
++    if (tenant) return tenantBoundedFetch(tenant, new URL(path, TANK_URL), {...init, headers}, SKALA_SERVER_TIMEOUT_MS.value, read);
++    headers.set("x-tank-key", TANK_API_KEY);
++    return boundedFetch(new URL(path, TANK_URL), {...init, headers, cache: "no-store"}, SKALA_SERVER_TIMEOUT_MS.value, read);
++  }
++  return read(await tenantFetch(tenant, new URL(path, TANK_URL), {...init, headers}));
+ }
+ 
+ export type RosterModel = {
+@@ -601,9 +613,9 @@
+ export function listSkills(): Promise<Skill[]> {
+   return tank<Skill[]>("/v1/skala", { method: "GET" });
+ }
+-export function runSkillEvals(id: string, version: string, by: string): Promise<EvalResult> {
++export function runSkillEvals(id: string, version: string, by: string, requestId?: string): Promise<EvalResult> {
+   return tank<EvalResult>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/evals`, {
+-    method: "POST",
++    method: "POST", headers: requestId ? {"idempotency-key": requestId} : undefined,
+     body: JSON.stringify({ by }),
+   });
+ }

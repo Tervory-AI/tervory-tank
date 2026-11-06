@@ -153,7 +153,11 @@ class Coolify:
     async def call(self, method: str, path: str, *, allow_list: bool = False,
                    mutation: bool = False, discard_response: bool = False, **kwargs: Any) -> dict | list:
         try:
-            r = await self.http.request(method, self.base + '/api/v1' + path,
+            from agents.tisan import upstream
+        except ModuleNotFoundError:
+            import upstream
+        try:
+            r = await upstream.request(self.http, method, self.base + '/api/v1' + path,
                 headers={'Authorization': 'Bearer ' + self._token}, follow_redirects=False, timeout=30, **kwargs)
             if mutation and r.status_code >= 500:
                 raise CoolifyUnknown("Coolify mutation outcome unknown")

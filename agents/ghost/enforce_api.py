@@ -119,6 +119,11 @@ async def require_rig_lifecycle(request: Request):
 def create_app():
     from .app import bounded_json
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    @app.get("/health")
+    async def health():
+        from .configuration import setting_status
+        status = setting_status("lifecycle")
+        return {"ok": True, "ready": status["configured"], **status}
     register(app, require_lifecycle, bounded_json)
     from .rig_lifecycle import register as register_rig
     register_rig(app, require_rig_lifecycle)

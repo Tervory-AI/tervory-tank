@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import asyncio
 import importlib.util
 import json
 import logging
@@ -150,13 +151,13 @@ async def make_plan(payload: dict, tenant: str, contract: dict, tank: Any) -> di
     messages = [{"role": "system", "content": "Return only a JSON plan with site fields logo/nav/footer/ui and pages (name, path, sections). A home page has path /; other paths are /<name>. Sections have type, unique id, props. Do not write text, code, page titles or image URLs. Omit text and image leaves; retain array/object structure and non-text props. Slot purposes describe the future accepted copy. Contract: " + json.dumps(contract)},
                 {"role": "user", "content": request}]
     for attempt in range(2):
-        reply = await tank.route(tenant, "tisan.plan", messages)
+        reply = await asyncio.wait_for(tank.route(tenant, "tisan.plan", messages), timeout=60)
         raw = reply.get("content")
         try:
             return validate_plan(json.loads(raw), contract)
         except (ValueError, TypeError, ValidationError) as exc:
             if attempt:
-                raise ValueError("invalid plan after retry: " + str(exc)) from None
+                raise ValueError("invalid plan after retry") from None
             messages += [{"role": "assistant", "content": raw if isinstance(raw, str) else ""},
                          {"role": "user", "content": "Correct the plan using these validation errors: " + str(exc)}]
     raise AssertionError("unreachable")
@@ -176,10 +177,14 @@ def slots(plan: dict, contract: dict):
 
 async def accepted_copy(http: Any, tenant: str, write_id: str, *, base: str, key: str, region: str) -> str:
     try:
+        from agents.tisan import upstream
+    except ModuleNotFoundError:
+        import upstream
+    try:
         identifier = str(uuid.UUID(write_id))
     except (TypeError, ValueError, AttributeError):
         raise ValueError("copy write id must be a UUID") from None
-    response = await http.get(base.rstrip("/") + "/v1/trigger/copy/" + identifier,
+    response = await upstream.get(http, base.rstrip("/") + "/v1/trigger/copy/" + identifier,
                               params={"tenant_id": tenant},
                               headers={"X-Tank-Key": key, "X-Tervory-Tenant": tenant, "X-Tervory-Home-Region": region},
                               follow_redirects=False, timeout=30)
@@ -235,7 +240,7 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
                         cache[wid] = await accepted_copy(client, tenant, wid, base=os.environ.get("TANK_URL", "http://tank:8000"), key=os.environ.get("TANK_KEY", ""), region=os.environ.get("TANK_REGION", "us-east"))
                     parent[leaf] = cache[wid]
         if http is None:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(trust_env=False, follow_redirects=False, timeout=30) as client:
                 await fill(client)
         else:
             await fill(http)
@@ -298,9 +303,12 @@ async def handle(ctx: Any) -> dict:
     if result.get("archive"):
         evidence.append(Path(result["archive"]).name)
     try:
-        saved = await ctx.memory.remember(str(ctx.tenant_id), json.dumps(claim, ensure_ascii=False),
-            "build", "job:" + str(ctx.job_id), evidence=evidence, confidence=1.0)
-        result["memory_id"] = saved["id"]
+        saved = await asyncio.wait_for(ctx.memory.remember(str(ctx.tenant_id), json.dumps(claim, ensure_ascii=False),
+            "build", "job:" + str(ctx.job_id), evidence=evidence, confidence=1.0), timeout=30)
+        identifier = saved['id']
+        if not isinstance(identifier, str) or re.fullmatch(r'[A-Za-z0-9_-]+', identifier) is None:
+            raise ValueError('memory unavailable')
+        result["memory_id"] = identifier
     except Exception as exc:
         logging.getLogger("agent").warning("build memory failed (%s)", type(exc).__name__)
     if failure is not None:

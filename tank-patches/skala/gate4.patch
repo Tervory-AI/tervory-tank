@@ -1,0 +1,511 @@
+diff --git a/tank/main.py b/tank/main.py
+index a50000e48021a5b64985ec7542f35e48a185699f..0feb5600de885c1db5a476c7006ad5e1d5c3a712 100644
+--- a/tank/main.py
++++ b/tank/main.py
+@@ -77,10 +77,10 @@
+ 
+ log = logging.getLogger("tank")
+ 
+-DATABASE_URL = os.environ["DATABASE_URL"]
++DATABASE_URL = os.environ.get("DATABASE_URL", "")
+ LITELLM_URL = os.environ.get("LITELLM_URL", "http://litellm:4000")
+-LITELLM_MASTER_KEY = os.environ["LITELLM_MASTER_KEY"]
+-TANK_API_KEY = os.environ["TANK_API_KEY"]
++LITELLM_MASTER_KEY = os.environ.get("LITELLM_MASTER_KEY", "")
++TANK_API_KEY = os.environ.get("TANK_API_KEY", "")
+ DEFAULT_REGION = os.environ.get("TANK_REGION", "us-east")
+ US_REGION = "us-east"
+ ZA_REGION = "za"
+@@ -3583,6 +3583,8 @@
+ async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: skala.SkillContext) -> dict[str, Any]:
+     room = "radix" if pkg.id == "scan.iac" else "tisan"
+     key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
++    if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} and not key.strip():
++        raise RuntimeError(f"Missing setting: TANK_KEY_{room.upper()}")
+     if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} or not key or _http is None:
+         raise RuntimeError("eval room is unavailable")
+     response = await _http.post(
+@@ -5041,3 +5043,8 @@
+ 
+ # Bind only accepted endpoint arguments after existing authentication dependencies.
+ bind_tenant_endpoints(app)
++
++__import__('skala_runtime').install(app, lambda: {
++    'DATABASE_URL': DATABASE_URL, 'TANK_API_KEY': TANK_API_KEY,
++    'LITELLM_MASTER_KEY': LITELLM_MASTER_KEY,
++})
+diff --git a/tank/skala.py b/tank/skala.py
+index bbeb4a1f0db0f9dc3606a0eeb6a7f6c76c89d2da..0f5646964382360e25e7ba1d19dbdbecab873439 100644
+--- a/tank/skala.py
++++ b/tank/skala.py
+@@ -277,6 +277,8 @@
+ # ---------- running ----------
+ 
+ async def run_skill(pkg: SkillPackage, payload: dict[str, Any], ctx: SkillContext) -> dict[str, Any]:
++    if getattr(pkg, 'id', None) == 'trigger.languagetool' and not os.environ.get('TANK_KEY_TRIGGER', '').strip():
++        raise ValueError('Missing setting: TANK_KEY_TRIGGER')
+     _maybe_sweep_skill_temp()
+     run = _import_run(pkg)
+     started = time.perf_counter()
+diff --git a/tank/skala_runtime.py b/tank/skala_runtime.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a98f9b5457baa619854d86f6f8c878305ff70879
+--- /dev/null
++++ b/tank/skala_runtime.py
+@@ -0,0 +1,49 @@
++"""Safe readiness reporting for the shared Skala runtime and its jobs."""
++from contextlib import asynccontextmanager
++import logging
++import os
++
++CORE_SETTINGS = ('DATABASE_URL', 'TANK_API_KEY', 'LITELLM_MASTER_KEY')
++EXPORT_SETTINGS = ('HF_TOKEN', 'HF_ORG')
++
++
++def missing_settings(names, values=None):
++    values = os.environ if values is None else values
++    return [name for name in names if not str(values.get(name) or '').strip()]
++
++
++def unavailable(names, values=None):
++    missing = missing_settings(names, values)
++    if not missing:
++        return None
++    return {'status': 'unconfigured', 'missing_settings': missing,
++            'message': 'Missing settings: ' + ', '.join(missing)}
++
++
++def install(app, settings):
++    """Start a diagnostic-only app when configuration is incomplete.
++
++    No router lifespan or startup worker is entered before this check. Both
++    startup logging and responses contain setting names, never their values.
++    """
++    from starlette.responses import JSONResponse
++    ordinary_lifespan = app.router.lifespan_context
++
++    @asynccontextmanager
++    async def lifespan(application):
++        problem = unavailable(CORE_SETTINGS, settings())
++        if problem:
++            logging.getLogger('tank.skala').warning(problem['message'])
++            yield
++            return
++        async with ordinary_lifespan(application) as state:
++            yield state
++
++    app.router.lifespan_context = lifespan
++
++    @app.middleware('http')
++    async def configured(request, call_next):
++        problem = unavailable(CORE_SETTINGS, settings())
++        if problem:
++            return JSONResponse(problem, status_code=503)
++        return await call_next(request)
+diff --git a/tank/storage.py b/tank/storage.py
+index 0fb64ae530e6172fddedbcaa6ae81b087969c52e..48806e0fd55980d34429d7961dc8568948b14d8a 100644
+--- a/tank/storage.py
++++ b/tank/storage.py
+@@ -71,7 +71,8 @@
+         self._access = env.get(f'R2_ACCESS_KEY_ID_{suffix}', '')
+         self._secret = env.get(f'R2_SECRET_ACCESS_KEY_{suffix}', '')
+         if not self._access or not self._secret:
+-            raise StorageError(f'R2 credentials for {suffix} are missing')
++            missing = [name for name in (f'R2_ACCESS_KEY_ID_{suffix}', f'R2_SECRET_ACCESS_KEY_{suffix}') if not env.get(name)]
++            raise StorageError(f'R2 credentials for {suffix} are missing: ' + ', '.join(missing))
+         own_keys = {f'R2_ACCESS_KEY_ID_{suffix}', f'R2_SECRET_ACCESS_KEY_{suffix}'}
+         if any(name.startswith(('R2_ACCESS_KEY_ID_', 'R2_SECRET_ACCESS_KEY_'))
+                and name not in own_keys for name in env):
+@@ -216,7 +217,7 @@
+         raise StorageError('Unknown storage room')
+     value = os.environ.get(f'TANK_KEY_{room.upper()}', '')
+     if not value:
+-        raise StorageError('Room storage is not configured')
++        raise StorageError(f'Room storage is not configured: TANK_KEY_{room.upper()}')
+     return value
+ 
+ 
+@@ -268,7 +269,7 @@
+     marker back. A failed or uncertain operation prevents the HF export. The HF
+     bearer-token client is never reused for room or R2 traffic.
+     """
+-    if agent not in ROOMS | {'tank'}:
++    if agent not in ROOMS | {'tank', 'trigger'}:
+         raise StorageError('Unknown snapshot owner')
+     if region not in {'us-east', 'za'} or region != os.environ.get('TANK_REGION', 'us-east'):
+         raise StorageError('Snapshot must stay in its own region')
+@@ -278,6 +279,10 @@
+     except ValueError:
+         raise StorageError('Invalid snapshot date') from None
+     name = f'{day}/{uuid.uuid4().hex}'
++    if agent == 'trigger':
++        # Trigger has no storage room/bucket. Its public platform training
++        # snapshots use Tank's existing uploads store, with a separate prefix.
++        name = 'trigger/' + name
+     parts = []
+ 
+     async def archive(put, get):
+@@ -293,7 +298,7 @@
+         if await get(manifest_name) != manifest:
+             raise StorageError('Snapshot completion could not be verified')
+ 
+-    if agent == 'tank':
++    if agent in {'tank', 'trigger'}:
+         store = uploads()
+         try:
+             async def put(name, content):
+diff --git a/tank/training.py b/tank/training.py
+index 0622a2244b6ecee726b61357a4ddf0f5f4cf8552..1ee77738c26c9fa3546ef2af223f4cb60a9fea6b 100644
+--- a/tank/training.py
++++ b/tank/training.py
+@@ -626,6 +626,10 @@
+ 
+ 
+ async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, Any] | None:
++    from skala_runtime import EXPORT_SETTINGS, unavailable
++    problem = unavailable(EXPORT_SETTINGS)
++    if problem:
++        return problem
+     ready = await conn.fetchval(
+         """SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND agent=$2
+         AND active AND public AND NOT client_matter""",
+@@ -645,8 +649,6 @@
+         PLATFORM_TENANT,
+     ):
+         return {"status": "reconcile the previous training job"}
+-    if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
+-        return {"status": "Hugging Face training is not configured"}
+     return None
+ 
+ 
+@@ -708,8 +710,10 @@
+ ) -> dict[str, Any]:
+     if not actor.founder:
+         raise HTTPException(403, "Founder access required")
+-    if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
+-        return {"status": "Hugging Face training is not configured"}
++    from skala_runtime import EXPORT_SETTINGS, unavailable
++    problem = unavailable(EXPORT_SETTINGS)
++    if problem:
++        return problem
+     return await _training_subprocess(
+         "--job-id", body.job_id, "--billed-usd", str(body.billed_usd),
+     )
+@@ -899,9 +903,11 @@
+ 
+ 
+ async def export_once(*, day: date | None = None) -> dict[str, Any]:
++    from skala_runtime import EXPORT_SETTINGS, unavailable
++    problem = unavailable(EXPORT_SETTINGS)
++    if problem:
++        return {**problem, "status": "skipped", "reason": "not configured"}
+     token, org = os.environ.get("HF_TOKEN", ""), os.environ.get("HF_ORG", "")
+-    if not token or not org:
+-        return {"status": "skipped", "reason": "not configured"}
+     region = runtime().box_region()
+     if region not in ("us-east", "za"):
+         return {"status": "skipped", "reason": "unknown region"}
+@@ -910,6 +916,7 @@
+     day = day or datetime.now(timezone.utc).date()
+     exported = 0
+     incomplete = False
++    issues = []
+     async with runtime().pool().acquire() as conn:
+         if not await conn.fetchval("SELECT pg_try_advisory_lock(871223)"):
+             return {"status": "skipped", "reason": "already running"}
+@@ -965,10 +972,11 @@
+                         continue
+                     try:
+                         await upload_dataset(client, org, agent, day.isoformat(), payload, region, holdouts)
+-                    except StorageError:
++                    except StorageError as exc:
+                         # Leave this agent unrecorded so the slot retries it,
+                         # while independent rooms can still finish their exports.
+                         incomplete = True
++                        issues.append({"agent": agent, "message": str(exc)})
+                         log.warning("Training archive unavailable for agent: %s", agent)
+                         continue
+                     for item in payload:
+@@ -985,7 +993,8 @@
+                     exported += len(payload)
+         finally:
+             await conn.execute("SELECT pg_advisory_unlock(871223)")
+-    return {"status": "incomplete" if incomplete else "complete", "exported": exported}
++    return {"status": "incomplete" if incomplete else "complete", "exported": exported,
++            **({"issues": issues} if issues else {})}
+ 
+ 
+ async def _batch_removed(conn, tenant: uuid.UUID, batch_id: str | None) -> bool:
+diff --git a/tank/training_jobs/run.py b/tank/training_jobs/run.py
+index 5f3ca6216a01e639cc238f2eea528f67e0909f79..0fc389fd39c998c15c76c06cd9279c91e7e203c1 100644
+--- a/tank/training_jobs/run.py
++++ b/tank/training_jobs/run.py
+@@ -104,6 +104,15 @@
+ 
+ 
+ async def run(args):
++    if getattr(args, 'dry_run', False) and (args.submit or args.receipt or getattr(args, 'job_id', '')):
++        raise ValueError('Dry run cannot submit a job or record a receipt')
++    names = ['HF_ORG', 'HF_TOKEN']
++    if args.submit or args.receipt or getattr(args, 'job_id', ''):
++        names.append('DATABASE_URL')
++    missing = [name for name in names if not os.environ.get(name, '').strip()]
++    if missing:
++        return {'status': 'unconfigured', 'missing_settings': missing,
++                'message': 'Missing settings: ' + ', '.join(missing)}
+     import asyncpg
+     from huggingface_hub import HfApi
+     agent = getattr(args, 'agent', '')
+@@ -193,7 +202,9 @@
+     parser = argparse.ArgumentParser()
+     parser.add_argument('--minutes', type=int, default=120)
+     parser.add_argument('--day', default='')
+-    parser.add_argument('--submit', action='store_true')
++    mode = parser.add_mutually_exclusive_group()
++    mode.add_argument('--submit', action='store_true')
++    mode.add_argument('--dry-run', action='store_true')
+     parser.add_argument('--agent', choices=['zenas'], default='')
+     parser.add_argument('--receipt', help='Local final HF billing receipt JSON; no credentials')
+     parser.add_argument('--job-id', default='')
+@@ -207,5 +218,7 @@
+         result = asyncio.run(run(args))
+         if args.json:
+             print(json.dumps(result, default=str))
++        elif result.get('status') == 'unconfigured':
++            print(result['message'])
+     except Exception:
+         raise SystemExit('Training operation failed; check configuration, budget and provenance. Credentials are not logged.') from None
+diff --git a/workspace/app/skala/approve-all.tsx b/workspace/app/skala/approve-all.tsx
+index 89423b9489c83a8f0e9e12064fa7d9959d18a7aa..726fd2716696996e68468003cb7dc8bcf008ce4c 100644
+--- a/workspace/app/skala/approve-all.tsx
++++ b/workspace/app/skala/approve-all.tsx
+@@ -3,7 +3,7 @@
+ 
+ type Preview = { token: string; items: { id: string; version: string; score: number; runs: number; model: boolean }[] };
+ 
+-export function ApproveAllReady({ onApproved, className, label = "Approve all ready" }: { label?: string; onApproved?: () => Promise<void>; className?: string }) {
++export function ApproveAllReady({ onApproved, className, label = "Approve all ready", disabled = false }: { label?: string; onApproved?: () => Promise<void>; className?: string; disabled?: boolean }) {
+   const dialog = useRef<HTMLDialogElement>(null);
+   const [preview, setPreview] = useState<Preview | null>(null);
+   const [busy, setBusy] = useState(false);
+@@ -32,12 +32,12 @@
+     } finally { setBusy(false); }
+   }
+   return <div className="sk-bulk">
+-    <button className={className} type="button" disabled={busy} onClick={() => request(false)}>{busy ? "Checking…" : label}</button>
++    <button className={className} type="button" disabled={busy || disabled} onClick={() => request(false)}>{busy ? "Checking…" : label}</button>
+     {message ? <p role="status">{message}</p> : null}
+     <dialog ref={dialog} className="sk-dialog" style={{maxWidth: "min(850px, calc(100vw - 32px))", boxSizing: "border-box", border: "1px solid #B8BFD0", borderRadius: 8, padding: 24, color: "#001840"}} aria-label="Confirm ready versions">
+       <h2>Approve these versions?</h2>
+       <p>Room-authored skills need individual source review and are excluded.</p>
+-      {preview?.items.length ? <ul className="sk-bulk-list" style={{maxHeight: "45vh", overflow: "auto", overflowWrap: "anywhere"}}>{preview.items.map(item => <li key={item.id}>{item.id} · {item.version} · {(item.score * 100).toFixed(1)}%{item.model ? ` · ${item.runs}/3 runs` : " · code skill"}</li>)}</ul> : <p>No versions are ready.</p>}
++      {preview?.items.length ? <ul className="sk-bulk-list" style={{maxHeight: "45vh", overflow: "auto", overflowWrap: "anywhere"}}>{preview.items.map(item => <li key={item.id}>{item.id} · {item.version} · {(item.score * 100).toFixed(1)}%{item.model ? ` · ${item.runs}/3 runs` : " · code skill"}</li>)}</ul> : <p>No versions are ready. Run evals to prepare a version for approval.</p>}
+       <button className={className ?? "primary"} type="button" disabled={busy || !preview?.items.length} onClick={() => request(true)}>Confirm listed approvals</button>{" "}
+       <button className={className} type="button" disabled={busy} onClick={() => { dialog.current?.close(); setPreview(null); }}>Cancel</button>
+     </dialog>
+diff --git a/workspace/app/skala/gold/page.tsx b/workspace/app/skala/gold/page.tsx
+index bdd0eacb7d75ee9162fb7b05e4594fdad361270d..7411d5cb6a8ca3c589c78f693629554e75f636c0 100644
+--- a/workspace/app/skala/gold/page.tsx
++++ b/workspace/app/skala/gold/page.tsx
+@@ -9,5 +9,6 @@
+ 
+ export default async function GoldPage() {
+   const identity = await goldIdentity("platform");
+-  return <GoldView founder={identity.role === "founder"} />;
++  const configurationError = process.env.TANK_API_KEY?.trim() ? null : "Missing setting: TANK_API_KEY.";
++  return <GoldView founder={identity.role === "founder"} configurationError={configurationError} />;
+ }
+diff --git a/workspace/app/skala/gold/view.tsx b/workspace/app/skala/gold/view.tsx
+index bd79ed081e824af6dc5c824be59f8312dd17c3ed..c85e177f0c1c5269d4d87e137b4c0f1b58388c7f 100644
+--- a/workspace/app/skala/gold/view.tsx
++++ b/workspace/app/skala/gold/view.tsx
+@@ -7,9 +7,9 @@
+ type Example = { id: string; input: unknown; expected: Record<string, unknown>; source: string; auto_label?: boolean; label_source?: string };
+ const agents = ["tank", "base", "tiger", "market_lab", "zenas", "radix", "tisan", "rig"];
+ const names: Record<string, string> = { tank: "Tank", base: "Base", tiger: "Tiger", market_lab: "Market Lab", zenas: "Zenas", radix: "Radix", tisan: "Tisan", rig: "RIG" };
+-const pct = (n: number | null) => n === null ? "Not tested" : `${(n * 100).toFixed(1)}%`;
++const pct = (n: number | null) => n === null || !Number.isFinite(n) ? "—" : `${(n * 100).toFixed(1)}%`;
+ 
+-export function GoldView({ founder }: { founder: boolean }) {
++export function GoldView({ founder, configurationError = null }: { founder: boolean; configurationError?: string | null }) {
+   const [scope, setScope] = useState("platform");
+   const [summary, setSummary] = useState<Summary | null>(null);
+   const [agent, setAgent] = useState(founder ? "base" : "zenas");
+@@ -20,21 +20,25 @@
+   const [correction, setCorrection] = useState("");
+   const [correcting, setCorrecting] = useState(false);
+   const [busy, setBusy] = useState(false);
+-  const [loading, setLoading] = useState(true);
+-  const [error, setError] = useState("");
++  const [loading, setLoading] = useState(!configurationError);
++  const [error, setError] = useState(configurationError ?? "");
+   const [notice, setNotice] = useState("");
+   const correctionRef = useRef<HTMLTextAreaElement>(null);
+   const saving = useRef(false);
+ 
+   useEffect(() => {
++    if (configurationError) return;
+     const controller = new AbortController();
+     setSummary(null);
+     fetch(`/api/skala/gold?scope=${scope}`, { signal: controller.signal }).then(async response => {
+       if (!response.ok) throw new Error();
+-      setSummary(await response.json());
++      const value = await response.json();
++      if (!value || !Array.isArray(value.skills) || !value.pairs || typeof value.pairs !== "object"
++          || !["us-east", "za"].includes(value.region)) throw new Error();
++      setSummary(value);
+     }).catch(() => { if (!controller.signal.aborted) setError("Training totals are unavailable. Try reloading."); });
+     return () => controller.abort();
+-  }, [scope, revision]);
++  }, [scope, revision, configurationError]);
+ 
+   const skills = summary?.skills.filter(s => s.agent === agent) ?? [];
+   useEffect(() => {
+@@ -45,6 +49,7 @@
+   }, [summary, agent, skill]);
+ 
+   useEffect(() => {
++    if (configurationError) return;
+     const controller = new AbortController();
+     setExample(null); setCorrecting(false); setCorrection("");
+     if (!skill) { setLoading(false); return () => controller.abort(); }
+@@ -57,7 +62,7 @@
+     }).catch(() => { if (!controller.signal.aborted) setError("The next example could not be loaded."); })
+       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+     return () => controller.abort();
+-  }, [scope, agent, skill, after, revision]);
++  }, [scope, agent, skill, after, revision, configurationError]);
+ 
+   const submit = useCallback(async (action: "right" | "wrong" | "skip") => {
+     if (!example || saving.current || loading) return;
+@@ -104,20 +109,7 @@
+         <option value="platform">Shared skill examples</option><option value="tenant">Current workspace examples</option>
+       </select></label><p className="gold-meta">{summary ? `Stored in ${summary.region === "za" ? "South Africa" : "United States"}` : "Loading training totals…"}</p>
+     </section>
+-    <section aria-labelledby="squad-title"><h2 id="squad-title">Squad training</h2><div className="gold-cards">
+-      {(founder ? agents : ["zenas"]).map(name => {
+-        const rows = summary?.skills.filter(s => s.agent === name) ?? [];
+-        const latest = rows.filter(s => s.ran_at).sort((a, b) => (b.ran_at ?? "").localeCompare(a.ran_at ?? ""))[0];
+-        return <article className="gold-card" key={name}><h3>{names[name]}</h3>
+-          <p className="gold-count">{summary ? rows.reduce((n, s) => n + s.checked, 0) : "—"}<span> / {Math.max(rows.length, 1) * 100} checked</span></p>
+-          <dl><div><dt>Latest skill score</dt><dd>{pct(latest?.last_score ?? null)}</dd></div>
+-            <div><dt>Change</dt><dd>{latest?.trend == null ? "—" : `${latest.trend > 0 ? "+" : ""}${(latest.trend * 100).toFixed(1)} points`}</dd></div>
+-            <div><dt>Training pairs</dt><dd>{summary ? summary.pairs[name] ?? 0 : "—"}</dd></div>
+-            <div><dt>Held back</dt><dd>{summary ? rows.reduce((n, s) => n + s.holdout, 0) : "—"}</dd></div></dl>
+-          {latest && <small>{latest.skill_id}</small>}
+-        </article>;
+-      })}
+-    </div></section>
++    <TrainingSummary summary={summary} founder={founder} />
+     <section className="gold-review" aria-labelledby="review-title"><div className="gold-review-heading"><div><p className="gold-eyebrow">ONE EXAMPLE AT A TIME</p><h2 id="review-title">Sample queue</h2></div>
+       <p className="gold-meta">Ten machine-labelled examples per source for each skill, plus every judgement example.<br />A source counts after 9 of 10 checks agree.</p></div>
+       <nav aria-label="Skills closest to 100" className="gold-filters">
+@@ -132,9 +124,9 @@
+           {!skills.length && <option value="">No examples yet</option>}{skills.map(s => <option key={s.skill_id} value={s.skill_id}>{s.skill_id}</option>)}</select></label>
+         {chosen && <p className="gold-meta">{chosen.checked} / 100 checked · {chosen.holdout} held back<br />Last score: {pct(chosen.last_score)}</p>}
+       </div>
+-      {error && <p role="alert" className="gold-error">{error} <button onClick={() => { setError(""); setRevision(v => v + 1); }}>Reload</button></p>}
++      {error && <p role="alert" className="gold-error">{error} {!configurationError && <button onClick={() => { setError(""); setRevision(v => v + 1); }}>Reload</button>}</p>}
+       <p role="status" className="gold-notice">{notice}</p>
+-      {loading ? <p className="gold-empty">Loading the next example…</p> : example ? <>
++      {configurationError ? null : loading ? <p className="gold-empty">Loading the next example…</p> : example ? <>
+         <div className="gold-example"><section><h3>Input</h3><pre>{JSON.stringify(example.input, null, 2)}</pre></section>
+           <section><h3>Expected answer</h3><pre>{JSON.stringify(example.expected, null, 2)}</pre></section></div>
+         {correcting && <label className="gold-correction">Corrected answer (JSON)<textarea ref={correctionRef} value={correction} onChange={e => setCorrection(e.target.value)} rows={8} disabled={busy} /><span>The original will be rejected. This correction needs a separate check.</span></label>}
+@@ -144,9 +136,29 @@
+           {correcting && <button disabled={busy} onClick={() => setCorrecting(false)}>Cancel correction</button>}
+           <span className="gold-meta">{busy ? "Saving…" : `${agent === "zenas" ? "Lawyer check · " : ""}Source: ${example.label_source ?? example.source.replaceAll("_", " ")}`}</span></div>
+       </> : <div className="gold-empty"><h3>{after ? "You’ve reached the end of this queue." : "No examples waiting for this skill."}</h3>
+-        <p>{after ? "Skipped examples are still available when you start again." : "Existing skill examples and accepted work appear here as they arrive."}</p>
++        <p>{after ? "Skipped examples are still available when you start again." : (scope === "tenant" ? "Accept a result in this workspace to start its training collection." : "Add a skill package to create the first examples.")}</p>
+         {after && <button onClick={() => setAfter("")}>Review skipped examples</button>}</div>}
+     </section>
+     <footer className="gold-meta">Weekly re-tests use checked examples only. Held-back examples stay out of weekly runs and training exports.</footer>
+   </main>;
+ }
++
++export function TrainingSummary({ summary, founder }: { summary: Summary | null; founder: boolean }) {
++  return (
++    <section aria-labelledby="squad-title"><h2 id="squad-title">Squad training</h2><div className="gold-cards">
++      {(founder ? agents : ["zenas"]).map(name => {
++        const rows = summary?.skills.filter(s => s.agent === name) ?? [];
++        const latest = rows.filter(s => s.ran_at).sort((a, b) => (b.ran_at ?? "").localeCompare(a.ran_at ?? ""))[0];
++        return <article className="gold-card" key={name}><h3>{names[name]}</h3>
++          <p className="gold-count">{summary ? rows.reduce((n, s) => n + s.checked, 0) : "—"}<span> / {summary ? rows.reduce((n, s) => n + s.target, 0) : "—"} checked</span></p>
++          <dl><div><dt>Latest skill score</dt><dd>{pct(latest?.last_score ?? null)}</dd></div>
++            <div><dt>Change</dt><dd>{latest?.trend == null ? "—" : `${latest.trend > 0 ? "+" : ""}${(latest.trend * 100).toFixed(1)} points`}</dd></div>
++            <div><dt>Training pairs</dt><dd>{summary ? summary.pairs[name] ?? 0 : "—"}</dd></div>
++            <div><dt>Held back</dt><dd>{summary ? rows.reduce((n, s) => n + s.holdout, 0) : "—"}</dd></div></dl>
++          {latest && <small>{latest.skill_id}</small>}
++          {summary && rows.every(row => row.checked === 0) && <p className="gold-meta">Check the first example to fill this training summary.</p>}
++        </article>;
++      })}
++    </div></section>
++  );
++}
+diff --git a/workspace/app/skala/library.ts b/workspace/app/skala/library.ts
+index 9ed797d3afaf9031fadebfd278d0285b714e1d18..63fb65a561f4dd3788b44f5529b36a3218c8be5a 100644
+--- a/workspace/app/skala/library.ts
++++ b/workspace/app/skala/library.ts
+@@ -88,7 +88,8 @@
+   if (!usesModel(skill)) return "no model";
+   const calls = Number(skill.calls_30d ?? 0);
+   const avg = typeof skill.avg_cost_usd === "number" ? skill.avg_cost_usd : Number(skill.avg_cost_usd);
+-  if (!Number.isFinite(calls) || calls <= 0 || !Number.isFinite(avg)) return "uses a model · no calls yet";
++  if (!Number.isFinite(calls) || calls <= 0) return "uses a model · no calls yet";
++  if (skill.avg_cost_usd == null || skill.avg_cost_usd === "" || !Number.isFinite(avg)) return "uses a model · —/call (30 days)";
+   return `uses a model · ${formatCallCost(avg)}/call (30 days)`;
+ }
+ 
+diff --git a/workspace/app/skala/page.tsx b/workspace/app/skala/page.tsx
+index 649262ebdbacde13bf577bae57493c4b540b708a..45feda843209744ee152f0bca07f9cda8155fc06 100644
+--- a/workspace/app/skala/page.tsx
++++ b/workspace/app/skala/page.tsx
+@@ -43,8 +43,9 @@
+   }
+ 
+   let skills: LibrarySkill[] = [];
+-  let loadError: string | null = null;
++  let loadError: string | null = process.env.TANK_API_KEY?.trim() ? null : "Missing setting: TANK_API_KEY.";
+   try {
++    if (loadError) return <SkalaApp accountName={accountName} skills={skills} loadError={loadError} />;
+     const [rows, status] = await Promise.all([listSkills(), skillApprovalStatus()]);
+     skills = rows.map(row => ({...asSkill(row), ...status.find(s => s.id === row.id && s.version === row.version)}));
+   } catch {
+diff --git a/workspace/app/skala/view.tsx b/workspace/app/skala/view.tsx
+index 66b32fe991de1fa082956ed2089fe9557df30dae..801c89b9747621ddc18e63c5d71e4b1d5dd2dab7 100644
+--- a/workspace/app/skala/view.tsx
++++ b/workspace/app/skala/view.tsx
+@@ -253,7 +253,7 @@
+           <header className="sk-header">
+             <div>
+               <h1>Skala</h1>
+-            <ApproveAllReady onApproved={async () => { const rows = await readSkills(); if (rows) setSkills(rows); }} />
++            <ApproveAllReady disabled={skills.length === 0 || Boolean(loadError)} onApproved={async () => { const rows = await readSkills(); if (rows) setSkills(rows); }} />
+               <p>Every skill, with its versions and scores.</p>
+             </div>
+             <a className="sk-examples" href="/skala/gold">Check examples</a>
+@@ -295,7 +295,10 @@
+           {notice ? <p className={notice.tone === "err" ? "sk-err" : "sk-note"} role={notice.tone === "err" ? "alert" : "status"}>{notice.text}</p> : null}
+ 
+           {loadError ? null : groups.length === 0 ? (
+-            <p className="sk-empty">{query.trim() ? "Nothing matches that search." : filtered ? "Nothing matches those filters." : "No skills yet."}</p>
++            <div className="sk-empty">
++              <p>{query.trim() ? "Nothing matches that search." : filtered ? "Nothing matches those filters." : "No skills yet."}</p>
++              <p>{filtered ? "Clear the search and filters to see your skills." : "Add a skill package to fill this library."}</p>
++            </div>
+           ) : (
+             <div className="sk-library">
+               {groups.map((group) => (
+@@ -324,9 +327,10 @@
+                               <li key={key} className="sk-version">
+                                 <span className="sk-meta">{version.version}</span>
+                                 <span className={version.state === "approved" ? "sk-state approved" : "sk-state"}>{version.state}</span>
+-                                <span className="sk-meta">{scoreLabel(version.last_eval_score)}</span>
++                                <span className="sk-meta">{version.last_eval_score == null ? "—" : scoreLabel(version.last_eval_score)}</span>
+                                 {scoreDate(version.last_eval_at) ? <span className="sk-meta">{scoreDate(version.last_eval_at)}</span> : null}
+                                 <span className="sk-meta">{costLabel(version)}</span>
++                                {version.last_eval_at == null && version.present && ["candidate", "staging", "approved"].includes(version.state) && <p className="sk-meta">Run evals to record the first score and case results.</p>}
+                                 {version.model && version.runs !== undefined ? <span className="sk-meta">{version.runs}/3 runs</span> : null}
+                                 {!version.present && version.state !== "approved" ? <span className="sk-gone">This version is no longer in the folder.</span> : null}
+                                 {(version.state === "candidate" || version.state === "staging" || version.state === "approved") && version.present ? (

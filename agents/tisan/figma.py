@@ -1161,15 +1161,19 @@ async def execute(
     *,
     data_root: Path | None = None,
     live: bool = False,
+    allow_fixture: bool = True,
 ) -> dict[str, Any]:
     """Read this tenant's paired live page, or the offline Tervory fixture."""
     if not isinstance(payload, dict):
         raise FigmaError("input must be an object")
+    # A server-owned live request may forbid recordings without changing the
+    # existing reader call signature used by the room/evaluation adapter.
+    allow_fixture = allow_fixture and payload.get('allow_fixture') is not False
     file_key = normalise_file_key(payload.get("file_key"))
     node_id = normalise_node_id(payload.get("node_id"))
     tenant = _tenant(str(tenant_id))
     token = os.environ.get("FIGMA_TOKEN", "").strip()
-    if file_key == TERVORY_FILE_KEY and (not live or not (token and _paired(tenant, file_key))):
+    if allow_fixture and file_key == TERVORY_FILE_KEY and (not live or not (token and _paired(tenant, file_key))):
         source = load_fixture(node_id)
     else:
         if not live or not _paired(tenant, file_key):

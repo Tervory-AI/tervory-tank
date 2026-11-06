@@ -191,10 +191,12 @@ async def database():
 @pytest.mark.asyncio
 async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rollback(database, monkeypatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", os.environ["SKALA_INTAKE_TEST_DATABASE_URL"])
-    monkeypatch.setenv("LITELLM_MASTER_KEY", "")
-    monkeypatch.setenv("TANK_API_KEY", "")
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "offline-placeholder")
+    monkeypatch.setenv("TANK_API_KEY", "workspace-offline-fixture")
     import main as tank
     # Keep this disposable database isolated from every other test/package.
+    monkeypatch.setattr(tank, "DATABASE_URL", os.environ["SKALA_INTAKE_TEST_DATABASE_URL"])
+    monkeypatch.setattr(tank, "LITELLM_MASTER_KEY", "offline-placeholder")
     monkeypatch.setattr(tank, "_pool", database)
     monkeypatch.setattr(tank, "_packages", dict(PACKAGES))
     monkeypatch.setattr(tank, "_agent_keys_synced", True)

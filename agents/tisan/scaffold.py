@@ -495,7 +495,7 @@ async def _secret_check(project: Path, tenant_id: str | None, tank: Any = None) 
         return {**check, "summary": "no generated text files were scanned"}
     try:
         async def scan(client: Any) -> dict[str, Any]:
-            report = await client.approved_skill(tenant_id, "scan.secrets", {"files": files})
+            report = await asyncio.wait_for(client.approved_skill(tenant_id, "scan.secrets", {"files": files}), timeout=60)
             if report is None:
                 return {**check, "pending_approval": True,
                         "summary": "scan.secrets has no approved version; founder approval is required in /skala"}
@@ -630,6 +630,10 @@ async def _resolve_copy(brief: dict[str, Any], tenant: str) -> None:
     if not brief.get("copies"):
         return
     import httpx
+    try:
+        from agents.tisan import upstream
+    except ModuleNotFoundError:
+        import upstream
     key = os.environ.get("TANK_KEY", "")
     if not key:
         raise ScaffoldError("Writing record unavailable")
@@ -637,7 +641,7 @@ async def _resolve_copy(brief: dict[str, Any], tenant: str) -> None:
     async with httpx.AsyncClient(timeout=30, follow_redirects=False, trust_env=False) as client:
         for page, write_id in brief["copies"].items():
             try:
-                response = await client.get("http://tank:8000/v1/trigger/copy/" + write_id,
+                response = await upstream.get(client, os.environ.get('TANK_URL', 'http://tank:8000').rstrip('/') + "/v1/trigger/copy/" + write_id,
                     params={"tenant_id": tenant}, headers={"X-Tank-Key": key,
                     "X-Tervory-Tenant": tenant, "X-Tervory-Home-Region": os.environ.get("TANK_REGION", "us-east")})
                 response.raise_for_status()

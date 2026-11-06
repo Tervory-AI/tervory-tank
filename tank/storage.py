@@ -71,7 +71,8 @@ class Storage:
         self._access = env.get(f'R2_ACCESS_KEY_ID_{suffix}', '')
         self._secret = env.get(f'R2_SECRET_ACCESS_KEY_{suffix}', '')
         if not self._access or not self._secret:
-            raise StorageError(f'R2 credentials for {suffix} are missing')
+            missing = [name for name in (f'R2_ACCESS_KEY_ID_{suffix}', f'R2_SECRET_ACCESS_KEY_{suffix}') if not env.get(name)]
+            raise StorageError(f'R2 credentials for {suffix} are missing: ' + ', '.join(missing))
         own_keys = {f'R2_ACCESS_KEY_ID_{suffix}', f'R2_SECRET_ACCESS_KEY_{suffix}'}
         if any(name.startswith(('R2_ACCESS_KEY_ID_', 'R2_SECRET_ACCESS_KEY_'))
                and name not in own_keys for name in env):
@@ -216,7 +217,7 @@ def room_key(room: str) -> str:
         raise StorageError('Unknown storage room')
     value = os.environ.get(f'TANK_KEY_{room.upper()}', '')
     if not value:
-        raise StorageError('Room storage is not configured')
+        raise StorageError(f'Room storage is not configured: TANK_KEY_{room.upper()}')
     return value
 
 
@@ -268,7 +269,7 @@ async def archive_training_snapshot(agent: str, day: str, data: bytes, *, region
     marker back. A failed or uncertain operation prevents the HF export. The HF
     bearer-token client is never reused for room or R2 traffic.
     """
-    if agent not in ROOMS | {'tank'}:
+    if agent not in ROOMS | {'tank', 'trigger'}:
         raise StorageError('Unknown snapshot owner')
     if region not in {'us-east', 'za'} or region != os.environ.get('TANK_REGION', 'us-east'):
         raise StorageError('Snapshot must stay in its own region')
@@ -278,6 +279,10 @@ async def archive_training_snapshot(agent: str, day: str, data: bytes, *, region
     except ValueError:
         raise StorageError('Invalid snapshot date') from None
     name = f'{day}/{uuid.uuid4().hex}'
+    if agent == 'trigger':
+        # Trigger has no storage room/bucket. Its public platform training
+        # snapshots use Tank's existing uploads store, with a separate prefix.
+        name = 'trigger/' + name
     parts = []
 
     async def archive(put, get):
@@ -293,7 +298,7 @@ async def archive_training_snapshot(agent: str, day: str, data: bytes, *, region
         if await get(manifest_name) != manifest:
             raise StorageError('Snapshot completion could not be verified')
 
-    if agent == 'tank':
+    if agent in {'tank', 'trigger'}:
         store = uploads()
         try:
             async def put(name, content):

@@ -117,15 +117,18 @@ async def record_receipt(conn, job_id: str, actual: Decimal, evaluation: dict | 
 
 
 async def run(args):
+    if getattr(args, 'dry_run', False) and (args.submit or args.receipt or getattr(args, 'job_id', '')):
+        raise ValueError('Dry run cannot submit a job or record a receipt')
     dry_run = getattr(args, 'dry_run', False)
-    if dry_run and (args.submit or args.receipt or getattr(args, 'job_id', '')):
-        raise ValueError('Dry-run cannot submit or reconcile')
-    required = ['HF_ORG', 'HF_TOKEN']
-    if dry_run or args.submit or args.receipt or getattr(args, 'job_id', ''):
-        required.append('DATABASE_URL')
-    missing = [name for name in required if not os.environ.get(name, '').strip()]
+    names = ['HF_ORG', 'HF_TOKEN']
+    if (dry_run and getattr(args, 'agent', '') == 'tiger') or args.submit or args.receipt or getattr(args, 'job_id', ''):
+        names.append('DATABASE_URL')
+    missing = [name for name in names if not os.environ.get(name, '').strip()]
     if missing:
-        return {'status': 'not_configured', 'settings': missing}
+        if getattr(args, 'agent', '') == 'tiger':
+            return {'status': 'not_configured', 'settings': missing}
+        return {'status': 'unconfigured', 'missing_settings': missing,
+                'message': 'Missing settings: ' + ', '.join(missing)}
     import asyncpg
     from huggingface_hub import HfApi
     agent = getattr(args, 'agent', '')
@@ -184,7 +187,7 @@ async def run(args):
     print(f'Maximum estimated compute cost: USD {amount:.4f}')
     if not args.submit:
         result = {'status': 'ready', 'cost_usd': amount, 'hardware': flavor}
-        if dry_run:
+        if dry_run and agent == 'tiger':
             conn = await asyncpg.connect(os.environ['DATABASE_URL'])
             try:
                 if await conn.fetchval('SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)', PLATFORM):
@@ -244,6 +247,10 @@ def cli(argv=None):
     parser.add_argument('--billed-usd', default='0')
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
+    if args.submit and args.dry_run:
+        if args.agent == 'tiger':
+            raise SystemExit('Training operation failed; dry-run cannot submit.')
+        parser.error('Training operation failed: --submit and --dry-run are mutually exclusive')
     if args.submit:
         from datetime import date
         date.fromisoformat(args.day)
@@ -251,6 +258,8 @@ def cli(argv=None):
         result = asyncio.run(run(args))
         if args.json or result.get('status') == 'not_configured':
             print(json.dumps(result, default=str))
+        elif result.get('status') == 'unconfigured':
+            print(result['message'])
         return result
     except Exception:
         raise SystemExit('Training operation failed; check configuration, budget and provenance. Credentials are not logged.') from None

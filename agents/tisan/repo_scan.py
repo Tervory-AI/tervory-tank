@@ -25,7 +25,11 @@ def headers(tenant):
 
 
 async def inspect(http, tenant, scan_id, digest):
-    response = await http.get(os.environ.get('TANK_URL', 'http://tank:8000').rstrip('/') +
+    try:
+        from agents.tisan import upstream
+    except ModuleNotFoundError:
+        import upstream
+    response = await upstream.get(http, os.environ.get('TANK_URL', 'http://tank:8000').rstrip('/') +
         '/v1/command/tisan/pipeline/repo-scan/' + str(UUID(scan_id)),
         params={'tenant_id': tenant}, headers=headers(tenant), timeout=30, follow_redirects=False)
     response.raise_for_status()
@@ -47,6 +51,10 @@ async def inspect(http, tenant, scan_id, digest):
 
 
 async def check(archive: Path, tenant: str, *, http=None):
+    try:
+        from agents.tisan import upstream
+    except ModuleNotFoundError:
+        import upstream
     failed = {'name': 'radix.repo', 'ok': False, 'summary': 'repo scan unavailable'}
     try:
         tenant = str(UUID(tenant))
@@ -56,7 +64,7 @@ async def check(archive: Path, tenant: str, *, http=None):
         digest = hashlib.sha256(raw).hexdigest()
         failed['archive_sha256'] = digest
         async def run(client):
-            response = await client.post(os.environ.get('TANK_URL', 'http://tank:8000').rstrip('/') +
+            response = await upstream.post(client, os.environ.get('TANK_URL', 'http://tank:8000').rstrip('/') +
                 '/v1/command/tisan/pipeline/repo-scan', headers=headers(tenant),
                 json={'tenant_id': tenant, 'source': base64.b64encode(raw).decode('ascii'), 'sha256': digest},
                 timeout=60, follow_redirects=False)

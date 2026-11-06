@@ -74,6 +74,10 @@ class Publisher:
         self.identity_proof = dict(identity_proof or {})
 
     async def run(self, body: PublishRequest, actor: str) -> dict:
+        try:
+            from agents.tisan import upstream
+        except ModuleNotFoundError:
+            import upstream
         tenant, site, operation = str(body.tenant_id), body.slug, str(body.operation_id)
         expected = f'build:{body.build}'
         previous = self.journal.get(tenant, site, operation)
@@ -98,7 +102,7 @@ class Publisher:
             # Reserve before Git writes too: an uncertain acknowledgement must not create a second commit.
             self.journal.update(tenant, site, operation, 'committing', details)
             mutation = True
-            response = await self.http.post(self.tank_url + '/v1/tisan/publish/git',
+            response = await upstream.post(self.http, self.tank_url + '/v1/tisan/publish/git',
                 headers={'X-Tank-Key': self.key, 'X-Tervory-Admin': actor, 'X-Tervory-Tenant': tenant,
                          **self.identity_proof},
                 json={**build, 'tenant_id': tenant, 'slug': site, 'repository': staging['repository']}, timeout=240)

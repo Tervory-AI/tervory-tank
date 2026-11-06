@@ -42,6 +42,11 @@ function load(file) {
       if (input.result.status === 'malformed') return {matches: 'invalid response'};
       return {matches: input.result.matches ?? (input.result.match ? [input.result.match] : [])};
     }};
+    if (name.startsWith('.')) {
+      const base = path.resolve(path.dirname(filename), name);
+      const target = ['.ts', '.tsx', ''].map(ext => base + ext).find(file => fs.existsSync(file));
+      if (target) return load(path.relative(path.join(root, 'workspace/app/moot'), target));
+    }
     return deps(name);
   }
   new Function('require', 'module', 'exports', compiled)(requireLocal, mod, mod.exports);

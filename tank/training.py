@@ -390,6 +390,16 @@ def valid_auto_candidate(row: Any, room: str, region: str,
 
 
 def candidate_json(value: dict) -> str:
+    def contains_nul(item):
+        if isinstance(item, str):
+            return "\x00" in item
+        if isinstance(item, dict):
+            return any(contains_nul(key) or contains_nul(val) for key, val in item.items())
+        if isinstance(item, list):
+            return any(contains_nul(val) for val in item)
+        return False
+    if contains_nul(value):
+        raise ValueError("Candidate row contains an invalid text character")
     text = json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True)
     # PostgreSQL JSON/text cannot store NUL. Reject source data before the
     # savepoint so it is not mistaken for a retryable storage outage.
@@ -552,7 +562,10 @@ async def scheduled_once(operation: str, now: datetime | None = None) -> None:
     lock = {"export": 871224, "retest": 871225, "gold": 871227}[operation]
     marker = encoded({"tenant_id": str(PLATFORM_TENANT), "region": region,
                       "operation": operation, "slot": slot.isoformat()})
-    async with runtime().pool().acquire() as conn:
+    # A session lock spans nested work, but a transaction must not: startup
+    # indexes otherwise wait on this snapshot while the work waits for a pool slot.
+    lock_pool = getattr(runtime(), "admin_pool", runtime().pool)()
+    async with lock_pool.acquire() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock):
             return
         try:
@@ -648,6 +661,11 @@ class TrainingReceiptRequest(BaseModel):
 
 
 async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, Any] | None:
+    from skala_runtime import EXPORT_SETTINGS, unavailable
+    problem = unavailable(EXPORT_SETTINGS)
+    if problem:
+        return {**problem, 'status': 'Hugging Face training is not configured',
+                'needs_settings': problem['missing_settings']}
     ready = await conn.fetchval(
         """SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND agent=$2
         AND active AND public AND NOT client_matter AND region=$3
@@ -671,14 +689,14 @@ async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, 
         PLATFORM_TENANT,
     ):
         return {"status": "reconcile the previous training job"}
-    missing = [name for name in ("HF_TOKEN", "HF_ORG") if not os.environ.get(name)]
-    if missing:
-        return {"status": "Hugging Face training is not configured", "needs_settings": missing}
     return None
 
 
 async def _training_quote(body: TrainingRunRequest) -> dict[str, Any]:
     return await _training_subprocess("--agent", body.agent, "--minutes", str(body.minutes))
+
+
+TRAINING_COMMAND_TIMEOUT_SECONDS = 180  # Reuse the archive transport deadline.
 
 
 async def _training_subprocess(*arguments: str) -> dict[str, Any]:
@@ -690,7 +708,17 @@ async def _training_subprocess(*arguments: str) -> dict[str, Any]:
         os.environ.get("HF_JOBS_PYTHON") or sys.executable, str(script), *arguments, "--json",
         env=child_env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
     )
-    stdout, _ = await process.communicate()
+    try:
+        stdout, _ = await asyncio.wait_for(process.communicate(), TRAINING_COMMAND_TIMEOUT_SECONDS)
+    except (TimeoutError, asyncio.CancelledError) as exc:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        await process.communicate()
+        if isinstance(exc, asyncio.CancelledError):
+            raise
+        return {"status": "Training operation failed; check configuration, budget and provenance."}
     if process.returncode != 0:
         return {"status": "Training operation failed; check configuration, budget and provenance."}
     try:
@@ -735,9 +763,10 @@ async def training_receipt(
 ) -> dict[str, Any]:
     if not actor.founder:
         raise HTTPException(403, "Founder access required")
-    missing = [name for name in ("HF_TOKEN", "HF_ORG") if not os.environ.get(name)]
-    if missing:
-        return {"status": "Hugging Face training is not configured", "needs_settings": missing}
+    from skala_runtime import EXPORT_SETTINGS, unavailable
+    problem = unavailable(EXPORT_SETTINGS)
+    if problem:
+        return problem
     return await _training_subprocess(
         "--job-id", body.job_id, "--billed-usd", str(body.billed_usd),
     )
@@ -935,10 +964,11 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
 
 
 async def export_once(*, day: date | None = None, only_agent: str | None = None) -> dict[str, Any]:
+    from skala_runtime import EXPORT_SETTINGS, unavailable
+    problem = unavailable(EXPORT_SETTINGS)
+    if problem:
+        return {**problem, "status": "skipped", "reason": "not configured"}
     token, org = os.environ.get("HF_TOKEN", ""), os.environ.get("HF_ORG", "")
-    if not token or not org:
-        missing = [name for name in ("HF_TOKEN", "HF_ORG") if not os.environ.get(name)]
-        return {"status": "skipped", "reason": "not configured", "needs_settings": missing}
     region = runtime().box_region()
     if region not in ("us-east", "za"):
         return {"status": "skipped", "reason": "unknown region"}
@@ -947,6 +977,7 @@ async def export_once(*, day: date | None = None, only_agent: str | None = None)
     day = day or datetime.now(timezone.utc).date()
     exported = 0
     incomplete = False
+    issues = []
     async with runtime().pool().acquire() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock(871223)"):
             return {"status": "skipped", "reason": "already running"}
@@ -1022,10 +1053,11 @@ async def export_once(*, day: date | None = None, only_agent: str | None = None)
                         continue
                     try:
                         await upload_dataset(client, org, agent, day.isoformat(), payload, region, holdouts)
-                    except StorageError:
+                    except StorageError as exc:
                         # Leave this agent unrecorded so the slot retries it,
                         # while independent rooms can still finish their exports.
                         incomplete = True
+                        issues.append({"agent": agent, "message": str(exc)})
                         log.warning("Training archive unavailable for agent: %s", agent)
                         continue
                     for item in payload:
@@ -1042,7 +1074,8 @@ async def export_once(*, day: date | None = None, only_agent: str | None = None)
                     exported += len(payload)
         finally:
             await conn.execute("SELECT pg_advisory_unlock(871223)")
-    return {"status": "incomplete" if incomplete else "complete", "exported": exported}
+    return {"status": "incomplete" if incomplete else "complete", "exported": exported,
+            **({"issues": issues} if issues else {})}
 
 
 async def _batch_removed(conn, tenant: uuid.UUID, batch_id: str | None) -> bool:

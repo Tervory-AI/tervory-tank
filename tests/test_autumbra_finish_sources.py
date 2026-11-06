@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -69,12 +69,10 @@ def test_market_lab_unknown_source_rejected_and_missing_bundle_id_is_stable():
 
 
 def patch_module():
-    root = Path(__file__).resolve().parents[1]
-    code = (root / 'tank/ghost_evidence.py').read_text()
-    module = ModuleType('integrated_ghost_evidence')
-    exec(compile(code, 'tank/ghost_evidence.py', 'exec'), module.__dict__)
-    assert 'return await observation(runtime(), body.target, body.signal)' in (root / 'tank/ghost_routes.py').read_text()
-    return module
+    import ghost_evidence
+    patch = (Path(__file__).resolve().parents[1] / 'tank-patches/autumbra/finish.patch').read_text()
+    assert 'return await observation(runtime(), body.target, body.signal)' in patch
+    return ghost_evidence
 
 
 @pytest.mark.asyncio

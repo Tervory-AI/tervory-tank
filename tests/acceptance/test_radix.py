@@ -35,8 +35,8 @@ import test_radix_weekly as weekly
 import test_radix_finish_data as finish_data
 import test_radix_finish_pages as finish_pages
 import test_radix_finish_recovery as finish_recovery
-import test_radix_finish_scanners as finish_scanners
-scanner_reports = finish_scanners.reports
+from test_radix_finish_scanners import reports as _scanner_reports
+scanner_reports = _scanner_reports
 import test_rx1_scans as source
 import test_rx4_compliance as notices
 from radix_i2 import test_active as active

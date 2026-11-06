@@ -75,6 +75,7 @@ COPY radix/browser/check.cjs /app/browser/check.cjs
 COPY --from=signatures /out/ /var/lib/clamav/
 COPY _chassis/chassis /app/chassis
 COPY radix/app.py /app/app.py
+COPY radix/radix_readiness.py /app/radix_readiness.py
 COPY radix/gold_sources.py /app/gold_sources.py
 COPY radix/evals/gold /app/evals/gold
 COPY radix/net.py /app/net.py

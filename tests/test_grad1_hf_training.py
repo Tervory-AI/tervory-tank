@@ -61,7 +61,11 @@ async def test_zenas_training_run_plain_refusals(monkeypatch, values, configured
         monkeypatch.delenv('HF_TOKEN', raising=False)
         monkeypatch.delenv('HF_ORG', raising=False)
     body = training.TrainingRunRequest(agent='zenas', minutes=120)
-    assert (await training._training_readiness(conn, body))['status'] == status
+    result = await training._training_readiness(conn, body)
+    assert result['status'] == status
+    if not configured:
+        assert result['missing_settings'] == ['HF_TOKEN', 'HF_ORG']
+        assert conn.fetchval.await_count == 0
 
 
 @pytest.mark.asyncio

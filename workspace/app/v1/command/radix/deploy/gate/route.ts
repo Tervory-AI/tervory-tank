@@ -1,0 +1,46 @@
+import { timingSafeEqual } from "node:crypto";
+import { Buffer } from "node:buffer";
+import { boundedFetch } from "@/lib/tank";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+// The deploy job uses the existing service key, not a personal CLI bearer token.
+// This exact GET route takes precedence over the personal-command catch-all.
+export async function GET(request: Request): Promise<Response> {
+  const headers = { "Cache-Control": "private, no-store" };
+  const refused = (status: number) => Response.json({}, { status, headers });
+  if (request.method !== "GET") return refused(405);
+  const expected = Buffer.from(process.env.TANK_API_KEY ?? "");
+  const supplied = Buffer.from(request.headers.get("x-tank-key") ?? "");
+  if (!expected.toString().trim()) return refused(503);
+  if (!supplied.length || supplied.length !== expected.length || !timingSafeEqual(expected, supplied)) return refused(401);
+  const query = new URL(request.url).searchParams;
+  if ([...query.keys()].some(key => key !== "tenant_id" && key !== "app") ||
+      query.getAll("tenant_id").length !== 1 || query.getAll("app").length !== 1) return refused(400);
+  const tenant = query.get("tenant_id")!;
+  const app = query.get("app")!;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(tenant) ||
+      !/^[a-z0-9-]+$/.test(app)) return refused(400);
+  if (request.headers.get("x-tervory-tenant") !== tenant) return refused(403);
+  try {
+    const target = new URL("/v1/command/radix/deploy/gate", process.env.TANK_URL ?? "http://tank:8000");
+    target.searchParams.set("tenant_id", tenant);
+    target.searchParams.set("app", app);
+    return await boundedFetch(target, {
+      method: "GET", cache: "no-store", signal: request.signal,
+      // Never forward cookies, user assertions, bearer tokens, or caller URLs.
+      headers: { "X-Tank-Key": supplied.toString(), "X-Tervory-Tenant": tenant, Accept: "application/json" },
+    }, 10_000, async response => {
+      if (!response.ok) {
+        await response.body?.cancel();
+        return refused(response.status);
+      }
+      if (!response.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+        await response.body?.cancel();
+        return refused(502);
+      }
+      return Response.json(await response.json(), { status: response.status, headers });
+    });
+  } catch { return refused(502); }
+}

@@ -1,0 +1,739 @@
+diff --git a/workspace/app/radix/content.ts b/workspace/app/radix/content.ts
+--- a/workspace/app/radix/content.ts
++++ b/workspace/app/radix/content.ts
+@@ -1,57 +1,5 @@
+-// Demonstration content only. Never merge examples into tenant scan results.
+ export const checks = [
+   { title: "Secrets", copy: "Find exposed credentials. Report the location, never the value." },
+   { title: "Dependencies", copy: "Compare package versions with advisory data included with Radix." },
+   { title: "Unsafe code", copy: "Look for risky patterns in the code supplied for review." },
+ ] as const;
+-
+-export const exampleFindings = [
+-  {
+-    id: "example-secret",
+-    severity: "Critical",
+-    title: "Exposed credential",
+-    file: "config/settings.py",
+-    line: 12,
+-    rule: "Example secret rule",
+-    fix: "Remove the credential, rotate it, and review the repository history.",
+-    detail: "Keep credentials in the server environment. Check that old credentials no longer work. The report records the location, never the secret value.",
+-  },
+-  {
+-    id: "example-dependency",
+-    severity: "High",
+-    title: "Risky dependency",
+-    file: "requirements.txt",
+-    line: 8,
+-    rule: "Example dependency advisory",
+-    fix: "Move to a patched package version and check compatibility.",
+-    detail: "Review the advisory and the package release notes, update the dependency, and run the project tests before checking again.",
+-  },
+-  {
+-    id: "example-static",
+-    severity: "Medium",
+-    title: "Unsafe SQL query",
+-    file: "app/search.py",
+-    line: 24,
+-    rule: "Example SQL rule",
+-    fix: "Use a parameterised query instead of joining user input into SQL.",
+-    detail: "Pass user values separately from the query text. Add a test for unexpected input, then run a fresh code check.",
+-  },
+-] as const;
+-
+-export function exampleReport(): string {
+-  return [
+-    "# Radix — EXAMPLE report",
+-    "",
+-    "EXAMPLE ONLY. These findings are made up. This is not a scan of your code.",
+-    "This report does not approve a release.",
+-    "",
+-    ...exampleFindings.flatMap((finding) => [
+-      "## " + finding.severity + " — " + finding.title + " (Example)",
+-      finding.file + ":" + finding.line,
+-      "Rule: " + finding.rule,
+-      finding.fix,
+-      finding.detail,
+-      "",
+-    ]),
+-  ].join("\n");
+-}
+diff --git a/workspace/app/radix/summary.tsx b/workspace/app/radix/summary.tsx
+new file mode 100644
+--- /dev/null
++++ b/workspace/app/radix/summary.tsx
+@@ -0,0 +1,72 @@
++"use client";
++import { useEffect, useState } from "react";
++
++type Figure = { id: string; status: string; value: unknown; unknown_cost_calls?: number };
++export type Summary = { scans: number | null; findings: { id: string; value: number }[] | null; receipts: number | null; spend: number | null };
++const severities = ["critical", "high", "medium", "low", "info", "unknown"];
++const unknown: Summary = { scans: null, findings: null, receipts: null, spend: null };
++const count = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
++export const FIRST_SCAN = "Upload your code in Chats, then confirm radix.repo.scan.";
++
++export function summary(value: unknown): Summary {
++  if (!value || typeof value !== "object") return unknown;
++  const data = value as { product?: unknown; figures?: unknown; tank?: unknown };
++  if (data.product !== "radix" || !Array.isArray(data.figures) || !Array.isArray(data.tank)) return unknown;
++  const figures = [...data.figures, ...data.tank].filter((item): item is Figure => !!item && typeof item === "object");
++  const find = (id: string) => figures.find((item) => item.id === id && item.status === "available");
++  const scans = find("radix.scans")?.value;
++  const findings = find("radix.findings_by_severity")?.value;
++  const executions = find("tank.work_by_execution")?.value;
++  const spend = find("tank.spend");
++  const validRows = (rows: unknown, ids: string[]): rows is { id: string; value: number }[] =>
++    Array.isArray(rows) && rows.length === ids.length && new Set(rows.map((row) => row?.id)).size === ids.length &&
++    rows.every((row) => row && ids.includes(row.id) && count(row.value));
++  return {
++    scans: count(scans) ? scans : null,
++    findings: validRows(findings, severities) ? findings : null,
++    receipts: validRows(executions, ["code", "cache", "model"]) ? executions.reduce((total, row) => total + row.value, 0) : null,
++    spend: typeof spend?.value === "number" && Number.isFinite(spend.value) && spend.value >= 0 && !spend.unknown_cost_calls ? spend.value : null,
++  };
++}
++
++export function SeverityChart({ rows }: { rows: Summary["findings"] }) {
++  const filled = rows?.some((row) => row.value > 0);
++  const maximum = Math.max(1, ...(rows ?? []).map((row) => row.value));
++  return <svg role="img" aria-label="Findings by severity" viewBox="0 0 360 170" style={{ width: "100%", height: "auto" }}>
++    {[20, 45, 70, 95, 120].map((y) => <line key={y} x1="30" x2="350" y1={y} y2={y} stroke="#B8BFD0" />)}
++    <path d="M30 20V145H350" fill="none" stroke="#001840" />
++    <text x="12" y="148" fill="#001840">0</text>
++    {filled ? rows!.map((row, index) => <g key={row.id}>
++      <rect x={40 + index * 51} y={145 - row.value / maximum * 115} width="28" height={row.value / maximum * 115} fill="#A16207"><title>{`${row.id}: ${row.value}`}</title></rect>
++      <text x={40 + index * 51} y="164" fontSize="9" fill="#001840">{row.id}</text>
++    </g>) : null}
++  </svg>;
++}
++
++export function SummaryView({ data, section }: { data: Summary; section: string }) {
++  const findings = data.findings?.reduce((total, row) => total + row.value, 0) ?? null;
++  return <section aria-label="Radix results">
++    <div className="rx-checks">
++      <article className="rx-card"><h2>Scans</h2><p>{data.scans ?? "—"}</p><p>{FIRST_SCAN}</p></article>
++      <article className="rx-card"><h2>Findings by severity</h2><p>{findings ?? "—"}</p><SeverityChart rows={data.findings} /><p>{FIRST_SCAN}</p></article>
++      <article className="rx-card"><h2>Receipts</h2><p>{data.receipts ?? "—"}</p><p>{data.spend === null ? "—" : "$" + data.spend.toFixed(2)}</p><p>{FIRST_SCAN}</p></article>
++    </div>
++    {section !== "Overview" ? <div className="rx-card rx-empty">
++      <h2>{section === "Findings" && findings === 0 ? "No findings yet" : section === "Reports" && data.scans === 0 ? "No reports yet" : section}</h2>
++      <p>{FIRST_SCAN}</p><a href="/chats" className="rx-text-button">Chats</a>
++    </div> : null}
++  </section>;
++}
++
++export function RadixSummary({ section }: { section: string }) {
++  const [data, setData] = useState<Summary>(unknown);
++  useEffect(() => {
++    const controller = new AbortController();
++    void fetch("/api/case-studies/radix", { signal: controller.signal, cache: "no-store" })
++      .then(async (response) => response.ok ? summary(await response.json()) : unknown)
++      .then((next) => { if (!controller.signal.aborted) setData(next); })
++      .catch(() => { if (!controller.signal.aborted) setData(unknown); });
++    return () => controller.abort();
++  }, []);
++  return <SummaryView data={data} section={section} />;
++}
+diff --git a/workspace/app/radix/tests/browser.mjs b/workspace/app/radix/tests/browser.mjs
+--- a/workspace/app/radix/tests/browser.mjs
++++ b/workspace/app/radix/tests/browser.mjs
+@@ -1,396 +1,390 @@
+ // Runs only in a disposable GitHub Actions runner. Renders the actual Radix component.
+ import assert from "node:assert/strict";
+ import { createRequire } from "node:module";
+ import { createServer } from "node:http";
+ import { readFile, mkdir } from "node:fs/promises";
+ import { resolve, join } from "node:path";
+ 
+ const require = createRequire(join(process.env.RUNNER_TEMP, "radix-browser/package.json"));
+ const { build } = require("esbuild");
+ const { chromium } = require("playwright");
+ const root = process.cwd();
+ const output = resolve(process.env.RUNNER_TEMP, "radix-page-site");
+ await mkdir(output, { recursive: true });
+ const actionNames = ["readRadixPlugins", "saveRadixKey", "removeRadixSecret", "uploadRadixFiles", "removeRadixFile", "addRadixLink", "removeRadixLink", "addRadixConnection", "removeRadixConnection"];
+ const bundle = await build({
+   stdin: {
+     contents: 'import React from "react"; import {createRoot} from "react-dom/client"; import {RadixPage} from "./app/radix/view"; createRoot(document.getElementById("root")).render(<RadixPage accountName="Example account" settings={<button type="button">Settings</button>} />);',
+     resolveDir: root, loader: "tsx",
+   },
+   bundle: true, write: false, format: "iife", jsx: "automatic",
+   plugins: [{
+     name: "test-server-actions",
+     setup(builder) {
+       builder.onResolve({ filter: /plugin-actions$/ }, () => ({ path: "actions", namespace: "test-actions" }));
+       builder.onLoad({ filter: /.*/, namespace: "test-actions" }, () => ({
+         contents: actionNames.map((name) => "export async function " + name + "(...args) { const r=await fetch('/test-action/'+ " + JSON.stringify(name) + ", {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(args)}); if(!r.ok)throw new Error('Action failed');return r.json(); }").join("\n"),
+         loader: "js",
+       }));
+     },
+   }],
+ });
+ const css = (await readFile("app/globals.css", "utf8")) + "\n" + (await readFile("app/radix/radix.css", "utf8"));
+ const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Radix browser test</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Jost:wght@300&display=swap" rel="stylesheet"><style>:root{--font-inter:Inter;--font-jost:Jost;--font-mono:monospace}</style><link rel="stylesheet" href="/page.css"></head><body><main><div id="root"></div></main><script src="/page.js"></script></body></html>';
+ 
+ await build({ entryPoints: ["app/radix/request-service.ts"], bundle: true, platform: "node", format: "cjs", outfile: join(output, "service.cjs") });
+ const { radixRequests } = require(join(output, "service.cjs"));
+ const tenantId = "00000000-0000-0000-0000-000000000001";
+ const otherTenant = "00000000-0000-0000-0000-000000000002";
+ function task(id, title, agent = "radix", tenant = tenantId) {
+   return { id, title, agent, tenant_id: tenant, status: "done", result: "Example reply: review the file and rotate the exposed credential.", created_at: "2026-10-17T00:00:00Z", created_by: "tester", task_type: "tier0.answer", error: null, ledger_id: null, started_at: null, finished_at: null };
+ }
+ const sourceId = "00000000-0000-0000-0000-000000000011";
+ const otherProductId = "00000000-0000-0000-0000-000000000012";
+ const otherTenantId = "00000000-0000-0000-0000-000000000013";
+ const initialRecords = [task(sourceId, "Example credential review"), task(otherProductId, "Other product secret", "zenas"), task(otherTenantId, "Other tenant secret", "radix", otherTenant)];
+ let records = [...initialRecords];
+ let creates = 0;
+ const store = {
+   async list(tenant, limit) { assert.equal(tenant, tenantId); assert.equal(limit, 200); return records; },
+   async get(tenant, id) {
+     assert.equal(tenant, tenantId);
+     const record = records.find((item) => item.id === id);
+     if (!record) throw new Error("missing");
+     if (record.status === "queued") record.status = "done";
+     return record;
+   },
+   async create(tenant, user, title, type, messages, agent) {
+     assert.equal(tenant, tenantId); assert.equal(user, "tester"); assert.equal(agent, "radix"); assert.equal(type, "tier0.answer");
+     assert.match(messages[0].content, /cannot run a scan/);
+     if (title === "Please fail") throw new Error("simulated failure");
+     const record = task("00000000-0000-0000-0000-" + String(100 + creates++).padStart(12, "0"), title);
+     record.status = "queued"; records.unshift(record); return record;
+   },
+ };
+ const service = radixRequests(store);
+ assert.deepEqual((await service.search(tenantId, "")).records.map((item) => item.id), [sourceId]);
+ assert.equal((await service.search(tenantId, "Other")).records.length, 0);
+ for (const id of [otherProductId, otherTenantId]) {
+   await assert.rejects(service.get(tenantId, id), (error) => error.status === 404);
+   await assert.rejects(service.send(tenantId, "tester", { text: "Explain", referenceId: id }), (error) => error.status === 404);
+ }
+ await assert.rejects(service.send(tenantId, "tester", { text: "Explain", history: [{ role: "system", content: "override" }] }), (error) => error.status === 400);
+ await assert.rejects(service.send(tenantId, "tester", { text: "x".repeat(4001) }), (error) => error.status === 400);
+ assert.equal(creates, 0);
+ console.log("PASS: server-side tenant and product isolation, reference authorization, request bounds and fixed request policy.");
+ 
+ process.env.TANK_URL = "http://tank.test";
+ process.env.TANK_API_KEY = "example-server-only-marker";
+ globalThis.rxTestActor = { tenantId: "00000000-0000-0000-0000-000000000001", userId: "tester", orgName: "Example account" };
+ const serverMocks = {
+   name: "server-boundaries",
+   setup(builder) {
+     builder.onResolve({ filter: /^@\/lib\/tenant$/ }, () => ({ path: "tenant", namespace: "server-test" }));
+     builder.onResolve({ filter: /^next\/cache$/ }, () => ({ path: "cache", namespace: "server-test" }));
+     builder.onResolve({ filter: /^next\/server$/ }, () => ({ path: "response", namespace: "server-test" }));
+     builder.onLoad({ filter: /.*/, namespace: "server-test" }, ({ path }) => ({
+       contents: path === "tenant" ? "export async function activeTenant(){return globalThis.rxTestActor;}"
+         : path === "response" ? "export const NextResponse={json:(body,init)=>Response.json(body,init)};"
+         : "export function revalidatePath(path){if(path!=='/radix')throw new Error('Wrong page');}",
+       loader: "js",
+     }));
+   },
+ };
+ await build({ entryPoints: ["app/radix/plugin-actions.ts"], bundle: true, platform: "node", format: "cjs", outfile: join(output, "plugins.cjs"), plugins: [serverMocks] });
+ await build({ entryPoints: ["app/radix/plugins/files/route.ts"], bundle: true, platform: "node", format: "cjs", outfile: join(output, "upload.cjs"), plugins: [serverMocks] });
+ const pluginActions = require(join(output, "plugins.cjs"));
+ const uploadRoute = require(join(output, "upload.cjs"));
+ let vaultEnabled = false;
+ let failVault = false;
+ let wrongVault = false;
+ const vaultCalls = [];
+ let vaultRows = { secrets: [], files: [], links: [], connections: [] };
+ globalThis.fetch = async (input, init = {}) => {
+   const target = new URL(String(input));
+   assert.equal(target.origin, "http://tank.test", "Only Tank receives server calls");
+   assert.match(target.pathname, /^\/v1\/vaults\/radix\.vault\//);
+   assert.doesNotMatch(target.pathname, /resolve|switch|admin/);
+   const headers = new Headers(init.headers);
+   assert.equal(headers.get("x-tank-key"), "example-server-only-marker");
+   assert.equal(headers.get("x-tervory-user"), "tester");
+   assert.equal(headers.get("x-tervory-squad"), "radix");
+   const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
+   assert.equal(body?.tenant_id ?? target.searchParams.get("tenant_id"), globalThis.rxTestActor.tenantId);
+   vaultCalls.push({ path: target.pathname, method: init.method, tenant: body?.tenant_id ?? target.searchParams.get("tenant_id") });
+   if (failVault) throw new Error("private backend failure");
+   if (init.method === "GET") return Response.json({ vault: wrongVault ? "other.vault" : "radix.vault", enabled: vaultEnabled, ...vaultRows });
+   if (!vaultEnabled) return Response.json({ detail: "This vault is off. Turn it on in Tank." }, { status: 403 });
+   if (target.pathname.endsWith("/secrets") && init.method === "POST") {
+     vaultRows.secrets = [{ name: body.name, purpose: body.purpose, mask: "unsafe-mask-from-server", saved_at: "2026-10-17", value: body.value }];
+   } else if (target.pathname.endsWith("/secrets")) vaultRows.secrets = [];
+   else if (target.pathname.endsWith("/files") && init.method === "POST") {
+     const file = init.body.get("file");
+     assert.ok(file instanceof File);
+     vaultRows.files = [{ id: "file-1", name: file.name, size: file.size, type: file.type, status: "ready", content: "private-bytes" }];
+   } else if (target.pathname.includes("/files/")) vaultRows.files = [];
+   else if (target.pathname.endsWith("/links") && init.method === "POST") vaultRows.links = [{ id: "link-1", ...body, status: "not checked" }];
+   else if (target.pathname.includes("/links/")) vaultRows.links = [];
+   else if (target.pathname.endsWith("/connections") && init.method === "POST") vaultRows.connections = [{ id: "mcp-1", ...body, has_token: true, status: "saved" }];
+   else if (target.pathname.includes("/connections/")) vaultRows.connections = [];
+   return Response.json({ ok: true });
+ };
+ assert.equal((await pluginActions.readRadixPlugins()).message, "This vault is off. Turn it on in Tank.");
+ assert.equal((await pluginActions.saveRadixKey("Example", "example-only-value", "Example purpose")).ok, false);
+ globalThis.rxTestActor = null;
+ const callsBefore = vaultCalls.length;
+ assert.equal((await pluginActions.saveRadixKey("Example", "example-only-value", "Example")).ok, false);
+ assert.equal((await pluginActions.readRadixPlugins()).enabled, false);
+ assert.equal(vaultCalls.length, callsBefore);
+ globalThis.rxTestActor = { tenantId, userId: "tester" };
+ vaultEnabled = true; // Isolated mock only. No live switch route exists in these tests.
+ await pluginActions.saveRadixKey("Example key", "example-only-value", "Example purpose");
+ let metadata = await pluginActions.readRadixPlugins();
+ assert.equal(metadata.secrets[0].mask, "••••••••");
+ assert.doesNotMatch(JSON.stringify(metadata), /example-only-value|unsafe-mask-from-server/);
+ await pluginActions.saveRadixKey("Example key", "example-replacement", "Example purpose");
+ await pluginActions.removeRadixSecret("Example key");
+ assert.equal((await pluginActions.readRadixPlugins()).secrets.length, 0);
+ await pluginActions.addRadixLink("https://example.com/reference", "Example link", "weekly");
+ await pluginActions.removeRadixLink("link-1");
+ await pluginActions.addRadixConnection("Example tool", "https://example.com/mcp", "token", "example-only-token");
+ assert.doesNotMatch(JSON.stringify(await pluginActions.readRadixPlugins()), /example-only-token/);
+ await pluginActions.removeRadixConnection("mcp-1");
+ const upload = new FormData(); upload.append("file", new File(["column\nExample\n"], "Example.csv", { type: "text/csv" }));
+ await pluginActions.uploadRadixFiles(upload);
+ assert.doesNotMatch(JSON.stringify(await pluginActions.readRadixPlugins()), /private-bytes/);
+ await pluginActions.removeRadixFile("file-1");
+ const largeFile = new FormData(); largeFile.append("file", new File(["x".repeat(2 * 1024 * 1024)], "Example.csv", { type: "text/csv" }));
+ const uploadRequest = (form, origin = "http://page.test") => new Request("http://page.test/radix/plugins/files", { method: "POST", headers: { origin }, body: form });
+ assert.equal((await uploadRoute.POST(uploadRequest(largeFile))).status, 200);
+ assert.equal((await uploadRoute.POST(uploadRequest(largeFile, "http://other.test"))).status, 403);
+ const oversized = new FormData(); oversized.append("file", new File(["x".repeat(9 * 1024 * 1024)], "Example.csv"));
+ assert.equal((await uploadRoute.POST(uploadRequest(oversized))).status, 413);
+ vaultEnabled = false;
+ metadata = await pluginActions.readRadixPlugins();
+ assert.deepEqual([metadata.secrets, metadata.files, metadata.links, metadata.connections], [[], [], [], []]);
+ assert.equal((await uploadRoute.POST(uploadRequest(upload))).status, 400);
+ wrongVault = true; vaultEnabled = true;
+ assert.equal((await pluginActions.readRadixPlugins()).enabled, false);
+ wrongVault = false; failVault = true;
+ assert.doesNotMatch(JSON.stringify(await pluginActions.readRadixPlugins()), /private backend/);
+ failVault = false; vaultEnabled = false;
+ vaultRows = { secrets: [], files: [], links: [], connections: [] };
+ console.log("PASS: Radix-only vault paths, signed-in tenant scope, off gates, masked metadata, save/replace/remove, files above 1 MB, upload bounds and origin, and no secret resolver or switch calls.");
+ 
+ const server = createServer(async (req, res) => {
+   const requestUrl = new URL(req.url, "http://localhost");
+   if (requestUrl.pathname.startsWith("/test-action/")) {
+     let body = ""; for await (const chunk of req) body += chunk;
+     const name = requestUrl.pathname.split("/").pop();
+     assert.ok(actionNames.includes(name));
+     res.setHeader("content-type", "application/json");
+     res.end(JSON.stringify(await pluginActions[name](...JSON.parse(body))));
+     return;
+   }
+   if (requestUrl.pathname === "/radix/plugins/files") {
+     const parts = []; for await (const chunk of req) parts.push(chunk);
+     const request = new Request("http://" + req.headers.host + req.url, { method: "POST", headers: req.headers, body: Buffer.concat(parts) });
+     const result = await uploadRoute.POST(request);
+     res.statusCode = result.status; res.setHeader("content-type", "application/json"); res.end(await result.text()); return;
+   }
+   if (requestUrl.pathname === "/radix/requests") {
+     res.setHeader("content-type", "application/json");
+     try {
+       let result;
+       if (req.method === "POST") {
+         let body = ""; for await (const chunk of req) body += chunk;
+         result = await service.send(tenantId, "tester", JSON.parse(body));
+         res.statusCode = 202;
+       } else if (requestUrl.searchParams.has("id")) {
+         result = { record: await service.get(tenantId, requestUrl.searchParams.get("id")) };
+       } else result = await service.search(tenantId, requestUrl.searchParams.get("q") ?? "");
+       res.end(JSON.stringify(result));
+     } catch (error) { res.statusCode = error.status ?? 502; res.end(JSON.stringify({ error: "The request could not be sent. Try again." })); }
+     return;
+   }
+   if (requestUrl.pathname.startsWith("/brand/")) {
+     const name = requestUrl.pathname.slice("/brand/".length);
+     if (!/^[\w.-]+$/.test(name)) { res.statusCode = 404; res.end(); return; }
+     res.setHeader("content-type", "image/png");
+     res.end(await readFile("public/brand/" + name));
+   } else if (req.url === "/page.js") {
+     res.setHeader("content-type", "text/javascript"); res.end(bundle.outputFiles[0].contents);
+   } else if (req.url === "/page.css") {
+     res.setHeader("content-type", "text/css"); res.end(css);
+   } else { res.setHeader("content-type", "text/html"); res.end(html); }
+ });
+ await new Promise((done) => server.listen(0, "127.0.0.1", done));
+ const url = "http://127.0.0.1:" + server.address().port;
+ const browser = await chromium.launch();
+ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+ const errors = [];
+ page.on("pageerror", (error) => errors.push(error.message));
+ const unexpected = [];
+ async function screenshot(name) {
+   await page.evaluate(() => document.fonts.ready);
+   const buffer = await page.screenshot({ path: join(output, name + ".png") });
+   const b64 = buffer.toString("base64");
+   for (let i = 0; i < b64.length; i += 16000) console.log("RX_IMAGE " + name + " " + (i / 16000) + " " + b64.slice(i, i + 16000));
+ }
+ async function noHorizontalOverflow() {
+   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+ }
+ try {
+   await page.goto(url + "/?founder=1");
+   await page.getByRole("heading", { name: "Radix", exact: true }).waitFor();
+   await page.evaluate(() => document.fonts.ready);
+   for (const name of ["Dashboard", "Projects", "Chats", "Support"]) assert.equal(await page.locator(".rx-panel").getByRole("link", { name, exact: name !== "Support" }).count(), 1);
+   assert.equal(await page.locator(".rx-panel").getByRole("button", { name: "Settings", exact: true }).count(), 1);
+   assert.equal(await page.locator(".rx-panel").getByText("Example account", { exact: true }).count(), 1);
+   assert.equal(await page.locator(".rx-logo").first().evaluate((img) => img.complete && img.naturalWidth > 0), true);
+   await page.getByRole("button", { name: "Example credential review done" }).waitFor();
+   assert.equal(await page.getByText("Other product secret", { exact: true }).count(), 0);
+   assert.equal(await page.getByText("Other tenant secret", { exact: true }).count(), 0);
+   await page.getByLabel("Find a recent request by title, reply, or status.").fill("no-match");
+   await page.getByText("No matching Radix records.", { exact: true }).waitFor();
+   await page.getByLabel("Find a recent request by title, reply, or status.").fill("credential");
+   await page.getByRole("button", { name: "Example credential review done" }).click();
+   await page.getByRole("button", { name: "Use in request", exact: true }).click();
+   await page.getByLabel("Your request", { exact: true }).fill("Explain this example finding");
+   await page.getByRole("button", { name: "Send", exact: true }).click();
+   await page.locator(".rx-message-assistant").waitFor();
+   assert.equal(await page.locator(".rx-thread .rx-message-user").count(), 1);
+   await page.locator(".rx-answer-sources summary").click();
+   assert.equal(await page.locator(".rx-answer-sources").getByRole("button", { name: "Example credential review" }).count(), 1);
+   const positions = await page.evaluate(() => ({ thread: document.querySelector(".rx-thread").getBoundingClientRect().top, box: document.querySelector("#rx-request").getBoundingClientRect().top }));
+   assert.ok(positions.thread < positions.box);
+   await page.locator(".rx-chat").scrollIntoViewIfNeeded();
+   await screenshot("desktop-conversation");
+   await page.getByLabel("Your request", { exact: true }).fill("Please fail");
+   await page.getByRole("button", { name: "Send", exact: true }).click();
+   await page.getByRole("alert").waitFor();
+   assert.equal(await page.getByLabel("Your request", { exact: true }).inputValue(), "Please fail");
+   await page.goto(url + "/?founder=1");
+   await page.getByRole("heading", { name: "Radix", exact: true }).waitFor();
+   await page.getByRole("button", { name: "Example credential review done" }).waitFor();
+   await screenshot("desktop-overview");
+   await page.setViewportSize({ width: 1440, height: 800 });
+   const panelBefore = await page.locator(".rx-panel").boundingBox();
+   await page.locator("[data-scroll-root]").evaluate((node) => { node.scrollTop = node.scrollHeight; });
+   assert.ok(await page.locator("[data-scroll-root]").evaluate((node) => node.scrollTop > 0));
+   assert.deepEqual(await page.locator(".rx-panel").boundingBox(), panelBefore);
+   assert.equal(await page.evaluate(() => window.scrollY), 0);
+   await noHorizontalOverflow();
+   await page.setViewportSize({ width: 1440, height: 1000 });
+ 
+   // Interactions must not fetch targets, send keys, or create scans.
+   page.on("request", (request) => {
+     if (!request.url().startsWith(url) && !request.url().startsWith("data:")) unexpected.push(request.url());
+   });
+-  await page.getByRole("button", { name: "View example report", exact: true }).click();
+-  assert.equal(await page.getByRole("heading", { name: "Example reports" }).count(), 1);
+-  await page.getByLabel("Severity", { exact: true }).selectOption("Critical");
+-  assert.equal(await page.locator(".rx-findings article").count(), 1);
+-  await page.getByText("Review the fix", { exact: true }).click();
+-  assert.equal(await page.getByText("Keep credentials in the server environment.", { exact: false }).isVisible(), true);
+-  await page.getByRole("searchbox", { name: "Find a file or issue" }).fill("no-match");
+-  await page.getByRole("heading", { name: "No matching example findings" }).waitFor();
+-  await page.getByRole("button", { name: "Clear filters" }).click();
+-  assert.equal(await page.locator(".rx-findings article").count(), 3);
+-  const download = page.getByRole("link", { name: "Download example report" });
+-  assert.match(decodeURIComponent(await download.getAttribute("href")), /EXAMPLE ONLY/);
+-  await screenshot("desktop-example-report");
+-  await page.getByRole("button", { name: "Leave example" }).click();
+-  await page.getByRole("heading", { name: "Reports are not connected" }).waitFor();
++  assert.equal(await page.getByRole("button", { name: "View example report", exact: true }).count(), 0);
++  assert.equal(await page.locator('svg[aria-label="Findings by severity"]').count(), 1);
++  assert.equal(await page.locator('svg[aria-label="Findings by severity"] line').count(), 5);
++  assert.equal(await page.locator('svg[aria-label="Findings by severity"] rect').count(), 0);
++  await page.locator(".rx-panel").getByRole("button", { name: "Reports", exact: true }).click();
++  await page.getByRole("heading", { name: "Reports", exact: true }).first().waitFor();
++  assert.equal(await page.getByRole("link", { name: "Download example report" }).count(), 0);
++  assert.ok(await page.getByText("Upload your code in Chats, then confirm radix.repo.scan.", { exact: true }).count());
++  await screenshot("desktop-day-zero");
+ 
+   const sourceButton = page.locator(".rx-panel").getByRole("button", { name: "Plugins", exact: true });
+   await sourceButton.click();
+   const dialog = page.getByRole("dialog", { name: "Plugins", exact: true });
+   await dialog.waitFor();
+   assert.equal(await dialog.locator('input[type="password"]').count(), 0);
+   await dialog.getByRole("tabpanel", { name: "API keys" }).getByText("This vault is off. Turn it on in Tank.", { exact: true }).waitFor();
+   await dialog.getByRole("tab", { name: "API keys" }).focus();
+   await page.keyboard.press("ArrowRight");
+   assert.equal(await dialog.getByRole("tab", { name: "Files", selected: true }).count(), 1);
+   await page.keyboard.press("End");
+   assert.equal(await dialog.getByRole("tab", { name: "MCP connections", selected: true }).count(), 1);
+   await screenshot("desktop-plugins");
+   for (let i = 0; i < 12; i++) {
+     await page.keyboard.press("Tab");
+     assert.equal(await page.evaluate(() => document.activeElement.closest("dialog")?.open === true), true);
+   }
+   await page.keyboard.press("Escape");
+   assert.equal(await sourceButton.evaluate((node) => node === document.activeElement), true);
+ 
+   await page.setViewportSize({ width: 390, height: 844 });
+   await page.getByRole("button", { name: "Menu", exact: true }).click();
+   const drawer = page.getByRole("dialog", { name: "Navigation" });
+   await drawer.getByRole("button", { name: "Overview", exact: true }).click();
+   await screenshot("mobile-overview");
+   await noHorizontalOverflow();
+   await page.getByRole("button", { name: "Menu", exact: true }).click();
+   await drawer.getByRole("button", { name: "Plugins", exact: true }).click();
+   await dialog.waitFor();
+   assert.equal(await drawer.isVisible(), false);
+   await dialog.locator(".rx-plugin-mobile").getByRole("button", { name: "Files", exact: true }).click();
+   await dialog.locator(".rx-plugin-mobile .rx-vault-off:visible").waitFor();
+   await screenshot("mobile-plugins");
+   await dialog.getByRole("button", { name: "Done", exact: true }).click();
+   assert.equal(await page.getByRole("button", { name: "Menu", exact: true }).evaluate((node) => node === document.activeElement), true);
+   await page.setViewportSize({ width: 320, height: 568 });
+   await noHorizontalOverflow();
+   assert.equal(await page.evaluate(() => window.scrollY), 0);
+ 
+ 
+   // Enabled states use only the isolated mock; the real vault is never switched.
+   await page.setViewportSize({ width: 1440, height: 1000 });
+   vaultEnabled = true;
+   await sourceButton.click();
+   const panel = dialog.locator(".rx-plugin-desktop [role=tabpanel]:not([hidden])");
+   await dialog.getByRole("tab", { name: "API keys", exact: true }).click();
+   await panel.getByLabel("Key name", { exact: true }).fill("Example key");
+   await panel.getByLabel("What it is for", { exact: true }).fill("Example test credential");
+   await panel.getByLabel("Key", { exact: true }).fill("example-only-value");
+   await panel.getByRole("button", { name: "Save key", exact: true }).click();
+   await panel.getByLabel("Saved key, hidden").waitFor();
+   assert.equal(await panel.getByLabel("Key", { exact: true }).inputValue(), "");
+   assert.doesNotMatch(await dialog.textContent(), /example-only-value|unsafe-mask-from-server|example-server-only-marker/);
+   await screenshot("desktop-plugins-example-key");
+   await panel.getByLabel("Key name", { exact: true }).fill("Example key");
+   await panel.getByLabel("Key", { exact: true }).fill("example-replacement");
+   await panel.getByRole("button", { name: "Save key", exact: true }).click();
+   await panel.getByRole("button", { name: "Remove Example key", exact: true }).click();
+   await panel.getByText("No keys saved.", { exact: true }).waitFor();
+   await dialog.getByRole("tab", { name: "Files", exact: true }).click();
+   await panel.getByLabel("Choose files", { exact: true }).setInputFiles({ name: "Example.csv", mimeType: "text/csv", buffer: Buffer.from("column\nExample\n") });
+   await panel.getByRole("button", { name: "Upload files", exact: true }).click();
+   await panel.getByRole("heading", { name: "Example.csv", exact: true }).waitFor();
+   await panel.getByRole("button", { name: "Remove Example.csv", exact: true }).click();
+   await panel.getByText("No files saved.", { exact: true }).waitFor();
+   await dialog.getByRole("tab", { name: "Source links", exact: true }).click();
+   await panel.getByLabel("Link", { exact: true }).fill("https://example.com/reference");
+   await panel.getByLabel("Label", { exact: true }).fill("Example link");
+   await panel.getByRole("button", { name: "Save link", exact: true }).click();
+   await panel.getByRole("button", { name: "Remove Example link", exact: true }).click();
+   await panel.getByText("No links saved.", { exact: true }).waitFor();
+   await dialog.getByRole("tab", { name: "MCP connections", exact: true }).click();
+   await panel.getByLabel("Connection name", { exact: true }).fill("Example tool");
+   await panel.getByLabel("Server URL", { exact: true }).fill("https://example.com/mcp");
+   await panel.getByLabel("Token", { exact: true }).fill("example-only-token");
+   await panel.getByRole("button", { name: "Save connection", exact: true }).click();
+   await panel.getByRole("heading", { name: "Example tool", exact: true }).waitFor();
+   assert.doesNotMatch(await dialog.textContent(), /example-only-token/);
+   assert.match(await panel.textContent(), /••••••••/);
+   await panel.getByRole("button", { name: "Remove Example tool", exact: true }).click();
+   await panel.getByText("No connections saved.", { exact: true }).waitFor();
+   await dialog.getByRole("tab", { name: "API keys", exact: true }).click();
+   await panel.getByLabel("Key name", { exact: true }).fill("Example refused");
+   await panel.getByLabel("Key", { exact: true }).fill("example-refused");
+   vaultEnabled = false; // Simulate Tank going off while the dialog is open.
+   await panel.getByRole("button", { name: "Save key", exact: true }).click();
+   await panel.getByText("This vault is off. Turn it on in Tank.", { exact: true }).waitFor();
+   assert.equal(await dialog.locator("input").count(), 0);
+   await dialog.getByRole("button", { name: "Done", exact: true }).click();
+ 
+   await page.goto(url);
+   await page.getByRole("heading", { name: "Radix", exact: true }).waitFor();
+   assert.equal(await page.locator(".rx-panel").getByRole("link", { name: "Tank", exact: true }).count(), 0);
+   assert.equal(await page.locator(".rx-panel").getByRole("link", { name: "Skala", exact: true }).count(), 0);
+   // Fonts can reload on navigation; the action audit ends before that navigation.
+   assert.deepEqual(errors, []);
+   assert.deepEqual(unexpected.filter((value) => !value.startsWith("https://fonts.")), []);
+   console.log("PASS: real request service, record search, replies, answer sources, failed-send recovery, fixed panel, body scroll, examples, plugin tabs, keyboard focus, mobile menu, masking, standard navigation and no external action requests.");
+ } finally {
+   await browser.close();
+   await new Promise((done) => server.close(done));
+ }
+diff --git a/workspace/app/radix/view.tsx b/workspace/app/radix/view.tsx
+--- a/workspace/app/radix/view.tsx
++++ b/workspace/app/radix/view.tsx
+@@ -1,181 +1,148 @@
+ "use client";
+ 
+ import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
+ import { Plugins } from "./plugins";
+-import { checks, exampleFindings, exampleReport } from "./content";
++import { checks } from "./content";
++import { RadixSummary } from "./summary";
+ import { SquadLinks } from "../squad-links";
+ import { RadixDesk } from "./conversation";
+ 
+ type Section = "Overview" | "Findings" | "Reports";
+ const sections: Section[] = ["Overview", "Findings", "Reports"];
+ 
+ function keepDialogFocus(event: KeyboardEvent<HTMLDialogElement>) {
+   if (event.key !== "Tab") return;
+   const nodes = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+     'button, a[href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])',
+   )).filter((node) => node.tabIndex >= 0 && !node.matches(":disabled") && node.getClientRects().length > 0);
+   const first = nodes[0];
+   const last = nodes[nodes.length - 1];
+   if (!first) return;
+   if (event.shiftKey && document.activeElement === first) {
+     event.preventDefault();
+     last.focus();
+   } else if (!event.shiftKey && document.activeElement === last) {
+     event.preventDefault();
+     first.focus();
+   }
+ }
+ 
+ function TervoryLogo() {
+   return <img src="/brand/tervory-logo-reversed.png" width={186} height={34} alt="Tervory" className="rx-logo" />;
+ }
+ 
+ function RadixLogo() {
+   return <img src="/brand/radix-on-dark.png" width={186} height={64} alt="Radix" className="rx-radix-mark" />;
+ }
+ 
+ export function RadixPage({ accountName, settings }: { accountName: string; settings: ReactNode }) {
+   const [pluginsOpen, setPluginsOpen] = useState(false);
+   const [vaultEnabled, setVaultEnabled] = useState(false);
+   const [section, setSection] = useState<Section>("Overview");
+-  const [example, setExample] = useState(false);
+-  const [severity, setSeverity] = useState("All");
+-  const [query, setQuery] = useState("");
+   const plugins = useRef<HTMLDialogElement>(null);
+   const menu = useRef<HTMLDialogElement>(null);
+   const body = useRef<HTMLDivElement>(null);
+   const heading = useRef<HTMLHeadingElement>(null);
+   const pluginsTrigger = useRef<HTMLButtonElement | null>(null);
+   const menuTrigger = useRef<HTMLButtonElement>(null);
+ 
+   useEffect(() => {
+     const media = window.matchMedia("(min-width: 801px)");
+     function closeMenu() { if (media.matches) menu.current?.close(); }
+     media.addEventListener("change", closeMenu);
+     return () => media.removeEventListener("change", closeMenu);
+   }, []);
+ 
+-  function navigate(next: Section, showExample = false) {
++  function navigate(next: Section) {
+     menu.current?.close();
+     setSection(next);
+-    setExample(showExample);
+-    setSeverity("All");
+-    setQuery("");
+     body.current?.scrollTo({ top: 0 });
+     requestAnimationFrame(() => heading.current?.focus());
+   }
+   function openPlugins(trigger: HTMLButtonElement) {
+     const fromMenu = Boolean(menu.current?.open);
+     menu.current?.close();
+     pluginsTrigger.current = fromMenu ? menuTrigger.current : trigger;
+     setPluginsOpen(true);
+     plugins.current?.showModal();
+   }
+   function navigation(variant: "panel" | "menu" = "menu") {
+     const workspace = <nav className="rx-bottom" aria-label="Workspace">
+       <span onClickCapture={() => menu.current?.close()}>{settings}</span>
+       <a href="https://tervory.com" target="_blank" rel="noreferrer">Support<span className="rx-sr"> (opens a new tab)</span></a>
+     </nav>;
+     return <>
+       {variant === "panel"
+         ? <div className="rx-brand"><RadixLogo /></div>
+         : <a href="/" className="rx-brand" aria-label="Tervory workspace"><TervoryLogo /></a>}
+       <nav className="rx-standard" aria-label="Standard navigation">
+         <p className="rx-account">{accountName}</p>
+         <a href="https://app.tervory.com/">Dashboard</a>
+         <a href="/matters">Projects</a>
+         <a href="/chats">Chats</a>
+       </nav>
+       <SquadLinks className="rx-standard squad-nav" />
+       <div className="rx-page-nav">
+         <p className="rx-kicker">Radix</p>
+         <nav aria-label="Radix">
+           {sections.map((item) => <button key={item} type="button" aria-current={section === item ? "page" : undefined}
+             onClick={() => navigate(item)}>{item}</button>)}
+           <button type="button" onClick={(event) => openPlugins(event.currentTarget)} aria-haspopup="dialog">Plugins</button>
+         </nav>
+       </div>
+       {variant === "panel"
+         ? <div className="rx-panel-foot"><a href="/" className="rx-brand" aria-label="Tervory workspace"><TervoryLogo /></a>{workspace}</div>
+         : workspace}
+     </>;
+   }
+-  const filtered = exampleFindings.filter((finding) =>
+-    (severity === "All" || finding.severity === severity) &&
+-    (finding.title + " " + finding.file + " " + finding.rule).toLowerCase().includes(query.toLowerCase().trim()));
+   return <div className="rx">
+     <a className="rx-skip" href="#rx-heading">Skip to page content</a>
+     <header className="rx-mobile-bar">
+       <TervoryLogo />
+       <button ref={menuTrigger} type="button" aria-haspopup="dialog" onClick={() => menu.current?.showModal()}>Menu</button>
+     </header>
+     <aside className="rx-panel" data-panel-anchor="fixed">{navigation("panel")}</aside>
+     <dialog className="rx-menu-dialog" ref={menu} aria-label="Navigation" onKeyDown={keepDialogFocus}>
+       <button className="rx-menu-close" type="button" onClick={() => menu.current?.close()}>Close menu</button>
+       {navigation("panel")}
+     </dialog>
+     <div className="rx-body" ref={body} data-scroll-root>
+       <p className="rx-crumb"><a href="/">Workspace</a> / Radix</p>
+       <header className="rx-intro">
+         <div>
+-          <h1 id="rx-heading" ref={heading} tabIndex={-1}>{section === "Overview" ? "Radix" : example ? "Example " + section.toLowerCase() : section}</h1>
++          <h1 id="rx-heading" ref={heading} tabIndex={-1}>{section === "Overview" ? "Radix" : section}</h1>
+           <p className="rx-lead">{section === "Overview"
+             ? "Check code before it ships. Review exposed secrets, risky dependencies, and unsafe code."
+-            : example ? "Example only. These findings are made up to show the review flow."
+             : "Review the checks made on code supplied to Radix."}</p>
+         </div>
+-        {example ? <a className="rx-secondary" download="radix-example-report.md"
+-          href={"data:text/markdown;charset=utf-8," + encodeURIComponent(exampleReport())}>Download example report</a>
+-          : <button className="rx-secondary" type="button" onClick={() => navigate("Reports", true)}>View example report</button>}
++        <a href="/chats" className="rx-secondary">Chats</a>
+       </header>
+ 
++      <RadixSummary section={section} />
+       <RadixDesk />
+ 
+       {section === "Overview" ? <>
+         <section aria-labelledby="rx-checks">
+           <h2 id="rx-checks" className="rx-section-heading">Code checks</h2>
+           <div className="rx-checks">{checks.map((check) => <article key={check.title} className="rx-card">
+             <h3>{check.title}</h3><p>{check.copy}</p>
+           </article>)}</div>
+         </section>
+         <section aria-labelledby="rx-flow">
+           <h2 id="rx-flow" className="rx-section-heading">From finding to fix</h2>
+           <ol className="rx-steps"><li>Review the file and rule.</li><li>Make the change.</li><li>Run a fresh check.</li></ol>
+         </section>
+-      </> : !example ? <section className="rx-card rx-empty">
+-        <h2>{section === "Findings" ? "No findings yet" : "No reports yet"}</h2>
+-        <p>{section === "Findings" ? "No findings yet." : "No reports yet."}</p>
+-        {section === "Findings" ? <button type="button" className="rx-text-button" onClick={() => navigate("Findings", true)}>Browse example findings</button> : null}
+-      </section> : <>
+-        <div className="rx-example-banner"><span className="rx-badge">Example</span><p>3 made-up findings. This is not a scan of your code or approval to release it.</p></div>
+-        <div className="rx-filter">
+-          <label>Severity<select aria-label="Severity" value={severity} onChange={(event) => setSeverity(event.target.value)}>
+-            {["All", "Critical", "High", "Medium"].map((value) => <option key={value}>{value}</option>)}
+-          </select></label>
+-          <label>Find a file or issue<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search example findings" /></label>
+-          <p role="status">{filtered.length} example {filtered.length === 1 ? "finding" : "findings"}</p>
+-        </div>
+-        <section className="rx-findings" aria-label="Example findings">
+-          {filtered.map((finding) => <article key={finding.id} className="rx-card">
+-            <div className="rx-finding-heading"><h2>{finding.title}</h2><span className="rx-badge">{finding.severity}</span></div>
+-            <p className="rx-meta">Example · {finding.file}:{finding.line}</p>
+-            <p>{finding.fix}</p>
+-            <details><summary>Review the fix</summary><p>{finding.detail}</p><p className="rx-meta">Rule: {finding.rule}</p></details>
+-          </article>)}
+-          {!filtered.length ? <div className="rx-card"><h2>No matching example findings</h2><p>Try another search or severity.</p><button type="button" className="rx-text-button" onClick={() => { setQuery(""); setSeverity("All"); }}>Clear filters</button></div> : null}
+-        </section>
+-        <button type="button" className="rx-text-button rx-exit-example" onClick={() => navigate(section)}>Leave example</button>
+-      </>}
++      </> : null}
+       <footer className="rx-footnote">Code checks use supplied files. No website is scanned from this page.</footer>
+     </div>
+     <dialog ref={plugins} className="rx-plugins-dialog" aria-labelledby="rx-plugins-title" onKeyDown={keepDialogFocus}
+       onClose={() => { setPluginsOpen(false); pluginsTrigger.current?.focus(); }}>
+       <div className="rx-modal-header">
+         <div><h2 id="rx-plugins-title">Plugins</h2><p>The files and connections Radix can use.</p></div>
+         <button type="button" className="rx-text-button" onClick={() => plugins.current?.close()}>Close</button>
+       </div>
+       <Plugins open={pluginsOpen} onEnabled={setVaultEnabled} />
+       <button type="button" className={vaultEnabled ? "rx-secondary" : "rx-primary"} onClick={() => plugins.current?.close()}>Done</button>
+     </dialog>
+   </div>;
+ }

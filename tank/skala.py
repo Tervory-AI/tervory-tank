@@ -25,6 +25,7 @@ is a separate, human-only call; superseded versions wait in staging for the
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import importlib.machinery
 import copy
@@ -124,8 +125,8 @@ def load_packages(root: Path = SKILLS_DIR) -> dict[tuple[str, str], SkillPackage
         pkg_dir = yaml_path.parent
         try:
             pkg = _parse_package(yaml_path, pkg_dir)
-        except Exception as exc:  # noqa: BLE001 — one broken package must never stop Tank
-            log.error("skala: skipping %s: %s", yaml_path, exc)
+        except Exception:  # noqa: BLE001 — one broken package must never stop Tank
+            log.error("skala: invalid package skipped")
             continue
         found[(pkg.id, pkg.version)] = pkg
     return found
@@ -134,7 +135,13 @@ def load_packages(root: Path = SKILLS_DIR) -> dict[tuple[str, str], SkillPackage
 log = logging.getLogger("tank.skala")
 
 
+def _safe_package(path: Path) -> None:
+    if any(part.is_symlink() for part in (path, *path.parents)) or any(p.is_symlink() for p in path.rglob('*')):
+        raise ValueError('Skill packages cannot contain symbolic links.')
+
+
 def _parse_package(yaml_path: Path, pkg_dir: Path) -> SkillPackage:
+    _safe_package(pkg_dir)
     meta = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
     if True:
         pkg = SkillPackage(
@@ -174,6 +181,7 @@ class _FreshSkillLoader(importlib.machinery.SourceFileLoader):
 
 
 def _import_run_uncached(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"], Awaitable[dict[str, Any]]]:
+    _safe_package(pkg.path)
     spec = importlib.util.spec_from_file_location(f"skill_{pkg.id}_{pkg.version}".replace(".", "_").replace("-", "_"), pkg.path / "run.py")
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -285,11 +293,20 @@ def _maybe_sweep_skill_temp() -> None:
 
 # ---------- running ----------
 
+SKILL_TIMEOUT_SECONDS = 660  # Existing room-evaluation deadline. No automatic replay.
+
+
 async def run_skill(pkg: SkillPackage, payload: dict[str, Any], ctx: SkillContext) -> dict[str, Any]:
+    if getattr(pkg, 'id', None) == 'trigger.languagetool' and not os.environ.get('TANK_KEY_TRIGGER', '').strip():
+        raise ValueError('Missing setting: TANK_KEY_TRIGGER')
     _maybe_sweep_skill_temp()
     run = _import_run(pkg)
     started = time.perf_counter()
-    out = await run(payload, ctx)
+    try:
+        async with asyncio.timeout(SKILL_TIMEOUT_SECONDS):
+            out = await run(payload, ctx)
+    except TimeoutError:
+        raise RuntimeError("The skill did not finish in time. Reload before trying again.") from None
     if not isinstance(out, dict):
         raise ValueError(f"{pkg.ref}: run() must return a dict")
     out.setdefault("_skill", pkg.ref)
@@ -449,7 +466,7 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
                 configured = getattr(ctx, "live_evaluation", False) or case.get("model_configured", "model" in case or bool(pkg.task_type))
                 ok, why = eval_properties(case, out, configured and getattr(ctx, "calls", 0) > 0)
         except Exception as exc:  # noqa: BLE001 — an exception is a failed case, recorded
-            ok, why, out = False, f"error: {exc}", {}
+            ok, why, out = False, "error: The evaluation could not complete. Reload before trying again.", {}
             expected_error = case.get("expected_error") or {}
             if (case.get("must_refuse") and type(exc).__name__ == expected_error.get("type")
                     and str(exc) == expected_error.get("message")):
@@ -495,11 +512,13 @@ def evidence_hash(value: Any) -> str:
 
 def source_files(pkg: SkillPackage) -> list[dict[str, str]]:
     """The complete Python source, including helpers in nested directories."""
+    _safe_package(pkg.path)
     return [{"path": path.relative_to(pkg.path).as_posix(), "source": path.read_text(encoding="utf-8")}
             for path in sorted(pkg.path.rglob("*.py")) if path.is_file()]
 
 
 def package_hash(pkg: SkillPackage, files: list[dict[str, str]] | None = None) -> str:
+    _safe_package(pkg.path)
     assets = []
     for path in sorted(pkg.path.rglob("*")):
         relative = path.relative_to(pkg.path)
