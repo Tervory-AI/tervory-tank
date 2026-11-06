@@ -8,6 +8,7 @@ from typing import Protocol
 from uuid import UUID
 
 import httpx
+from rigbox.deadline import bounded
 
 from rigbox.service import RigError
 from .contracts import Job, Report, Result
@@ -29,6 +30,7 @@ class BrainForge:
     def __init__(self, client: httpx.AsyncClient, key: str, files=None):
         self.client, self.key, self.files = client, key, files
 
+    @bounded(30, lambda: RigError("forge_unavailable", "The product service is not connected.", 503))
     async def _call(self, method: str, job: Job):
         if not self.key:
             raise RigError("forge_unavailable", "The product service is not connected.", 503)

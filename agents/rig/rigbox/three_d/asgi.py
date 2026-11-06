@@ -55,10 +55,18 @@ class LazyR2:
         return self.instance
 
     async def put(self, *args):
-        return await self.backend().put(*args)
+        from chassis.storage import StorageError
+        try:
+            return await self.backend().put(*args)
+        except StorageError:
+            raise RigError("storage", "The product file could not be read.", 503) from None
 
     async def get(self, *args):
-        return await self.backend().get(*args)
+        from chassis.storage import StorageError
+        try:
+            return await self.backend().get(*args)
+        except StorageError:
+            raise RigError("storage", "The product file could not be read.", 503) from None
 
     async def stage(self, job):
         from chassis.storage import StorageError

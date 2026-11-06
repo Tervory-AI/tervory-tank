@@ -7,6 +7,7 @@ import os
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
 from pydantic import Field, ValidationError
+from chassis.tenant_db import activate_tenant
 
 from rigbox.service import RigError
 from .api import engine, Mount
@@ -39,6 +40,9 @@ async def workspace(operation: str, body: Call, request: Request):
     presented = request.headers.get("x-tank-key", "")
     if not expected or not presented or not hmac.compare_digest(expected.encode(), presented.encode()):
         raise RigError("unauthorized", "Room authorization is required.", 401)
+    from rigbox.rooms import require_owner
+    require_owner(body.tenant_id)
+    activate_tenant(body.tenant_id)
     value, tenant = engine(request), str(body.tenant_id)
     if operation == "capabilities" and not body.payload:
         return await value.capabilities(tenant)

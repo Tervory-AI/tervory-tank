@@ -1,5 +1,6 @@
 """Configuration diagnostics return setting names, never their values."""
 import os
+import asyncio
 
 
 GROUPS = {
@@ -39,14 +40,14 @@ async def startup_missing(agent, env=None):
     import asyncpg
     from chassis.db import schema_for
     try:
-        conn = await asyncpg.connect(values['DATABASE_URL'])
+        conn = await asyncpg.connect(values['DATABASE_URL'], timeout=10, command_timeout=10)
         try:
             enforced = await conn.fetchval('''SELECT EXISTS (
                 SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                 WHERE c.relrowsecurity AND n.nspname=$1)''', schema_for(agent))
         finally:
-            await conn.close()
-    except (OSError, ValueError, asyncpg.PostgresError):
+            await conn.close(timeout=10)
+    except (OSError, ValueError, asyncio.TimeoutError, asyncpg.PostgresError):
         return ['DATABASE_URL']
     if not enforced:
         return []

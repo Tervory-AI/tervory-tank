@@ -13,6 +13,7 @@ import re
 import time
 from decimal import Decimal, InvalidOperation
 from urllib.parse import quote, urlsplit
+from rigbox.deadline import bounded
 
 
 class CommerceError(Exception):
@@ -82,6 +83,7 @@ class Platform:
     def __repr__(self):
         return f'Platform({self.kind})'
 
+    @bounded(25, lambda: CommerceError('platform_request'))
     async def request(self, method, path, **kwargs):
         headers = {'Accept': 'application/json'}
         if self.kind == 'woocommerce':
