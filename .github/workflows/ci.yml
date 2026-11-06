@@ -63,8 +63,9 @@ jobs:
           retention-days: 14
 
   lint:
-    # Founder, 3 Nov: the full suite runs once, in the merge queue (the exact commit that lands).
-    # A pull request gets the fast checks only: this lint, security and the changes scope.
+    # 6 Nov: a pull request runs the same scoped suite as the merge queue (tank, workspace,
+    # command acceptance, savings page), so a green PR means the queue will pass too.
+    # Before this, PRs ran only lint/security/scope and failures surfaced only in the queue.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -176,7 +177,7 @@ jobs:
   tank:
     needs: [changes, runner]
     # Run even when "pick runner" was skipped; then the runner falls back to ubuntu-latest.
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     # Full suite: about 14 minutes on the hosted 4-core runner (run 41229068797: 808 s of tests in
@@ -407,7 +408,7 @@ jobs:
 
   workspace:
     needs: [changes, runner]
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
@@ -457,7 +458,7 @@ jobs:
   # Any skipped or missing test fails the job, so it never passes silently.
   command-acceptance:
     needs: [changes]
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     services:
@@ -529,7 +530,7 @@ jobs:
     needs: [changes]
     # Only when the savings pages (or what they render) change. Founder, 27 Oct: no
     # check runs on a pull request it cannot affect.
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.savings == 'true' }}
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.savings == 'true' }}
     # Chromium system dependencies need sudo; keep this job on GitHub hosted runners.
     runs-on: ubuntu-latest
     # 8 minutes timed out twice on 22 Oct and cancelled CI on main. Usually ~1 minute.
