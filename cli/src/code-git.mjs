@@ -6,7 +6,7 @@ import { emptyState } from './empty-state.mjs';
 const execute = promisify(execFile);
 const refuse = () => new Error('Code Git refused.');
 export async function gitProcess(command, args, local, signal) {
-  try { return (await execute(command, args, { cwd: local.gitWorkTree, shell: false, timeout: LIMITS.commandMs, maxBuffer: LIMITS.outputBytes, signal,
+  try { return (await execute(command, args, { cwd: local.gitWorkTree, shell: false, timeout: LIMITS.commandMs, killSignal: 'SIGKILL', maxBuffer: LIMITS.outputBytes, signal,
     env: { ...Object.fromEntries(['PATH','HOME','USERPROFILE','APPDATA','LOCALAPPDATA','SystemRoot','SSH_AUTH_SOCK','HTTPS_PROXY','HTTP_PROXY','NO_PROXY','SSL_CERT_FILE','NODE_EXTRA_CA_CERTS'].filter(k => process.env[k] !== undefined).map(k => [k, process.env[k]])), GH_PROMPT_DISABLED: '1', GIT_TERMINAL_PROMPT: '0' } })).stdout; }
   catch { throw refuse(); }
 }

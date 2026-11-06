@@ -45,10 +45,16 @@ export class TerminalUI {
     }).join('\n'));
   }
   preview(value) {
+    if (!value) { this.clearPreview(); return; }
     if (this.plain) return; // Screen readers get a single validated answer.
+    const now = performance.now();
+    if (this.lastPreview !== undefined && now - this.lastPreview < 16) return;
+    this.lastPreview = now;
     const text = previewText(value).replace(/\s/g,' ');
     if (!text) return;
-    this.clearPreview(); const lines = wrapTerminal(text,Math.max(1,this.columns()-1)).split('\n');
+    // A live preview occupies one line. Segment only its bounded visible tail;
+    // final output is still complete and uses the same redaction rules.
+    this.clearPreview(); const lines = wrapTerminal(text.slice(-Math.max(2,this.columns()*2)),Math.max(1,this.columns()-1)).split('\n');
     this.live(lines.at(-1)); this.active = true;
   }
   status(state) {
@@ -84,5 +90,5 @@ export function terminalIO(io, settings) {
   const ui = new TerminalUI({...settings,write:io.write});
   return {...io, write:value=>ui.write(value), preview:value=>ui.preview(value), status:state=>ui.status(state), tool:step=>ui.tool(step), steps:value=>ui.toggle(value),
     reset:()=>{ui.clearPreview();ui.steps=[];ui.state=null;},
-    prompt:async label=>{ui.clearPreview();return io.prompt(label);}};
+    prompt:async label=>{ui.clearPreview();return io.prompt(ui.plain ? clean(label) : wrapTerminal(clean(label),ui.columns()));}};
 }

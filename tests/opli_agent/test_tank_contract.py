@@ -272,6 +272,152 @@ async def test_code_savings_use_frozen_code_policy_prices_without_another_model_
 
 
 @pytest.mark.asyncio
+async def test_gate5_all_opli_routes_require_service_auth_and_signed_in_identity(gate_api, proposed, monkeypatch):
+    client, pool = gate_api
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    route = await answer(proposed, pool, monkeypatch, {'answer': 'done', 'requests': []})
+    requests = [
+        ('GET', '/code-models', None), ('GET', '/code-sessions', None),
+        ('GET', '/code-sessions/' + thread, None), ('GET', '/code-mcp-policy', None),
+        ('PUT', '/code-mcp-policy', {'server_id': '*', 'blocked': True}),
+        ('POST', '/code-attachments', {'thread_id': thread, 'name': 'file.txt', 'base64': 'cGxhaW4='}),
+        ('POST', f'/threads/{thread}/code-turn', {'text': 'inspect'}),
+        ('POST', f'/threads/{thread}/code-stream', {'text': 'inspect'}),
+    ]
+    for headers in [{'x-tank-key': ''}, {'x-tank-key': 'not-a-key'}, {'x-tervory-user': ''}, {'x-tervory-tenant': ''}]:
+        for method, path, body in requests:
+            result = await client.request(method, '/v1/command' + path, headers=headers, json=body)
+            assert result.status_code in {401, 422}, (method, path, result.text)
+    route.assert_not_called()
+    assert await pool.fetchval('SELECT count(*) FROM tank.tasks') == 0
+    assert await pool.fetchval('SELECT count(*) FROM tank.opli_mcp_policy') == 0
+
+
+@pytest.mark.asyncio
+async def test_gate5_cross_tenant_and_owner_cannot_read_or_mutate_code_thread(gate_api, proposed, monkeypatch):
+    client, pool = gate_api
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    route = await answer(proposed, pool, monkeypatch, {'answer': 'done', 'requests': []})
+    await client.post(f'/v1/command/threads/{thread}/code-turn', json={'text': 'private client task'})
+    before = await pool.fetchval('SELECT state::text FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(thread))
+    route.reset_mock()
+    for headers in [{'x-tervory-tenant': str(OTHER)}, {'x-tervory-user': 'other'}]:
+        assert (await client.get('/v1/command/code-sessions', headers=headers)).json() == []
+        assert (await client.get('/v1/command/code-sessions/' + thread, headers=headers)).status_code == 404
+        for endpoint in ['code-turn', 'code-stream']:
+            result = await client.post(f'/v1/command/threads/{thread}/{endpoint}', headers=headers, json={'text': 'forged'})
+            assert result.status_code == 404, result.text
+            assert 'private client task' not in result.text
+        result = await client.post('/v1/command/code-attachments', headers=headers,
+            json={'thread_id': thread, 'name': 'file.txt', 'base64': 'cGxhaW4='})
+        assert result.status_code == 404
+    route.assert_not_called()
+    assert await pool.fetchval('SELECT state::text FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(thread)) == before
+
+
+@pytest.mark.asyncio
+async def test_gate5_request_reservation_survives_completion_failure_and_later_prompts(gate_api, proposed, monkeypatch):
+    client, pool = gate_api
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    route = await answer(proposed, pool, monkeypatch, {'answer': 'done', 'requests': []})
+    async def next_receipt(*args, **kwargs):
+        ledger = uuid.uuid4()
+        await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) VALUES($1,$2,'orchestrator','command.code','placeholder-allowed',0.004)", ledger, TENANT)
+        return types.SimpleNamespace(ledger_id=ledger, content=json.dumps({'answer': 'done', 'requests': []}))
+    route.side_effect = next_receipt
+    path = f'/v1/command/threads/{thread}/code-turn'
+    body = {'text': 'do once', 'prompt_id': str(uuid.uuid4()), 'request_id': str(uuid.uuid4())}
+    assert (await client.post(path, json=body)).status_code == 200
+    assert (await client.post(path, json=body)).status_code == 409
+    assert (await client.post(path, json={**body, 'request_id': str(uuid.uuid4())})).status_code == 409
+    continuation = {**body, 'continuation': True, 'request_id': str(uuid.uuid4())}
+    result = await client.post(path, json=continuation)
+    assert result.status_code == 200, result.text
+    assert (await client.post(path, json=continuation)).status_code == 409
+    assert route.await_count == 2
+    assert (await client.post(path, json={'text': 'later prompt'})).status_code == 200
+    before = await pool.fetchval('SELECT state::text FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(thread))
+    assert (await client.post(path, json=body)).status_code == 409
+    assert await pool.fetchval('SELECT state::text FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(thread)) == before
+    assert route.await_count == 3
+    route.side_effect = RuntimeError('private transport canary')
+    failed = {'text': 'new task', 'prompt_id': str(uuid.uuid4()), 'request_id': str(uuid.uuid4())}
+    result = await client.post(path, json=failed)
+    assert result.status_code == 502 and 'private transport canary' not in result.text
+    assert (await client.post(path, json=failed)).status_code == 409
+    assert route.await_count == 4
+    assert await pool.fetchval('SELECT count(*) FROM tank.tasks') == 4
+    assert await pool.fetchval('SELECT status FROM tank.tasks WHERE id=$1', uuid.UUID(failed['request_id'])) == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_gate5_concurrent_duplicate_requests_create_one_task(gate_api, proposed, monkeypatch):
+    import asyncio
+    client, pool = gate_api
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    route = await answer(proposed, pool, monkeypatch, {'answer': 'done', 'requests': []})
+    body = {'text': 'once', 'prompt_id': str(uuid.uuid4()), 'request_id': str(uuid.uuid4())}
+    responses = await asyncio.gather(*[client.post(f'/v1/command/threads/{thread}/code-turn', json=body) for _ in range(3)])
+    assert sorted(result.status_code for result in responses) == [200, 409, 409]
+    assert route.await_count == 1
+    assert await pool.fetchval('SELECT count(*) FROM tank.tasks') == 1
+
+
+@pytest.mark.asyncio
+async def test_gate5_invalid_code_inputs_never_reach_model_or_storage(gate_api, proposed, monkeypatch):
+    client, pool = gate_api
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    route = await answer(proposed, pool, monkeypatch, {'answer': 'done', 'requests': []})
+    for bad in [{'mode': 'unsafe'}, {'request_id': '../other'}, {'text': ''}, {'text': 'x' * 20001},
+                {'tenant_id': str(OTHER)}, {'tool_results': [{'name': 'shell', 'output': 'no'}]},
+                {'local_mcp': [{'server': 'fixture', 'name': 'x', 'inputSchema': {}, 'description': 'x' * 200001}]}]:
+        result = await client.post(f'/v1/command/threads/{thread}/code-turn', json={'text': 'inspect', **bad})
+        assert result.status_code == 422, result.text[:200]
+    route.assert_not_called()
+    assert await pool.fetchval('SELECT count(*) FROM tank.tasks') == 0
+
+@pytest.mark.asyncio
+async def test_gate5_mcp_schema_references_cannot_fetch_even_a_local_url(gate_api, proposed, monkeypatch):
+    import asyncio
+    client, pool = gate_api
+    hits = []
+    async def fake_http(reader, writer):
+        hits.append(await reader.read(4096))
+        writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 17\r\nConnection: close\r\n\r\n{"type":"object"}')
+        await writer.drain()
+        writer.close()
+    server = await asyncio.start_server(fake_http, '127.0.0.1', 0)
+    try:
+        thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+        request = {'name': 'local_mcp', 'arguments': {'server': 'fixture', 'tool': 'echo', 'arguments': {}}}
+        await answer(proposed, pool, monkeypatch, {'answer': '', 'requests': [request]})
+        schema = {'$ref': f'http://127.0.0.1:{server.sockets[0].getsockname()[1]}/schema'}
+        result = await client.post(f'/v1/command/threads/{thread}/code-turn', json={'text': 'inspect', 'local_mcp': [{'server': 'fixture', 'name': 'echo', 'inputSchema': schema}]})
+        assert result.status_code == 422 and 'schema or arguments refused' in result.text
+        assert hits == []
+        state = json.loads(await pool.fetchval('SELECT state::text FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(thread)))
+        assert state['cards'] == {} and state['active_turn'] is None
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_gate5_mcp_validation_bounds_hostile_regex_and_keeps_local_references(proposed):
+    import asyncio
+    from fastapi import HTTPException
+    validate = proposed.code_sessions.validate_mcp
+    schema = {'$defs': {'text': {'type': 'string'}}, 'type': 'object', 'properties': {'text': {'$ref': '#/$defs/text'}}}
+    await validate(schema, {'text': 'valid'})
+    with pytest.raises(HTTPException, match='schema or arguments refused'):
+        await validate(schema, {'text': 1})
+    began = asyncio.get_running_loop().time()
+    with pytest.raises(HTTPException, match='timed out'):
+        await validate({'type': 'string', 'pattern': '^(a+)+$'}, 'a' * 40 + '!', timeout=1)
+    assert asyncio.get_running_loop().time() - began < 5
+
+
+@pytest.mark.asyncio
 async def test_existing_source_privacy_assertions_with_proposed_server(gate_api, proposed, monkeypatch):
     # Execute the original regression, including all assertions, with this
     # proposal's HTTP/SQL fixture. The Tank checkout stays untouched.

@@ -21,7 +21,8 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
   let savings = 0; let knownSavings = true;
   const turns = []; const history = [];
   const mcp = createMCP(tank, io);
-  const clean = value => sanitize(redactSecrets(String(value)));
+  const clean = value => sanitize(redactSecrets(mcp.clean ? mcp.clean(String(value)) : String(value)));
+  const cleanObject = value => mcp.cleanObject ? mcp.cleanObject(value) : value;
   const statusLine = () => { if (!headless) io.status?.({model:model === 'auto'?'Auto':model,mode,cost_usd:knownCost?cost:null,savings_usd:knownSavings?savings:null}); };
   const notesFolder = await CodeFolder.create(local.gitWorkTree);
   let notes = { exists: false };
@@ -132,7 +133,7 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
       if (io.signal?.aborted) throw new Error('Command cancelled; no action was retried.');
       if (round === 32) throw new Error('Code tool limit reached; nothing was retried.');
       const body = {
-        text, model, mode, tool_results: results, prompt_id: promptId, continuation: round > 0, history: previous,
+        text: clean(text), model, mode, tool_results: results, prompt_id: promptId, request_id: randomUUID(), continuation: round > 0, history: cleanObject(previous),
         ...(attachments.length ? { attachments } : {}), ...(local_mcp.length ? { local_mcp } : {}),
       };
       const plan = !headless && typeof io.preview === 'function' && typeof tank.codeTurn === 'function'
@@ -167,8 +168,8 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
         if (io.signal?.aborted) throw new Error('Command cancelled; no action was retried.');
         if (!request || typeof request.name !== 'string' || !request.arguments || typeof request.arguments !== 'object') throw new Error('Tank sent an invalid answer.');
         if ((mode === 'plan' || headless) && !READS.has(request.name)) { blocked = true; status = 'needs_input'; break; }
-        remember('tool', JSON.stringify({ name: request.name, arguments: request.arguments }));
-        if (!headless) io.tool?.({phase:'start',name:request.name,arguments:JSON.parse(JSON.stringify(request.arguments,(key,value)=>typeof value==='string'?clean(value):value))});
+        remember('tool', JSON.stringify(cleanObject({ name: request.name, arguments: request.arguments })));
+        if (!headless) io.tool?.({phase:'start',name:request.name,arguments:JSON.parse(JSON.stringify(cleanObject(request.arguments),(key,value)=>typeof value==='string'?clean(value):value))});
         let result;
         try {
           if (request.name === 'local_mcp') result = await mcp.call(request.arguments, mode, headless);
@@ -201,7 +202,7 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
         } catch { result = { error: 'Code tool refused.' }; }
         if (result?.applied === false || result?.ran === false || result?.status === 'cancelled' || result?.error) { blocked = true; status = 'needs_input'; }
         if (!headless) io.tool?.({phase:'end',result:JSON.parse(JSON.stringify(result ?? null,(key,value)=>typeof value==='string'?clean(value):value)),failed:blocked});
-        const output = redactSecrets(JSON.stringify({ arguments: request.arguments, result }));
+        const output = redactSecrets(JSON.stringify(cleanObject({ arguments: request.arguments, result })));
         while (results.length && (results.length >= 6 || results.reduce((n, item) => n + Buffer.byteLength(item.output), 0) + Buffer.byteLength(output) > 1_500_000)) results.shift();
         results.push({ name: request.name, output: Buffer.byteLength(output) > 400000 ? JSON.stringify({ error: 'Code tool result exceeds the limit.' }) : output });
         if (blocked) break;
@@ -209,5 +210,5 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
       if (blocked) { io.write('Code task needs approval or a valid tool request.\n'); break; }
     }
   }
-  } finally { await mcp.close(); }
+  } finally { io.preview?.(''); await mcp.close(); }
 }

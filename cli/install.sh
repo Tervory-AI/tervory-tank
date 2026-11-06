@@ -53,11 +53,20 @@ main() {
   # curl: --proto/--proto-redir keep the first request and every redirect on https.
   # wget: --https-only covers recursive mode only (an https->http redirect would still be
   # followed), so wget follows no redirect at all; app.tervory.com serves the files
-  # directly. -T is per read, so `timeout 300` adds a total deadline where it exists.
+  # directly. -T is per read; Node supplies the same total deadline on macOS
+  # and other systems without the timeout utility.
   if command -v curl >/dev/null 2>&1; then
     fetch() { curl -fsSL --proto "$PROTO" --proto-redir "$PROTO" --connect-timeout 15 --max-time 300 --retry 2 -o "$2" "$1"; }
   elif command -v wget >/dev/null 2>&1; then
-    DEADLINE=""
+    deadline() {
+      node - "$@" <<'JS'
+const {spawnSync}=require('node:child_process');
+const [command,...args]=process.argv.slice(2);
+const result=spawnSync(command,args,{stdio:'inherit',timeout:300000,killSignal:'SIGKILL'});
+process.exit(result.status===0?0:1);
+JS
+    }
+    DEADLINE="deadline"
     if command -v timeout >/dev/null 2>&1; then DEADLINE="timeout 300"; fi
     if [ "$LOOPBACK" = 1 ]; then
       fetch() { $DEADLINE wget -q --max-redirect=0 -T 30 -t 2 -O "$2" "$1"; }

@@ -4,14 +4,15 @@ import { homedir } from 'node:os';
 import { join, basename } from 'node:path';
 import { LIMITS, redactSecrets } from './code-tools.mjs';
 import { ConfigurationError, missingSetting } from './configuration.mjs';
+import { boundedFetch, boundedOperation, boundedBody } from './http.mjs';
+import { keyringEntry } from './keyring.mjs';
 
 const refused = () => new Error('Code MCP refused.');
 const identifier = /^[A-Za-z0-9_.-]+$/;
 export async function mcpKeyring(server, name) {
   if (!identifier.test(server) || !identifier.test(name)) throw refused();
   try {
-    const { Entry } = await import('@napi-rs/keyring');
-    return new Entry('@tervory/cli/mcp', `${server}/${name}`, { linux: { store: 'secret-service' } });
+    return keyringEntry('@tervory/cli/mcp', `${server}/${name}`);
   } catch {
     throw new ConfigurationError(`Code MCP keyring entry @tervory/cli/mcp/${server}/${name} is unavailable. Enable the OS keyring before connecting.`, [`@tervory/cli/mcp/${server}/${name}`]);
   }
@@ -63,8 +64,12 @@ export async function loadMCP(path = join(homedir(), '.tervory', 'mcp.json')) {
 }
 
 export class MCPClients {
-  constructor(tank, io, { load = loadMCP, keyring = mcpKeyring, transport = fetch } = {}) {
-    Object.assign(this, { tank, io, load, keyring, transport }); this.clients = new Map(); this.values = new Set(); this.catalogue = [];
+  constructor(tank, io, { load = loadMCP, keyring = mcpKeyring, transport = fetch, timeoutMs = LIMITS.commandMs } = {}) {
+    Object.assign(this, { tank, io, load, keyring, transport, timeoutMs }); this.clients = new Map(); this.values = new Set(); this.catalogue = [];
+  }
+  async operation(start, signal = this.io.signal) {
+    try { return await boundedOperation(start, this.timeoutMs, signal); }
+    catch { throw new Error('Code MCP failed or timed out. Nothing was retried; check the server before trying again.'); }
   }
   clean(value) {
     let text = String(value);
@@ -86,9 +91,9 @@ export class MCPClients {
     if (headless || mode === 'plan') return [];
     const configs = await this.load(); const catalogue = [];
     for (const [name, config] of Object.entries(configs)) {
-      if (!await this.allowed(config)) { await this.clients.get(name)?.client.close(); this.clients.delete(name); continue; }
+      if (!await this.allowed(config)) { await this.operation(() => this.clients.get(name)?.client.close()); this.clients.delete(name); continue; }
       const fingerprint = JSON.stringify(config);
-      if (this.clients.has(name) && this.clients.get(name).fingerprint !== fingerprint) { await this.clients.get(name).client.close(); this.clients.delete(name); }
+      if (this.clients.has(name) && this.clients.get(name).fingerprint !== fingerprint) { await this.operation(() => this.clients.get(name).client.close()); this.clients.delete(name); }
       if (!this.clients.has(name)) {
         this.io.write(`MCP ${name}: ${config.transport === 'stdio' ? JSON.stringify([config.command, ...(config.args ?? [])]) : config.url}\n`);
         if (this.io.interactive !== true || (await this.io.prompt(`Connect MCP ${name} [y/N] `))?.trim().toLowerCase() !== 'y') continue;
@@ -111,28 +116,34 @@ export class MCPClients {
           const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
           const guarded = async (url, init) => {
             if (String(url) !== new URL(config.url).href) throw refused();
-            const response = await this.transport(url, { ...init, redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(LIMITS.commandMs), ...(init?.signal ? [init.signal] : []), ...(this.io.signal ? [this.io.signal] : [])]) });
-            if (response.status >= 300 && response.status < 400) { await response.body?.cancel(); throw refused(); }
-            let size = 0;
-            return new Response(response.body?.pipeThrough(new TransformStream({ transform(chunk, controller) { size += chunk.byteLength; if (size > LIMITS.fileBytes) throw refused(); controller.enqueue(chunk); } })), { status: response.status, headers: response.headers });
+            // Preserve streaming replies; bound headers and the entire body.
+            const signal = AbortSignal.any([...(init?.signal ? [init.signal] : []), ...(this.io.signal ? [this.io.signal] : [])]);
+            const deadline = Date.now() + this.timeoutMs;
+            return boundedFetch(this.transport, url, { ...init, redirect: 'error', signal }, this.timeoutMs, async response => {
+              return new Response(boundedBody(response.body, LIMITS.fileBytes, Math.max(1, deadline-Date.now()), signal), { status: response.status, headers: response.headers });
+            });
           };
           channel = new StreamableHTTPClientTransport(new URL(config.url), { fetch: guarded, requestInit: { headers: secretEntries, redirect: 'error' }, reconnectionOptions: { maxRetries: 0, initialReconnectionDelay: 1000, maxReconnectionDelay: 1000, reconnectionDelayGrowFactor: 1 } });
         }
+        // The SDK also closes asynchronously after failed initialization. Share
+        // that promise so cleanup waits for the same stdio process to exit.
+        const closeChannel = channel.close.bind(channel); let closing;
+        channel.close = () => closing ??= closeChannel();
         const client = new Client({ name: 'tervory', version: '0.11.0' }, { capabilities: {} });
-        try { await client.connect(channel, { timeout: LIMITS.commandMs, signal: this.io.signal }); }
-        catch { await client.close().catch(() => {}); throw refused(); }
+        try { await this.operation(() => client.connect(channel, { timeout: this.timeoutMs, signal: this.io.signal })); }
+        catch (error) { await this.operation(() => client.close(), null).catch(() => {}); throw error; }
         this.clients.set(name, { client, config, fingerprint });
       }
       const { client } = this.clients.get(name); let cursor; const seen = new Set();
       do {
-        const page = await client.listTools(cursor ? { cursor } : {}, { timeout: LIMITS.commandMs, signal: this.io.signal });
+        const page = await this.operation(() => client.listTools(cursor ? { cursor } : {}, { timeout: this.timeoutMs, signal: this.io.signal }));
         for (const tool of page.tools) {
           if (!identifier.test(tool.name) || this.clean(tool.name) !== tool.name) throw refused();
           catalogue.push({ server: name, name: tool.name, description: this.clean(tool.description ?? ''), inputSchema: this.cleanObject(tool.inputSchema) });
         }
         if (Buffer.byteLength(JSON.stringify(catalogue)) > LIMITS.fileBytes) throw refused();
         cursor = page.nextCursor;
-        if (cursor && seen.has(cursor)) throw refused(); seen.add(cursor);
+        if (cursor && (seen.has(cursor) || seen.size >= LIMITS.files)) throw refused(); seen.add(cursor);
       } while (cursor);
     }
     this.catalogue = catalogue; return catalogue;
@@ -140,14 +151,14 @@ export class MCPClients {
   async call(args, mode, headless) {
     const server = this.clients.get(args.server);
     if (headless || mode === 'plan' || ['search','fetch','web_search','web_fetch'].includes(args.tool) || !server || !this.catalogue.some(t => t.server === args.server && t.name === args.tool) || !await this.allowed(server.config)) throw refused();
-    this.io.write(this.clean(JSON.stringify({ server: args.server, tool: args.tool, arguments: args.arguments ?? {} })) + '\n');
+    this.io.write(JSON.stringify(this.cleanObject({ server: args.server, tool: args.tool, arguments: args.arguments ?? {} })) + '\n');
     if (this.io.interactive !== true || (await this.io.prompt('Run MCP tool [y/N] '))?.trim().toLowerCase() !== 'y') return { status: 'cancelled' };
     if (!await this.allowed(server.config)) throw refused();
     try {
-      const result = await server.client.callTool({ name: args.tool, arguments: args.arguments ?? {} }, undefined, { timeout: LIMITS.commandMs, signal: this.io.signal });
+      const result = await this.operation(() => server.client.callTool({ name: args.tool, arguments: args.arguments ?? {} }, undefined, { timeout: this.timeoutMs, signal: this.io.signal }));
       const clean = this.cleanObject(result); if (Buffer.byteLength(JSON.stringify(clean)) > LIMITS.fileBytes) throw refused();
       return clean;
-    } catch { throw refused(); }
+    } catch { throw new Error('Code MCP failed or timed out. Nothing was retried; check the server before trying again.'); }
   }
-  async close() { await Promise.allSettled([...this.clients.values()].map(({ client }) => client.close())); this.clients.clear(); this.values.clear(); }
+  async close() { await Promise.allSettled([...this.clients.values()].map(({ client }) => this.operation(() => client.close(), null))); this.clients.clear(); this.values.clear(); }
 }

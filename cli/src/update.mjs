@@ -7,7 +7,8 @@ import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:f
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { boundedFetch, DeadlineError, RedirectError } from './http.mjs';
+import { boundedFetch, responseBytes, DeadlineError, RedirectError } from './http.mjs';
+import { LIMITS } from './code-tools.mjs';
 
 export const RELEASE_BASE = 'https://app.tervory.com/cli';
 export const RELEASE_BASES = Object.freeze([RELEASE_BASE,'https://opli.tervory.com']);
@@ -65,7 +66,7 @@ async function get(transport, path, signal, timeoutMs, read, base = RELEASE_BASE
 }
 
 async function getJson(transport, path, signal, timeoutMs = JSON_TIMEOUT_MS, base = RELEASE_BASE) {
-  return get(transport, path, signal, timeoutMs, response => response.json(),base);
+  return get(transport, path, signal, timeoutMs, async response => JSON.parse(await responseBytes(response, LIMITS.fileBytes)),base);
 }
 
 export async function latestVersion(transport, signal, timeoutMs = JSON_TIMEOUT_MS, base = RELEASE_BASE) {
@@ -90,7 +91,7 @@ export async function update({ transport, io, version, root = PACKAGE_ROOT, tar 
   try { trust = await readFile(join(root,'TRUSTED-RELEASE.pem')); } catch (error) { if (release.signed || error.code !== 'ENOENT') throw new Error('Update refused: release trust key missing: TRUSTED-RELEASE.pem. Reinstall with the signed installer.'); }
   const signed = async (path, bytes) => {
     if (!trust) return;
-    const signature = await get(transport,path+'.sig',io.signal,JSON_TIMEOUT_MS,response=>response.text(),base);
+    const signature = await get(transport,path+'.sig',io.signal,JSON_TIMEOUT_MS,async response=>(await responseBytes(response, LIMITS.fileBytes)).toString(),base);
     try { const key=createPublicKey(trust); if(key.asymmetricKeyType!=='ed25519'||!verify(null,bytes,key,Buffer.from(signature.trim(),'base64')))throw new Error(); }
     catch { throw new Error('Update refused: release signature invalid. Nothing was changed.'); }
   };
@@ -105,7 +106,7 @@ export async function update({ transport, io, version, root = PACKAGE_ROOT, tar 
   try {
     if (trust) {
       const path=`releases/${target}/manifest.json`;
-      const raw=await get(transport,path,io.signal,JSON_TIMEOUT_MS,async response=>Buffer.from(await response.arrayBuffer()),base);
+      const raw=await get(transport,path,io.signal,JSON_TIMEOUT_MS,response=>responseBytes(response, LIMITS.fileBytes),base);
       await signed(path,raw); manifest=JSON.parse(raw);
     } else manifest = await getJson(transport, `releases/${target}/manifest.json`, io.signal,JSON_TIMEOUT_MS,base);
   } catch (error) {
@@ -146,7 +147,8 @@ export async function update({ transport, io, version, root = PACKAGE_ROOT, tar 
   try {
     const file = join(staging, artifact.file);
     await writeFile(file, bytes);
-    await run(tar, ['-xzf', file, '-C', staging]);
+    try { await run(tar, ['-xzf', file, '-C', staging], { timeout: LIMITS.commandMs, signal: io.signal, killSignal: 'SIGKILL', maxBuffer: LIMITS.outputBytes }); }
+    catch { throw new Error('Update failed: archive extraction failed or timed out. Nothing was changed.'); }
     const unpacked = join(staging, `tervory-cli-${target}`);
     const record = JSON.parse(await readFile(join(unpacked, 'RELEASE.json'), 'utf8'));
     if (record.version !== target || record.platform !== release.platform) throw new Error('Update failed: archive does not match the manifest.');
@@ -171,7 +173,7 @@ export async function update({ transport, io, version, root = PACKAGE_ROOT, tar 
  * Passive check, at most once a day, for installed copies. Returns a one-line
  * notice or null; never throws (offline, slow or broken answers are ignored).
  */
-export async function updateNotice({ transport, now = Date.now, root = PACKAGE_ROOT, timeoutMs = 1500 }) {
+export async function updateNotice({ transport, now = Date.now, root = PACKAGE_ROOT, timeoutMs = 1500, onFailure = () => {} }) {
   // Windows uses verified archive installation; never suggest its refused updater.
   if (process.platform === 'win32') return null;
   try {
@@ -189,7 +191,7 @@ export async function updateNotice({ transport, now = Date.now, root = PACKAGE_R
     if (latest && compareVersions(latest, release.version) > 0) {
       return `A new Tervory CLI is available: ${release.version} -> ${latest}. Run: tervory update\n`;
     }
-  } catch { /* never block or fail a command on the passive check */ }
+  } catch { onFailure(); /* The command can still finish successfully. */ }
   return null;
 }
 
