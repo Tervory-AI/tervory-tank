@@ -1,4 +1,5 @@
-"""The SA stack deploys after main and before any room. No network, no token printed."""
+"""Main deploys first; then the ZA chain (SA stack, then ZA rooms) runs beside Boston's rooms.
+No network, no token printed."""
 
 from __future__ import annotations
 
@@ -53,16 +54,16 @@ def test_sa_stack_deploys_after_main_and_before_rooms(monkeypatch: pytest.Monkey
     monkeypatch.setattr(mod, "deploy", deploy)
     monkeypatch.setattr(mod, "wait_for", wait_for)
     assert mod.main() == 0
-    assert order == [
-        ("deploy", "main", mod.MAIN_APP),
-        ("wait", "main", mod.MAIN_APP),
+    assert order[:2] == [("deploy", "main", mod.MAIN_APP), ("wait", "main", mod.MAIN_APP)]
+    za = [o for o in order[2:] if o[1].endswith("-za")]
+    boston = [o for o in order[2:] if not o[1].endswith("-za")]
+    assert za == [
         ("deploy", "tervory-tank-za", "za-uuid"),
         ("wait", "tervory-tank-za", "za-uuid"),
-        ("deploy", "agent-zenas", "room-uuid"),
-        ("wait", "agent-zenas", "room-uuid"),
         ("deploy", "agent-zenas-za", "room-za-uuid"),
         ("wait", "agent-zenas-za", "room-za-uuid"),
     ]
+    assert boston == [("deploy", "agent-zenas", "room-uuid"), ("wait", "agent-zenas", "room-uuid")]
 
 
 def test_a_failed_main_deploy_does_not_touch_the_sa_stack(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,13 +99,8 @@ def test_a_failed_sa_deploy_skips_za_rooms_but_deploys_boston_rooms(monkeypatch:
     monkeypatch.setattr(mod, "deploy", deploy)
     monkeypatch.setattr(mod, "wait_for", wait_for)
     assert mod.main() == 1  # still reported as a failure, so the ZA outage stays visible
-    assert order == [
-        ("deploy", "main"),
-        ("wait", "main"),
-        ("deploy", "tervory-tank-za"),
-        ("deploy", "agent-zenas"),
-        ("wait", "agent-zenas"),
-    ]
+    assert order[:2] == [("deploy", "main"), ("wait", "main")]
+    assert sorted(order[2:]) == sorted([("deploy", "tervory-tank-za"), ("deploy", "agent-zenas"), ("wait", "agent-zenas")])
     assert ("deploy", "agent-zenas-za") not in order
 
 
@@ -740,3 +736,24 @@ def test_confirmed_failed_build_can_continue_without_overlap(monkeypatch):
     monkeypatch.setattr(mod, "wait_for", lambda *args: False)
     assert mod.main() == 1
     assert seen == ["base", "tiger"]
+
+
+def test_za_chain_runs_beside_boston_rooms(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A slow ZA build no longer holds Boston's rooms: the Boston room deploys while ZA is still waiting."""
+    import threading
+    mod = _script(monkeypatch)
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["tank/main.py", "agents/zenas/app.py"])
+    monkeypatch.setattr(mod, "api", lambda method, path: (200, _apps()))
+    boston_done = threading.Event()
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: True)
+
+    def wait_for(uuid: str, name: str, timeout_s: int = 900) -> bool:
+        if name == "tervory-tank-za":
+            return boston_done.wait(5)  # only finishes once Boston's room has deployed
+        if name == "agent-zenas":
+            boston_done.set()
+        return True
+
+    monkeypatch.setattr(mod, "wait_for", wait_for)
+    assert mod.main() == 0
+    assert boston_done.is_set()
