@@ -161,7 +161,7 @@ def test_founder_subjects_are_bound_to_one_verified_issuer(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_setup_read_requires_capability_not_a_native_subject_name(monkeypatch):
+async def test_setup_read_requires_capability_not_a_native_subject_name(runtime, monkeypatch):
     from unittest.mock import AsyncMock
     from starlette.requests import Request
     import case_studies

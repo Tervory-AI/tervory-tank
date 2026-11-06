@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cloneElement, isValidElement, useId, type ReactElement } from "react";
 import { FirstAction } from "./day-zero";
 import { CRM, Data, Resource, value } from "./copy";
 export function Field({
@@ -8,10 +9,15 @@ export function Field({
   label: string;
   children: React.ReactNode;
 }) {
+  const fieldId = useId();
+  const control = isValidElement(children) && ["input", "textarea", "select"].includes(String(children.type));
+  const labelled = control ? cloneElement(children as ReactElement<{"aria-labelledby"?: string}>, {
+    "aria-labelledby": (children.props as {"aria-labelledby"?: string})["aria-labelledby"] ?? fieldId,
+  }) : children;
   return (
     <div className="trigger-field">
-      <span className="trigger-field-label">{label}</span>
-      <div className="trigger-field-value">{children}</div>
+      <span id={fieldId} className="trigger-field-label">{label}</span>
+      <div className="trigger-field-value">{labelled}</div>
     </div>
   );
 }

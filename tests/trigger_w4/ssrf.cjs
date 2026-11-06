@@ -47,6 +47,7 @@ const query = [
     },
     mocks: {
       "@/lib/trigger-signin": { auth: async () => ({ orgRole: "org:admin" }) },
+      "@/lib/trigger": {triggerIdentity: async tenant => ({...tenant, tenantAdmin:true})},
       "@/lib/tenant": {
         activeTenant: async () => {
           identities++;
