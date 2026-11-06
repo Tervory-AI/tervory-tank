@@ -128,7 +128,9 @@ class ContextDev:
             return {"status": "ledger_unavailable", "fields": {}}
         key = os.environ.get("CONTEXT_DEV_API_KEY")
         if not key:
-            return {"status": "not_configured", "fields": {}}
+            return {"status": "not_configured", "fields": {},
+                    "missing_settings": ["CONTEXT_DEV_API_KEY"],
+                    "message": "Missing setting: CONTEXT_DEV_API_KEY"}
         if self.stopped or self.reserved + BRAND_CREDITS > self.max_credits:
             return {"status": "credit_limit", "message": "credit cap reached", "fields": {}}
         approval = await self._paid_admission(payload, record_id)

@@ -14,6 +14,7 @@ from fastapi import Header, HTTPException
 from pydantic import BaseModel, Field
 
 from chassis.storage import Storage, StorageError
+from configuration import missing_settings, not_configured
 
 LIMITS = {'.html': 2_400_000, '.jpg': 8 * 1024 * 1024, '.pdf': 10_000_000}
 
@@ -94,6 +95,9 @@ def register(app) -> None:
     async def evidence(body: EvidenceRequest, x_tank_key: str = Header(default='')):
         from base_brain import Task, selected
         selected(Task(tenant_id=body.tenant_id, task_id=body.task_id), x_tank_key)
+        missing = missing_settings(('R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID_BASE', 'R2_SECRET_ACCESS_KEY_BASE'))
+        if missing:
+            raise HTTPException(503, not_configured(missing))
         try:
             return await upload(body)
         except Exception:

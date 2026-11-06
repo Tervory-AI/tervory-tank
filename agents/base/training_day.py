@@ -28,6 +28,7 @@ else:
 from pipeline import order_states
 from room import SkillClient, _run_batch, ensure_tables, insert_batch
 from sources.vendor_ledger import PLATFORM_TENANT, decoded
+from configuration import missing_settings, not_configured
 
 
 def local_service(url):
@@ -240,6 +241,16 @@ async def execute(pool, skills, snapshot, directory, *, states=None, today=None)
 
 
 async def main(args):
+    if getattr(args, 'dry_run', False):
+        from base_gate4_dry_run import run
+        result = await run(Path(args.work_dir))
+        print(json.dumps(result, sort_keys=True))
+        return result
+    missing = missing_settings(('DATABASE_URL', 'TANK_KEY'))
+    if missing:
+        result = not_configured(missing)
+        print(json.dumps(result, sort_keys=True))
+        return result
     database = local_service(os.environ['DATABASE_URL'])
     tank = local_service(os.environ.get('TANK_URL', 'http://127.0.0.1:8000'))
     if os.environ.get('TANK_REGION', 'us-east') != 'us-east':
@@ -277,6 +288,7 @@ if __name__ == '__main__':
     parser.add_argument('--published-on', default='')
     parser.add_argument('--state', action='append', help='Explicit jurisdiction selection; default is the complete file')
     parser.add_argument('--work-dir', required=True)
+    parser.add_argument('--dry-run', action='store_true', help='Replay the recorded smallest state and every scheduled job offline')
     options = parser.parse_args()
     if options.reference and (not options.source_url or not options.published_on):
         parser.error('--reference requires --source-url and --published-on')

@@ -8,11 +8,15 @@ import json
 import logging
 import os
 import uuid
+from contextlib import asynccontextmanager
+import asyncpg
 from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import Header, HTTPException, Query
 from pydantic import BaseModel, Field
+from starlette.responses import JSONResponse
+from configuration import missing_settings, not_configured
 
 from chassis.app import create_app
 from chassis.jobs import JobContext
@@ -96,6 +100,41 @@ app = create_app(
         },
     ],
 )
+
+_chassis_lifespan = app.router.lifespan_context
+
+
+async def runtime_missing_settings():
+    missing = missing_settings(('DATABASE_URL', 'TANK_KEY'))
+    if missing or not missing_settings(('CHASSIS_ADMIN_DATABASE_URL',)):
+        return missing
+    connection = None
+    try:
+        connection = await asyncpg.connect(os.environ['DATABASE_URL'], timeout=3)
+        enforced = await connection.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+            "WHERE c.relrowsecurity AND n.nspname='agent_base')")
+        return ['CHASSIS_ADMIN_DATABASE_URL'] if enforced else []
+    except (OSError, ValueError, asyncpg.PostgresError):
+        return ['DATABASE_URL']
+    finally:
+        if connection is not None:
+            await connection.close()
+
+
+@asynccontextmanager
+async def configured_lifespan(instance):
+    missing = await runtime_missing_settings()
+    instance.state.configuration_missing = missing
+    if missing:
+        # Serve diagnostics without starting pools, schedules, workers or paid work.
+        yield
+        return
+    async with _chassis_lifespan(instance):
+        yield
+
+
+app.router.lifespan_context = configured_lifespan
 
 from base_brain import register as register_brain  # noqa: E402
 from browser_evidence import register as register_browser_evidence  # noqa: E402
@@ -236,6 +275,14 @@ async def ensure_worker() -> None:
 @app.middleware("http")
 async def _boot_worker(request, call_next):  # noqa: ANN001 — Starlette's middleware signature
     await ensure_worker()
+    return await call_next(request)
+
+
+@app.middleware('http')
+async def configuration_guard(request, call_next):
+    missing = getattr(app.state, 'configuration_missing', [])
+    if missing:
+        return JSONResponse(not_configured(missing), status_code=200 if request.url.path == '/health' else 503)
     return await call_next(request)
 
 
