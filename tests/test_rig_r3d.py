@@ -17,7 +17,7 @@ from test_rig_3d_uploads import files
 from rigbox.three_d import command
 from rigbox.three_d.assets import R2Assets
 from rigbox.three_d.contracts import Review
-from rigbox.three_d.forge import BrainForge
+from rigbox.three_d.forge import BrainForge, add_anchors
 from rigbox.three_d.terminal import snapshot, updates
 from agents.rig.forge import service as worker
 from agents.rig.forge.gpu import GPU, GPUError
@@ -188,7 +188,12 @@ async def test_r3d_recorded_photos_hf_real_cpu_approval_receipt_and_resume(rig, 
             result = await command.run(request, uploads, output, review_path, corridor, storage, wait=wait)
             assert result['status'] == 'approved' and result['receipt_ids']
             assert hashlib.sha256((output / 'approved.glb').read_bytes()).hexdigest() == result['sha256']
-            assert result['sha256'] == recording['validated_glb']['sha256']
+            # Real CPU tools can emit different GLB bytes across supported hosts.
+            # Bind approval to this run's validated/uploaded bytes, never a stale recording.
+            raw = objects.objects[f'forge/{TENANT}/{request.id}/drafts/model.glb']
+            converted = add_anchors(raw, request)
+            assert result['sha256'] == hashlib.sha256(converted).hexdigest()
+            assert (output / 'approved.glb').read_bytes() == converted
             again = await command.run(request, uploads, output, review_path, corridor, storage, wait=wait)
             assert again == result and len(starts) == 1 and len(inspections) == 2
             wall = await snapshot(engine, TENANT)

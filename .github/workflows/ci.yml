@@ -78,6 +78,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check "ruff==0.17.2"
           ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+          python -m unittest discover -s tests -p test_ci_rig_toolchain.py
 
   routing:
     # Always required, including docs-only edits to the ingress contract.
@@ -373,6 +374,7 @@ jobs:
           PYTHONPATH: .:tank:agents/_chassis
           COMMAND_TEST_TOOLS: ${{ github.workspace }}/cli/node_modules
           TIGER_PROJECT_ROOT: ${{ github.workspace }}
+          CI_PREPARE_RIG_TOOLS: "1"
           SUITE_SHARD: ${{ matrix.shard }}
           SUITE_SHARDS: 10
           # One Postgres service. tests/conftest.py gives each xdist worker its own

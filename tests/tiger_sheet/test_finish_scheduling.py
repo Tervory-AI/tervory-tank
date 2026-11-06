@@ -59,6 +59,8 @@ async def test_parallel_dispatch_and_rig_queue_share_one_job_per_tenant():
         async with pool.acquire() as conn:
             await ensure_schema(conn, name)
             await ensure_tables(conn, schema)
+            assert await conn.fetchval("SELECT to_regclass($1)", schema + ".matches") is not None
+            assert await conn.fetchval("SELECT to_regclass($1)", schema + ".memory_records") is not None
         store = PgStore(pool, schema)
         a = await store.create_watch(_watch())
         b = await store.create_watch(_watch(TENANT_B))

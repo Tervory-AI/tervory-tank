@@ -52,10 +52,13 @@ const browser = await chromium.launch({headless:true,executablePath:process.env.
 try {
   for(const viewport of [{width:1920,height:1080},{width:1080,height:1920}]) {
     state = empty(); deny = false; completedRows = [];
-    const context = await browser.newContext({viewport,hasTouch:true,deviceScaleFactor:1});
+    // Keep the full CSS viewport/touch targets while bounding software-GPU raster
+    // work on shared CI runners. Real WebGL/texture/RAF assertions remain below.
+    const context = await browser.newContext({viewport,hasTouch:true,deviceScaleFactor:.5});
     await context.route('**/*',route=>route.request().url().startsWith(url) ? route.continue() : route.abort());
     const page = await context.newPage(), errors=[];
-    await page.clock.install();
+    // Only Date is controlled: keep native RAF/touch scheduling for real WebGL.
+    await page.clock.setFixedTime(new Date());
     page.on('pageerror',error=>errors.push(error.message));
     await page.addInitScript(() => {
       window.draws = 0;
@@ -74,9 +77,14 @@ try {
     assert.match(await page.locator('#intro').innerText(),/Prepare and approve your first product/);
     assert(!requested.slice(before).some(name=>name.includes('/assets/') || name.includes('terminal-runtime')));
     assert(await page.evaluate(()=>document.documentElement.scrollWidth === innerWidth && document.documentElement.scrollHeight === innerHeight));
-    await page.clock.setSystemTime(new Date(Date.now()+61000)); await page.waitForTimeout(1100);
+    await page.clock.setFixedTime(new Date(await page.evaluate(()=>Date.now()) + 61000));
+    await page.waitForFunction(()=>document.body.dataset.attract === 'true');
     assert.equal(await page.locator('body').getAttribute('data-attract'),'true');
     assert.equal(await page.locator('#model').isVisible(),false);
+    // The idle wall cycles models every eight seconds. Start the manual-control
+    // journey with a real touch so it cannot replace the model mid-assertion.
+    await page.touchscreen.tap(50, 150);
+    assert.equal(await page.locator('body').getAttribute('data-attract'),'false');
     state = { ...empty(), counts:{approved:2,today:2,active:0}, approved:[build(1),build(2)], latest:build(1)}; publish();
     await page.waitForFunction(()=>document.querySelector('#model').dataset.phase === 'wireframe',{},{timeout:20000});
     await page.waitForFunction(()=>document.querySelector('#model').dataset.phase === 'solid');
@@ -97,10 +105,13 @@ try {
     await page.locator('#rotate-left').focus(); await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(()=>document.activeElement.id),'rotate-left');
     const directory = process.env.RIG_SCREENSHOT_DIR;
-    if(directory) {fs.mkdirSync(directory,{recursive:true});await page.screenshot({path:path.join(directory,`r3d-${viewport.width}.png`)});}
-    await page.clock.setSystemTime(new Date(Date.now()+130000)); await page.waitForTimeout(1100);
+    if(directory) {fs.mkdirSync(directory,{recursive:true});await page.screenshot({path:path.join(directory,`r3d-${viewport.width}.png`),scale:'css'});}
+    await page.clock.setFixedTime(new Date(await page.evaluate(()=>Date.now()) + 130000));
     try {await page.waitForFunction(()=>document.querySelector('#product-name').textContent === 'Approved fixture 2');}
     catch(error) {console.error(await page.evaluate(()=>({body:document.body.innerText,attract:document.body.dataset.attract,now:Date.now()})));throw error;}
+    // Observe the automatic switch, then resume the user's interaction before
+    // checking textures/progress; another idle cycle must not replace this asset.
+    await page.touchscreen.tap(50, 150);
     await page.waitForFunction(()=>document.querySelector('#model').dataset.phase === 'solid');
     assert(requested.some(name=>name.endsWith('basis_transcoder.wasm')),'Real Forge KTX2 output must use the existing texture decoder');
     const live = {...build(100),status:'running',model:null,receipt:null,events:[event('understand',500),event('design',1800)]};

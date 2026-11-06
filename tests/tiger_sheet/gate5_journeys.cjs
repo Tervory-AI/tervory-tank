@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '../..');
 const proposed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const width = Number(process.argv[3]);
 const ts = require(path.join(root, 'workspace/node_modules/typescript'));
-const {chromium} = require(path.join(process.env.TIGER_TEST_TOOLS, 'playwright'));
+const {chromium} = require(path.join(process.env.TIGER_TEST_TOOLS || path.join(root, 'tests/acceptance/tiger-browser/node_modules'), 'playwright'));
 const template = path.join(root, 'workspace');
 const modules = new Map();
 function read(file) {return proposed[path.relative(root, file)] ?? fs.readFileSync(file, 'utf8');}
