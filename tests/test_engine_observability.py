@@ -97,6 +97,11 @@ def test_status_links_use_only_requested_tenant_project(monkeypatch):
     assert '/project/placeholder-a/' in engine_tracing.traces_url(a, 'base.extract')
     assert 'placeholder-b' not in engine_tracing.traces_url(a, 'base.extract')
     assert engine_tracing.traces_url(uuid.uuid4(), 'base.extract') is None
+    for invalid in ('https://cloud.langfuse.com', 'https://evil.invalid/langfuse.tervory.com',
+                    'https://langfuse.tervory.com.evil.invalid', 'https://langfuse.tervory.com@evil.invalid',
+                    'https://langfuse.tervory.com/?redirect=evil.invalid'):
+        monkeypatch.setenv('LANGFUSE_UI_URL', invalid)
+        assert engine_tracing.traces_url(a, 'base.extract') is None
 
 
 def test_self_hosted_services_have_private_stores_no_telemetry_and_pinned_images():

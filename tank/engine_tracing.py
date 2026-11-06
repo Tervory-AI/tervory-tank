@@ -2,7 +2,7 @@
 import json
 import os
 from datetime import datetime, timezone
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import quote, urlencode
 import uuid
 
 import engine_ladder
@@ -63,8 +63,9 @@ def traces_url(tenant_id, task_type):
     # Links use public project IDs only, never the ingestion credentials.
     project = json.loads(os.environ.get('LANGFUSE_TENANT_PROJECT_IDS', '{}')).get(str(tenant_id))
     base = os.environ.get('LANGFUSE_UI_URL', '').rstrip('/')
-    url = urlsplit(base)
-    if not project or url.scheme != 'https' or url.username or not url.hostname or url.hostname.endswith('langfuse.com'):
+    # This must match the audited ingress origin, not an arbitrary URL containing
+    # a familiar hostname or a cloud service used as an accidental fallback.
+    if not project or base != 'https://langfuse.tervory.com':
         return None
     filters = [{'column': 'name', 'type': 'string', 'operator': '=', 'value': task_type}]
     return base + '/project/' + quote(project, safe='') + '/traces?' + urlencode({'filter': json.dumps(filters)})
