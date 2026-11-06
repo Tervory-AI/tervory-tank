@@ -33,6 +33,7 @@ DT = datetime.fromisoformat(AT)
 
 @pytest_asyncio.fixture
 async def audit_db(monkeypatch):
+    monkeypatch.setenv("TANK_KEY_BASE", "placeholder-base-room-key")
     address = os.environ.get("BASE_TEST_DATABASE_URL") or os.environ.get("POOL_SCHEMA_DATABASE_URL")
     if not address:
         pytest.skip("Set BASE_TEST_DATABASE_URL or POOL_SCHEMA_DATABASE_URL to an isolated local PostgreSQL")

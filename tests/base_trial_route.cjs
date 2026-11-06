@@ -27,7 +27,16 @@ function load(file) {
   }).outputText;
   const module = { exports: {} };
   new Function("require", "module", "exports", compiled)(
-    (name) => mocks[name] ?? workspaceRequire(name), module, module.exports,
+    (name) => {
+      if (name in mocks) return mocks[name];
+      if (name.startsWith(".") || name.startsWith("@/")) {
+        const base = name.startsWith("@/") ? path.join(root, "workspace", name.slice(2)) : path.resolve(root, path.dirname(file), name);
+        const filename = ["", ".ts", ".tsx", ".js"].map(ext => base + ext).find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+        assert(filename, `Missing source ${name}`);
+        return load(path.relative(root, filename));
+      }
+      return workspaceRequire(name);
+    }, module, module.exports,
   );
   return module.exports;
 }

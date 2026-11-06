@@ -9,7 +9,7 @@ function load(file, mocks, env = 'production') {
   const exports = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
     compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
-  }).outputText, {exports, URL, URLSearchParams, Response, Headers, Buffer, process: {env: {NODE_ENV: env}}, require(name) {
+  }).outputText, {exports, URL, URLSearchParams, Response, Headers, Buffer, AbortSignal, process: {env: {NODE_ENV: env}}, require(name) {
     if (name in mocks) return mocks[name];
     throw Error(`Unmocked ${name}`);
   }});
