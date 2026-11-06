@@ -169,6 +169,8 @@ async def receipt(rt, req, policy, answer):
     value = {'rung': 'cache' if answer.rung == 4 else rung(answer.model),
              'would_have_cost_usd': would, 'baseline_model': baseline, 'estimated': True,
              'evals': info['attempts'], 'ledger_id': str(answer.ledger_id)}
+    if info.get('graduated_model') == answer.model and info.get('free') and value['rung'] == 'frontier':
+        value['rung'] = 'local trained'
     import engine_memory
     value['memory_hits'] = info.get('memory', {}).get('hits', 0)
     value['memory_status'] = info.get('memory', {}).get('status', 'unavailable')

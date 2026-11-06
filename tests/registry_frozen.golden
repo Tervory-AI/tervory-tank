@@ -8239,6 +8239,13 @@
         "name": "preview"
       },
       {
+        "path": "/v1/engine/status",
+        "methods": [
+          "GET"
+        ],
+        "name": "status"
+      },
+      {
         "path": "/v1/engine/candidates",
         "methods": [
           "POST"
