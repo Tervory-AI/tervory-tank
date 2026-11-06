@@ -21,7 +21,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 for folder in ('trigger_first_build', 'trigger_second_build', 'trigger_gate2', 'trigger_m1',
-               'trigger_m2', 'trigger_bot_b1', 'trigger_bot_b3', 'trigger_w4'):
+               'trigger_m2', 'trigger_bot_b1', 'trigger_bot_b3', 'trigger_w4', 'trigger_finish'):
     sys.path.insert(0, str(ROOT / 'tests' / folder))
 
 import test_trigger as writing
@@ -42,6 +42,9 @@ import test_retention as retention
 import test_whatsapp as whatsapp
 import test_console_widget as console
 import test_wave4_workspace as workspace
+import test_checker_results as checker_finish
+import test_room_lifecycle as room_finish
+import test_jobs_and_sources as source_finish
 
 # Import fixtures explicitly, as in test_tisan.py: their dependency graph is real.
 env = voice.env
@@ -52,7 +55,7 @@ database = sources.database
 w4 = console.w4
 crm_setup = crm.setup
 
-ROWS = tuple(f'R{i:02}' for i in range(1, 57))
+ROWS = tuple(f'R{i:02}' for i in range(1, 62))
 
 
 @pytest.fixture(autouse=True)
@@ -513,6 +516,37 @@ async def test_r56_draft_activation_once(w4, monkeypatch):
     w4.runtime._rig_call.assert_awaited_once()
     forwarded = json.loads(w4.runtime._rig_call.await_args.args[3])
     assert forwarded['tenant_id'] == str(console.A) and forwarded['data'] == data
+
+
+@pytest.mark.asyncio
+async def test_r57_unicode_grammar_positions(monkeypatch):
+    checker_finish.deterministic_local.__wrapped__(monkeypatch)
+    for prefix in ('', 'A sentence.\n' * 2000):
+        await checker_finish.test_unicode_grammar_points_to_original_text(prefix)
+
+
+@pytest.mark.asyncio
+async def test_r58_checker_failure_and_room_recovery(monkeypatch):
+    await checker_finish.test_failed_approved_grammar_never_calls_legacy_service(RuntimeError)
+    await room_finish.test_failed_schema_initialisation_closes_database(monkeypatch)
+    await room_finish.test_shutdown_closes_http_then_database_even_on_failure(monkeypatch, True)
+
+
+@pytest.mark.asyncio
+async def test_r59_tenant_maintenance_failures(caplog):
+    for kind in ('publication', 'retention'):
+        await source_finish.test_scheduled_batches_isolate_failures_and_preserve_cancellation(kind, False, caplog)
+
+
+@pytest.mark.asyncio
+async def test_r60_real_source_title_and_rate_limit():
+    await source_finish.test_recorded_robots_status_controls_crawl(429, False)
+    await source_finish.test_source_uses_real_title_and_ignores_hidden_links()
+
+
+@pytest.mark.asyncio
+async def test_r61_full_length_approved_faq(database):
+    await source_finish.test_long_approved_faq_can_answer_without_model(database)
 
 
 def test_sheet_has_exactly_one_fixture_case_per_row():

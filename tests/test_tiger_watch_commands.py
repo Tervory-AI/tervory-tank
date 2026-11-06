@@ -35,6 +35,8 @@ CHANGES = ("pause", "resume", "remove", "bulk")
 
 @pytest_asyncio.fixture
 async def runtime(monkeypatch):
+    monkeypatch.setenv("TANK_KEY", "placeholder-room-key")
+    monkeypatch.setenv("TANK_KEY_TIGER", "placeholder-room-key")
     monkeypatch.setenv("DATABASE_URL", "postgresql://placeholder@127.0.0.1/placeholder")
     monkeypatch.setenv("LITELLM_MASTER_KEY", "placeholder-litellm-key")
     monkeypatch.setenv("TANK_API_KEY", "placeholder-tank-key")
@@ -73,7 +75,7 @@ async def runtime(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", dns)
     for tenant, url in ((TENANT, URL), (OTHER, URL), (OTHER, FOREIGN)):
         await store.create_watch(agent._fields(agent.WatchIn(tenant_id=tenant, url=url, label="placeholder watch", every="1d"), False))
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=agent.app), base_url="http://placeholder-room") as room_client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=agent.app), base_url="http://placeholder-room", headers={"X-Tank-Key": "placeholder-room-key"}) as room_client:
         class Relay:
             async def request(self, method, url, **kwargs):
                 path = urlsplit(url).path

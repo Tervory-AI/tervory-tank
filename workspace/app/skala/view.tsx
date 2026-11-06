@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { SquadLinks } from "../squad-links";
 import { caseRecord, type EvalResult } from "./record";

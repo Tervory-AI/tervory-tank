@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Request
+from fastapi.responses import FileResponse
 from .static import ViewerFiles
 from pydantic import Field
 from app import app
@@ -28,6 +29,9 @@ _original = app.router.lifespan_context
 @asynccontextmanager
 async def lifespan(application):
     async with _original(application):
+        if getattr(application.state, 'missing_settings', []):
+            yield
+            return
         # Missing R2 credentials must not break Rig's existing catalogue API.
         # Initialize lazily at the first 3D storage operation and show its error.
         assets = LazyR2()
@@ -52,10 +56,18 @@ class LazyR2:
         return self.instance
 
     async def put(self, *args):
-        return await self.backend().put(*args)
+        from chassis.storage import StorageError
+        try:
+            return await self.backend().put(*args)
+        except StorageError:
+            raise RigError("storage", "The product file could not be read.", 503) from None
 
     async def get(self, *args):
-        return await self.backend().get(*args)
+        from chassis.storage import StorageError
+        try:
+            return await self.backend().get(*args)
+        except StorageError:
+            raise RigError("storage", "The product file could not be read.", 503) from None
 
     async def stage(self, job):
         from chassis.storage import StorageError
@@ -97,5 +109,12 @@ async def page_config(request: Request):
 
 
 bundle = Path(__file__).with_name("widget")
+
+
+@app.get('/3d/wall', include_in_schema=False)
+async def wall():
+    return FileResponse(bundle / 'index.html', headers={'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff'})
+
+
 if bundle.is_dir():
     app.mount("/3d", ViewerFiles(directory=bundle, html=True), name="rig-three-d-test")

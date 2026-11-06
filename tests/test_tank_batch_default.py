@@ -264,7 +264,7 @@ def test_convert_parallel(monkeypatch, raw, value):
 @pytest.mark.asyncio
 async def test_night_model_sends_case_facts_in_background_only(monkeypatch):
     from agents.zenas.core import convert
-    import chassis.tank as chassis_tank
+    import agents.zenas.core.outbound as zenas_outbound
     calls = []
 
     class Fake:
@@ -275,7 +275,7 @@ async def test_night_model_sends_case_facts_in_background_only(monkeypatch):
             calls.append((task_type, background))
             return {'content': 'ok'}
 
-    monkeypatch.setattr(chassis_tank, 'TankClient', Fake)
+    monkeypatch.setattr(zenas_outbound, 'TankClient', Fake)
     monkeypatch.setenv('TANK_KEY', 'fixture-key')
     monkeypatch.setenv('TANK_URL', 'http://tank')
     model, http = convert._night_model()

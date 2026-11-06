@@ -22,7 +22,7 @@ from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, Vec
 from agents.zenas.pool.http import RateLimited
 from agents.zenas.pool.ingest import ingest_snapshot
 from agents.zenas.pool.indexing import index_pending
-from agents.zenas.pool.licence import FetchNotConfigured, LicenceError, refusal_reason
+from agents.zenas.pool.licence import FetchNotConfigured, LicenceError, SourceChallenge, refusal_reason
 from agents.zenas.pool.laws_africa import is_laws_africa, live_sources, sync_source
 from agents.zenas.pool.model import SourceSpec
 from agents.zenas.pool.nightly import urllib_get
@@ -483,7 +483,7 @@ async def _record_error(store: Store, source: SourceSpec, exc: Exception, when: 
         await store.record_run(
             source.source_id,
             status="error",
-            detail=str(exc),
+            detail=("SAFLII returned a challenge page and no judgment text" if isinstance(exc, SourceChallenge) else type(exc).__name__),
             documents=0,
             when=when,
         )
@@ -492,6 +492,12 @@ async def _record_error(store: Store, source: SourceSpec, exc: Exception, when: 
 
 
 def main() -> None:
+    import sys
+    if len(sys.argv) > 1:
+        if "--dry-run" not in sys.argv[1:]:
+            raise SystemExit("Use scripts/zenas load for command options")
+        from agents.zenas.core.operations import main as command
+        raise SystemExit(command(["load", *sys.argv[1:]]))
     try:
         os.nice(19)
     except OSError:

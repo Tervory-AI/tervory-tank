@@ -110,9 +110,12 @@ class Store:
 
     # ---------- GHOST-2 inventory ----------
 
-    def replace_inventory(self, tenant: str, source: str, components: list[dict], seen_at: str) -> dict:
+    def replace_inventory(self, tenant: str, source: str, components: list[dict], seen_at: str,
+                          *, apps: set[str] | None = None) -> dict:
         """Upsert this source's current snapshot; rows it no longer reports stay as history (current=0)."""
         keys = set()
+        if apps is not None and any(c["app"] not in apps for c in components):
+            raise ValueError("Inventory component is outside the refreshed apps.")
         with self.db:
             for c in components:
                 key = (c["app"], c["kind"], c["name"], c["version"])
@@ -123,7 +126,7 @@ class Store:
                                 (tenant, *key, c.get("ecosystem", "generic"), source, seen_at, seen_at))
             stale = [row for row in self.db.execute(
                 "SELECT app, kind, name, version FROM ghost_inventory WHERE tenant=? AND source=? AND current=1",
-                (tenant, source)) if tuple(row) not in keys]
+                (tenant, source)) if tuple(row) not in keys and (apps is None or row["app"] in apps)]
             for row in stale:
                 self.db.execute("""UPDATE ghost_inventory SET current=0 WHERE tenant=? AND source=?
                     AND app=? AND kind=? AND name=? AND version=?""", (tenant, source, *tuple(row)))
@@ -148,6 +151,23 @@ class Store:
 
     def advisories(self, tenant: str) -> list[dict]:
         rows = self.db.execute("SELECT payload FROM ghost_advisories WHERE tenant=? ORDER BY published, id", (tenant,))
+        return [json.loads(row[0]) for row in rows]
+
+    def save_feed(self, tenant: str, items: list[dict], fetched_at: str, cursors: dict[str, str]) -> None:
+        """A cursor never advances past advisory rows that have not been committed."""
+        with self.db:
+            for item in items:
+                self.db.execute("""INSERT INTO ghost_advisories VALUES (?,?,?,?,?,?)
+                    ON CONFLICT(tenant, id) DO UPDATE SET payload=excluded.payload,
+                    source=excluded.source, published=excluded.published, fetched_at=excluded.fetched_at""",
+                    (tenant, item["id"], item["source"], item["published"], json.dumps(item), fetched_at))
+            for key, value in cursors.items():
+                self.db.execute("INSERT OR REPLACE INTO ghost_state VALUES (?,?,?)", (tenant, key, json.dumps(value)))
+
+    def pending_match_receipts(self, tenant: str) -> list[dict]:
+        rows = self.db.execute("""SELECT payload FROM ghost_matches WHERE tenant=? AND
+            (coalesce(json_extract(payload, '$.receipt.status'), '') != 'recorded' OR
+             json_extract(payload, '$.resolved_receipt.status') = 'pending')""", (tenant,))
         return [json.loads(row[0]) for row in rows]
 
     def advisory_ids(self, tenant: str) -> dict[str, str]:

@@ -39,7 +39,9 @@ print(json.dumps([{'results': {'failed_checks': [
 sys.exit(1)
 ''')
     binary.chmod(0o755)
-    monkeypatch.setenv('RADIX_USE_SYSTEM_TOOLS', '1')
+    # This fixture tests Checkov alone; the other engines use their offline mode.
+    monkeypatch.setenv('RADIX_USE_SYSTEM_TOOLS', '0')
+    monkeypatch.setattr(iac, 'checkov_bin', lambda: str(binary))
     monkeypatch.setenv('CHECKOV_BIN', str(binary))
     monkeypatch.setenv('BC_API_KEY', 'placeholder-not-a-secret')
     return binary

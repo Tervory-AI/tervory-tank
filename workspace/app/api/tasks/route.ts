@@ -1,3 +1,5 @@
+import { jsonInput, InputError, routeFailure } from "@/lib/route-input";
+import { submitOnce } from "@/lib/submission";
 import { NextResponse } from "next/server";
 import { createTask, listTasks, type ChatMessage } from "@/lib/tank";
 import { currentTenant } from "@/lib/tenant";
@@ -12,23 +14,24 @@ export async function GET() {
     const { tenantId } = await currentTenant();
     return NextResponse.json(await listTasks(tenantId, 50));
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
+    return routeFailure(err);
   }
 }
 
 // POST: queue a task. Tank runs it and the board picks up the result.
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as { title?: string; request?: string; task_type?: string } | null;
-  const title = body?.title?.trim() ?? "";
-  const request = body?.request?.trim() ?? "";
-  const taskType = body?.task_type ?? "tier0.answer";
-  if (!title || !request) return NextResponse.json({ error: "title and request required" }, { status: 400 });
-  if (!ALLOWED_TASK_TYPES.has(taskType)) return NextResponse.json({ error: "unknown task type" }, { status: 400 });
   try {
+    const body = await jsonInput(req);
+    if (typeof body.title !== "string" || !body.title.trim() || body.title.length > 200 ||
+        typeof body.request !== "string" || !body.request.trim() || body.request.length > 20000) throw new InputError("Add a title and what you need done (up to 20,000 characters).");
+    const title = body.title.trim(), request = body.request.trim();
+    const taskType = body.task_type ?? "tier0.answer";
+    if (typeof taskType !== "string" || !ALLOWED_TASK_TYPES.has(taskType)) throw new InputError("Choose an available task kind.");
     const { tenantId, userId } = await currentTenant();
     const messages: ChatMessage[] = [{ role: "user", content: request }];
-    return NextResponse.json(await createTask(tenantId, userId, title.slice(0, 200), taskType, messages), { status: 202 });
+    const result = await submitOnce(tenantId, userId, req.headers.get("Idempotency-Key"), { title, taskType, messages }, () => createTask(tenantId, userId, title, taskType, messages));
+    return NextResponse.json(result, { status: 202 });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
+    return routeFailure(err);
   }
 }

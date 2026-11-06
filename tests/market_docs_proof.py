@@ -23,7 +23,7 @@ import asyncpg
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / 'agents/market_lab'), str(ROOT / 'agents/_chassis'), str(ROOT / 'tests')]
+sys.path[:0] = [str(ROOT / 'agents/market_lab'), str(ROOT / 'agents/_chassis'), str(ROOT / 'tests'), str(ROOT / 'tank')]
 from fixture_proof.server import database_url, free_port, wait_ready
 from fixture_proof.boot_tank import verify_imported_cases
 from test_market_lab_documents import report_pdf, spreadsheet
@@ -79,7 +79,10 @@ def services(output):
                 child = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'market_docs_room:app', '--host', '127.0.0.1', '--port', str(room_port), '--lifespan', 'off', '--no-access-log'],
                     cwd=ROOT, env=room_env, stdout=log, stderr=log)
                 children.append(child)
-                wait_ready(f'http://127.0.0.1:{room_port}/openapi.json', child)
+                if room == 'market_lab':
+                    wait_ready(f'http://127.0.0.1:{room_port}/market/settings', child, headers={'X-Tank-Key': room_env['TANK_KEY']})
+                else:
+                    wait_ready(f'http://127.0.0.1:{room_port}/openapi.json', child)
             tank_env = {**env, 'HTTP_PROXY': f'http://127.0.0.1:{proxy.server_port}', 'http_proxy': f'http://127.0.0.1:{proxy.server_port}',
                         'NO_PROXY': '127.0.0.1,localhost', 'no_proxy': '127.0.0.1,localhost'}
             child = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', str(port), '--no-access-log'],

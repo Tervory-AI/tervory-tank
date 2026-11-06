@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   async headers() {
     // The CLI approval page grants a credential: never framed, never cached.
     return [{
+      source: "/:path*",
+      headers: [{ key: "X-Content-Type-Options", value: "nosniff" }, { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" }],
+    }, {
       source: "/sw.js",
       headers: [{ key: "Cache-Control", value: "no-cache, no-store" }, { key: "Service-Worker-Allowed", value: "/" }, { key: "X-Content-Type-Options", value: "nosniff" }],
     }, {

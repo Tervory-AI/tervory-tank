@@ -24,6 +24,7 @@ services:
       CHASSIS_RLS_ADMIN_ROLE: ${CHASSIS_RLS_ADMIN_ROLE:-}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_TIGER:-}
+      RIG_TIGER_CHECK_KEY: ${RIG_TIGER_CHECK_KEY:-}
       TIGER_URL: http://tiger-browser-gateway:3000
       # Reserved for a future caller; current extraction stays code-only.
       TIGER_BRAIN_ENABLED: ${TIGER_BRAIN_ENABLED:-false}
@@ -41,7 +42,7 @@ services:
     networks:
       - gw
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/health', headers={'X-Tank-Key': os.environ.get('TANK_KEY', '')}), timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 10

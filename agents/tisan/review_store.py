@@ -1,10 +1,14 @@
 """Retain checked static pages for founder review; never create approval records."""
-import json
 import os
 import re
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+try:
+    from agents.tisan.storage import atomic_json, tenant_folder
+except ModuleNotFoundError:
+    from storage import atomic_json, tenant_folder
+
 
 
 class Structure(HTMLParser):
@@ -56,7 +60,7 @@ def save(root: Path, project: Path, tenant: str, slug: str, build: int, source: 
     frame_path = f"{file_id}/{frame_id.replace(':', '-')}.json"
     # The saved reading is the exact frame evidence; a missing reading cannot be approved.
     reading = root / "readings" / tenant / frame_path
-    if not reading.is_file():
+    if not reading.resolve().is_relative_to(root.resolve() / "readings" / tenant) or not reading.is_file():
         raise ValueError("save the Figma frame before building its page")
     html_path = project / ".next/server/app" / ("index.html" if page == "home" else f"{page}.html")
     html = html_path.read_text()
@@ -66,10 +70,10 @@ def save(root: Path, project: Path, tenant: str, slug: str, build: int, source: 
     css = "\n".join(p.read_text() for p in sorted((project / ".next/static/css").glob("*.css")))
     artifact = {"html": html, "css": css, "structure": {"path": "/" if page == "home" else f"/{page}", "nodes": parser.nodes}}
     built_path = f"{slug}/{build}-{page}.page.json"
-    (root / "builds" / tenant / built_path).write_text(json.dumps(artifact))
-    review_dir = root / "reviews" / tenant
-    review_dir.mkdir(parents=True, exist_ok=True)
+    artifact_dir = tenant_folder(root, "builds", tenant, slug)
+    atomic_json(artifact_dir / f"{build}-{page}.page.json", artifact)
+    review_dir = tenant_folder(root, "reviews", tenant)
     record = {"tenant_id": tenant, "figma_file_id": file_id, "figma_frame_id": frame_id,
               "frame_path": frame_path, "built_page_path": built_path,
               "region": os.environ.get("TANK_REGION", "us-east"), "public": False}
-    (review_dir / f"{slug}-{page}.json").write_text(json.dumps(record))
+    atomic_json(review_dir / f"{slug}-{page}.json", record)

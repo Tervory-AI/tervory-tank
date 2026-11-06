@@ -13,10 +13,10 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import re
 import subprocess
 import sys
 import time
-import re
 from uuid import UUID
 import urllib.error
 import urllib.request
@@ -278,6 +278,21 @@ def main() -> int:
         return 1
     by_name = {a.get("name", ""): a.get("uuid") for a in apps}
     room_apps = {n: u for n, u in by_name.items() if n.startswith("agent-") and n != "agent-template"}
+    # A display-name edit must not silently stop deploying a room. Only the exact
+    # standard room compose qualifies; Enforce and other auxiliary apps stay out.
+    for app in apps:
+        if app.get("name", "").startswith("agent-"):
+            continue
+        folder = re.fullmatch(r"/?agents/([a-z][a-z0-9_]*)/?", app.get("base_directory") or "")
+        if not folder or app.get("docker_compose_location", "").lstrip("/") != "docker-compose.yml":
+            continue
+        name = "agent-" + folder[1].replace("_", "-")
+        if name == "agent-template":
+            continue
+        if name in room_apps and room_apps[name] != app.get("uuid"):
+            print("::error title=ambiguous room::multiple applications use " + name + " compose source")
+            return 1
+        room_apps[name] = app.get("uuid")
     if every_room:
         targets = dict(room_apps)
     else:

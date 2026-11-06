@@ -78,6 +78,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check "ruff==0.17.2"
           ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+          python -m unittest discover -s tests -p test_ci_rig_toolchain.py
 
   routing:
     # Always required, including docs-only edits to the ingress contract.
@@ -224,6 +225,13 @@ jobs:
           pip install --require-hashes -r agents/rig/forge/requirements.lock
       - name: Prepare video processing tools for offline acceptance
         run: bash .github/scripts/install-video-test-tools.sh
+      - name: Prepare real Radix advisory database for offline proofs
+        run: |
+          mkdir -p "$RUNNER_TEMP/radix-osv"
+          curl --fail --silent --show-error --location --retry 3 https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip --output "$RUNNER_TEMP/radix-osv/PyPI.zip"
+          curl --fail --silent --show-error --location --retry 3 https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip --output "$RUNNER_TEMP/radix-osv/npm.zip"
+          python agents/radix/osv_bake.py "$RUNNER_TEMP/radix-osv/osv.sqlite" "PyPI=$RUNNER_TEMP/radix-osv/PyPI.zip" "npm=$RUNNER_TEMP/radix-osv/npm.zip"
+          echo "RADIX_OSV_REAL=$RUNNER_TEMP/radix-osv/osv.sqlite" >> "$GITHUB_ENV"
       - name: Prepare pinned k6 for offline Tisan smoke tests
         run: |
           python3 - <<'PYK6'
@@ -289,6 +297,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx --no-install playwright install chromium
+          echo "TISAN_NPM_CACHE=$(npm config get cache)" >> "$GITHUB_ENV"
       - name: Prepare pinned Tiger acceptance browser dependencies
         working-directory: tests/acceptance/tiger-browser
         run: |
@@ -299,6 +308,13 @@ jobs:
           npm ci --prefix tests/trigger_browser_tools --ignore-scripts --no-audit --no-fund
           tests/trigger_browser_tools/node_modules/.bin/playwright install chromium
           echo "TRIGGER_BROWSER_TOOLS=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules" >> "$GITHUB_ENV"
+          echo "BASE_TEST_PLAYWRIGHT=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "RIG_PLAYWRIGHT_PATH=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "RIG_ESBUILD_PATH=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/esbuild" >> "$GITHUB_ENV"
+      - name: Prepare pinned Workspace acceptance browser dependencies
+        run: |
+          npm ci --prefix tests/browser --ignore-scripts --no-audit --no-fund
+          echo "WORKSPACE_BROWSER_TOOLS=$GITHUB_WORKSPACE/tests/browser/node_modules" >> "$GITHUB_ENV"
       - name: Prepare CLI acceptance fixtures
         run: |
           npm ci --prefix cli --ignore-scripts --no-audit --no-fund
@@ -355,7 +371,10 @@ jobs:
         # tests/test_skala_patch_code_unchanged.py (#484) runs as part of the suite.
         run: python3 .github/scripts/offline_suite.py
         env:
-          PYTHONPATH: tank
+          PYTHONPATH: .:tank:agents/_chassis
+          COMMAND_TEST_TOOLS: ${{ github.workspace }}/cli/node_modules
+          TIGER_PROJECT_ROOT: ${{ github.workspace }}
+          CI_PREPARE_RIG_TOOLS: "1"
           SUITE_SHARD: ${{ matrix.shard }}
           SUITE_SHARDS: 10
           # One Postgres service. tests/conftest.py gives each xdist worker its own

@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..');
-const tools=process.env.COMMAND_TEST_TOOLS || '/tmp/command-1b-tools/node_modules';
+const tools=process.env.WORKSPACE_BROWSER_TOOLS || process.env.TRIGGER_BROWSER_TOOLS || process.env.COMMAND_TEST_TOOLS || '/tmp/command-1b-tools/node_modules';
 const {build}=require(path.join(tools,'esbuild'));
 const {chromium}=require(path.join(tools,'playwright'));
 const base=path.join(root,'workspace');
@@ -93,7 +93,7 @@ try {
  await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('button',{name:'+ New chat',exact:true}).click();await page.getByRole('heading',{name:'New chat',exact:true}).waitFor();assert.equal(state.messages.length,0);
  state=structuredClone(original);await page.goto(`http://127.0.0.1:${port}/chats?thread=thread-one&role=client`);await page.getByRole('heading',{name:thread.title}).waitFor();assert.equal(await page.getByRole('combobox').textContent().then(text=>text.includes('fixture-model')),false);assert.equal(await page.locator('.cw-receipt-row').first().textContent().then(text=>text.includes('baseline')),false);
  await page.screenshot({path:path.join(output,'client-375.png')});
- assert.equal(await page.locator('select option').count(),1);assert.equal(await page.getByRole('combobox').inputValue(),'auto');assert.equal(await page.getByRole('link',{name:'Dashboard',exact:true,includeHidden:true}).getAttribute('href'),'/');
+ assert.equal(await page.locator('select option').count(),1);assert.equal(await page.getByRole('combobox').inputValue(),'auto');assert.equal(await page.getByRole('link',{name:'Dashboard',exact:true,includeHidden:true}).getAttribute('href'),'https://app.tervory.com/');
  assert.equal(await page.getByRole('link',{name:'Base',exact:true,includeHidden:true}).count(),1);assert.equal(await page.getByRole('link',{name:'Tiger',exact:true,includeHidden:true}).count(),0);assert.equal(await page.getByRole('button',{name:'Confirm',exact:true}).count(),1);
  const unchanged='Gold prices, Tank, eval and shadow stay unchanged.';state.messages[0].content=unchanged;state.messages[1].content=unchanged;state.cards[0].arguments={question:unchanged};state.cards[0].result={answer:unchanged};allowedTools=[];
  await page.reload();await page.getByRole('heading',{name:thread.title}).waitFor();assert.equal(await page.locator('.cw-message-text').first().textContent(),unchanged);assert.equal(await page.locator('.cw-message-text').nth(1).textContent(),unchanged);assert((await page.locator('.cw-card-details').allTextContents()).every(text=>text.includes(unchanged)));assert.equal(await page.getByRole('button',{name:'Confirm',exact:true}).count(),0);assert.equal(await page.getByRole('link',{name:'Base',exact:true,includeHidden:true}).count(),0);

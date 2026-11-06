@@ -69,6 +69,11 @@ async function serve(req: Request, context: Context) {
       if (!SEATS.has(seat)) return reply({ error: "invalid_seat" }, 400);
       params.set("seat", seat);
     }
+    const screen = new URL(req.url).searchParams.get("screen");
+    if (screen) {
+      if (!["bench", "citations", "feedback"].includes(screen)) return reply({ error: "invalid_request" }, 400);
+      params.set("screen", screen);
+    }
     let body: Record<string, unknown> | null = null;
     if (req.method === "POST") {
       body = await jsonBody(req);

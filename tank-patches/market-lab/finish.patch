@@ -1,0 +1,24 @@
+diff --git a/tank/vault_routes.py b/tank/vault_routes.py
+--- a/tank/vault_routes.py
++++ b/tank/vault_routes.py
+@@ -271,7 +271,7 @@
+                 name = clean(upload.filename, 240)
+                 if '/' in name or '\\' in name:
+                     fail(422, 'Use a file name without folders.')
+-                if room == 'market_lab' and not name.lower().endswith(('.pdf', '.csv', '.xlsx')):
++                if room == 'market_lab' and not name.lower().endswith(('.pdf', '.csv', '.xlsx', '.docx')):
+                     fail(422, 'Only CSV, XLSX, and PDF files can be uploaded.')
+             from datetime import datetime, timezone
+             for upload in uploads:
+diff --git a/workspace/app/market-lab/view.tsx b/workspace/app/market-lab/view.tsx
+--- a/workspace/app/market-lab/view.tsx
++++ b/workspace/app/market-lab/view.tsx
+@@ -484,7 +484,7 @@
+                 ref={fileRef}
+                 className="ml-sr"
+                 type="file"
+-                accept=".csv,.xlsx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
++                accept=".csv,.xlsx,.pdf,.docx,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                 multiple
+                 onChange={() => void onFiles(fileRef.current?.files ?? null)}
+               />

@@ -1,3 +1,24 @@
+## 0.11.0 — 2026-11-05
+
+- Add day-zero terminal states, local run dry runs and named missing-configuration recovery.
+
+## 0.10.1 — 2026-11-05
+
+- Reject linked MCP configuration on every platform and compare release sources exactly.
+
+## 0.10.0 — 2026-11-05
+
+- Stream code answers with accessible terminal controls, live diffs, tool details, model/mode/cost/Auto savings, and signed install/update support on both release hosts.
+
+## 0.9.0 — 2026-11-05
+
+- Add user MCP clients and tenant blocks, Tank web tools, approved Git actions, and local file/image attachments.
+
+## 0.8.0 — 2026-11-05
+
+- Add Ask, Auto-edit and Plan code modes, permitted model selection, redacted server session resume, headless tasks, and code-session slash commands.
+- Requires the accompanying OPLI agent Tank patch for permitted rosters, durable session history and turn model/cost metadata.
+
 ## 0.7.1 — 2026-11-05
 
 - Wait for bounded search-worker startup before applying the existing one-second per-file regex execution limit, avoiding false refusals on busy Windows hosts.

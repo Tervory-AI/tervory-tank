@@ -8,7 +8,7 @@ import hmac
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -115,19 +115,37 @@ class Tank:
             raise RuntimeError("Tank did not record the receipt.")
 
 
+def monitoring_checks() -> list[Look]:
+    checks = []
+    for target in (*SITES, *ROOMS, "tank"):
+        signals = [Signal.health, Signal.slow]
+        if target in SITES:
+            signals += [Signal.dns, Signal.certificate, Signal.headers]
+        if target != "za":
+            signals += [Signal.deploy]
+        if target in {"workspace", "tank"}:
+            signals += [Signal.errors]
+        if target == "tank":
+            signals += [Signal.ci, Signal.radix]
+        checks.extend(Look(target=target, signal=signal) for signal in signals)
+    return checks
+
+
+async def monitor_once(app: FastAPI) -> None:
+    failures = 0
+    for check in monitoring_checks():
+        try:
+            async with app.state.lock:
+                observation = await app.state.probes.reproduce(check)
+                await app.state.investigator.alert(observation)
+        except Exception:
+            failures += 1
+    app.state.monitor = {"running": True, "unavailable_checks": failures}
+
+
 async def watch(app: FastAPI) -> None:
     while True:
-        failures = 0
-        for target in (*SITES, *ROOMS, "tank"):
-            signals = (Signal.health, Signal.slow, Signal.dns, Signal.certificate, Signal.headers) if target in SITES else (Signal.health,)
-            for signal in signals:
-                try:
-                    async with app.state.lock:
-                        observation = await app.state.probes.reproduce(Look(target=target, signal=signal))
-                        await app.state.investigator.alert(observation)
-                except Exception:
-                    failures += 1
-        app.state.monitor = {"running": True, "unavailable_checks": failures}
+        await monitor_once(app)
         await asyncio.sleep(300)
 
 
@@ -145,25 +163,25 @@ async def refresh_inventory(app: FastAPI) -> dict:
             result["coolify"] = "ok"
     except Exception:
         result["coolify"] = "unavailable"
-    headers: list = []
     failed = 0
     for app_name, host in inv.WATCHED_SITES.items():
         try:
-            headers.extend(await inv.fetch_headers(http, app_name, host))
+            headers = await inv.fetch_headers(http, app_name, host)
+            store.replace_inventory(PLATFORM_TENANT, "headers", [vars(c) for c in headers], seen,
+                                    apps={app_name})
         except Exception:
             failed += 1
-    if headers:
-        store.replace_inventory(PLATFORM_TENANT, "headers", [vars(c) for c in headers], seen)
     result["headers"] = "ok" if not failed else f"{len(inv.WATCHED_SITES) - failed}_of_{len(inv.WATCHED_SITES)}"
-    store.set_state(PLATFORM_TENANT, "inventory_refreshed", {"at": seen, **result})
+    store.set_state(PLATFORM_TENANT, "inventory_refreshed", {
+        "at": seen, "complete": not failed and result["coolify"] != "unavailable", **result})
     return result
 
 
 async def nightly(app: FastAPI) -> None:
     while True:
-        last = app.state.store.get_state(PLATFORM_TENANT, "inventory_refreshed", {}).get("at")
-        moment = advisory_watch.parse_time(last)
-        if moment is None or (advisory_watch.now_utc() - moment).total_seconds() > 86400:
+        last = app.state.store.get_state(PLATFORM_TENANT, "inventory_refreshed", {})
+        moment = advisory_watch.parse_time(last.get("at"))
+        if not last.get("complete", True) or moment is None or (advisory_watch.now_utc() - moment).total_seconds() > 86400:
             try:
                 async with app.state.advisory_lock:
                     await refresh_inventory(app)
@@ -206,14 +224,16 @@ def _require_tenant_uuid(tenant_id: str | None) -> str:
 
 def _receipts_for_tenant(tenant_id: str) -> list[dict]:
     """Load Enforce/Watch receipts for one client from their queue box."""
+    if (not watch_queue_configured() and transport_status() == "fixture"
+            and os.environ.get("AUTUMBRA_FIXTURE_COMPOSE_ROOT")):
+        # The explicit local lifecycle fixture has no Enforce queue yet. This
+        # preview can use the fixture sender; SMTP jobs always require storage.
+        return []
     try:
         q = watch_threat_queue(tenant_id)
-    except Exception:
-        return []
-    try:
         return list(q.list_receipts())
     except Exception:
-        return []
+        raise RuntimeError("Receipt storage is unavailable.") from None
 
 
 def enqueue_fixture_attack_for_watch(
@@ -250,31 +270,43 @@ def enqueue_fixture_attack_for_watch(
     )
 
 
-async def _weekly_owner_email_loop(app: "FastAPI") -> None:
-    """Real scheduled weekly job — every tenant with a stored owner, counts from receipts."""
-    # Default 7 days; tests may set AUTUMBRA_WEEKLY_INTERVAL_SEC.
-    interval = float(os.environ.get("AUTUMBRA_WEEKLY_INTERVAL_SEC") or str(7 * 24 * 3600))
-    if interval < 1:
-        interval = 1
-    while True:
-        # Chunked sleep so lifespan cancel is prompt.
-        left = interval
-        while left > 0:
-            step = 1.0 if left > 1 else left
-            await asyncio.sleep(step)
-            left -= step
+async def deliver_weekly_owner_updates(app: FastAPI, *, now: datetime | None = None) -> dict:
+    """Send the last completed UTC week; persisted delivery claims survive restarts."""
+    from .owner_email_jobs import week_bounds
+    result = {"sent": 0, "unavailable": 0}
+    if transport_status() != "smtp":
+        return result
+    end, _ = week_bounds(now=now)
+    start = end - timedelta(days=7)
+    store = app.state.store
+    for client in list_clients_with_owner(store):
+        previous = store.get_state(client.tenant_id, "owner_weekly_sent", {})
+        if previous.get("week_end") == end.isoformat():
+            continue
         try:
-            store = app.state.store
-            clients = list_clients_with_owner(store)
-            if not clients:
-                continue
-            receipts_by_tenant = {
-                c.tenant_id: _receipts_for_tenant(c.tenant_id) for c in clients
-            }
-            await asyncio.to_thread(run_weekly_owner_updates, clients,
-                                    receipts_by_tenant=receipts_by_tenant)
+            receipts = _receipts_for_tenant(client.tenant_id)
+            rows = await asyncio.to_thread(run_weekly_owner_updates, [client],
+                receipts_by_tenant={client.tenant_id: receipts}, week_start=start,
+                week_end=end - timedelta(microseconds=1))
+            row = rows[0]
+            if row.get("sent") or row.get("delivery_state") == "sent":
+                store.set_state(client.tenant_id, "owner_weekly_sent", {"week_end": end.isoformat()})
+                result["sent"] += int(bool(row.get("sent")))
+            else:
+                result["unavailable"] += 1
         except Exception:
-            pass
+            result["unavailable"] += 1
+    return result
+
+
+async def _weekly_owner_email_loop(app: "FastAPI") -> None:
+    interval = max(1, min(3600, float(os.environ.get("AUTUMBRA_WEEKLY_INTERVAL_SEC") or "3600")))
+    while True:
+        try:
+            app.state.owner_weekly_status = await deliver_weekly_owner_updates(app)
+        except Exception:
+            app.state.owner_weekly_status = {"unavailable": 1}
+        await asyncio.sleep(interval)
 
 
 async def deliver_act_owner_updates(app: FastAPI) -> None:
@@ -282,19 +314,28 @@ async def deliver_act_owner_updates(app: FastAPI) -> None:
     if transport_status() != "smtp":
         return
     from .owner_email_jobs import _parse_receipt_time, week_bounds
-    start, end = week_bounds()
+    _, end = week_bounds()
     available_since = smtp_available_since()
     for settings in list_clients_with_owner(app.state.store):
-        receipts = _receipts_for_tenant(settings.tenant_id)
+        try:
+            receipts = _receipts_for_tenant(settings.tenant_id)
+        except RuntimeError:
+            continue
         for receipt in receipts:
             moment = _parse_receipt_time(receipt)
             identity = str(receipt.get("id") or "")
             if (not receipt.get("applied") or not identity or moment is None
-                    or moment.timestamp() <= available_since or not start <= moment <= end):
+                    or receipt.get("kind") == "exercise"
+                    or receipt.get("tenant_id", settings.tenant_id) != settings.tenant_id
+                    or moment.timestamp() <= available_since or moment > end):
                 continue
-            email = build_owner_update_from_receipts(settings=settings, receipts=[receipt])
-            await asyncio.to_thread(send_owner_update, email, to=settings.owner_email,
-                                   tenant_id=settings.tenant_id, message_key="act:" + identity)
+            try:
+                email = build_owner_update_from_receipts(settings=settings, receipts=[receipt],
+                    week_start=datetime.fromtimestamp(available_since, timezone.utc), week_end=end)
+                await asyncio.to_thread(send_owner_update, email, to=settings.owner_email,
+                                       tenant_id=settings.tenant_id, message_key="act:" + identity)
+            except Exception:
+                continue
 
 
 async def _act_owner_email_loop(app: FastAPI) -> None:
@@ -336,6 +377,16 @@ async def _market_lab_intel_loop(app: FastAPI) -> None:
             app.state.intel_status = "connected"
         except Exception:
             app.state.intel_status = "unavailable"  # Keep the previous catalog; no fixture on live screens.
+        await asyncio.sleep(3600)
+
+
+async def _exercise_loop(app: FastAPI) -> None:
+    from .red_team import scheduled_exercises
+    while True:
+        try:
+            scheduled_exercises(app.state.store, PLATFORM_TENANT)
+        except Exception:
+            app.state.store.set_state(PLATFORM_TENANT, "exercise_status", "unavailable")
         await asyncio.sleep(3600)
 
 
@@ -402,6 +453,7 @@ def create_app() -> FastAPI:
                 asyncio.create_task(_weekly_owner_email_loop(app)),
                 asyncio.create_task(_act_owner_email_loop(app)),
                 asyncio.create_task(_market_lab_intel_loop(app)),
+                asyncio.create_task(_exercise_loop(app)),
             ]
             try:
                 yield
@@ -1017,6 +1069,7 @@ def create_app() -> FastAPI:
             raise HTTPException(403, str(exc)) from None
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
+        app.state.store.set_state(tenant_id, "exercise_last", receipt)
         return receipt
 
 

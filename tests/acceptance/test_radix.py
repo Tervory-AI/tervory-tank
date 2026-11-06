@@ -1,4 +1,4 @@
-"""One offline scenario per Radix founder row (R01–R58).
+"""One offline scenario per Radix founder row (R01–R62).
 
 Exercise shipped handlers with their existing fake-service harnesses, not a
 second implementation. Postgres/Redis are disposable loopback stores; HTTP
@@ -32,6 +32,11 @@ import test_radix_passive as passive
 import test_radix_report as reports
 import test_radix_scheduler_budget as budget
 import test_radix_weekly as weekly
+import test_radix_finish_data as finish_data
+import test_radix_finish_pages as finish_pages
+import test_radix_finish_recovery as finish_recovery
+import test_radix_finish_scanners as finish_scanners
+scanner_reports = finish_scanners.reports
 import test_rx1_scans as source
 import test_rx4_compliance as notices
 from radix_i2 import test_active as active
@@ -578,6 +583,29 @@ def test_r58_legacy_fixed_host_header_check(monkeypatch):
     legacy.test_wider_allowlist_is_refused_before_transport(monkeypatch)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('partial', [False, True])
+async def test_r59_required_scanners_and_real_advisory_receipts(repo_api, scanner_reports, monkeypatch, partial):
+    await finish_data.test_production_reports_persist_and_deliver_private_zero_cost_receipts(
+        repo_api, scanner_reports, monkeypatch, partial)
+
+
+@pytest.mark.asyncio
+async def test_r60_expired_weekly_pair_resumes(database, monkeypatch):
+    await finish_recovery.test_expired_weekly_pair_resumes_same_ids_after_restart(database, monkeypatch, 'scheduler')
+
+
+@pytest.mark.asyncio
+async def test_r61_expired_regulation_run_real_measurements(database, monkeypatch, tmp_path):
+    await finish_data.test_recovered_regulation_job_rechecks_dns_and_persists_actual_measurements(database, monkeypatch, tmp_path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [200, 404, 503])
+async def test_r62_unlinked_pages_are_rechecked(tmp_path, status):
+    await finish_pages.test_unlinked_monitored_page_is_rechecked_before_gone(tmp_path, status)
+
+
 def test_sheet_has_exactly_one_fixture_case_per_row():
     sheet = (ROOT / 'docs/acceptance/radix.md').read_text()
     rows = re.findall(r'^\| (R\d\d)\b', sheet, flags=re.M)
@@ -587,8 +615,8 @@ def test_sheet_has_exactly_one_fixture_case_per_row():
              if callable(value) and (match := re.fullmatch(r'test_(r\d\d)_\w+', name))]
     names = re.findall(r'^\| R\d\d `([a-z0-9_]+)`', sheet, flags=re.M)
     assert names == [name for name in globals() if re.fullmatch(r'test_r\d\d_\w+', name)]
-    assert len(rows) == len(set(rows)) == 58
-    assert rows == cases == [f'R{number:02}' for number in range(1, 59)]
+    assert len(rows) == len(set(rows)) == 62
+    assert rows == cases == [f'R{number:02}' for number in range(1, 63)]
     settings = (ROOT / 'docs/ops/FOUNDER-SETTINGS.md').read_text()
     for row in sheet.splitlines():
         if re.match(r'^\| R\d\d\b', row):

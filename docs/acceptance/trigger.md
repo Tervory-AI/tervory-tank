@@ -6,7 +6,7 @@ learns, #497/#498 CRM and #624 client organisations/Facebook/WhatsApp, #604 GBP,
 #600 source-grounded bot, and #654 responsive console/embedded widget. Source
 inventory: `agents/trigger/`, `tank/trigger_*.py`, `workspace/app/trigger/`,
 `workspace/public/trigger/widget.js` and their existing offline fixtures. The old
-CRM acceptance branch is not a source. There are **56 rows** with one offline
+CRM acceptance branch is not a source. There are **61 rows** with one offline
 case per row in `tests/acceptance/test_trigger.py`.
 
 ## Addresses, inputs and evidence
@@ -102,6 +102,11 @@ case per row in `tests/acceptance/test_trigger.py`.
 | R54 | https://trigger.tervory.com/chats | Read `trigger.scorecard` after writing/feedback and compare formats/periods. | Tenant-only last-30-day and weekly counts, acceptance/example rates and zero-cost read receipt; no invented missing metrics. | none |
 | R55 | https://trigger.tervory.com/chats | Give `trigger.bot.feedback` for an actual message with a correction; read `trigger.bot.review` and `trigger.bot.stats`. | Feedback belongs to that tenant/message; correction is a reviewable FAQ draft, never silently approved. | TRIGGER_BOT_HANDOVER_ADDRESSES, TRIGGER_BOT_TRUSTED_PROXY_CIDRS |
 | R56 | https://trigger.tervory.com/trigger/bot/inbox; https://trigger.tervory.com/chats | Review the visitor’s actual lead/quote draft; Confirm the existing lead/quote action after privacy notice (D2). | Only unchanged tenant-owned draft activates once through the existing CRM/Rig corridor; no unconfirmed side effect. Requires D2. | TRIGGER_CRM_URL, TRIGGER_CRM_PAT_CONNECTOR, TRIGGER_CRM_TENANT_BINDINGS, TRIGGER_BOT_HANDOVER_ADDRESSES, TRIGGER_BOT_TRUSTED_PROXY_CIDRS |
+| R57 | https://trigger.tervory.com/chats | Check an owned short paragraph and long document containing emoji before a grammar finding. | Returned offsets highlight the original text in both cases; zero-model code checks retain the existing report and receipt fields. | none |
+| R58 | https://trigger.tervory.com/chats | In isolated fixtures, fail an approved LanguageTool call and fail room schema startup, then restart. | Grammar reports incomplete without legacy fallback; failed startup releases its database pool and shutdown releases HTTP/database resources. | none |
+| R59 | Isolated maintenance fixtures, after Tank finish patch integration | Fail one tenant's due publication or retention job, then process another tenant; cancel a batch separately. | Other tenants continue within their own scope and receipt path; cancellation propagates and private provider bodies are not logged. | none |
+| R60 | Approved store website source, after Tank finish patch integration | Refresh a source with its own HTML title; exercise a recorded robots.txt 429 response in isolation. | Actual title and source URL are preserved; hidden links are excluded; rate-limited robots prevents page crawling. | none |
+| R61 | https://trigger.tervory.com/chats, after Tank finish patch integration | Approve an actual FAQ question longer than 160 words within the existing 2,000-character limit; ask the same question. | Complete approved question remains searchable; own answer returns with a code receipt and no model call or foreign-tenant answer. | none |
 
 ## Frame and capability boundaries
 

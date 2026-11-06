@@ -416,3 +416,67 @@ def test_R46():
 async def test_R47(real_chromium, tmp_path):
     import test_market_lab_h7_browser as h7_browser
     await h7_browser.test_both_pages_states_menu_and_cohort_selection(real_chromium, tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_R48():
+    import test_market_lab_finish_documents as proofs
+    await proofs.test_word_sources_tables_guard_and_forget()
+
+
+@pytest.mark.asyncio
+async def test_R49(monkeypatch):
+    import test_market_lab_finish_documents as proofs
+    await proofs.test_room_upload_replay_failure_and_immutable_original(monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_R50(monkeypatch):
+    import test_market_lab_finish_documents as proofs
+    await proofs.test_room_upload_replay_failure_and_immutable_original(monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_R51(monkeypatch):
+    import test_market_lab_finish_jobs as proofs
+    for changed in (0,4):
+        await proofs.test_refresh_recomputes_opportunities_only_for_new_pooled_data(monkeypatch,changed)
+
+
+@pytest.mark.asyncio
+async def test_R52():
+    import test_market_lab_finish_jobs as proofs
+    await proofs.test_uploaded_response_metric_resolves_without_changing_original()
+    await proofs.test_unmeasurable_or_ambiguous_uploaded_metric_is_not_scored('cartons',False)
+    await proofs.test_unmeasurable_or_ambiguous_uploaded_metric_is_not_scored('percent',True)
+
+
+@pytest.mark.asyncio
+async def test_R53(monkeypatch):
+    import test_market_lab_finish_jobs as proofs
+    for blocked in (False,True):
+        await proofs.test_fred_failures_do_not_abort_other_sources_or_copy_restricted_points(monkeypatch,blocked)
+
+
+def test_R54(monkeypatch):
+    import test_market_lab_finish_jobs as proofs
+    proofs.test_listing_never_implicitly_uses_bundled_fixture_data(monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_R55(monkeypatch):
+    import test_market_lab_finish_receipts as proofs
+    await proofs.test_report_keeps_original_receipts_and_unknown_cost_and_survives_memory_failure()
+    await proofs.test_http_research_releases_database_for_network_and_remembers_after_save(monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_R56(tmp_path):
+    import test_market_lab_finish_receipts as proofs
+    await proofs.test_real_postgres_migrates_legacy_report_and_retains_receipts(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_R57(monkeypatch,tmp_path):
+    import test_market_lab_finish_receipts as proofs
+    await proofs.test_scheduled_live_refresh_uses_recorded_publishers_and_private_postgres(monkeypatch,tmp_path)

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackButtons } from "../feedback-buttons";
 import "./tasks.css";
@@ -35,17 +36,32 @@ const KINDS = [
 ];
 
 export default function TasksPage() {
+  const submitting = useRef(false), refreshing = useRef(false);
+  const pendingTitle = useRef("");
+  const [submissionUnknown, setSubmissionUnknown] = useState(false);
   const focusedTask = useRef<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
   const [request, setRequest] = useState("");
   const [kind, setKind] = useState(KINDS[0].value);
-  const [busy, setBusy] = useState(false);
+  const [inProgress, setBusy] = useState(false);
+  const busy = inProgress || submissionUnknown;
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const res = await fetch("/api/tasks", { cache: "no-store" });
-    if (res.ok) setTasks((await res.json()) as Task[]);
+    if (refreshing.current) return;
+    refreshing.current = true;
+    try {
+      const res = await fetch("/api/tasks", { cache: "no-store" });
+      if (!res.ok) throw Error();
+      const next = await res.json();
+      if (!Array.isArray(next) || next.some(task => !task || typeof task.id !== "string" || typeof task.title !== "string" || !["queued", "running", "done", "failed"].includes(task.status))) throw Error();
+      setTasks(next as Task[]); setError(null);
+      if (pendingTitle.current && next.some((task: Task) => task.title === pendingTitle.current)) {
+        pendingTitle.current = ""; setSubmissionUnknown(false); setTitle(""); setRequest("");
+      }
+    } catch { setError("Tasks could not be loaded. Try again."); }
+    finally { refreshing.current = false; }
   }, []);
 
   // Load once, then poll while anything is still moving.
@@ -79,27 +95,34 @@ export default function TasksPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (busy) return;
+    if (submitting.current || submissionUnknown) return;
     if (!title.trim() || !request.trim()) {
       setError("Add a title and what you need done.");
       return;
     }
+    pendingTitle.current = title.trim();
+    submitting.current = true;
     setBusy(true);
     setError(null);
+    let definitelyRejected = false;
     try {
       const res = await fetch("/api/tasks", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ title, request, task_type: kind }),
       });
+      definitelyRejected = !res.ok && res.status < 500 && res.status !== 409;
       const data = await res.json();
+      if (!res.ok && data.retry_safe === true) definitelyRejected = true;
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       setTitle("");
       setRequest("");
       await refresh();
     } catch (err) {
+      setSubmissionUnknown(!definitelyRejected);
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -107,6 +130,8 @@ export default function TasksPage() {
   return (
     <div className="tasks-page">
       <h1>Tasks</h1>
+      {!tasks.length && <p className="empty">Add a task to fill this board.</p>}
+      {submissionUnknown && <p role="status">The task could not be confirmed. Reload tasks to check whether it was created. Do not submit it again.</p>}
       <form onSubmit={submit} className="task-form">
         <label htmlFor="task-title">Title</label>
         <input
@@ -134,10 +159,10 @@ export default function TasksPage() {
             ))}
           </select>
           <button type="submit" disabled={busy}>
-            {busy ? "Queueing…" : "Add task"}
+            {inProgress ? "Queueing…" : "Add task"}
           </button>
         </div>
-        {error && <p className="err">{error}</p>}
+        {error && <p className="err" role="alert">{error} <button type="button" onClick={() => void refresh()}>Reload tasks</button></p>}
       </form>
 
       <div className="board">
@@ -159,7 +184,7 @@ export default function TasksPage() {
                   {t.status === "failed" && <p className="err">{t.error ?? "Failed"}</p>}
                   {t.model && (
                     <div className="meta">
-                      {t.model} · rung {t.rung} · ${Number(t.cost_usd ?? 0).toFixed(5)} · {t.latency_ms} ms
+                      {t.model} · rung {t.rung ?? "—"} · {t.cost_usd == null ? "—" : `$${Number(t.cost_usd).toFixed(5)}`} · {t.latency_ms ?? "—"} ms
                     </div>
                   )}
                   {t.status === "done" && t.ledger_id && (

@@ -43,6 +43,12 @@ _CHECKS = (
 )
 
 
+try:
+    from agents.tisan.storage import atomic_json, durable_root, tenant_folder
+except ModuleNotFoundError:
+    from storage import atomic_json, durable_root, tenant_folder
+
+
 class ScaffoldError(ValueError):
     """The brief is not safe to build."""
 
@@ -349,30 +355,38 @@ def project_files(project: Path) -> list[str]:
 
 
 def _data_root(explicit: Path | None) -> Path:
-    if explicit is not None:
-        explicit.mkdir(parents=True, exist_ok=True)
-        return explicit
-    raw = os.environ.get("DATA_DIR", "/data")
-    path = Path(raw)
     try:
-        path.mkdir(parents=True, exist_ok=True)
-        probe = path / ".write-probe"
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
+        return durable_root(explicit)
     except OSError:
-        path = Path(tempfile.gettempdir()) / "tisan-data"
-        path.mkdir(parents=True, exist_ok=True)
-    return path
+        raise ScaffoldError("invalid stored build") from None
 
 
 def _next_build_number(folder: Path) -> int:
-    highest = 0
-    if folder.is_dir():
-        for path in folder.glob("*.tar.gz"):
-            stem = path.name[: -len(".tar.gz")]
-            if stem.isdigit():
-                highest = max(highest, int(stem))
-    return highest + 1
+    """Reserve a durable number across room jobs, including failed builds."""
+    folder.mkdir(parents=True, exist_ok=True)
+    reservations = folder / '.build-reservations'
+    if reservations.is_symlink():
+        raise ScaffoldError('invalid stored build')
+    reservations.mkdir(exist_ok=True)
+    highest = max((int(p.name) for p in reservations.iterdir() if p.name.isdigit()), default=0)
+    for path in folder.iterdir():
+        stem = path.name.removesuffix('.tar.gz').removesuffix('.json')
+        if stem.isdigit() and path.name.endswith(('.tar.gz', '.json')):
+            highest = max(highest, int(stem))
+    number = highest + 1
+    while True:
+        try:
+            descriptor = os.open(reservations / str(number), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            number += 1
+            continue
+        os.close(descriptor)
+        directory = os.open(reservations, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        return number
 
 
 def pack(project: Path, archive: Path) -> list[str]:
@@ -404,7 +418,7 @@ def _check_env() -> dict[str, str]:
 
 
 def _npm_ci_args() -> list[str]:
-    args = ["npm", "ci", "--no-audit", "--no-fund"]
+    args = ["npm", "ci", "--no-audit", "--no-fund", "--include=dev", "--ignore-scripts"]
     cache = os.environ.get("TISAN_NPM_CACHE", "").strip() or str(Path(tempfile.gettempdir()) / "tisan-npm-cache")
     args.extend(["--cache", cache])
     offline = os.environ.get("TISAN_NPM_OFFLINE", "").strip().lower()
@@ -638,6 +652,35 @@ async def _resolve_copy(brief: dict[str, Any], tenant: str) -> None:
     brief["resolved_copy"] = resolved
 
 
+def attach_visual_frames(payload: dict, project: Path, root: Path, tenant: str, brief: dict) -> None:
+    if 'figma' not in payload:
+        return
+    source = payload['figma']
+    if not isinstance(source, dict):
+        raise ScaffoldError("frame data incomplete")
+    file_key, node_id = source.get("file_key", ""), source.get("node_id", "")
+    if (not isinstance(file_key, str) or not isinstance(node_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9]{22,128}", file_key) or not re.fullmatch(r"\d+:\d+", node_id)):
+        raise ScaffoldError("frame data incomplete")
+    reading_path = root / "readings" / tenant / file_key / (node_id.replace(":", "-") + ".json")
+    try:
+        if not reading_path.resolve().is_relative_to(root.resolve() / "readings" / tenant):
+            raise ScaffoldError("frame data incomplete")
+        reading = json.loads(reading_path.read_text())
+    except (OSError, ValueError):
+        raise ScaffoldError("frame data incomplete") from None
+    # Validation is performed by the browser gate, against the saved evidence.
+    # Empty/incomplete measurements cause that gate to fail; never derive a baseline from the page.
+    visual_dir = project / "visual"
+    visual_dir.mkdir(exist_ok=True)
+    target_page = source.get("page", "home")
+    if target_page not in brief["pages"]:
+        raise ScaffoldError("frame data incomplete")
+    target_path = "/" if target_page == "home" else f"/{target_page}"
+    measurements = select_visual_frames(reading, node_id, target_path)
+    (visual_dir / "frames.json").write_text(json.dumps(measurements))
+
+
 async def execute(
     payload: dict[str, Any],
     tenant_id: str,
@@ -651,36 +694,14 @@ async def execute(
     await _resolve_copy(brief, tenant)
     root = _data_root(data_root)
     builds = (root / "builds").resolve()
-    folder = builds / tenant / brief["slug"]
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = tenant_folder(root, "builds", tenant, brief["slug"])
     if builds not in folder.resolve().parents:
         raise ScaffoldError("refusing to write outside this tenant's builds")
     number = _next_build_number(folder)
     with tempfile.TemporaryDirectory(prefix="tisan-") as tmp:
         project = Path(tmp) / "project"
         write_project(brief, project)
-        if "figma" in payload:
-            source = payload["figma"]
-            if not isinstance(source, dict):
-                raise ScaffoldError("frame data incomplete")
-            file_key, node_id = source.get("file_key", ""), source.get("node_id", "")
-            if not re.fullmatch(r"[A-Za-z0-9]{22,128}", file_key) or not re.fullmatch(r"\d+:\d+", node_id):
-                raise ScaffoldError("frame data incomplete")
-            reading_path = root / "readings" / tenant / file_key / (node_id.replace(":", "-") + ".json")
-            try:
-                reading = json.loads(reading_path.read_text())
-            except (OSError, ValueError):
-                raise ScaffoldError("frame data incomplete") from None
-            # Validation is performed by the browser gate, against the saved evidence.
-            # Empty/incomplete measurements cause that gate to fail; never derive a baseline from the page.
-            visual_dir = project / "visual"
-            visual_dir.mkdir(exist_ok=True)
-            target_page = source.get("page", "home")
-            if target_page not in brief["pages"]:
-                raise ScaffoldError("frame data incomplete")
-            target_path = "/" if target_page == "home" else f"/{target_page}"
-            measurements = select_visual_frames(reading, node_id, target_path)
-            (visual_dir / "frames.json").write_text(json.dumps(measurements))
+        attach_visual_frames(payload, project, root, tenant, brief)
         if run_checks_now:
             checks, detail = await run_checks(project, tenant_id=tenant)
         else:
@@ -705,5 +726,5 @@ async def execute(
         archive=str(folder / f"{number}.tar.gz"),
         build=number,
     )
-    (folder / f"{number}.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    atomic_json(folder / f"{number}.json", manifest)
     return manifest

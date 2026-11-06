@@ -29,6 +29,11 @@ URL_A = "https://shop-a.example/item"
 URL_B = "https://shop-b.example/item"
 
 
+@pytest.fixture(autouse=True)
+def tiger_room_key(monkeypatch):
+    monkeypatch.setenv("TANK_KEY_TIGER", "placeholder-tiger-room-key")
+
+
 def _request(method: str, path: str, query: str = "", body: bytes | None = None) -> Request:
     async def receive():
         return {"type": "http.request", "body": body or b"", "more_body": False}
@@ -87,7 +92,7 @@ class LeakyTiger:
         params = dict(kwargs.get("params") or [])
         content = kwargs.get("content")
         self.calls.append((method, url, params, content, headers))
-        assert "x-tank-key" not in headers
+        assert headers["x-tank-key"] == "placeholder-tiger-room-key"
         assert "test" not in repr(headers)
         if method == "GET" and url.endswith("/watchlist"):
             return _json(200, {"tenant_id": TENANT_B, "watches": list(self.watches.values())})

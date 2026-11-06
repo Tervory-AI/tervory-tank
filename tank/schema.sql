@@ -3392,6 +3392,35 @@ CREATE TABLE IF NOT EXISTS tank.trigger_signin_founders (
 );
 -- END trigger_signin
 
+-- BEGIN opli
+CREATE TABLE IF NOT EXISTS tank.opli_mcp_policy (
+    tenant_id uuid NOT NULL,
+    server_id text NOT NULL,
+    blocked boolean NOT NULL,
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,server_id)
+);
+DO $$
+BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.opli_mcp_policy ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.opli_mcp_policy FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.opli_mcp_policy'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.opli_mcp_policy FOR ALL TO PUBLIC
+     USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+     WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.opli_mcp_policy'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.opli_mcp_policy AS RESTRICTIVE FOR ALL TO PUBLIC
+     USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+     WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END;
+$$;
+-- END opli
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (

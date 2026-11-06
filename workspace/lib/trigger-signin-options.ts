@@ -3,8 +3,11 @@ import ZitadelProvider from "next-auth/providers/zitadel";
 import { signinPrincipal, signinOrganisations, ORG_CLAIM, ROLES_CLAIM } from "./trigger-signin-principal";
 import { isWorkspaceOrigin } from "./workspace-origin";
 import { signinRuntime } from "./trigger-signin-runtime";
+import { workspaceSetupMessage } from "./workspace-setup";
 
 export async function signinOptions(): Promise<NextAuthOptions> {
+  const problem = workspaceSetupMessage();
+  if (problem) throw new Error(problem);
   const { issuer } = await signinRuntime();
   return {
   secret: process.env.TRIGGER_SIGNIN_WORKSPACE_SECRET,

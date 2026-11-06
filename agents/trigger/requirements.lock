@@ -1,0 +1,5 @@
+# Trigger tools: existing pins, CPython 3.12 Linux x86_64 wheel hashes.
+defusedxml==0.7.1 --hash=sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61
+google-re2==1.1.20251105 --hash=sha256:809c5fa5d08279413b29c2e2c5c528e85cd94a0e0fd897db595a0c09eeee2782
+google-re2-stubs==0.1.1 --hash=sha256:a82eb6c3accd20879d711cd38151583d8a154fcca755f43a5595143a484c8118
+proselint==0.16.0 --hash=sha256:5c0542b8c9e869c75f4f002bae96aeb929bdff0eae7d991e255abc35cbbdf16f

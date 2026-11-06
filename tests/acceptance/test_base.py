@@ -404,12 +404,56 @@ def test_b55_large_pages_do_not_stall_or_lose_evidence():
     limits.test_candidate_preserves_existing_evals_and_approved_package()
 
 
+@pytest.mark.asyncio
+async def test_b56_interrupted_record_recovery(monkeypatch):
+    from test_base_finish_recovery import test_completed_record_is_checkpointed_before_slow_record_and_survives_cancel
+    await test_completed_record_is_checkpointed_before_slow_record_and_survives_cancel(monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_b57_atomic_batch_insert():
+    from test_base_finish_recovery import test_batch_and_records_are_atomic_on_partial_insert_failure
+    await test_batch_and_records_are_atomic_on_partial_insert_failure()
+
+
+def test_b58_independently_checked_vendor_lessons():
+    from test_base_finish_learning import evidence
+    assert len(evidence()['candidates']) == 1
+    assert evidence(truth={'website': 'https://different.example'})['status'] == 'disagrees'
+    assert evidence(truth={})['candidates'] == []
+
+
+@pytest.mark.asyncio
+async def test_b59_gap_only_paid_admission(monkeypatch):
+    from test_base_finish_learning import test_automatic_vendor_rung_requires_completed_code_and_public_platform_data
+    from test_base_finish_learning import test_ask_or_denied_admission_never_calls_vendor_or_reserves_credit
+    await test_automatic_vendor_rung_requires_completed_code_and_public_platform_data(monkeypatch)
+    await test_ask_or_denied_admission_never_calls_vendor_or_reserves_credit(monkeypatch)
+
+
+import test_base_finish_training as finish_training
+from test_base_finish_training import postgres as postgres, recorded as recorded
+finish_database = finish_training.database
+
+
+@pytest.mark.asyncio
+async def test_b60_recorded_atf_small_state(finish_database, recorded, tmp_path, monkeypatch):
+    from test_base_finish_training import test_real_small_state_runs_through_worker_and_resume_never_replays_completed_records
+    await test_real_small_state_runs_through_worker_and_resume_never_replays_completed_records(finish_database, recorded, tmp_path, monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_b61_receipt_outage_recovery(finish_database, monkeypatch):
+    from test_base_finish_training import test_real_vendor_outbox_and_learning_survive_ledger_outage_without_buying_again
+    await test_real_vendor_outbox_and_learning_survive_ledger_outage_without_buying_again(finish_database, monkeypatch, True)
+
+
 def test_sheet_has_exactly_one_fixture_case_per_row():
     sheet = (ROOT / 'docs/acceptance/base.md').read_text()
     rows = re.findall(r'^\| (B\d\d) \|', sheet, flags=re.M)
     cases = [name[5:8].upper() for name, value in globals().items()
              if re.match(r'^test_b\d\d_', name) and callable(value)]
-    assert len(rows) == len(set(rows)) == 55
+    assert len(rows) == len(set(rows)) == 61
     assert rows == cases
 
     register = (ROOT / 'docs/ops/FOUNDER-SETTINGS.md').read_text()

@@ -1074,7 +1074,6 @@ def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
 # The shared override gate for Command and MoA. Never persist policy changes
 # to pin one call; MoA uses the parent task's policy limits.
 MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn", "command.code"})
-MOA_SEAT_TASK = re.compile(r"[a-zA-Z0-9_.-]+#moa\.[a-z][a-z0-9_]{0,79}")
 _MOA_BASE = re.compile(r"[a-zA-Z0-9_.-]+")
 _MOA_SEAT = re.compile(r"[a-z][a-z0-9_]{0,79}")
 
@@ -1086,7 +1085,7 @@ def is_moa_seat(task_type: str) -> bool:
 
 
 def override_allowed(task_type: str) -> bool:
-    return task_type in MODEL_OVERRIDE_TASK_TYPES or MOA_SEAT_TASK.fullmatch(task_type) is not None
+    return task_type in MODEL_OVERRIDE_TASK_TYPES or is_moa_seat(task_type)
 
 
 def _plain_value(value: Any) -> Any:
@@ -1373,7 +1372,7 @@ async def _run_route(
     if early:
         raise HTTPException(status_code=403, detail=early)
 
-    seat = MOA_SEAT_TASK.fullmatch(req.task_type)
+    seat = is_moa_seat(req.task_type)
     if seat and model_override is None:
         raise HTTPException(status_code=400, detail="A MoA seat requires a model override")
     if model_override is not None:
@@ -1556,7 +1555,7 @@ async def _run_route(
                       "caller": caller, "skill": req.skill, "pool_read": pool_read},
     )
     try:
-        if _on_token is not None and req.task_type == "command.turn":
+        if _on_token is not None and req.task_type in {"command.turn", "command.code"}:
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
                                         {"model": model, "messages": messages, **dispatched_settings, **routing}, _on_token)
         else:
@@ -3480,6 +3479,25 @@ async def _model_for_skill(**kw: Any) -> dict[str, Any]:
     return res.model_dump()
 
 
+class TigerOcrHTTP:
+    """The existing OCR skill gets only an authenticated browser boundary."""
+    def __init__(self, client):
+        self.client = client
+
+    async def post(self, url, **kwargs):
+        base = os.environ.get("TIGER_URL", "").rstrip("/")
+        key = os.environ.get("TANK_KEY_TIGER", "")
+        if not base or not key:
+            raise HTTPException(503, "TIGER_URL or TANK_KEY_TIGER is not set")
+        if url != base + "/ocr":
+            raise HTTPException(400, "url not allowed")
+        kwargs["headers"] = {**kwargs.get("headers", {}), "X-Tank-Key": key}
+        kwargs["timeout"] = 30
+        kwargs["follow_redirects"] = False
+        async with asyncio.timeout(30):
+            return await self.client.post(url, **kwargs)
+
+
 def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID | None = None, preview: bool = False, home_region: str | None = None) -> skala.SkillContext:
     assert _http is not None
     ref = pkg.ref + ("#preview" if preview else "")
@@ -3494,7 +3512,7 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
         return await _model_for_skill(**kw)
 
     return skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
-                              _model=_model, http=_http, env=dict(SKILL_ENV))
+                              _model=_model, http=TigerOcrHTTP(_http) if pkg.id == "tiger.price_ocr" else _http, env=dict(SKILL_ENV))
 
 
 # Evals and previews run under the platform tenant so their model spend never lands on a client.
@@ -3830,7 +3848,10 @@ async def base_proxy(path: str, request: Request) -> Response:
     if _http is None:
         raise HTTPException(status_code=503, detail="Base room is unreachable")
     body = await request.body()
-    headers = {}
+    key = os.environ.get("TANK_KEY_BASE", "")
+    if not key:
+        raise HTTPException(503, "Missing setting: TANK_KEY_BASE")
+    headers = {"X-Tank-Key": key}
     content_type = request.headers.get("content-type")
     if content_type:
         headers["content-type"] = content_type
@@ -4037,7 +4058,14 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     target = zenas_upstream(path)
     if _http is None:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable")
-    headers: dict[str, str] = {}
+    headers: dict[str, str] = {"X-Tank-Key": os.environ.get("TANK_KEY_ZENAS", "")}
+    for name in ("idempotency-key", "x-zenas-tenant"):
+        supplied = request.headers.get(name)
+        if supplied:
+            try:
+                headers[name] = str(uuid.UUID(supplied))
+            except ValueError:
+                raise HTTPException(422, "invalid_request") from None
     if path.startswith("regulations/"):
         headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
     if path.strip().strip("/").startswith("street-law/"):
@@ -4336,7 +4364,10 @@ async def _tiger_body(request: Request) -> dict[str, Any]:
 async def _tiger_call(method: str, path: str, params: list[tuple[str, str]], content: bytes | None) -> Any:
     if _http is None:
         raise HTTPException(status_code=503, detail="Tiger is unreachable")
-    headers = {"content-type": "application/json"} if content else {}
+    key = os.environ.get("TANK_KEY_TIGER", "")
+    if not key:
+        raise HTTPException(status_code=503, detail="TANK_KEY_TIGER is not set")
+    headers = {"content-type": "application/json", "x-tank-key": key}
     try:
         return await _http.request(
             method,

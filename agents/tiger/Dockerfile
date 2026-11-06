@@ -7,6 +7,11 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && chown agent:agent /data
 COPY _chassis/chassis /app/chassis
 COPY tiger/app.py /app/app.py
+COPY tiger/batch.py /app/batch.py
+COPY tiger/readiness.py /app/readiness.py
+COPY tiger/execution.py /app/execution.py
+COPY tiger/operations.py /app/operations.py
+COPY tiger/batch_discovery.py /app/batch_discovery.py
 COPY tiger/watch.py /app/watch.py
 COPY tiger/g5_alerts.py /app/g5_alerts.py
 COPY tiger/schema.sql /app/schema.sql

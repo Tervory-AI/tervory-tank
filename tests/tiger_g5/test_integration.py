@@ -118,10 +118,11 @@ async def test_agent_job_to_existing_email_path(system, catcher, monkeypatch, ki
 
 @pytest.mark.asyncio
 async def test_switches_create_patch_read_and_cross_tenant_refusal(database, monkeypatch):
+    monkeypatch.setenv("TANK_KEY", "placeholder-room-key")
     store = PgStore(database)
     monkeypatch.setattr(agent, "_store", lambda: store)
     # Direct ASGI transport through the real Tank relay to the real agent route.
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=agent.app)) as room:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=agent.app), headers={"X-Tank-Key": "placeholder-room-key"}) as room:
         async def call(method, path, params, body):
             return await room.request(method, "http://agent-tiger" + path, params=params,
                                       content=body, headers={"content-type": "application/json"})

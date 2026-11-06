@@ -9,17 +9,26 @@ function load(file, bindings = {}, globals = {}) {
   const code = ts.transpileModule(source, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
   const exports = {};
   vm.runInNewContext(code, {exports, require: name => {assert(name in bindings, name);return bindings[name];},
-    process:{env:{TERVORY_ADMIN_USER_IDS:'owner'}}, URL, Uint8Array, TextDecoder, Set, Error, ...globals});
+    process:{env:{TERVORY_ADMIN_USER_IDS:'owner',TANK_API_KEY:'offline-placeholder'}},
+    URL, URLSearchParams, Headers, AbortSignal, AbortController, setTimeout, clearTimeout,
+    Uint8Array, TextDecoder, Set, Error, console, ...globals});
   return exports;
 }
 async function main() {
   const calls=[];
   let session={userId:'owner',orgRole:'org:member'};
   const actor={tenantId:'active-tenant',userId:'owner'};
-  const tank=load('workspace/lib/tank.ts',{'@/app/api/zenas/tank':load('workspace/app/api/zenas/tank.ts')}, {fetch:async(url,options)=>{
+  const fakeFetch=async(url,options)=>{
+    url=String(url);
+    if (url.includes('/v1/tenants/') && url.endsWith('/home'))
+      return {ok:false,status:404,json:async()=>({detail:{code:'tenant_home_missing'}})};
     calls.push({url,options});
-    return {ok:true,json:async()=>url.endsWith('/delete-products')?{deleted:2}:{products:0,product_rows:[]}};
-  }});
+    return {ok:true,status:200,json:async()=>url.endsWith('/delete-products')?{deleted:2}:{products:0,product_rows:[]}};
+  };
+  const tank=load('workspace/lib/tank.ts',{
+    '@/app/api/zenas/tank':load('workspace/app/api/zenas/tank.ts'),
+    '@/lib/trigger-signin-fetch':{signinFetch:fakeFetch},
+  }, {fetch:fakeFetch});
   const actions=load('workspace/app/rig/admin/actions.ts',{
     '@/lib/trigger-signin':{auth:async()=>session},
     '@/lib/tenant':{activeTenant:async()=>({...actor,userId:session.userId})},
@@ -37,8 +46,8 @@ async function main() {
   assert.equal(response.body.ok,true);
   assert.equal(response.body.message,'2 deleted.');
   assert.equal(response.body.deleted,2);
-  assert.equal(calls[0].options.headers['x-tervory-tenant'],'active-tenant');
-  assert.equal(calls[0].options.headers['x-tervory-user'],'owner');
+  assert.equal(new Headers(calls[0].options.headers).get('x-tervory-tenant'),'active-tenant');
+  assert.equal(new Headers(calls[0].options.headers).get('x-tervory-user'),'owner');
   assert.equal(calls[0].options.cache,'no-store');
   assert(calls[0].url.endsWith('/v1/access/rig/admin/delete-products'));
   session={userId:'retailer-admin',orgRole:'org:admin'};

@@ -15,9 +15,15 @@ function load(file, dependencies) {
   return module.exports;
 }
 const hosts = load('workspace/lib/product-hosts.ts', {});
+const origin = load('workspace/lib/workspace-origin.ts', {'./product-hosts': hosts});
+const setup = load('workspace/lib/workspace-setup.ts', {});
+const requestHelpers = load('workspace/lib/request.ts', {});
 let signed = true;
 const middleware = load('workspace/middleware.ts', {
   '@/lib/product-hosts': hosts,
+  './lib/workspace-origin': origin,
+  './lib/request': requestHelpers,
+  './lib/workspace-setup': { workspaceSetupMessage: () => setup.workspaceSetupMessage({ TANK_URL: 'http://tank:8000', TANK_API_KEY: 'placeholder-key', TRIGGER_SIGNIN_WORKSPACE_SECRET: 'placeholder-secret' }) },
   'next-auth/jwt': {getToken: async () => signed ? {principal: {expiresAt: Date.now() + 3600000}} : null},
   'next/server': { NextResponse: {
     rewrite: url => ({ type: 'rewrite', url: url.href }),
@@ -28,7 +34,7 @@ const middleware = load('workspace/middleware.ts', {
 function request(path, forwarded = true) {
   const nextUrl = new URL('http://0.0.0.0:3000' + path);
   nextUrl.clone = () => new URL(nextUrl);
-  return { nextUrl, cookies: {get: () => undefined}, headers: new Headers(forwarded ? { 'x-forwarded-host': 'rig.tervory.com', host: 'internal:3000' } : { host: 'rig.tervory.com' }) };
+  return { method: 'GET', nextUrl, cookies: {get: () => undefined}, headers: new Headers(forwarded ? { 'x-forwarded-host': 'rig.tervory.com', host: 'internal:3000' } : { host: 'rig.tervory.com' }) };
 }
 (async () => {
   for (const forwarded of [true, false]) {

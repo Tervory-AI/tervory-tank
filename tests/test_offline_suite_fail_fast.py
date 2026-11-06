@@ -68,6 +68,14 @@ def test_over_budget_run_dumps_stacks_and_kills_the_whole_group(tmp_path):
     for _ in range(50):
         try:
             os.kill(grandchild, 0)
+            # Minimal container init processes may leave an already killed
+            # orphan as a zombie; a retained PID is not a running process.
+            status = Path(f"/proc/{grandchild}/stat")
+            try:
+                if status.is_file() and status.read_text().rpartition(") ")[2].split()[0] == "Z":
+                    break
+            except FileNotFoundError:
+                break
         except ProcessLookupError:
             break
         time.sleep(0.1)

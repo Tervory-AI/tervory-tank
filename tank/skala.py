@@ -26,6 +26,7 @@ is a separate, human-only call; superseded versions wait in staging for the
 from __future__ import annotations
 
 import importlib.util
+import importlib.machinery
 import copy
 import hashlib
 import json
@@ -154,23 +155,31 @@ def _parse_package(yaml_path: Path, pkg_dir: Path) -> SkillPackage:
         return pkg
 
 
-_run_cache: dict[tuple[str, str], Callable[..., Awaitable[dict[str, Any]]]] = {}
+_run_cache: dict[tuple[str, str], tuple[str, Callable[..., Awaitable[dict[str, Any]]]]] = {}
 
 
 def _import_run(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"], Awaitable[dict[str, Any]]]:
+    fingerprint = evidence_hash([str(pkg.path.resolve()), package_hash(pkg)])
     cached = _run_cache.get((pkg.id, pkg.version))
-    if cached is not None:
-        return cached
+    if cached is not None and cached[0] == fingerprint:
+        return cached[1]
     run = _import_run_uncached(pkg)
-    _run_cache[(pkg.id, pkg.version)] = run
+    _run_cache[(pkg.id, pkg.version)] = (fingerprint, run)
     return run
+
+
+class _FreshSkillLoader(importlib.machinery.SourceFileLoader):
+    def get_code(self, fullname):
+        return self.source_to_code(self.get_data(self.path), self.path)
 
 
 def _import_run_uncached(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"], Awaitable[dict[str, Any]]]:
     spec = importlib.util.spec_from_file_location(f"skill_{pkg.id}_{pkg.version}".replace(".", "_").replace("-", "_"), pkg.path / "run.py")
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # Candidate edits can have the same size and timestamp as a cached .pyc.
+    # The source loader compiles the approved bytes rather than reusing bytecode.
+    _FreshSkillLoader(spec.name, str(pkg.path / "run.py")).exec_module(mod)
     run = getattr(mod, "run", None)
     if run is None:
         raise ValueError(f"{pkg.ref}: run.py has no run()")
@@ -422,7 +431,8 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
     cost = 0.0
     for i, case in enumerate(pkg.cases):
         ctx = make_ctx()
-        if "model" in case and not getattr(ctx, "live_evaluation", False):
+        recorded_model = "model" in case and not getattr(ctx, "live_evaluation", False)
+        if recorded_model:
             from dataclasses import replace
 
             async def saved_model(**_kwargs: Any) -> dict[str, Any]:
@@ -456,6 +466,7 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
             "case_hash": evidence_hash(case),
             "package_hash": source_fingerprint,
             "used_model": getattr(ctx, "calls", 0) > 0,
+            "recorded_model": recorded_model and getattr(ctx, "calls", 0) > 0,
         })
     total = len(pkg.cases)
     distinct = {json.dumps(case["input"], sort_keys=True) + json.dumps(case.get("model"), sort_keys=True)
@@ -489,8 +500,16 @@ def source_files(pkg: SkillPackage) -> list[dict[str, str]]:
 
 
 def package_hash(pkg: SkillPackage, files: list[dict[str, str]] | None = None) -> str:
-    return evidence_hash([source_files(pkg) if files is None else files, pkg.cases,
-                          pkg.eval_threshold, pkg.task_type, pkg.rung])
+    assets = []
+    for path in sorted(pkg.path.rglob("*")):
+        relative = path.relative_to(pkg.path)
+        if "__pycache__" in relative.parts or path.suffix in {".pyc", ".pyo"}:
+            continue
+        if path.is_file():
+            assets.append([relative.as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()])
+    return evidence_hash([source_files(pkg) if files is None else files, assets, pkg.cases,
+                          pkg.id, pkg.version, pkg.agent, pkg.description,
+                          pkg.input_schema, pkg.output_schema, pkg.eval_threshold, pkg.task_type, pkg.rung])
 
 
 def version_key(version: str) -> tuple[int, int, int]:
@@ -511,10 +530,15 @@ def eval_details(row: dict[str, Any]) -> list[dict[str, Any]]:
 
 def passing_runs(pkg: SkillPackage, runs: list[dict[str, Any]]) -> int:
     count = 0
+    fingerprint = package_hash(pkg)
+    hashes = [evidence_hash(case) for case in pkg.cases]
     for row in runs[:3]:
         details = eval_details(row)
-        if (row["total"] != len(pkg.cases) or row["passed"] != row["total"] or not details
-                or any(d.get("package_hash") != package_hash(pkg) for d in details)):
+        if (not hashes or row["total"] != len(hashes) or row["passed"] != row["total"]
+                or float(row["score"]) != 1.0 or len(details) != len(hashes)
+                or [d.get("case_hash") for d in details] != hashes
+                or any(d.get("passed") is not True or d.get("package_hash") != fingerprint
+                       or d.get("recorded_model") for d in details)):
             break
         count += 1
     return count

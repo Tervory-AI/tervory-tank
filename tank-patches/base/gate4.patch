@@ -1,0 +1,98 @@
+--- a/workspace/app/base/reference-workflow.tsx
++++ b/workspace/app/base/reference-workflow.tsx
+@@ -108,24 +108,26 @@
+       <p className="bcp-copy">Leave a selection empty for all states or types. Select several with Ctrl or Command.</p>
+       <button className="bcp-secondary" disabled={busy || !reference?.file}>Start from reference</button>
+     </form>
+-    <form className="bcp-upload" onSubmit={e => upload(e)}><h3>Upload a business list</h3><label>Business CSV <input className="bcp-input" type="file" name="file" accept=".csv,text/csv" required disabled={busy} /></label><button className="bcp-secondary" disabled={busy}>Upload and verify</button><p>Include a name column. Optional website, phone, address, city, state and zip. Up to 1,000 rows, 500 KB.</p></form>
++    <form id="base-upload" className="bcp-upload" onSubmit={e => upload(e)}><h3>Upload a business list</h3><label>Business CSV <input className="bcp-input" type="file" name="file" accept=".csv,text/csv" required disabled={busy} /></label><button className="bcp-secondary" disabled={busy}>Upload and verify</button><p>Include a name column. Optional website, phone, address, city, state and zip. Up to 1,000 rows, 500 KB.</p></form>
+     <h3>Verified contact details</h3><p>Counts describe the latest attempt per licence. Checks still running carry that reason until they finish. A record can have a verified field and still have missing fields. Select any count to download its records with sources and check dates.</p>
+-    <div className="bcp-product-table"><table><thead><tr><th>State and licence type</th>{metrics.map(metric => <th key={metric}>{words[metric]}</th>)}</tr></thead><tbody>{numbers?.groups.map(group => <tr key={`${group.state}-${group.licence_type}`}><th>{selectionLabel(group.state, group.licence_type)}</th>{metrics.map(metric => <td key={metric}><a href={download(group, metric)}>{group[metric].toLocaleString()}</a></td>)}</tr>)}</tbody></table></div>
++    <div className="bcp-product-table"><table><thead><tr><th>State and licence type</th>{metrics.map(metric => <th key={metric}>{words[metric]}</th>)}</tr></thead><tbody>{numbers?.groups.map(group => <tr key={`${group.state}-${group.licence_type}`}><th>{selectionLabel(group.state, group.licence_type)}</th>{metrics.map(metric => <td key={metric}><a href={download(group, metric)}>{group[metric].toLocaleString()}</a></td>)}</tr>)}{numbers?.groups.length === 0 && <tr><th>—</th>{metrics.map(metric => <td key={metric}>0</td>)}</tr>}</tbody></table></div>
++    {numbers?.groups.length === 0 && <p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p>}
+     {numbers?.groups.flatMap(group => Object.entries(group.failed_by_reason).map(([reason, count]) => <p key={`${group.state}-${group.licence_type}-${reason}`}><a href={download(group, "failed", reason)}>{countLabel(count, "record")} · {selectionLabel(group.state, group.licence_type)} · {reasonLabel(reason)}</a></p>))}
+     <button className="bcp-secondary" onClick={showRecords}>View verified fields and sources</button>
+-    {records && <div aria-label="Verified fields"><p>{countLabel(records.total, "attempted record")}. Showing the first {records.rows.length}; downloads include every matching record.</p>{records.rows.map(row => <article key={row.record_id}><h4>{row.name} · {stateLabel(row.state)}</h4><dl>{pageFields(row.fields).map(([name, value]) => <div key={name}><dt>{fieldLabels[name]}</dt><dd><Evidence field={value} /></dd></div>)}</dl></article>)}</div>}
++    {records && <div aria-label="Verified fields"><p>{countLabel(records.total, "attempted record")}. Showing the first {records.rows.length}; downloads include every matching record.</p>{records.total === 0 && <p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p>}{records.rows.map(row => <article key={row.record_id}><h4>{row.name} · {stateLabel(row.state)}</h4><dl>{pageFields(row.fields).map(([name, value]) => <div key={name}><dt>{fieldLabels[name]}</dt><dd><Evidence field={value} /></dd></div>)}</dl></article>)}</div>}
+     <h3>Cost per verified record</h3><p>One verified record has at least one website, phone or email with a recorded source and check date. Costs include priced calls only, by month and step. Calls without a price stay out of these totals; select their count to see them.</p>
+     <div className="bcp-product-table"><table><thead><tr><th>State</th><th>Month</th><th>Step</th><th>Verified records</th><th>Recorded spend</th><th>Cost per verified record</th></tr></thead><tbody>{numbers?.costs.map(cost => <tr key={`${cost.state}-${cost.month}-${cost.rung}`}><td>{stateLabel(cost.state)}</td><td>{monthLabel(cost.month)}</td><td>{costStep(cost)}</td><td>{cost.verified_records}</td><td><button className="bcp-text-button" onClick={() => showExpenses(cost)}>{amount(cost.known_cost_usd)}</button></td><td><button className="bcp-text-button" onClick={() => showExpenses(cost)}>{cost.status === "no verified records" ? "No records have been verified yet." : cost.status === "receipts unavailable" ? "We have not received all the cost details yet." : amount(cost.cost_per_verified_record)}</button>{cost.unpriced > 0 && <><br /><button className="bcp-text-button" onClick={() => showExpenses(cost, false, true)}>excludes {countLabel(cost.unpriced, "unpriced call")}</button></>}</td></tr>)}</tbody></table></div>
+-    {numbers?.costs.length === 0 && <p>No recorded costs yet.</p>}
+-    <ul aria-label="Monthly cost change">{costTrend(numbers?.costs || []).map(row => <li key={`${row.state}-${row.month}`}>{stateLabel(row.state)} · {monthLabel(row.month)} · {row.cost === null ? "We do not have a cost per verified record yet." : `$${row.cost.toFixed(6)} per verified record`} · {row.change}{row.unpriced > 0 && <> · {numbers?.costs.filter(cost => cost.state === row.state && cost.month === row.month && cost.unpriced > 0).map(cost => <button key={cost.rung} className="bcp-text-button" onClick={() => showExpenses(cost, false, true)}>excludes {countLabel(cost.unpriced, "unpriced call")} ({costStep(cost).toLowerCase()})</button>)}</>}</li>)}</ul>
++    {numbers?.costs.length === 0 && <div data-empty="costs"><p>No recorded costs yet.</p><figure aria-label="Cost per verified record"><svg viewBox="0 0 320 100" role="img" aria-label="Monthly cost change" style={{width:"100%",maxWidth:640}}><path d="M24 8V80H312" fill="none" stroke="currentColor"/><path d="M24 80H312" fill="none" stroke="currentColor"/><text x="4" y="84">0</text><text x="164" y="45">—</text></svg><figcaption>—</figcaption></figure><p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p><h4>Recorded calls</h4><ul><li>{numbers.unattributed_calls || numbers.records_without_receipts || numbers.groups.some(group => group.attempted > 0) ? "—" : "0 calls"}</li></ul><p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p></div>}
++    <ul aria-label="Monthly cost change">{numbers?.costs.length === 0 && <li>—</li>}{costTrend(numbers?.costs || []).map(row => <li key={`${row.state}-${row.month}`}>{stateLabel(row.state)} · {monthLabel(row.month)} · {row.cost === null ? "We do not have a cost per verified record yet." : `$${row.cost.toFixed(6)} per verified record`} · {row.change}{row.unpriced > 0 && <> · {numbers?.costs.filter(cost => cost.state === row.state && cost.month === row.month && cost.unpriced > 0).map(cost => <button key={cost.rung} className="bcp-text-button" onClick={() => showExpenses(cost, false, true)}>excludes {countLabel(cost.unpriced, "unpriced call")} ({costStep(cost).toLowerCase()})</button>)}</>}</li>)}</ul>
+     {Boolean(numbers?.unattributed_calls) && <p>{countLabel(numbers?.unattributed_calls || 0, "earlier call")} could not be matched to a record and {numbers?.unattributed_calls === 1 ? "is" : "are"} excluded from per-record costs.</p>}
+-    {expenses && <div aria-label="Cost receipts"><h4>{expenses.unpricedOnly ? "Calls without a price" : "Recorded calls"}</h4><p>Showing {expenses.rows.length} of {countLabel(expenses.total, "call")}.</p><ul>{expenses.rows.map(row => <li key={row.id}>{dateLabel(row.ts)} · {receiptLabel(row)} · {row.cost_status === "not_set" ? "price not set" : row.vendor_cost_status === "free_pass" ? `Free pass: $0 charged · list cost ${amount(row.vendor_list_cost_usd ?? null)}` : amount(row.cost_usd)}</li>)}</ul>{expenses.rows.length < expenses.total && <button className="bcp-secondary" onClick={() => showExpenses(expenses.cost, true, expenses.unpricedOnly)}>Show more calls</button>}</div>}
++    {expenses && <div aria-label="Cost receipts"><h4>{expenses.unpricedOnly ? "Calls without a price" : "Recorded calls"}</h4><p>Showing {expenses.rows.length} of {countLabel(expenses.total, "call")}.</p><ul>{expenses.rows.map(row => <li key={row.id}>{dateLabel(row.ts)} · {receiptLabel(row)} · {row.cost_status === "not_set" ? "price not set" : row.vendor_cost_status === "free_pass" ? `Free pass: $0 charged · list cost ${amount(row.vendor_list_cost_usd ?? null)}` : amount(row.cost_usd)}</li>)}</ul>{expenses.total === 0 && <p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p>}{expenses.rows.length < expenses.total && <button className="bcp-secondary" onClick={() => showExpenses(expenses.cost, true, expenses.unpricedOnly)}>Show more calls</button>}</div>}
+     {Boolean(numbers?.records_without_receipts) && <p>We have not received cost details for {countLabel(numbers?.records_without_receipts || 0, "record")}. Their complete costs cannot be calculated yet.</p>}
+     <h3>States done</h3><p>{countLabel(numbers?.states_done || 0, "completed state batch", "completed state batches")}. States run one after another.</p><ul>{numbers?.states.map(state => <li key={`${state.id}-${state.state}`}>{stateLabel(state.state)} · {state.name} · {countLabel(state.records_count, "licence")} · {batchStatusLabel(state.status)}{state.error && ` ${reasonLabel(state.error)}`}</li>)}</ul>
++    {numbers?.states.length === 0 && <p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p>}
+     <h3>Reference changes</h3>
+     <ul>{reference?.history?.map(file => <li key={file.id}>{dateLabel(file.published_on)} · {countLabel(file.row_count, "licence")} retained in this dated file</li>)}</ul>
+     {reference?.changes.length ? <details><summary>{countLabel(reference.changes.length, "new, lapsed or moved licence")} in the latest file</summary><ul>{reference.changes.map(change => <li key={change.licence_key}>Licence {change.licence_key} · {changeLabel(change.change)}</li>)}</ul></details> : <p>No differences between dated files to show yet.</p>}
+     <h3>Compare with Apollo</h3><form className="bcp-upload" onSubmit={e => upload(e, true)}><label>Apollo CSV <input className="bcp-input" type="file" name="file" accept=".csv,text/csv" required disabled={busy} /></label><button className="bcp-secondary" disabled={busy}>Compare the same licences</button><p>Upload the Apollo comparison CSV prepared for your Base licences. It contains matching licence numbers and Apollo’s website, phone and email results for the same businesses. Up to 2 MB. No service connection is required.</p></form>
+-    {comparison?.states.length ? <div className="bcp-product-table"><table><thead><tr><th>State and detail</th><th>Matches</th><th>Base only</th><th>Apollo only</th><th>Disagreements</th></tr></thead><tbody>{comparison.states.flatMap(state => (["website", "phone", "email"] as const).map(field => <tr key={`${state.state}-${field}`}><th>{stateLabel(state.state)} · {fieldLabels[field]}</th>{["matches", "base_only", "apollo_only", "disagreements"].map(outcome => <td key={outcome}>{state[field][outcome]}</td>)}</tr>))}</tbody></table><details><summary>See the values side by side</summary>{comparison.rows.map(row => <article key={row.licence_key}><h4>Licence {row.licence_key} · {stateLabel(row.state)}</h4>{(["website", "phone", "email"] as const).map(field => <p key={field}>{fieldLabels[field]} · Base: {String(row.base[field].value || "Not found")} · Apollo: {row.apollo[field] || "Not found"} · {comparisonLabel(row.outcomes[field])}</p>)}</article>)}</details></div> : <p>No comparison imported yet.</p>}
++    {comparison?.states.length ? <div className="bcp-product-table"><table><thead><tr><th>State and detail</th><th>Matches</th><th>Base only</th><th>Apollo only</th><th>Disagreements</th></tr></thead><tbody>{comparison.states.flatMap(state => (["website", "phone", "email"] as const).map(field => <tr key={`${state.state}-${field}`}><th>{stateLabel(state.state)} · {fieldLabels[field]}</th>{["matches", "base_only", "apollo_only", "disagreements"].map(outcome => <td key={outcome}>{state[field][outcome]}</td>)}</tr>))}</tbody></table><details><summary>See the values side by side</summary>{comparison.rows.map(row => <article key={row.licence_key}><h4>Licence {row.licence_key} · {stateLabel(row.state)}</h4>{(["website", "phone", "email"] as const).map(field => <p key={field}>{fieldLabels[field]} · Base: {String(row.base[field].value || "Not found")} · Apollo: {row.apollo[field] || "Not found"} · {comparisonLabel(row.outcomes[field])}</p>)}</article>)}</details></div> : <div data-empty="comparison"><p>No comparison imported yet.</p><table><thead><tr>{["State and detail","Matches","Base only","Apollo only","Disagreements"].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody><tr><th>—</th>{[0,1,2,3].map(key => <td key={key}>0</td>)}</tr></tbody></table><p className="bcp-copy">Apollo CSV</p></div>}
+   </section>;
+ }
+--- a/workspace/app/base/view.tsx
++++ b/workspace/app/base/view.tsx
+@@ -256,6 +256,7 @@
+             </div>
+           )}
+ 
++          {!model.loadError && model.empty && <p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p>}
+           <section id="search" className="bcp-section">
+             <h2>Search records</h2>
+             <p className="bcp-copy">Find any Base record by shop name, city, phone number, website or licence number.</p>
+@@ -277,7 +278,7 @@
+             {model.loadError ? null : model.empty ? (
+               <div className="bcp-state">
+                 <h3>No batches yet</h3>
+-                <p>When a list is uploaded, its batch shows here with its counts.</p>
++                <p>When a list is uploaded, its batch shows here with its counts.</p><p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p><div className="bcp-table" role="table" aria-label="Batches"><div className="bcp-tr bcp-th bcp-batch-cols" role="row">{["Batch","Records","Finished","With a website","With an email","Skipped steps","Status"].map(label => <span role="columnheader" key={label}>{label}</span>)}</div><div className="bcp-tr bcp-batch-cols" role="row">{["—","0","0","0","0","0","—"].map((value,index) => <span role="cell" key={index}>{value}</span>)}</div></div>
+               </div>
+             ) : (
+               <div className="bcp-table" role="table" aria-label="Batches">
+--- a/workspace/app/base/ask.tsx
++++ b/workspace/app/base/ask.tsx
+@@ -67,7 +67,7 @@
+           {busy ? "Searching…" : "Search"}
+         </button>
+       </form>
+-      {result === null ? null : !result.ok ? (
++      {result === null ? <div className="bcp-hits" role="region" aria-label="Search results"><p>0 records</p><ul className="bcp-list" /><p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p></div> : !result.ok ? (
+         <div className="bcp-state" role="status">
+           <h3>Search could not run</h3>
+           <p>We could not read the records just now. Nothing has changed. Try again in a minute.</p>
+@@ -140,8 +140,7 @@
+       <div className="bcp-thread" aria-live="polite">
+         {thread.length === 0 ? (
+           <p className="bcp-thread-empty">
+-            Ask about your records, for example “Which Kauai shops have no website?” Answers come from Base records only, and
+-            the records each answer used are listed under Sources.
++            <a href="#base-upload">Upload a business list</a>
+           </p>
+         ) : (
+           thread.map((turn, index) => (
+--- a/workspace/app/base/context-comparison.tsx
++++ b/workspace/app/base/context-comparison.tsx
+@@ -32,7 +32,7 @@
+       {message.startsWith("A trial is already running") && <p className="bcp-copy">Start time is UTC.</p>}
+       {report?.creditCapReached && <p role="status">credit cap reached</p>}
+       {!report ? <p>Comparison could not load.</p> : !report.records && !latestReport ? (
+-        <p>No trial results yet. Selected public businesses can be compared once the trial key is set.</p>
++        <div data-empty="trial"><p>No trial results yet. Selected public businesses can be compared once the trial key is set.</p><p>0 records</p><div className="bcp-table" role="table" aria-label="Company data comparison"><div role="row">{["Field","Checked","Base correct","Context.dev correct"].map(label => <span key={label} role="columnheader">{label}</span>)}</div><div role="row">{["—","0","—","—"].map((value,index) => <span key={index} role="cell">{value}</span>)}</div></div><p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p></div>
+       ) : (
+         <>
+           <p className="bcp-copy">{latestReport ? "This press" : "Latest 200 records in this workspace"}: records sent: {report.records}. Credits used: {report.creditsUsed.toFixed(2)}{report.unknownCharges ? " confirmed" : ""}. Credits per record: {report.creditsPerRecord?.toFixed(2) ?? "Not known"}.</p>
+--- a/workspace/app/base/model.ts
++++ b/workspace/app/base/model.ts
+@@ -123,7 +123,7 @@
+ }
+ 
+ export function totals(rows: BatchRow[]): Totals {
+-  const reported = rows.some((row) => row.skipped !== null);
++  const reported = rows.length === 0 || rows.some((row) => row.skipped !== null);
+   return {
+     records: rows.reduce((sum, row) => sum + row.total, 0),
+     withSite: rows.reduce((sum, row) => sum + row.withSite, 0),

@@ -68,6 +68,12 @@ _BLOCKING = {
 _SEPARATORS = ("/", " /", " \u2014", " \u2013", " -")
 
 
+try:
+    from agents.tisan.storage import atomic_json, durable_root, tenant_folder
+except ModuleNotFoundError:
+    from storage import atomic_json, durable_root, tenant_folder
+
+
 class FigmaError(ValueError):
     """The page cannot be read safely."""
 
@@ -1075,20 +1081,10 @@ def compile_reading(source: dict[str, Any]) -> dict[str, Any]:
 
 
 def _data_root(explicit: Path | None) -> Path:
-    if explicit is not None:
-        explicit.mkdir(parents=True, exist_ok=True)
-        return explicit
-    raw = os.environ.get("DATA_DIR", "/data")
-    path = Path(raw)
     try:
-        path.mkdir(parents=True, exist_ok=True)
-        probe = path / ".write-probe"
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
+        return durable_root(explicit)
     except OSError:
-        path = Path(os.environ.get("TMPDIR", "/tmp")) / "tisan-data"
-        path.mkdir(parents=True, exist_ok=True)
-    return path
+        raise FigmaError(_REQUEST_FAILED) from None
 
 
 def _store(reading: dict[str, Any], tenant: str, data_root: Path | None) -> str:
@@ -1096,15 +1092,15 @@ def _store(reading: dict[str, Any], tenant: str, data_root: Path | None) -> str:
     readings = (root / "readings").resolve()
     node = reading.get("node") if isinstance(reading.get("node"), dict) else {}
     node_id = str(node.get("id") or "page").replace(":", "-")
-    folder = readings / tenant / str(reading.get("file_key"))
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = tenant_folder(root, "readings", tenant, str(reading.get("file_key")))
     if readings not in folder.resolve().parents:
         raise FigmaError("refusing to write outside this tenant's readings")
     path = folder / f"{node_id}.json"
-    assert path.resolve().parent == folder.resolve()
+    if path.is_symlink() or path.resolve().parent != folder.resolve():
+        raise FigmaError(_REQUEST_FAILED)
     stored = path.relative_to(root).as_posix()
     reading["stored"] = stored
-    path.write_text(json.dumps(reading, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    atomic_json(path, reading)
     return stored
 
 

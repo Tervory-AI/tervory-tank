@@ -1,7 +1,7 @@
 # Tisan — founder testing sheet
 
 Scope: all shipped Tisan waves through merged #652, based on `origin/main` at
-`475597ed`. Branch `codex/tisan-acceptance`. There are **48 acceptance rows**;
+`475597ed`. Branch `codex/tisan-acceptance`. There are **56 acceptance rows**;
 `tests/acceptance/test_tisan.py::test_tNN_*` is the offline proof for row TNN.
 Only test/docs/CI preparation change here; no product UI or runtime setting is added.
 
@@ -104,6 +104,15 @@ Only the founder handles private key/token inputs in those rows.
 | T47 `test_t47_*` | https://app.tervory.com/chats → `tisan.request` approved-plan build path | In offline P set section type to `placeholder-invented`; separately try HTTP, credential-bearing HTTPS, `/media/../placeholder-private`, data-URL and protocol-relative media inputs. | Unknown section fails plan validation; all five unsafe media forms are refused before generated content is written. No invented section or private fetch. | none |
 | T48 `test_t48_*` | Founder test site's existing `npm run test:visual` | Compare the approved frame's measured text/box/colour against rendered local fixture at 375px. Then change its text, painted colour and x position. | Exact match yields `score: 1`, `passed: true`; changed rendering yields `score < 1`, `passed: false`, identifying failed measurements. No external asset request. T40 separately proves both required frame widths. | none |
 
+| T49 `test_t49_*` | Existing scaffold and builder jobs | Start concurrent builds of one tenant/site, including after a failed build. | Every job reserves a distinct durable number; failed receipts remain intact. | none |
+| T50 `test_t50_*` | Existing approved-page build and pipeline jobs | Omit a caller frame, then try replacing it with a different file/frame. | The server binds the approved source; substitutions never start a build or staging operation. | FIGMA_TOKEN, TISAN_FIGMA_FILES |
+| T51 `test_t51_*` | Existing local quality gate | Compare saved 375/1440 measurements; then change text or geometry. | Matching measurements pass; changed or incomplete evidence fails the gate before an archive is returned. No new UI wording is added. | none |
+| T52 `test_t52_*` | Room's existing data volume | Interrupt receipt serialization, read during updates, and simulate unavailable durable storage. | Readers see a complete old or new record; failed writes preserve the old record. No temporary-volume fallback. | DATA_DIR |
+| T53 `test_t53_*` | Existing review and publisher artifact reads | Point a tenant artifact directory at another tenant in an offline fixture. | Reads and writes are refused; the other tenant's data remains unchanged. | none |
+| T54 `test_t54_*` | Room-only existing jobs API, kind `archive`, input `{"slug":"<SITE>","build":<BUILD>}`; operator CLI `python /app/archive.py --tenant <TENANT> --slug <SITE> --build <BUILD>` | Archive an actual passed build with its R5 receipt; repeat the operation. | Signed requests use only the room's private tenant prefix; archive and manifest readback match. Immutable keys, a durable hash receipt and private Hermes record are retained. No model call. | R2_ACCOUNT_ID, R2_ACCESS_KEY_ID_TISAN, R2_SECRET_ACCESS_KEY_TISAN |
+| T55 `test_t55_*` | Existing five-minute heartbeat | Exercise the scheduler at two instants in one slot, then the next slot on Saturday 7 Nov. | One job per slot; the actual heartbeat writes only its platform-tenant receipt without embedding or model work. | HERMES_URL, TANK_KEY |
+| T56 `test_t56_*` | Existing offline build installation | Run the locked installation with `NODE_ENV=production`. | Pinned dev tools remain installed; dependency lifecycle scripts do not run and no Internet request is needed. | none |
+
 ## Offline proof and limits
 
 Each `test_tNN_*` executes its shipped UI, route, orchestration, scanner or
@@ -145,7 +154,7 @@ POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32885/postgres \
 git diff --check
 ```
 
-Validation: **48 passed, 0 skipped**, 10 existing warnings in **127.55s**, using the exact acceptance command above with two xdist workers. `tests/test_secrets.py -q --disable-socket` also passed (**2 passed**). The 48 unique table IDs match the 48 test functions and the workflow YAML parses. Exact CI lint returned **All checks passed!**; `git diff --check` was clean. The pushed head is reported in the handoff. The founder still
+Validation: **48 passed, 0 skipped**, 10 existing warnings in **127.55s**, using the exact acceptance command above with two xdist workers. `tests/test_secrets.py -q --disable-socket` also passed (**2 passed**). At that baseline revision, the 48 unique table IDs matched the 48 test functions and the workflow YAML parses. Exact CI lint returned **All checks passed!**; `git diff --check` was clean. The pushed head is reported in the handoff. The founder still
 runs the live positive cases after deployment in his own workspace; offline
 fixtures do not establish that live acceptance occurred.
 

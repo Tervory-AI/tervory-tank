@@ -1,3 +1,4 @@
+import { fetchWithDeadline as fetch } from "./request";
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 

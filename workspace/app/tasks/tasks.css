@@ -34,3 +34,11 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+.tasks-page button:disabled {
+  opacity: 1;
+  background: #e4e8f0;
+  border-color: #b8bfd0;
+  color: #4a5672;
+  cursor: default;
+}

@@ -36,8 +36,9 @@ def digest(value: Any) -> str:
 
 
 def safe_path(root: Path, relative: str) -> Path:
-    path = (root / relative).resolve()
-    if root.resolve() not in path.parents or path.is_symlink():
+    candidate = root / relative
+    path = candidate.resolve()
+    if root.is_symlink() or root.parent.is_symlink() or candidate.is_symlink() or root.resolve() not in path.parents:
         raise ValueError("invalid artifact path")
     return path
 
@@ -81,10 +82,11 @@ def require_visual_data(reading: Any) -> None:
 
 
 def snapshot(root: Path, tenant: str, page_id: str) -> dict[str, Any]:
+    root = root.resolve()
     tenant = str(uuid.UUID(tenant))
     if not re.fullmatch(r"[a-z0-9-]{1,100}", page_id):
         raise ValueError("invalid page id")
-    row = json.loads((root / "reviews" / tenant / f"{page_id}.json").read_text())
+    row = json.loads(safe_path(root / "reviews" / tenant, f"{page_id}.json").read_text())
     if row["tenant_id"] != tenant or row["region"] not in {"za", "us-east"} or row["region"] != os.environ.get("TANK_REGION", "us-east"):
         raise ValueError("artifact scope mismatch")
     # Resolve only this tenant's artifacts, even if a metadata file is malformed.

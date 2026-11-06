@@ -132,6 +132,8 @@ async def test_alert_preferences_reach_tank_and_tiger_routes(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_two_tenants_cannot_read_or_remove_each_others_saved_page_job(monkeypatch):
+    monkeypatch.setenv("TANK_KEY_TIGER", "placeholder-room-key")
+    monkeypatch.setenv("TANK_KEY", "placeholder-room-key")
     from test_tg2_tiger_watchlist import URL_A
     import main as tank
 
@@ -139,7 +141,7 @@ async def test_two_tenants_cannot_read_or_remove_each_others_saved_page_job(monk
     url = "https://8.8.8.8/item"
     store = MemoryStore()
     monkeypatch.setattr(tiger, "_store", lambda: store)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tiger.app)) as room:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tiger.app), headers={"X-Tank-Key": "placeholder-room-key"}) as room:
         monkeypatch.setattr(tank, "_http", room)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tank.app), base_url="http://tank",
                                      headers={"X-Tank-Key": tank.TANK_API_KEY}) as client:
