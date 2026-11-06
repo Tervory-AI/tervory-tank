@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SquadLinks, SQUAD_MEMBERS } from "../squad-links";
 import { RadixCard } from "./radix-card";

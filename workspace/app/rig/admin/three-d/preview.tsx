@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../../../lib/request";
 import { useEffect, useRef, useState } from "react";
 
 type Stage = { rotate(value: number): void; zoom(value: number): void; dispose(): void };

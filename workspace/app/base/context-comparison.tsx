@@ -1,3 +1,4 @@
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { contextReport, type ContextReport } from "./context-report";

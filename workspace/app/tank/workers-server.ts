@@ -1,3 +1,4 @@
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import "server-only";
 
 // Server-side only. The Workspace key stays here; the browser never sees it.

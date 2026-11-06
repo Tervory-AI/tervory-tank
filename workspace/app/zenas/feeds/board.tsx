@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../../lib/request";
 import { useEffect, useState } from "react";
 import { emptyConvert, type PublicConvert, type PublicScore, type PublicSource } from "@/app/api/zenas/feeds/public";
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../../lib/request";
 import { useEffect, useState, type FormEvent } from "react";
 import type { AdminOperation, AdminResult, CartOrder, CommerceResult } from "./types";
 

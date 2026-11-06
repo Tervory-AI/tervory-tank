@@ -413,7 +413,7 @@ async function tank<T>(path: string, init: RequestInit): Promise<T> {
   const res = await tenantFetch(requestTenant(path, init), new URL(path, TANK_URL), {...init, headers});
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 300)}`);
+    throw new Error("Your request could not be completed. Please try again.");
   }
   return (await res.json()) as T;
 }
@@ -436,7 +436,7 @@ export async function listRoster(): Promise<RosterModel[]> {
   const rows = await boundedFetch(`${TANK_URL}/v1/models`, {
     method: "GET", cache: "no-store", headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
   }, ROSTER_TIMEOUT_MS.value, async res => {
-    if (!res.ok) { const text = await res.text(); throw new Error(`Tank /v1/models ${res.status}: ${text.slice(0, 300)}`); }
+    if (!res.ok) { const text = await res.text(); throw new Error("Your request could not be completed. Please try again."); }
     return (await res.json()) as unknown;
   });
   if (!Array.isArray(rows)) return [];
@@ -813,7 +813,7 @@ async function tigerCall<T>(path: string, init: RequestInit): Promise<T> {
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 300)}`);
+    throw new Error("Your request could not be completed. Please try again.");
   }
   if (!text) return null as T;
   return JSON.parse(text) as T;
@@ -885,7 +885,7 @@ async function vaultFetch(path: string, userId: string, squad: string, init: Req
 async function vaultJson<T>(path: string, userId: string, squad: string, init: RequestInit): Promise<T> {
   const res = await vaultFetch(path, userId, squad, init);
   const text = await res.text();
-  if (!res.ok) throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 180)}`);
+  if (!res.ok) throw new Error("Your request could not be completed. Please try again.");
   return (text ? JSON.parse(text) : {}) as T;
 }
 
@@ -944,7 +944,7 @@ export async function uploadVaultFiles(
     body: files,
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`Tank /files ${res.status}: ${text.slice(0, 180)}`);
+  if (!res.ok) throw new Error("Your request could not be completed. Please try again.");
   return { ok: true };
 }
 

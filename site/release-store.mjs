@@ -34,6 +34,7 @@ function fileContains(file, email) {
 function storeAddressSync(file, email) {
   const clean = normalizeEmail(email);
   if (!clean) return { status: 400, stored: false };
+  if (fileContains(file, clean)) return { status: 200, stored: true };
   try {
     mkdirSync(dirname(file), { recursive: true });
     const line = `${JSON.stringify({ email: clean, at: new Date().toISOString() })}\n`;

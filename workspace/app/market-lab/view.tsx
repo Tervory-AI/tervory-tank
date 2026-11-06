@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";

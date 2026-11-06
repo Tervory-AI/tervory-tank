@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { RadixRecord, Reference } from "./request-service";
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { PLUGIN_TABS, offPanel, type PluginPanel } from "./plugins-model";
 import {

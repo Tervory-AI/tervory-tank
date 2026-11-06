@@ -1,3 +1,4 @@
+import { fetchWithDeadline as fetch } from "./request";
 /** Load whether an Undo link was already used (owner page). */
 
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";

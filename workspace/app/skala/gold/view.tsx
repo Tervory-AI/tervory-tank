@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../../lib/request";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Skill = { agent: string; skill_id: string; checked: number; target: number; holdout: number; candidates: number; last_score: number | null; trend: number | null; ran_at: string | null };

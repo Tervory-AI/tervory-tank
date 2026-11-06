@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { MOOT_LABEL, MOOT_LEAD, MOOT_PARTS } from "./moot";
 import { fairnessReading, type Fairness, newerHearing, SEATS, SEAT_LABELS, turnFromForm, type Hearing, type Seat } from "./moot-hearing-types";
