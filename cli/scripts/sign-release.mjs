@@ -5,8 +5,11 @@ import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ConfigurationError, missingSetting } from '../src/configuration.mjs';
 
 export function signRelease(directory, privatePem, publicPem) {
+  if (!privatePem) throw missingSetting('CLI_RELEASE_SIGNING_KEY', 'Release signing did not start.');
+  if (!publicPem) throw missingSetting('CLI_RELEASE_SIGNING_PUBLIC_KEY', 'Release signing did not start.');
   const key = createPrivateKey(privatePem);
   const trusted = createPublicKey(publicPem);
   if (key.asymmetricKeyType !== 'ed25519' || trusted.asymmetricKeyType !== 'ed25519'
@@ -39,8 +42,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (process.argv.length !== 3) throw new Error();
     signRelease(resolve(process.argv[2]), process.env.CLI_RELEASE_SIGNING_KEY, process.env.CLI_RELEASE_SIGNING_PUBLIC_KEY);
     console.log('Release signatures verified.');
-  } catch {
-    console.error('Release signing failed. Check CLI_RELEASE_SIGNING_KEY and CLI_RELEASE_SIGNING_PUBLIC_KEY.');
+  } catch (error) {
+    console.error(error instanceof ConfigurationError ? error.message : 'Release signing failed. Check CLI_RELEASE_SIGNING_KEY and CLI_RELEASE_SIGNING_PUBLIC_KEY.');
     process.exitCode = 1;
   }
 }

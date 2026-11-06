@@ -3,13 +3,18 @@ import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, basename } from 'node:path';
 import { LIMITS, redactSecrets } from './code-tools.mjs';
+import { ConfigurationError, missingSetting } from './configuration.mjs';
 
 const refused = () => new Error('Code MCP refused.');
 const identifier = /^[A-Za-z0-9_.-]+$/;
 export async function mcpKeyring(server, name) {
   if (!identifier.test(server) || !identifier.test(name)) throw refused();
-  const { Entry } = await import('@napi-rs/keyring');
-  return new Entry('@tervory/cli/mcp', `${server}/${name}`, { linux: { store: 'secret-service' } });
+  try {
+    const { Entry } = await import('@napi-rs/keyring');
+    return new Entry('@tervory/cli/mcp', `${server}/${name}`, { linux: { store: 'secret-service' } });
+  } catch {
+    throw new ConfigurationError(`Code MCP keyring entry @tervory/cli/mcp/${server}/${name} is unavailable. Enable the OS keyring before connecting.`, [`@tervory/cli/mcp/${server}/${name}`]);
+  }
 }
 
 export function serverIdentity(config) {
@@ -31,22 +36,29 @@ export async function loadMCP(path = join(homedir(), '.tervory', 'mcp.json')) {
     const raw = new TextDecoder('utf8', { fatal: true }).decode(buffer.subarray(0, bytesRead));
     if (redactSecrets(raw) !== raw) throw refused();
     const value = JSON.parse(raw);
+    if (value && typeof value === 'object' && !Array.isArray(value) && value.servers == null) throw missingSetting('~/.tervory/mcp.json: servers', 'Add your MCP server configuration before connecting.');
     if (!value || Object.keys(value).some(k => k !== 'servers') || !value.servers || Array.isArray(value.servers)) throw refused();
     for (const [name, config] of Object.entries(value.servers)) {
       if (!identifier.test(name) || !config || Object.keys(config).some(k => !['transport', 'command', 'args', 'url', 'env', 'headers'].includes(k))) throw refused();
+      const required = field => {
+        if (config[field] === undefined || config[field] === null || config[field] === '') throw missingSetting(`~/.tervory/mcp.json: servers.${name}.${field}`, 'Complete this server configuration before connecting.');
+      };
+      required('transport');
       if (config.transport === 'stdio') {
+        required('command');
         if (typeof config.command !== 'string' || !config.command || /[\0\r\n]/.test(config.command) || config.url || config.headers) throw refused();
         if (config.args !== undefined && (!Array.isArray(config.args) || config.args.some(arg => typeof arg !== 'string' || /[\0\r\n]/.test(arg) || /(?:token|secret|password|api[-_]key)(?:=|$)/i.test(arg)))) throw refused();
       } else if (config.transport === 'http') {
+        required('url');
         const url = new URL(config.url);
         if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || config.command || config.args || config.env) throw refused();
       } else throw refused();
       for (const [key, ref] of Object.entries(config.env ?? config.headers ?? {})) {
-        if (!identifier.test(key) || !ref || typeof ref !== 'object' || Object.keys(ref).join() !== 'keyring' || !identifier.test(ref.keyring)) throw refused();
+        if (!identifier.test(key) || !ref || typeof ref !== 'object' || Object.keys(ref).join() !== 'keyring' || typeof ref.keyring !== 'string' || !identifier.test(ref.keyring)) throw refused();
       }
     }
     return value.servers;
-  } catch (error) { if (error.code === 'ENOENT' && !handle) return {}; throw refused(); }
+  } catch (error) { if (error instanceof ConfigurationError) throw error; if (error.code === 'ENOENT' && !handle) return {}; throw refused(); }
   finally { await handle?.close(); }
 }
 
@@ -83,8 +95,11 @@ export class MCPClients {
         if (!await this.allowed(config)) throw refused();
         const secretEntries = {};
         for (const [key, ref] of Object.entries(config.env ?? config.headers ?? {})) {
-          const secret = await (await this.keyring(name, ref.keyring)).getPassword();
-          if (typeof secret !== 'string' || !secret) throw refused();
+          let secret;
+          const missing = () => missingSetting(`@tervory/cli/mcp/${name}/${ref.keyring}`, `Run tervory mcp secret ${name} ${ref.keyring} before connecting.`);
+          try { secret = await (await this.keyring(name, ref.keyring)).getPassword(); }
+          catch { throw missing(); }
+          if (typeof secret !== 'string' || !secret) throw missing();
           this.values.add(secret); secretEntries[key] = secret;
         }
         const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
@@ -103,7 +118,7 @@ export class MCPClients {
           };
           channel = new StreamableHTTPClientTransport(new URL(config.url), { fetch: guarded, requestInit: { headers: secretEntries, redirect: 'error' }, reconnectionOptions: { maxRetries: 0, initialReconnectionDelay: 1000, maxReconnectionDelay: 1000, reconnectionDelayGrowFactor: 1 } });
         }
-        const client = new Client({ name: 'tervory', version: '0.10.1' }, { capabilities: {} });
+        const client = new Client({ name: 'tervory', version: '0.11.0' }, { capabilities: {} });
         try { await client.connect(channel, { timeout: LIMITS.commandMs, signal: this.io.signal }); }
         catch { await client.close().catch(() => {}); throw refused(); }
         this.clients.set(name, { client, config, fingerprint });

@@ -4,6 +4,8 @@ import { CodeFolder, redactSecrets } from './code-tools.mjs';
 import { MCPClients } from './mcp.mjs';
 import { gitSlash } from './code-git.mjs';
 import { attachmentsFrom } from './code-attachments.mjs';
+import { ConfigurationError } from './configuration.mjs';
+import { emptyState } from './empty-state.mjs';
 
 export const CODE_HELP = '/help | /mode ask|auto-edit|plan | /model [name] | /resume [session] | /undo | /cost | /commit | /branch [name] | /pr | /steps [number] | /clear | /exit';
 const MODES = new Set(['ask', 'auto-edit', 'plan']);
@@ -37,13 +39,15 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
     if (typeof thread !== 'string' || !thread) throw new Error('Tank sent an invalid answer.');
     history.length = 0; cost = 0; knownCost = true; turns.length = 0; lastAnswer = ''; status = 'completed';
     savings = 0; knownSavings = true;
+    io.reset?.();
     io.write(`Thread ${clean(thread)}\n`);
+    if (!headless) io.write(emptyState('code'));
   };
   const reopen = async selected => {
     const sessions = await tank.json('/v1/command/code-sessions');
     if (!Array.isArray(sessions)) throw new Error('Tank sent an invalid answer.');
     for (const row of sessions) io.write(`${clean(row.thread_id)} ${clean(row.title ?? '')}\n`);
-    if (!sessions.length) { io.write('No code sessions.\n'); return false; }
+    if (!sessions.length) { io.write(emptyState('sessions')); return false; }
     selected ||= (await io.prompt('Session: '))?.trim();
     if (!selected) return false;
     if (!sessions.some(row => row.thread_id === selected)) { io.write('Code session not available.\n'); return false; }
@@ -51,6 +55,7 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
     if (saved.thread_id !== selected || !Array.isArray(saved.history) || saved.active) throw new Error('Code session cannot be resumed while a turn is active.');
     local = await createFolder(folder); // Undo snapshots and reads belong to this local session only.
     thread = selected; history.length = 0; turns.length = 0; mode = 'ask'; model = 'auto'; lastAnswer = ''; status = 'completed';
+    io.reset?.();
     for (const item of saved.history) {
       if (['user', 'assistant'].includes(item.kind) && typeof item.content === 'string') {
         remember(item.kind, item.content); io.write(`${item.kind}: ${clean(item.content)}\n`);
@@ -65,6 +70,7 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
     const roster = await tank.json('/v1/command/code-models');
     if (!Array.isArray(roster) || roster.some(row => !row || typeof row.name !== 'string')) throw new Error('Tank sent an invalid answer.');
     io.write('Auto\n');
+    if (!roster.length) io.write(emptyState('models'));
     for (const row of roster) io.write(`${clean(row.name)} | in ${dollars(row.input_usd_per_m)}/M | out ${dollars(row.output_usd_per_m)}/M\n`);
     selected ||= (await io.prompt('Model: '))?.trim();
     if (!selected) return;
@@ -91,9 +97,12 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
         if (MODES.has(next)) { mode = next; io.write(`Mode ${mode}\n`); } else io.write('Invalid code mode.\n');
       } else if (slash === '/model') await chooseModel(value);
       else if (slash === '/resume') await reopen(value);
-      else if (slash === '/cost') io.write(`Session cost ${dollars(knownCost ? cost : null)}\n`);
+      else if (slash === '/cost') {
+        io.write(`Session cost ${dollars(knownCost ? cost : null)}\n`);
+        if (!history.length && knownCost && cost === 0) io.write(emptyState('code'));
+      }
       else if (slash === '/steps') io.steps?.(value);
-      else if (['/commit','/branch','/pr'].includes(slash)) { try { await gitSlash(slash, value, local, io, mode); } catch { io.write('Code Git refused.\n'); } }
+      else if (['/commit','/branch','/pr'].includes(slash)) { try { await gitSlash(slash, value, local, io, mode); } catch (error) { io.write(error instanceof ConfigurationError ? error.message + '\n' : 'Code Git refused.\n'); } }
       else if (slash === '/clear') { local = await createFolder(folder); mode = 'ask'; model = 'auto'; await fresh(); }
       else if (slash === '/undo') {
         if (mode === 'plan') io.write('Plan mode is read only. Switch mode before undo.\n');
@@ -105,7 +114,12 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
     status = 'completed';
     const text = redactSecrets(input);
     const attachments = await attachmentsFrom(text, local, tank, thread, io);
-    const local_mcp = await mcp.tools(mode, headless);
+    let local_mcp;
+    try { local_mcp = await mcp.tools(mode, headless); }
+    catch (error) {
+      if (!(error instanceof ConfigurationError) || headless) throw error;
+      io.write(clean(error.message) + '\n'); status = 'needs_input'; continue;
+    }
     const promptId = randomUUID();
     const previous = history.slice();
     if (project) {

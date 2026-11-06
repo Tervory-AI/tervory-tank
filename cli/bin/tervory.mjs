@@ -27,7 +27,7 @@ process.on('SIGINT', cancel);
 // most once a day, 1.5 s budget, from app.tervory.com/cli only, never fails a command.
 // TERVORY_NO_UPDATE_CHECK=1 turns it off; a TERVORY_CLI_VERSION pin turns it off too.
 const command = process.argv[2];
-const notice = command && command !== '-p' && command !== 'update' && process.env.TERVORY_NO_UPDATE_CHECK !== '1'
+const notice = command && command !== '-p' && command !== 'update' && !process.argv.includes('--dry-run') && process.env.TERVORY_NO_UPDATE_CHECK !== '1'
   && !(process.env.TERVORY_CLI_VERSION ?? '').trim()
   ? updateNotice({ transport: fetch }) : Promise.resolve(null);
 try {
@@ -65,7 +65,7 @@ try {
   });
 } catch (error) {
   // Never print native-keychain or transport errors: they can include input.
-  const known = /^(?:Personal token refused\.|Tank |Login |Signed |Node 22|Unknown command|Code |Invalid |A thread|Command |Run requires|This tool|Update )/;
+  const known = /^(?:Personal token refused\.|Tank |Login |Signed |Node 22|Unknown command|Code |Invalid |A thread|Command |Run requires|This tool|Update |Missing setting )/;
   if (!error.reported) process.stderr.write(known.test(error.message) ? `${safe(error.message)}\n` : 'Command failed. Check your OS keychain and Tank connection.\n');
   process.exitCode = error.exitCode ?? 1;
 } finally {

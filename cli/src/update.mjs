@@ -87,7 +87,7 @@ export async function update({ transport, io, version, root = PACKAGE_ROOT, tar 
   if (version !== undefined && !VERSION.test(version)) throw new Error('Update failed: invalid version.');
   const base = sourceFor(release);
   let trust;
-  try { trust = await readFile(join(root,'TRUSTED-RELEASE.pem')); } catch (error) { if (release.signed || error.code !== 'ENOENT') throw new Error('Update refused: release trust key missing.'); }
+  try { trust = await readFile(join(root,'TRUSTED-RELEASE.pem')); } catch (error) { if (release.signed || error.code !== 'ENOENT') throw new Error('Update refused: release trust key missing: TRUSTED-RELEASE.pem. Reinstall with the signed installer.'); }
   const signed = async (path, bytes) => {
     if (!trust) return;
     const signature = await get(transport,path+'.sig',io.signal,JSON_TIMEOUT_MS,response=>response.text(),base);

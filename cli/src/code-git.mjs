@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { LIMITS, redactSecrets } from './code-tools.mjs';
+import { missingSetting } from './configuration.mjs';
+import { emptyState } from './empty-state.mjs';
 const execute = promisify(execFile);
 const refuse = () => new Error('Code Git refused.');
 export async function gitProcess(command, args, local, signal) {
@@ -17,7 +19,7 @@ export async function gitSlash(name, value, local, io, mode, { process = gitProc
   if (name === '/commit') {
     if (value) throw refuse();
     const names = await checked(['diff', '--cached', '--name-only', '-z']);
-    if (!names) { io.write('No staged changes.\n'); return; }
+    if (!names) { io.write('No staged changes.\n' + emptyState('staged')); return; }
     const paths = names.split('\0').filter(Boolean);
     for (const path of paths) await local.path(path, { missing: true });
     const diff = await checked(['diff', '--cached', '--no-ext-diff', '--no-textconv']);
@@ -32,7 +34,7 @@ export async function gitSlash(name, value, local, io, mode, { process = gitProc
     io.write('Committed.\n'); return;
   }
   if (name === '/branch') {
-    if (!value) { io.write(clean(await checked(['branch','--list','--no-color'])) + '\n'); return; }
+    if (!value) { const branches = await checked(['branch','--list','--no-color']); io.write(branches ? clean(branches) + '\n' : emptyState('branches')); return; }
     if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value) || value.includes('..') || value.includes('@{')) throw refuse();
     await checked(['check-ref-format','--branch',value]);
     const exists = await local.git(['show-ref','--verify','--quiet',`refs/heads/${value}`]);
@@ -40,7 +42,8 @@ export async function gitSlash(name, value, local, io, mode, { process = gitProc
     await checked(['switch', ...(exists.code === 0 ? [] : ['-c']), value]); return;
   }
   if (name !== '/pr' || value) throw refuse();
-  await process('gh',['auth','status'],local,io.signal);
+  try { await process('gh',['auth','status'],local,io.signal); }
+  catch { throw missingSetting('gh authentication', 'Install gh and run gh auth login before using /pr. Nothing was pushed.'); }
   const branch = await checked(['symbolic-ref','--short','HEAD']);
   if (['main','master'].includes(branch) || !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(branch)) throw refuse();
   const remote = await checked(['remote','get-url','--push','--all','origin']);

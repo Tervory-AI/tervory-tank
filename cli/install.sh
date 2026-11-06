@@ -24,12 +24,17 @@ main() {
   PUBLIC_KEY_DER="" # TERVORY_RELEASE_TRUST
   KEY_FILE="${TERVORY_CLI_PUBLIC_KEY_FILE:-}"
   BASE="${BASE%/}"
-  HOME_DIR="${TERVORY_HOME:-${HOME:?HOME is not set}/.tervory}"
-  BIN_DIR="${TERVORY_BIN_DIR:-$HOME/.local/bin}"
-  CLI_DIR="$HOME_DIR/cli"
-
   fail() { printf 'tervory install: %s\n' "$1" >&2; exit 1; }
   say() { printf '%s\n' "$1"; }
+  if [ -z "${HOME:-}" ] && { [ -z "${TERVORY_HOME:-}" ] || [ -z "${TERVORY_BIN_DIR:-}" ]; }; then
+    fail 'Missing setting HOME. Set HOME or both TERVORY_HOME and TERVORY_BIN_DIR. Nothing was installed.'
+  fi
+  HOME_DIR="${TERVORY_HOME:-${HOME:-}/.tervory}"
+  BIN_DIR="${TERVORY_BIN_DIR:-${HOME:-}/.local/bin}"
+  CLI_DIR="$HOME_DIR/cli"
+  if [ -n "$KEY_FILE" ] && [ ! -r "$KEY_FILE" ]; then
+    fail 'TERVORY_CLI_PUBLIC_KEY_FILE is not readable. Nothing was installed.'
+  fi
 
   # https only, for the first request and every redirect; plain http only for a loopback base.
   PROTO='=https'; LOOPBACK=0

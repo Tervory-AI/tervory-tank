@@ -1,5 +1,6 @@
 import { safe } from './client.mjs';
 import { redactSecrets } from './code-tools.mjs';
+import { emptyState } from './empty-state.mjs';
 
 const segments = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const width = value => /[\p{Extended_Pictographic}\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\uff01-\uff60]/u.test(value) ? 2 : 1;
@@ -63,10 +64,13 @@ export class TerminalUI {
     } else {
       const entry = this.steps.at(-1); if (!entry) return;
       Object.assign(entry,step); this.write(`Tool ${this.steps.length}: ${step.failed ? 'needs input' : 'done'}\n`);
+      if (!step.failed && entry.name === 'list_files' && Array.isArray(step.result?.files) && !step.result.files.length) this.write(emptyState('files'));
+      if (!step.failed && entry.name === 'search' && Array.isArray(step.result?.matches) && !step.result.matches.length) this.write(emptyState('matches'));
       if (this.plain) this.write(JSON.stringify(step.result ?? {})+'\n');
     }
   }
   toggle(value) {
+    if (!value && !this.steps.length) { this.write(emptyState('tools')); return; }
     if (!value) { for (const [i,step] of this.steps.entries()) this.write(`Tool ${i+1}: ${step.name} [${step.expanded?'expanded':'collapsed'}]\n`); return; }
     const index = Number(value)-1; const step = this.steps[index];
     if (!Number.isInteger(index) || !step) { this.write('Tool step not available.\n'); return; }
@@ -79,5 +83,6 @@ export class TerminalUI {
 export function terminalIO(io, settings) {
   const ui = new TerminalUI({...settings,write:io.write});
   return {...io, write:value=>ui.write(value), preview:value=>ui.preview(value), status:state=>ui.status(state), tool:step=>ui.tool(step), steps:value=>ui.toggle(value),
+    reset:()=>{ui.clearPreview();ui.steps=[];ui.state=null;},
     prompt:async label=>{ui.clearPreview();return io.prompt(label);}};
 }

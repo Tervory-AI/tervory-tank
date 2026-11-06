@@ -2,8 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { codeSession, dollars } from './code-mode.mjs';
 import { redactSecrets } from './code-tools.mjs';
 import { loadMCP, mcpKeyring, serverIdentity } from './mcp.mjs';
-import { basename, extname } from 'node:path';
-import { parse } from 'csv-parse/sync';
+import { ConfigurationError, LOGIN_SETTING, keyringUnavailable } from './configuration.mjs';
+import { emptyState, EMPTY } from './empty-state.mjs';
+import { prepareRun, dryRunResult, dryRunText } from './run-request.mjs';
 import { installedRelease, packageVersion, update } from './update.mjs';
 import { boundedFetch, DeadlineError } from './http.mjs';
 
@@ -159,19 +160,25 @@ function stored(raw) {
 
 /** A valid access token, refreshed (and rotated in the keychain) shortly before expiry. */
 export async function session(store, transport = fetch, now = Date.now) {
-  const value = stored(await store.get());
-  if (!value) throw new Error('Login required. Run tervory login.');
+  let raw;
+  try { raw = await store.get(); } catch { throw keyringUnavailable(); }
+  const value = stored(raw);
+  if (!value) throw new ConfigurationError(`Login required. Missing OS keyring entry ${LOGIN_SETTING}. Run tervory login.`, [LOGIN_SETTING]);
   if (value.legacy || Date.parse(value.expires_at) - now() > 60_000) return value.access_token;
   if (Date.parse(value.refresh_expires_at) <= now()) throw new Error('Login expired. Run tervory login.');
   const grant = await deviceCall(value.region, 'refresh', { refresh_token: value.refresh_token }, transport);
   if (grant.error) {
     throw new Error(grant.error === 'invalid_grant' ? 'Login expired or revoked. Run tervory login.' : 'Tank refused the login refresh.');
   }
-  await store.set(credential(grant, value.region));
+  const refreshed = credential(grant, value.region);
+  try { await store.set(refreshed); } catch { throw keyringUnavailable('written'); }
   return grant.access_token;
 }
 
 async function login(region, { store, transport, io }) {
+  // Do not begin device approval when the required credential store is absent.
+  try { await store.get?.(); } catch { throw keyringUnavailable(); }
+  if (typeof store.set !== 'function') throw keyringUnavailable('written');
   const name = String(io.deviceName?.() ?? 'tervory-cli').replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim().slice(0, 100) || 'tervory-cli';
   const start = await deviceCall(region, 'code', { device_name: name, approval: 'trigger-signin' }, transport);
   if (start.error || typeof start.device_code !== 'string'
@@ -187,7 +194,8 @@ async function login(region, { store, transport, io }) {
     await sleep(interval);
     const grant = await deviceCall(region, 'token', { device_code: start.device_code }, transport);
     if (!grant.error) {
-      await store.set(credential(grant, region));
+      const saved = credential(grant, region);
+      try { await store.set(saved); } catch { throw keyringUnavailable('written'); }
       io.write(`Signed in on ${region}. Credential saved in the OS keychain; it refreshes automatically.\n`);
       return;
     }
@@ -332,9 +340,9 @@ export async function* events(response, { idleMs = STREAM_IDLE_MS, signal } = {}
 }
 
 const amount = value => value === null || value === undefined ? 'pending' : String(value);
-export function receiptLines(receipt) {
+export function receiptLines(receipt, { empty = false } = {}) {
   const rows = receipt.rows ?? [];
-  if (!rows.length) return ['Receipt pending'];
+  if (!rows.length) return empty ? [...EMPTY.receipts] : ['Receipt pending'];
   return rows.map((row, index) => {
     // Tank prices pinned turns' same recorded tokens at the frozen Auto policy price; the CLI never computes money.
     const priced = row.auto_cost_status === 'priced' && typeof row.auto_cost_usd === 'number';
@@ -447,7 +455,7 @@ export function options(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith('--')) { args.push(argv[i]); continue; }
     const flag = argv[i].slice(2);
-    if (['resume','plain'].includes(flag) && flags[flag] === undefined) { flags[flag] = true; continue; }
+    if (['resume','plain','dry-run'].includes(flag) && flags[flag] === undefined) { flags[flag] = true; continue; }
     if (!['model', 'thread', 'file', 'args', 'region', 'version', 'output'].includes(flag) || flags[flag] !== undefined || !argv[i + 1] || argv[i + 1].startsWith('--')) {
       throw new Error('Invalid command option.');
     }
@@ -474,8 +482,9 @@ export async function run(argv, { store, transport, io, env = process.env }) {
       result = await codeSession(new Tank(token, transport, io.signal), '.', 'auto',
         { ...io, interactive: false, prompt: async () => null, write() {} }, receiptLines, safe,
         { task: argv[1], headless: true });
-    } catch {
-      result = { status: 'error', answer: 'Code task failed; nothing was retried.', cost_usd: null, turns: [] };
+    } catch (error) {
+      result = { status: 'error', answer: error instanceof ConfigurationError ? error.message : 'Code task failed; nothing was retried.', cost_usd: null, turns: [],
+        ...(error instanceof ConfigurationError ? { missing_settings: error.settings } : {}) };
     }
     io.write(output === 'json' ? JSON.stringify(result) + '\n'
       : `${safe(redactSecrets(result.answer ?? ''))}\n${result.turns.map(turn => `Model ${turn.model} | cost ${dollars(turn.cost_usd)}\n`).join('')}Status ${result.status}\nCost ${dollars(result.cost_usd)}\n`);
@@ -485,9 +494,15 @@ export async function run(argv, { store, transport, io, env = process.env }) {
     return result;
   }
   const { args, flags } = options(argv); const [name, ...rest] = args;
+  if (flags['dry-run']) {
+    if (name !== 'run' || !['json', 'text'].includes(flags.output ?? 'text')) throw new Error('Invalid dry-run command option.');
+    const result = dryRunResult(await prepareRun(rest, flags));
+    io.write(flags.output === 'json' ? JSON.stringify(result) + '\n' : dryRunText(result));
+    return result;
+  }
   if (flags.output !== undefined || ((flags.resume !== undefined || flags.plain !== undefined) && name !== 'code')) throw new Error('Invalid command option.');
   if (!name || name === 'help') {
-    io.write('tervory login [--region us-east|za] | logout | chat [thread] | code [folder] [--resume] [--plain] | -p "<task>" [--output json|text] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | mcp secret <server> <name> | mcp block|unblock <server> | update [--version X.Y.Z] | version\n');
+    io.write('tervory login [--region us-east|za] | logout | chat [thread] | code [folder] [--resume] [--plain] | -p "<task>" [--output json|text] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] [--dry-run --output json|text] | build "change" | receipts <thread|task> | mcp secret <server> <name> | mcp block|unblock <server> | update [--version X.Y.Z] | version\n');
     return;
   }
   if (name === 'update') {
@@ -513,6 +528,7 @@ export async function run(argv, { store, transport, io, env = process.env }) {
   }
   if (flags.region !== undefined) throw new Error('Invalid command option.');
   if (name === 'logout') return logout({ store, transport, io });
+  const runRequest = name === 'run' ? await prepareRun(rest, flags) : null;
   const token = await session(store, transport);
   const tank = new Tank(token, transport, io.signal);
   if (name === 'mcp') {
@@ -537,6 +553,7 @@ export async function run(argv, { store, transport, io, env = process.env }) {
       throw error;
     }
     if (!Array.isArray(roster)) throw new Error('Tank sent an invalid answer.');
+    if (!roster.length) io.write(emptyState('models'));
     const price = value => (typeof value === 'number' && Number.isFinite(value) ? `$${value}` : 'price not set');
     for (const row of roster) {
       if (row && typeof row.name === 'string') io.write(`${safe(row.name)} | in ${price(row.input_usd_per_m)}/M | out ${price(row.output_usd_per_m)}/M\n`);
@@ -544,7 +561,10 @@ export async function run(argv, { store, transport, io, env = process.env }) {
     return;
   }
   if (name === 'threads') {
-    for (const thread of await tank.json('/v1/command/threads')) io.write(`${safe(thread.thread_id)} ${safe(thread.title)} | spent ${amount(thread.spent_usd)} | saved ${amount(thread.saved_usd)}\n`);
+    const threads = await tank.json('/v1/command/threads');
+    if (!Array.isArray(threads)) throw new Error('Tank sent an invalid answer.');
+    if (!threads.length) io.write(emptyState('threads'));
+    for (const thread of threads) io.write(`${safe(thread.thread_id)} ${safe(thread.title)} | spent ${amount(thread.spent_usd)} | saved ${amount(thread.saved_usd)}\n`);
     return;
   }
   if (name === 'receipts') {
@@ -556,7 +576,7 @@ export async function run(argv, { store, transport, io, env = process.env }) {
       if (error.status !== 404) throw error;
       result = await tank.json(`/v1/command/tasks/${encodeURIComponent(rest[0])}/receipts`);
     }
-    io.write(receiptLines({ rows: result.rows ?? result.receipts ?? [] }).map(safe).join('\n') + '\n'); return;
+    io.write(receiptLines({ rows: result.rows ?? result.receipts ?? [] }, { empty: true }).map(safe).join('\n') + '\n'); return;
   }
   if (!['ask', 'chat', 'run', 'build'].includes(name)) throw new Error('Unknown command.');
   if (name !== 'chat' && !rest.length) throw new Error('Command text is required.');
@@ -572,19 +592,7 @@ export async function run(argv, { store, transport, io, env = process.env }) {
     return;
   }
   if (name === 'run') {
-    if (rest.length !== 2) throw new Error('Run requires an agent and task.');
-    let arguments_ = {};
-    try { arguments_ = flags.args ? JSON.parse(flags.args) : {}; } catch { throw new Error('Invalid task arguments.'); }
-    const tool = `${rest[0]}.${rest[1]}`;
-    if (flags.file) {
-      if (tool !== 'base.batch') throw new Error('Invalid file option for this tool; use --args with its Tank schema.');
-      const text = await readFile(flags.file, 'utf8');
-      if (Buffer.byteLength(text) > 2_000_000) throw new Error('Invalid file size.');
-      try {
-        arguments_.records = parse(text, { columns: true, bom: true, skip_empty_lines: true, max_record_size: 200_000 });
-      } catch { throw new Error('Invalid CSV file.'); }
-      arguments_.batch ??= basename(flags.file, extname(flags.file));
-    }
+    const { tool, arguments: arguments_ } = runRequest;
     const allowed = await tank.json('/v1/command/tools');
     if (!allowed.includes(tool)) throw new Error('This tool is not available to this user.');
     const card = await tank.json(`/v1/command/threads/${encodeURIComponent(thread)}/actions`, { tool, arguments: arguments_ });
@@ -596,12 +604,13 @@ export async function run(argv, { store, transport, io, env = process.env }) {
   if (name === 'ask') { await showTurn(tank, thread, rest.join(' '), flags.model ?? 'auto', attachments, io); return; }
   if (rest[0] || flags.thread) {
     const snapshot = await tank.json(`/v1/command/threads/${encodeURIComponent(thread)}`);
+    if (!snapshot.messages?.length && !snapshot.steps?.length && !snapshot.cards?.length) io.write(emptyState('messages'));
     for (const message of snapshot.messages ?? []) io.write(`${safe(message.role)}: ${safe(message.content)}\n`);
     for (const step of snapshot.steps ?? []) io.write(`[${safe(step.status)}] ${safe(step.actor)}: ${safe(step.label)}\n`);
     for (const card of snapshot.cards ?? []) {
       if (['confirmed', 'executing'].includes(card.status)) await followThread(tank, thread, card, io);
     }
-  }
+  } else io.write(emptyState('messages'));
   while (true) {
     const text = await io.prompt('> ');
     if (text === null || text.trim() === '/exit') break;
