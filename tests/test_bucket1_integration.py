@@ -268,6 +268,8 @@ def test_export_storage_failure_isolated_and_retries_only_unfinished_agent(monke
         async def fetch(self, query, *args):
             if 'DISTINCT tenant_id' in query:
                 return [{'tenant_id': gold.PLATFORM_TENANT}]
+            if 'FROM tank.gold_examples' in query:
+                return []  # This storage/retry fixture has no reviewed gold holdouts.
             agent = args[1]
             return [{'tenant_id': gold.PLATFORM_TENANT, 'region': region,
                      'holdout': False, 'active': True, 'public': True, 'client_matter': False,

@@ -7,6 +7,9 @@ The worksheet cells are also checked against the row's declared contract.
 """
 from __future__ import annotations
 
+import tempfile
+import shutil
+
 from collections import defaultdict
 from dataclasses import dataclass
 import os
@@ -159,10 +162,11 @@ def fixture_runs(tmp_path_factory, request):
                 if item.path == Path(__file__) and hasattr(item, "callspec") and "row" in item.callspec.params]
     for row in selected:
         grouped[row.fixture].append(row.case)
-    scratch = tmp_path_factory.mktemp("cli-acceptance")
+    scratch = Path(tempfile.mkdtemp(prefix="cli-acceptance-"))
+    request.addfinalizer(lambda: shutil.rmtree(scratch, ignore_errors=True))
     # Dependency installation is a setup step, not a test-time network fallback.
     assert (ROOT / "cli/node_modules/csv-parse/package.json").is_file(), "Run npm ci --prefix cli before acceptance tests"
-    allowed = {"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "SYSTEMROOT", "PATHEXT", "APPDATA", "LOCALAPPDATA", "CI", "TANK_SOURCE_REPO", "PYTHONDONTWRITEBYTECODE"}
+    allowed = {"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "SYSTEMROOT", "PATHEXT", "APPDATA", "LOCALAPPDATA", "CI", "TANK_SOURCE_REPO", "PYTHONDONTWRITEBYTECODE", "npm_config_cache", "NPM_CONFIG_CACHE"}
     env = {key: value for key, value in os.environ.items() if key in allowed}
     env.update({"TMPDIR": str(scratch), "TEMP": str(scratch), "TMP": str(scratch),
                 "TERVORY_NO_UPDATE_CHECK": "1", "npm_config_offline": "true",

@@ -296,6 +296,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx --no-install playwright install chromium
+          echo "TISAN_NPM_CACHE=$(npm config get cache)" >> "$GITHUB_ENV"
       - name: Prepare pinned Tiger acceptance browser dependencies
         working-directory: tests/acceptance/tiger-browser
         run: |
