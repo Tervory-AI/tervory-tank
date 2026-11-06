@@ -2,7 +2,6 @@ import asyncio
 import faulthandler
 import importlib.metadata
 import json
-from litellm import Router
 
 
 def row(name, ident, cost, text):
@@ -18,6 +17,7 @@ async def completion(client, **payload):
 
 
 async def main():
+    from litellm import Router
     assert importlib.metadata.version('litellm') == '1.106.4'
     router = Router(model_list=[row('placeholder-group', 'placeholder-direct', .00000095, 'placeholder direct'),
         row('placeholder-group', 'placeholder-hf', .0000008, 'placeholder hosted'),
