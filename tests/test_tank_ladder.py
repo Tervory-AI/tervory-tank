@@ -41,6 +41,9 @@ async def pass_policy_swaps(b):
 @pytest_asyncio.fixture
 async def ladder(boundary, monkeypatch):  # noqa: F811 -- pytest fixture injection
     b = boundary
+    from test_engine_ladder import enable_local
+    # The fixture's Provider below serves both local models; opt into them.
+    enable_local(monkeypatch)
     # Existing lifecycle/cache protocol tests use a calibrated quality fixture.
     # The real DeepEval worker and negative quality gate run in engine_quality tests.
     import engine_quality

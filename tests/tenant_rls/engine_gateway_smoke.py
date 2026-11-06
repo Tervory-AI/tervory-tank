@@ -3,8 +3,6 @@ import asyncio
 import sys
 from urllib.parse import urlsplit
 
-import httpx
-
 
 def config():
     return {
@@ -22,6 +20,7 @@ def config():
 
 async def verify(base):
     # Reuse the existing audited fake-provider gateway probe; no new provider path.
+    import httpx
     from litellm_probe import completion
     assert urlsplit(base).hostname == '127.0.0.1'
     async with httpx.AsyncClient(base_url=base, timeout=15, trust_env=False) as client:
