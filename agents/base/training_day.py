@@ -19,8 +19,12 @@ import uuid
 import asyncpg
 import httpx
 
-from engines.ffl.reference import MAX_BYTES, official_url, parse_file, refresh
-from engines.ffl import reference_source
+if __package__:
+    from .engines.ffl.reference import MAX_BYTES, official_url, parse_file, refresh
+    from .engines.ffl import reference_source
+else:
+    from engines.ffl.reference import MAX_BYTES, official_url, parse_file, refresh
+    from engines.ffl import reference_source
 from pipeline import order_states
 from room import SkillClient, _run_batch, ensure_tables, insert_batch
 from sources.vendor_ledger import PLATFORM_TENANT, decoded

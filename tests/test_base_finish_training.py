@@ -11,9 +11,9 @@ import pytest
 import pytest_asyncio
 
 from test_b3_base_room import ROOT, BASE_CORE, _load, _scripted
-from engines.ffl.reference import parse_file
+from agents.base.engines.ffl.reference import parse_file
 import room
-import training_day as training
+from agents.base import training_day as training
 
 INGEST = _load('base_training_recorded_ingest', ROOT / 'tank/skills/ffl.ingest/1.0.1/run.py')
 TODAY = date(2025, 9, 20)
