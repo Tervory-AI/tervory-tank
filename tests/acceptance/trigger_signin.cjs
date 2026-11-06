@@ -7,6 +7,8 @@ const jwt = require(path.join(process.env.COMMAND_TEST_TOOLS, 'next-auth/jwt'));
 const provider = require(path.join(process.env.COMMAND_TEST_TOOLS, 'next-auth/providers/zitadel'));
 const next = require(path.join(process.env.COMMAND_TEST_TOOLS, 'next/server'));
 const env = {
+  TANK_URL: 'https://tank.example.invalid',
+  TANK_API_KEY: 'offline-acceptance-placeholder',
   TRIGGER_SIGNIN_WORKSPACE_SECRET: require('node:crypto').randomBytes(32).toString('hex'),
   TRIGGER_SIGNIN_WORKSPACE_CLIENT_ID: '30002@tervory',
   TRIGGER_SIGNIN_ORG_TENANTS: JSON.stringify({'60001': '00000000-0000-4000-8000-000000000011', '60002': '00000000-0000-4000-8000-000000000012'}),
