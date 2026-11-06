@@ -346,6 +346,7 @@ def test_a_deployment_still_building_at_the_deadline_is_reported_as_in_progress(
     out = capsys.readouterr().out
     assert "still in_progress after 600s (deployment dep-882)" in out
     assert "may still finish in Coolify" in out
+    assert "za-uuid" in mod._timed_out
     assert "deploy failed" not in out
 
 
@@ -357,6 +358,7 @@ def test_a_failed_deployment_is_reported_as_failed(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(mod, "api", lambda method, path: (200, {"status": "failed"}))
     assert mod.wait_for("za-uuid", "tervory-tank-za", 600) is False
     assert "ended with failed" in capsys.readouterr().out
+    assert "za-uuid" not in mod._timed_out
 
 
 def test_without_a_queued_id_the_wait_reads_the_latest_deployment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -403,7 +405,7 @@ def test_deploy_job_has_room_for_every_wait(monkeypatch: pytest.MonkeyPatch) -> 
     assert "agent-zenas" in boston and za == ["agent-zenas-za"]
     # Worst case: a shared-room change deploys main, ZA, then every room one at a time.
     waits = mod.MAIN_TIMEOUT_S + mod.ZA_TIMEOUT_S + sum(mod.room_timeout(n) for n in boston + za)
-    assert waits == 1800 + 2700 + len(boston) * 900 + len(za) * 1800 + 900
+    assert waits == 1800 + 2700 + len(boston) * 900 + len(za) * 1800 + 1800
     # Coolify calls besides the polls, each up to its 30 s socket timeout: the app list,
     # the backup-scope check (GET, PATCH, GET), and per app the retry GET, the
     # already-live GET, the POST and a 404 on an "already queued" id. Each wait can also
@@ -699,3 +701,42 @@ def test_radix_deploy_uses_its_cold_build_wait(monkeypatch):
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, seconds: waits.append(seconds) or True)
     assert mod.main() == 0
     assert waits == [30 * 60]
+
+
+def test_tisan_cold_build_has_thirty_minutes_without_changing_light_rooms(monkeypatch):
+    mod = _script(monkeypatch)
+    assert mod.room_timeout("agent-tisan") == 1800
+    assert mod.room_timeout("agent-trigger") == 900
+
+
+def test_timed_out_active_build_defers_the_next_room(monkeypatch):
+    mod = _script(monkeypatch)
+    apps = [{"name": "agent-base", "uuid": "base"}, {"name": "agent-tiger", "uuid": "tiger"}]
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["agents/_chassis/chassis/app.py"])
+    monkeypatch.setattr(mod, "api", lambda *args: (200, apps))
+    monkeypatch.setattr(mod, "last_failed", lambda *args: False)
+    monkeypatch.setattr(mod, "already_live", lambda *args: False)
+    monkeypatch.setattr(mod, "radix_blocks", lambda *args: False)
+    seen = []
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: seen.append(uuid) or True)
+    def timeout(uuid, name, seconds):
+        mod._timed_out.add(uuid)
+        return False
+    monkeypatch.setattr(mod, "wait_for", timeout)
+    assert mod.main() == 1
+    assert seen == ["base"]
+
+
+def test_confirmed_failed_build_can_continue_without_overlap(monkeypatch):
+    mod = _script(monkeypatch)
+    apps = [{"name": "agent-base", "uuid": "base"}, {"name": "agent-tiger", "uuid": "tiger"}]
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["agents/_chassis/chassis/app.py"])
+    monkeypatch.setattr(mod, "api", lambda *args: (200, apps))
+    monkeypatch.setattr(mod, "last_failed", lambda *args: False)
+    monkeypatch.setattr(mod, "already_live", lambda *args: False)
+    monkeypatch.setattr(mod, "radix_blocks", lambda *args: False)
+    seen = []
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: seen.append(uuid) or True)
+    monkeypatch.setattr(mod, "wait_for", lambda *args: False)
+    assert mod.main() == 1
+    assert seen == ["base", "tiger"]
