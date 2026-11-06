@@ -77,10 +77,10 @@ import skill_costs
 
 log = logging.getLogger("tank")
 
-DATABASE_URL = os.environ["DATABASE_URL"]
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 LITELLM_URL = os.environ.get("LITELLM_URL", "http://litellm:4000")
-LITELLM_MASTER_KEY = os.environ["LITELLM_MASTER_KEY"]
-TANK_API_KEY = os.environ["TANK_API_KEY"]
+LITELLM_MASTER_KEY = os.environ.get("LITELLM_MASTER_KEY", "")
+TANK_API_KEY = os.environ.get("TANK_API_KEY", "")
 DEFAULT_REGION = os.environ.get("TANK_REGION", "us-east")
 US_REGION = "us-east"
 ZA_REGION = "za"
@@ -3583,6 +3583,8 @@ class EvalRun(BaseModel):
 async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: skala.SkillContext) -> dict[str, Any]:
     room = "radix" if pkg.id == "scan.iac" else "tisan"
     key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
+    if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} and not key.strip():
+        raise RuntimeError(f"Missing setting: TANK_KEY_{room.upper()}")
     if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} or not key or _http is None:
         raise RuntimeError("eval room is unavailable")
     response = await _http.post(
@@ -3601,6 +3603,7 @@ async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: s
 
 
 @app.post("/v1/skala/{skill_id}/{version}/evals", dependencies=[Depends(require_key)])
+@__import__("skala_jobs").single_evaluation
 async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = None) -> dict[str, Any]:
     pkg = get_package(skill_id, version)
     if not pkg.cases:
@@ -5041,3 +5044,8 @@ app.include_router(__import__('window_complete').router)
 
 # Bind only accepted endpoint arguments after existing authentication dependencies.
 bind_tenant_endpoints(app)
+
+__import__('skala_runtime').install(app, lambda: {
+    'DATABASE_URL': DATABASE_URL, 'TANK_API_KEY': TANK_API_KEY,
+    'LITELLM_MASTER_KEY': LITELLM_MASTER_KEY,
+})

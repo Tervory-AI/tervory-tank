@@ -104,6 +104,15 @@ async def record_receipt(conn, job_id: str, actual: Decimal, evaluation: dict | 
 
 
 async def run(args):
+    if getattr(args, 'dry_run', False) and (args.submit or args.receipt or getattr(args, 'job_id', '')):
+        raise ValueError('Dry run cannot submit a job or record a receipt')
+    names = ['HF_ORG', 'HF_TOKEN']
+    if args.submit or args.receipt or getattr(args, 'job_id', ''):
+        names.append('DATABASE_URL')
+    missing = [name for name in names if not os.environ.get(name, '').strip()]
+    if missing:
+        return {'status': 'unconfigured', 'missing_settings': missing,
+                'message': 'Missing settings: ' + ', '.join(missing)}
     import asyncpg
     from huggingface_hub import HfApi
     agent = getattr(args, 'agent', '')
@@ -193,7 +202,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--minutes', type=int, default=120)
     parser.add_argument('--day', default='')
-    parser.add_argument('--submit', action='store_true')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--submit', action='store_true')
+    mode.add_argument('--dry-run', action='store_true')
     parser.add_argument('--agent', choices=['zenas'], default='')
     parser.add_argument('--receipt', help='Local final HF billing receipt JSON; no credentials')
     parser.add_argument('--job-id', default='')
@@ -207,5 +218,7 @@ if __name__ == '__main__':
         result = asyncio.run(run(args))
         if args.json:
             print(json.dumps(result, default=str))
+        elif result.get('status') == 'unconfigured':
+            print(result['message'])
     except Exception:
         raise SystemExit('Training operation failed; check configuration, budget and provenance. Credentials are not logged.') from None

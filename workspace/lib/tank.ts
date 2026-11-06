@@ -283,12 +283,16 @@ export async function caseStudyRequest(identity: { tenantId: string; userId: str
     const value = query.get(key);
     if (value !== null) url.searchParams.set(key, value);
   }
-  return tenantFetch(query.get("tenant_id") ?? identity.tenantId, url, {
+  const tenant = query.get("tenant_id") ?? identity.tenantId;
+  const init: RequestInit = {
     method: path === "ensure" ? "POST" : "GET", cache: "no-store",
     // Observe ensure redirects as non-retryable HTTP failures; never follow them.
     redirect: path === "ensure" ? "manual" : "error", signal,
     headers: { "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId },
-  });
+  };
+  if (path === "radix") return tenantBoundedFetch(tenant, url, init, 30_000,
+    readRadixResponse);
+  return tenantFetch(tenant, url, init);
 }
 
 // Optional bookkeeping, never an authorization or squad grant. Durable SigninDirectory
@@ -406,15 +410,26 @@ export type RouteResult = {
   latency_ms: number;
 };
 
+export const SKALA_SERVER_TIMEOUT_MS = { value: 25_000 };
 async function tank<T>(path: string, init: RequestInit): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json");
-  const res = await tenantFetch(requestTenant(path, init), new URL(path, TANK_URL), {...init, headers});
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error("Your request could not be completed. Please try again.");
+  const goldTenant = path.startsWith("/v1/gold/") ? headers.get("x-tervory-tenant") : null;
+  const tenant = requestTenant(path, init) || (goldTenant !== "00000000-0000-0000-0000-000000000001" ? goldTenant : null);
+  const read = async (res: Response): Promise<T> => {
+    if (!res.ok) {
+      throw new Error("Your request could not be completed. Please try again.");
+    }
+    return await res.json() as T;
+  };
+  if (/^\/v1\/(skala|gold)(?:\/|$)/.test(path)) {
+    if (!TANK_API_KEY.trim()) throw new Error("Missing setting: TANK_API_KEY.");
+    // One attempt for both reads and writes; the client may explicitly retry.
+    if (tenant) return tenantBoundedFetch(tenant, new URL(path, TANK_URL), {...init, headers}, SKALA_SERVER_TIMEOUT_MS.value, read);
+    headers.set("x-tank-key", TANK_API_KEY);
+    return boundedFetch(new URL(path, TANK_URL), {...init, headers, cache: "no-store"}, SKALA_SERVER_TIMEOUT_MS.value, read);
   }
-  return (await res.json()) as T;
+  return read(await tenantFetch(tenant, new URL(path, TANK_URL), {...init, headers}));
 }
 
 export type RosterModel = {
@@ -499,6 +514,30 @@ export function createTask(
   return tank<Task>("/v1/tasks", {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, title, task_type: taskType, messages, agent }),
+  });
+}
+
+async function readRadixResponse(response: Response): Promise<Response> {
+  const bytes = await response.arrayBuffer();
+  return new Response(response.status === 204 || response.status === 205 ? null : bytes,
+    {status: response.status, headers: response.headers});
+}
+
+// Radix interactive reads/writes use the existing regional, whole-body deadline.
+// No automatic write retry: the caller checks its records after uncertainty.
+export const radixTaskStore = {
+  list: (tenant: string, limit: number) => radixTaskRequest<Task[]>(tenant, `/v1/tasks?tenant_id=${encodeURIComponent(tenant)}&limit=${limit}`, {method: "GET"}),
+  get: (tenant: string, id: string) => radixTaskRequest<Task>(tenant, `/v1/tasks/${encodeURIComponent(id)}?tenant_id=${encodeURIComponent(tenant)}`, {method: "GET"}),
+  create: (tenant: string, user: string, title: string, taskType: string, messages: ChatMessage[], agent: string) =>
+    radixTaskRequest<Task>(tenant, "/v1/tasks", {method: "POST", body: JSON.stringify({tenant_id: tenant, created_by: user, title, task_type: taskType, messages, agent})}),
+};
+function radixTaskRequest<T>(tenant: string, path: string, init: RequestInit): Promise<T> {
+  return tenantBoundedFetch(tenant, new URL(path, TANK_URL), {...init, headers: {"content-type": "application/json"}}, 30_000, async response => {
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      throw new Error("Radix could not reach your records. Please try again.");
+    }
+    return await response.json() as T;
   });
 }
 
@@ -601,9 +640,9 @@ export type EvalResult = {
 export function listSkills(): Promise<Skill[]> {
   return tank<Skill[]>("/v1/skala", { method: "GET" });
 }
-export function runSkillEvals(id: string, version: string, by: string): Promise<EvalResult> {
+export function runSkillEvals(id: string, version: string, by: string, requestId?: string): Promise<EvalResult> {
   return tank<EvalResult>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/evals`, {
-    method: "POST",
+    method: "POST", headers: requestId ? {"idempotency-key": requestId} : undefined,
     body: JSON.stringify({ by }),
   });
 }
@@ -878,7 +917,12 @@ async function vaultFetch(path: string, userId: string, squad: string, init: Req
   headers.set("x-tervory-user", userId);
   headers.set("x-tervory-squad", squad);
   if (typeof init.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
-  return tenantFetch(requestTenant(path, init), `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
+  const tenant = requestTenant(path, init);
+  if (squad === "radix" && tenant) {
+    return tenantBoundedFetch(tenant, `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" }, 30_000,
+      readRadixResponse);
+  }
+  return tenantFetch(tenant, `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
 }
 
 async function vaultJson<T>(path: string, userId: string, squad: string, init: RequestInit): Promise<T> {

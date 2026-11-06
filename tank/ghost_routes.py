@@ -414,8 +414,8 @@ async def check(request: Request):
     if body.target not in TARGETS:
         raise HTTPException(422, "Unknown check target.")
     if body.signal not in {"health", "slow"}:
-        # No raw-log API, GitHub administration credential, or cross-region proxy.
-        raise HTTPException(503, "The read-only evidence feed is not connected.")
+        from ghost_evidence import observation
+        return await observation(runtime(), body.target, body.signal)
     if body.target not in ROOMS and body.target != "tank":
         raise HTTPException(422, "Public sites use Autumbra Watch's own browser.")
     start = time.monotonic()
