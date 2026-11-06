@@ -1,15 +1,20 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
+
+import { fetchWithDeadline as fetch } from "../lib/request";
 
 type Status = "idle" | "saving" | "saved" | "failed";
 
 export function ReleaseForm({ hero = false }: { hero?: boolean }) {
+  const submitting = useRef(false);
   const fieldId = useId();
   const [status, setStatus] = useState<Status>("idle");
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     const email = String(new FormData(event.currentTarget).get("email") || "");
     setStatus("saving");
     try {
@@ -22,7 +27,7 @@ export function ReleaseForm({ hero = false }: { hero?: boolean }) {
       setStatus(response.ok && body?.stored === true ? "saved" : "failed");
     } catch {
       setStatus("failed");
-    }
+    } finally { submitting.current = false; }
   }
 
   return (

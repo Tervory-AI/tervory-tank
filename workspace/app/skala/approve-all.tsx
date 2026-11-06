@@ -1,4 +1,5 @@
 "use client";
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useRef, useState } from "react";
 
 type Preview = { token: string; items: { id: string; version: string; score: number; runs: number; model: boolean }[] };

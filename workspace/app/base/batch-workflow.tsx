@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useEffect, useState } from "react";
 import { batchLabel } from "./model";
 import { countLabel, pageFields, fieldLabels, stateLabel } from "./display";

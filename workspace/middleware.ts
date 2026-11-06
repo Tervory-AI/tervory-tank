@@ -1,3 +1,5 @@
+import { isWorkspaceOrigin } from "./lib/workspace-origin";
+import { fetchWithDeadline as fetch } from "./lib/request";
 import { workspaceSetupMessage } from "./lib/workspace-setup";
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
@@ -89,6 +91,9 @@ export default async function middleware(req: NextRequest) {
   // Explicit sign-in redirect keeps private panels (e.g. /zenas) usable when signed out.
   const rewriteTo = productHostRewritePath(host, req.nextUrl.pathname);
   const publicOk = (rewriteTo ? rewriteIsPublic(rewriteTo) : false) || isPublic(req);
+  if (!publicOk && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !isWorkspaceOrigin(req)) {
+    return NextResponse.json({ error: "Open this workspace and try again." }, { status: 403 });
+  }
   if (!publicOk) {
     const token = await getToken({ req, secret: process.env.TRIGGER_SIGNIN_WORKSPACE_SECRET, cookieName: "__Secure-tervory-signin", secureCookie: true });
     const principal = token?.principal as { expiresAt?: number } | undefined;

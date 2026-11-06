@@ -1,3 +1,4 @@
+import { fetchWithDeadline as fetch } from "./request";
 import "server-only";
 import { workspaceSetupMessage } from "./workspace-setup";
 
