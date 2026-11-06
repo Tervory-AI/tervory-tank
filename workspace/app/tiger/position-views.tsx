@@ -61,6 +61,7 @@ function Competitors({ row }: { row: PositionRow }) {
 function PricePosition({ rows }: { rows: PositionRow[] | null }) {
   return <>
     <p className="intro">Your products against confirmed matches on the competitor sites you saved.</p>
+    {rows?.length === 0 ? <p className="fine"><a href="/rig">Add a product</a></p> : null}
     {rows ? <>
       <SimpleTable className="position-table desktop-comparison" heads={["Product", "Your price", "Matched competitor pages", "Cheapest", "Your rank", "Difference"]} empty="" rows={rows.map(row => [
         <div key="product" className="position-product"><strong>{row.name}</strong><span className="fine">{row.sku}</span></div>,
@@ -116,7 +117,7 @@ function Decision({ row, onChange }: { row: TigerMatch; onChange: (match: TigerM
 
 function Matches({ rows, onChange }: { rows: TigerMatch[] | null; onChange: (match: TigerMatch) => void }) {
   if (rows === null) return null;
-  if (!rows.length) return <p className="empty comparison-empty">No matches to review.</p>;
+  if (!rows.length) return <div><p className="empty comparison-empty">No matches to review.</p><p className="fine">Tiger Plugins → Source links</p></div>;
   // The approved review frame describes brand/part-number suggestions only.
   rows = rows.filter(row => row.method === "brand_mpn");
   if (!rows.length) return null;
@@ -159,11 +160,11 @@ function Sites({ rows, onPlugins, pluginsEnabled }: { rows: SiteRow[] | null; on
     {rows === null ? null : !rows.length ? <p className="empty comparison-empty">No saved sites.</p> : <>
       <SimpleTable className="sites-table desktop-comparison" heads={["Saved site", "Pages checked", "Matches found", "Last checked", "Check status"]} empty="" rows={rows.map(row => [
         <div key="site" className="saved-site"><PageLink row={{ url: row.url, store: `${row.label} ↗` }} /><span className="fine">{row.host}</span></div>,
-        row.pages, row.matches, <SiteTime key="time" row={row} />, <SiteStatus key="status" row={row} />,
+        row.pages ?? "—", row.matches ?? "—", <SiteTime key="time" row={row} />, <SiteStatus key="status" row={row} />,
       ])} />
       <ul className="cards mobile-comparison sites-cards">{rows.map(row => <li key={row.id}>
         <PageLink row={{ url: row.url, store: `${row.label} ↗` }} /><p className="fine">{row.host}</p>
-        <dl className="site-counts"><div><dt>Pages checked</dt><dd>{row.pages}</dd></div><div><dt>Matches found</dt><dd>{row.matches}</dd></div></dl>
+        <dl className="site-counts"><div><dt>Pages checked</dt><dd>{row.pages ?? "—"}</dd></div><div><dt>Matches found</dt><dd>{row.matches ?? "—"}</dd></div></dl>
         <p className="site-time"><SiteTime row={row} mobile /></p><SiteStatus row={row} />
       </li>)}</ul>
       <Note title="What these counts cover">{SITES_NOTE}</Note>

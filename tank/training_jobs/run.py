@@ -117,6 +117,15 @@ async def record_receipt(conn, job_id: str, actual: Decimal, evaluation: dict | 
 
 
 async def run(args):
+    dry_run = getattr(args, 'dry_run', False)
+    if dry_run and (args.submit or args.receipt or getattr(args, 'job_id', '')):
+        raise ValueError('Dry-run cannot submit or reconcile')
+    required = ['HF_ORG', 'HF_TOKEN']
+    if dry_run or args.submit or args.receipt or getattr(args, 'job_id', ''):
+        required.append('DATABASE_URL')
+    missing = [name for name in required if not os.environ.get(name, '').strip()]
+    if missing:
+        return {'status': 'not_configured', 'settings': missing}
     import asyncpg
     from huggingface_hub import HfApi
     agent = getattr(args, 'agent', '')
@@ -163,7 +172,7 @@ async def run(args):
     if agent == 'tiger':
         from train import tiger_data
         tiger_revision = api.dataset_info(f'{org}/tervory-public-tiger').sha
-        tiger_data(api, org, args.day, revision=tiger_revision)
+        tiger_rows, tiger_held = tiger_data(api, org, args.day, revision=tiger_revision)
     flavor = training_hardware(agent)
     if flavor not in HARDWARE:
         raise ValueError('Training hardware is not allowed')
@@ -174,7 +183,22 @@ async def run(args):
                       Decimal(os.environ.get('HF_TRAIN_MAX_USD') or '50'))
     print(f'Maximum estimated compute cost: USD {amount:.4f}')
     if not args.submit:
-        return {'status': 'ready', 'cost_usd': amount, 'hardware': flavor}
+        result = {'status': 'ready', 'cost_usd': amount, 'hardware': flavor}
+        if dry_run:
+            conn = await asyncpg.connect(os.environ['DATABASE_URL'])
+            try:
+                if await conn.fetchval('SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)', PLATFORM):
+                    raise ValueError('Reconcile the previous training job before submitting another')
+            finally:
+                await conn.close()
+            result['dry_run'] = True
+            if agent == 'tiger':
+                result.update(dataset=f'{org}/tervory-public-tiger', revision=tiger_revision,
+                              training_rows=len(tiger_rows), holdout_rows=len(tiger_held),
+                              model='Qwen/Qwen3-4B', context_length=4096,
+                              output_prefix=f'{org}/tervory-own-tiger-',
+                              artifacts=['evaluation.json', 'holdout.json'], eval_gate='exact_price_fields')
+        return result
     conn = await asyncpg.connect(os.environ['DATABASE_URL'])
     try:
         await conn.execute('SELECT pg_advisory_lock(871228)')
@@ -208,23 +232,29 @@ async def run(args):
 
 
 
-if __name__ == '__main__':
+def cli(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--minutes', type=int, default=120)
     parser.add_argument('--day', default='')
     parser.add_argument('--submit', action='store_true')
+    parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--agent', choices=['zenas', 'tiger'], default='')
     parser.add_argument('--receipt', help='Local final HF billing receipt JSON; no credentials')
     parser.add_argument('--job-id', default='')
     parser.add_argument('--billed-usd', default='0')
     parser.add_argument('--json', action='store_true')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.submit:
         from datetime import date
         date.fromisoformat(args.day)
     try:
         result = asyncio.run(run(args))
-        if args.json:
+        if args.json or result.get('status') == 'not_configured':
             print(json.dumps(result, default=str))
+        return result
     except Exception:
         raise SystemExit('Training operation failed; check configuration, budget and provenance. Credentials are not logged.') from None
+
+
+if __name__ == '__main__':
+    cli()

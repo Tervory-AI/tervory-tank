@@ -20,12 +20,12 @@ export function AttemptTime({ row }: { row: { attemptedAt: string | null; checke
 }
 
 export function SimpleTable({ heads, rows, empty, priceCol, className = "" }: { heads: string[]; rows: ReactNode[][]; empty: string; priceCol?: number; className?: string }) {
-  if (rows.length === 0) return empty ? <p className="fine">{empty}</p> : null;
   return (
     <div className={`table-wrap ${className}`}>
       <table>
         <thead><tr>{heads.map((head) => <th key={head}>{head}</th>)}</tr></thead>
         <tbody>
+          {rows.length === 0 ? <tr data-empty="true">{heads.map((head, index) => <td key={index}>—</td>)}</tr> : null}
           {rows.map((row, index) => (
             <tr key={index}>
               {row.map((cell, cellIndex) => <td key={cellIndex} className={cellIndex === priceCol ? "price" : cellIndex === 0 && priceCol === undefined ? "name" : ""}>{cell}</td>)}
@@ -33,6 +33,7 @@ export function SimpleTable({ heads, rows, empty, priceCol, className = "" }: { 
           ))}
         </tbody>
       </table>
+      {rows.length === 0 && empty ? <p className="fine">{empty}</p> : null}
     </div>
   );
 }

@@ -281,7 +281,13 @@ def tiger_data(api, org, day, revision=None):
     return train, held
 
 
-def main() -> None:
+def main() -> dict | None:
+    missing = [name for name in ('HF_TOKEN', 'HF_ORG', 'OUTPUT_REPO', 'TRAIN_DAY')
+               if not os.environ.get(name, '').strip()]
+    if missing:
+        result = {'status': 'not_configured', 'settings': missing}
+        print(json.dumps(result))
+        return result
     from datasets import Dataset
     from huggingface_hub import HfApi
     from peft import LoraConfig

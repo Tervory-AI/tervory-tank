@@ -84,7 +84,7 @@ export default async function PricesPage({ searchParams }: { searchParams: Promi
       </form>
 
       <h2>Watches</h2>
-      {watches.length === 0 && !loadError && <p className="empty">Nothing is being watched yet. Add a page above.</p>}
+      {watches.length === 0 && !loadError && <div><p className="empty">Nothing is being watched yet. Add a page above.</p><PriceChart points={[]} /></div>}
       {watches.map((watch) => {
         const row = history.get(watch.url);
         const observations = row?.observations ?? [];
@@ -124,7 +124,7 @@ export default async function PricesPage({ searchParams }: { searchParams: Promi
 
       <h2>Alerts</h2>
       <p className="hint">A price move past the threshold, or a change in stock.</p>
-      {alerts.length === 0 && !loadError && <p className="empty">No alerts yet.</p>}
+      {alerts.length === 0 && !loadError && <div><p className="empty">No alerts yet.</p><p className="hint">Add a page to watch. Tervory checks the price on a schedule and keeps the history here.</p></div>}
       {alerts.length > 0 && (
         <table>
           <thead>
