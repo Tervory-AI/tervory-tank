@@ -169,12 +169,13 @@ async def test_missing_or_bad_configuration_starts_blocked_without_resources(mon
 
 @pytest.mark.asyncio
 async def test_storage_settings_disable_storage_before_reading_upload(monkeypatch):
+    monkeypatch.setenv("TANK_KEY", "placeholder-room-key")
     from readiness import capabilities
     for name in capabilities()['storage'] + ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID_TIGER', 'R2_SECRET_ACCESS_KEY_TIGER']:
         monkeypatch.delenv(name, raising=False)
     agent = _load('tiger_gate4_storage', ROOT/'agents/tiger/app.py')
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=agent.app), base_url='http://placeholder') as client:
-        response = await client.put('/storage/objects/screenshots/placeholder')
+        response = await client.put('/storage/objects/screenshots/placeholder', headers={'X-Tank-Key': 'placeholder-room-key'})
     assert response.status_code == 503
     assert response.json()['settings'] == ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID_TIGER', 'R2_SECRET_ACCESS_KEY_TIGER']
 

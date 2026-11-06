@@ -151,7 +151,7 @@ async def deliver_pending(
         except MailConfigurationError:
             return {"mail": "not_configured", "sent": 0}
     recipient = _address(recipient)
-    counts = {"sent": 0, "pending": 0, "uncertain": 0, "suppressed": 0}
+    counts = {"sent": 0, "pending": 0, "uncertain": 0, "suppressed": 0, "failed": 0}
     # Bound the dispatch job; subsequent minute ticks drain the remaining rows.
     for alert_id in (await store.pending_mail(tenant_id, clock()))[:3]:
         record = await store.claim_mail(tenant_id, alert_id, clock())
@@ -181,7 +181,7 @@ async def deliver_pending(
             socket.gaierror,
         ):
             # The SMTP transaction was explicitly rejected (or never connected).
-            state = "pending"
+            state = "failed" if record["attempts"] >= 3 else "pending"
         except Exception:
             # A timeout/disconnect may follow DATA acceptance. Re-sending could
             # duplicate mail. Keep the receipt for operator reconciliation.
@@ -190,4 +190,6 @@ async def deliver_pending(
             state = "sent"
         await store.finish_mail(tenant_id, alert_id, state, clock())
         counts[state] += 1
+    if counts['pending'] or counts['uncertain'] or counts['failed']:
+        counts['error'] = 'Tiger is not reachable right now.'
     return counts

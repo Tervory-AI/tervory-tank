@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
+import fcntl
+import stat
 from uuid import UUID, uuid5
 from urllib.parse import urlsplit
 
@@ -56,11 +58,22 @@ def discovery_id(tenant: str, batch: str, record: str, url: str) -> UUID:
     return uuid5(job_id(tenant, batch, record, url), 'discovery')
 
 
-async def completed(client, tenant, job, expected, sleep):
+# Three existing worker attempts of 120 seconds, plus its 30-second backoff.
+JOB_WAIT_S = 3 * (120 + 30)
+
+
+async def completed(client, tenant, job, expected, sleep, progress=None):
+    async with asyncio.timeout(JOB_WAIT_S):
+        return await _completed(client, tenant, job, expected, sleep, progress)
+
+
+async def _completed(client, tenant, job, expected, sleep, progress):
     seen = set()
     while True:
         if job.get('tenant_id') != tenant or job.get('id') != expected:
             raise ValueError('Batch job receipt does not match the source')
+        if progress:
+            progress(expected)
         if job['status'] in {'queued', 'running'}:
             await sleep(2)
         elif job['status'] != 'done':
@@ -73,26 +86,39 @@ async def completed(client, tenant, job, expected, sleep):
                 raise ValueError('Invalid discovery continuation')
             seen.add(expected)
             expected = str(UUID(continuation))
-        response = await client.get('/jobs/' + expected, params={'tenant_id': tenant})
+        response = await client.get('/jobs/' + expected, params={'tenant_id': tenant}, timeout=60)
         response.raise_for_status()
         job = response.json()
 
 
 class Checkpoint:
     def __init__(self, path: Path, tenant: str, batch: str, rows: list[dict]):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(path)
-        path.chmod(0o600)
-        self.db.execute('PRAGMA journal_mode=WAL')
-        self.db.execute('CREATE TABLE IF NOT EXISTS source (id INTEGER PRIMARY KEY CHECK(id=1), binding TEXT NOT NULL)')
-        self.db.execute('CREATE TABLE IF NOT EXISTS receipts (record TEXT PRIMARY KEY, receipt TEXT NOT NULL)')
-        binding = json.dumps([str(UUID(tenant)), str(UUID(batch)), rows], sort_keys=True, separators=(',', ':'))
-        digest = hashlib.sha256(binding.encode()).hexdigest()
-        with self.db:
-            self.db.execute('INSERT OR IGNORE INTO source VALUES (1, ?)', (digest,))
-        if self.db.execute('SELECT binding FROM source').fetchone()[0] != digest:
-            self.db.close()
-            raise ValueError('Checkpoint source, batch or tenant changed')
+        if any(parent.is_symlink() for parent in (path, *path.parents)):
+            raise ValueError('Checkpoint must not use symbolic links')
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        try:
+            if not stat.S_ISREG(os.fstat(self.fd).st_mode):
+                raise ValueError('Checkpoint must be a regular file')
+            fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            os.fchmod(self.fd, 0o600)
+            self.db = sqlite3.connect(path)
+        except BaseException:
+            os.close(self.fd)
+            raise
+        try:
+            self.db.execute('PRAGMA journal_mode=WAL')
+            self.db.execute('CREATE TABLE IF NOT EXISTS source (id INTEGER PRIMARY KEY CHECK(id=1), binding TEXT NOT NULL)')
+            self.db.execute('CREATE TABLE IF NOT EXISTS receipts (record TEXT PRIMARY KEY, receipt TEXT NOT NULL)')
+            binding = json.dumps([str(UUID(tenant)), str(UUID(batch)), rows], sort_keys=True, separators=(',', ':'))
+            digest = hashlib.sha256(binding.encode()).hexdigest()
+            with self.db:
+                self.db.execute('INSERT OR IGNORE INTO source VALUES (1, ?)', (digest,))
+            if self.db.execute('SELECT binding FROM source').fetchone()[0] != digest:
+                raise ValueError('Checkpoint source, batch or tenant changed')
+        except BaseException:
+            self.close()
+            raise
 
     def get(self, record: str):
         row = self.db.execute('SELECT receipt FROM receipts WHERE record=?', (record,)).fetchone()
@@ -105,6 +131,7 @@ class Checkpoint:
 
     def close(self):
         self.db.close()
+        os.close(self.fd)
 
 
 async def run(rows, tenant, batch, checkpoint, client, *, sleep=asyncio.sleep, retry_failed=False):
@@ -123,10 +150,18 @@ async def run(rows, tenant, batch, checkpoint, client, *, sleep=asyncio.sleep, r
             if not urls and row['website']:
                 if 'discovery' not in receipt:
                     ident = str(discovery_id(tenant, batch, row['id'], row['website']))
-                    response = await client.post('/batch/discover', json={'tenant_id': tenant, 'batch_id': batch,
-                        'record_id': row['id'], 'url': row['website'], 'retry_failed': retry_failed})
+                    current = receipt.get('discovery_cursor', ident)
+                    if current != ident and not retry_failed:
+                        response = await client.get('/jobs/' + current, params={'tenant_id': tenant}, timeout=60)
+                    else:
+                        current = ident
+                        response = await client.post('/batch/discover', json={'tenant_id': tenant, 'batch_id': batch,
+                            'record_id': row['id'], 'url': row['website'], 'retry_failed': retry_failed}, timeout=60)
                     response.raise_for_status()
-                    discovered = await completed(client, tenant, response.json(), ident, sleep)
+                    def progress(current):
+                        receipt['discovery_cursor'] = current
+                        state.save(row['id'], receipt)
+                    discovered = await completed(client, tenant, response.json(), current, sleep, progress)
                     result = discovered.get('result') or {}
                     if result.get('status') != 'completed' or not isinstance(result.get('product_urls'), list):
                         raise ValueError('Discovery has no completed source receipt')
@@ -141,7 +176,7 @@ async def run(rows, tenant, batch, checkpoint, client, *, sleep=asyncio.sleep, r
                     continue
                 ident = str(job_id(tenant, batch, row['id'], url))
                 response = await client.post('/batch/check', json={
-                    'tenant_id': tenant, 'batch_id': batch, 'record_id': row['id'], 'url': url, 'retry_failed': retry_failed})
+                    'tenant_id': tenant, 'batch_id': batch, 'record_id': row['id'], 'url': url, 'retry_failed': retry_failed}, timeout=60)
                 response.raise_for_status()
                 job = await completed(client, tenant, response.json(), ident, sleep)
                 result = job.get('result') or {}
@@ -215,14 +250,19 @@ async def main(args):
         return result
     if getattr(args, 'responses', None):
         raise ValueError('Recorded responses require dry-run')
-    async with httpx.AsyncClient(base_url=os.environ['TIGER_BATCH_URL'], follow_redirects=False, timeout=60) as client:
+    if not os.environ.get('TANK_KEY', '').strip():
+        result = {'status': 'not_configured', 'settings': ['TANK_KEY']}
+        print(json.dumps(result))
+        return result
+    async with httpx.AsyncClient(base_url=os.environ['TIGER_BATCH_URL'], follow_redirects=False, timeout=60,
+                                 headers={'X-Tank-Key': os.environ['TANK_KEY'], 'X-Tenant-ID': tenant}) as client:
         receipts = await run(rows, str(UUID(args.tenant)), str(UUID(args.batch)), args.checkpoint, client,
                              retry_failed=args.retry_failed)
     output = Path(args.receipts)
     output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = output.with_suffix(output.suffix + '.tmp')
-    temporary.write_text(''.join(json.dumps(row, sort_keys=True) + '\n' for row in receipts))
-    temporary.chmod(0o600)
+    with tempfile.NamedTemporaryFile(mode='w', dir=output.parent, prefix='.tiger-receipts-', delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(''.join(json.dumps(row, sort_keys=True) + '\n' for row in receipts))
     temporary.replace(output)
 
 

@@ -138,6 +138,7 @@ async def database(postgres):
 
 @pytest_asyncio.fixture
 async def corridor(database, monkeypatch):
+    monkeypatch.setenv("TANK_KEY", "placeholder-room-key")
     spec = importlib.util.spec_from_file_location('tiger_t1_agent', ROOT / 'agents/tiger/app.py')
     agent = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, spec.name, agent)
@@ -155,7 +156,7 @@ async def corridor(database, monkeypatch):
     async def catalogue(tenant):
         return [{**OWN, 'price': '99.00' if str(tenant) == str(OTHER) else '15.00'}]
     async def tiger_call(method, path, params, content):
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=agent.app), base_url='http://tiger') as client:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=agent.app), base_url='http://tiger', headers={'X-Tank-Key': 'placeholder-room-key'}) as client:
             return await client.request(method, path, params=params, content=content, headers={'content-type':'application/json'})
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(pool=lambda: database, box_region=lambda: 'us-east', _tiger_call=tiger_call))
     monkeypatch.setattr(access, 'tiger_catalogue', catalogue)
@@ -514,7 +515,7 @@ async def test_start_durable_job_returns_matches_to_existing_card_and_denies_oth
     monkeypatch.setattr(corridor.agent,'_render',render)
     monkeypatch.setattr(corridor.agent,'DiscoveryGate',lambda pool:gate)
     monkeypatch.setattr(corridor.agent.app.state,'http',corridor.client,raising=False)
-    monkeypatch.delenv('TANK_KEY',raising=False)
+    monkeypatch.setenv('TANK_KEY', 'placeholder-room-key')
     for _ in range(30):
         data = await corridor.agent.competitor_match(SimpleNamespace(tenant_id=str(TENANT),job_id=str(job['id']),input=json.loads(job['input'])))
         await corridor.pool.execute("UPDATE agent_tiger.jobs SET status='completed',result=$3::jsonb WHERE tenant_id=$1 AND id=$2",TENANT,job['id'],json.dumps(data))

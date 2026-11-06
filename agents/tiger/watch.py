@@ -813,7 +813,7 @@ class PgStore(PgPlaybooks, PgAlerts):
                 await ensure_tables(conn, self.schema)
             rows = await conn.fetch(self._sql("""
                 SELECT alert_id FROM {schema}.alert_mail
-                WHERE tenant_id = $1 AND status = 'pending' AND next_attempt_at <= $2
+                WHERE tenant_id = $1 AND status = 'pending' AND attempts < 3 AND next_attempt_at <= $2
                 ORDER BY next_attempt_at, alert_id LIMIT 3
             """), uuid.UUID(str(tenant_id)), now)
         return [str(row["alert_id"]) for row in rows]
@@ -825,8 +825,8 @@ class PgStore(PgPlaybooks, PgAlerts):
             row = await conn.fetchrow(self._sql("""
                 UPDATE {schema}.alert_mail AS m SET status = 'sending', updated_at = $3,
                     attempts = attempts + 1
-                WHERE tenant_id = $1 AND alert_id = $2 AND status = 'pending' AND next_attempt_at <= $3
-                RETURNING url, kind, letter, EXISTS (
+                WHERE tenant_id = $1 AND alert_id = $2 AND status = 'pending' AND attempts < 3 AND next_attempt_at <= $3
+                RETURNING url, kind, letter, attempts, EXISTS (
                     SELECT 1 FROM {schema}.watchlist w WHERE w.tenant_id = m.tenant_id
                     AND w.url = m.url AND w.enabled AND CASE m.kind
                         WHEN 'price' THEN w.alert_price WHEN 'stock' THEN w.alert_stock
@@ -836,11 +836,11 @@ class PgStore(PgPlaybooks, PgAlerts):
             """), uuid.UUID(str(tenant_id)), uuid.UUID(str(alert_id)), now)
         if row is None:
             return None
-        return {"url": row["url"], "kind": row["kind"], "allowed": row["allowed"],
+        return {"url": row["url"], "kind": row["kind"], "allowed": row["allowed"], "attempts": row["attempts"],
                 "letter": json.loads(row["letter"]) if isinstance(row["letter"], str) else dict(row["letter"])}
 
     async def finish_mail(self, tenant_id: str, alert_id: str, state: str, now: datetime) -> None:
-        if state not in {"pending", "sent", "uncertain", "suppressed"}:
+        if state not in {"pending", "sent", "uncertain", "suppressed", "failed"}:
             raise ValueError("invalid mail state")
         async with self.pool.acquire() as conn:
             await conn.execute(self._sql("""
@@ -1010,16 +1010,16 @@ class MemoryStore(MemoryPlaybooks, MemoryAlerts):
 
     async def pending_mail(self, tenant_id: str, now: datetime) -> list[str]:
         return [alert_id for (tenant, alert_id), row in self.mail.items()
-                if tenant == str(tenant_id) and row["status"] == "pending" and row["next_attempt_at"] <= now][:3]
+                if tenant == str(tenant_id) and row["status"] == "pending" and row["attempts"] < 3 and row["next_attempt_at"] <= now][:3]
 
     async def claim_mail(self, tenant_id: str, alert_id: str, now: datetime) -> dict | None:
         row = self.mail.get((str(tenant_id), str(alert_id)))
-        if not row or row["status"] != "pending" or row["next_attempt_at"] > now:
+        if not row or row["status"] != "pending" or row["attempts"] >= 3 or row["next_attempt_at"] > now:
             return None
         row.update(status="sending", attempts=row["attempts"] + 1)
         watch = next((w for w in self.watches if w["tenant_id"] == str(tenant_id) and w["url"] == row["url"]), None)
         allowed = bool(watch and watch.get("enabled") and watch.get("alert_" + row["kind"], True))
-        return {**{key: row[key] for key in ("url", "kind", "letter")}, "allowed": allowed}
+        return {**{key: row[key] for key in ("url", "kind", "letter", "attempts")}, "allowed": allowed}
 
     async def finish_mail(self, tenant_id: str, alert_id: str, state: str, now: datetime) -> None:
         row = self.mail.get((str(tenant_id), str(alert_id)))

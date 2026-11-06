@@ -31,8 +31,11 @@ def is_public_url(url: str) -> bool:
     """
     if not isinstance(url, str):
         return False
-    parsed = urlparse(url.strip())
-    if parsed.scheme not in {"http", "https"}:
+    try:
+        parsed = urlparse(url.strip())
+    except ValueError:
+        return False
+    if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password:
         return False
     host = (parsed.hostname or "").lower().rstrip(".")
     if not host or host == "localhost":
@@ -112,6 +115,8 @@ def session_file(root: str | Path, agent: str, tenant: str, session: str) -> Pat
     base = Path(root)
     parts = (_part(agent), _part(tenant), _part(session))
     path = base / "sessions" / parts[0] / parts[1] / f"{parts[2]}.json"
+    if any(candidate.is_symlink() for candidate in (path, *list(path.parents)[:4])):
+        raise SessionKeyError("bad session key")
     root_dir = base.resolve()
     resolved = path.resolve()
     if resolved != root_dir and root_dir not in resolved.parents:
