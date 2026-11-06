@@ -172,8 +172,8 @@ def service(ctx, pool, loader, root):
         return dict(row)
 
     async def read(tenant, approval):
-        return await figma.execute({'file_key': approval['figma_file_id'], 'node_id': approval['figma_frame_id']},
-                                   tenant, live=True, data_root=root)
+        return await figma.execute({'file_key': approval['figma_file_id'], 'node_id': approval['figma_frame_id'],
+                                    'allow_fixture': False}, tenant, live=True, data_root=root)
 
     async def build(tenant, ident, brief):
         child = SimpleNamespace(**{**vars(ctx), 'tenant_id': tenant, 'job_id': ident, 'input': brief})

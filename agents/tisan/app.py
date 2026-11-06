@@ -208,3 +208,7 @@ _load_beside({}, 'tisan_quotes', 'quotes.py').mount(
 
 _load_beside(_figma_cache(), 'tisan_pipeline_room', 'pipeline.py').mount(
     app, lambda key, filename: _load_beside(_figma_cache(), key, filename))
+
+# Install last so absent configuration also guards room-specific startup DDL.
+_load_beside({}, 'tisan_runtime', 'runtime.py').install(
+    app, lambda key, filename: _load_beside(_figma_cache(), key, filename))

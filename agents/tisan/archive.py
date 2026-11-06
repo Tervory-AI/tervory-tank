@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 import tarfile
 from pathlib import Path
 from uuid import UUID, uuid5
@@ -59,6 +60,11 @@ async def export(tenant_id: str, payload: dict, *, root: Path | None = None,
         await store.close()
     receipt = folder/f'{body.build}.archive.json'
     atomic_json(receipt, result)
+    absent = [name for name in ('HERMES_URL', 'TANK_KEY') if not os.environ.get(name, '').strip()]
+    if memory is None and absent:
+        result.update(memory='not_configured', missing_settings=absent)
+        atomic_json(receipt, result)
+        return result
     try:
         client = memory if memory is not None else MemoryClient(agent='tisan')
         saved = await client.remember(tenant, json.dumps(result, sort_keys=True), 'build',
@@ -76,14 +82,35 @@ async def handle(ctx) -> dict:
     return await export(str(ctx.tenant_id), ctx.input, memory=ctx.memory, job_id=str(ctx.job_id))
 
 
+def dry_run(tenant_id: str, payload: dict, *, root: Path) -> dict:
+    """Validate actual stored bytes; never open R2 or write a success receipt."""
+    tenant = str(UUID(str(tenant_id)))
+    body = ArchiveArgs.model_validate(payload)
+    root = root.resolve()
+    stored = publish.stored_build(root, tenant, body.slug, body.build)
+    raw = (root / 'builds' / tenant / body.slug / f'{body.build}.tar.gz').read_bytes()
+    return {'dry_run': True, 'ready': True, 'uploaded': False, 'tenant_id': tenant,
+            'slug': body.slug, 'build': body.build, 'files': len(stored['files']),
+            'archive_sha256': hashlib.sha256(raw).hexdigest()}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--tenant', required=True)
     parser.add_argument('--slug', required=True)
     parser.add_argument('--build', required=True, type=int)
+    parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
+    required = ['DATA_DIR']
+    if not args.dry_run:
+        required += ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID_TISAN', 'R2_SECRET_ACCESS_KEY_TISAN']
+    absent = [name for name in required if not os.environ.get(name, '').strip()]
+    if absent:
+        parser.exit(1, 'Missing settings: ' + ', '.join(absent) + '\n')
     try:
-        result = asyncio.run(export(args.tenant, {'slug': args.slug, 'build': args.build}))
+        payload = {'slug': args.slug, 'build': args.build}
+        result = (dry_run(args.tenant, payload, root=Path(os.environ['DATA_DIR'])) if args.dry_run
+                  else asyncio.run(export(args.tenant, payload)))
     except StorageError as exc:
         parser.exit(1, str(exc) + '\n')
     except (ValueError, OSError, tarfile.TarError):
