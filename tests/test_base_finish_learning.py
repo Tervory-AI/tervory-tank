@@ -62,6 +62,9 @@ class Pool:
 
 @pytest.mark.asyncio
 async def test_automatic_vendor_rung_requires_completed_code_and_public_platform_data(monkeypatch):
+    import sys
+    from agents.base.engines import ffl
+    monkeypatch.setitem(sys.modules, 'engines.ffl', ffl)
     monkeypatch.setenv('CONTEXT_DEV_API_KEY', 'placeholder-offline-only')
     conn = SimpleNamespace(fetchval=AsyncMock(return_value=None), fetch=AsyncMock())
     pool = Pool(conn)

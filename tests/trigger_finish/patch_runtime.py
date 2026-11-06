@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def proposed_text(relative, original):
+    if not (ROOT / 'vendor/tervory-tank').is_dir() and (ROOT / relative).is_file():
+        return (ROOT / relative).read_text()
     original = original.splitlines(keepends=True)
     patch = (ROOT / 'tank-patches/finish.patch').read_text().splitlines(keepends=True)
     start = patch.index('+++ b/' + relative + '\n') + 1
