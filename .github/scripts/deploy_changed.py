@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from uuid import UUID
 import urllib.error
@@ -337,28 +338,41 @@ def main() -> int:
         elif not deploy(MAIN_APP, "main") or not wait_for(MAIN_APP, "main", MAIN_TIMEOUT_S):
             print("::error title=stopped::main did not deploy; rooms were not touched")
             return 1
-    za_ok = True
-    if ZA_OFFLINE:
-        skipped = sorted(n for n in targets if n.endswith("-za"))
-        targets = {n: u for n, u in targets.items() if not n.endswith("-za")}
-        print("::notice title=za offline::ZA_OFFLINE is set: tervory-tank-za"
-              + (" and " + ", ".join(skipped) if skipped else "") + " skipped on purpose")
-    elif want_main or za_retry:
-        za_uuid = by_name.get(SA_APP)
-        if radix_blocks(SA_APP):
-            pass
-        elif za_uuid and already_live(za_uuid, SA_APP):
-            pass
-        elif not za_uuid or not deploy(za_uuid, SA_APP) or not wait_for(za_uuid, SA_APP, ZA_TIMEOUT_S):
-            # The ZA box failing (for example a power outage there) must not hold back
-            # Boston's rooms. ZA rooms wait until tervory-tank-za deploys again.
-            za_ok = False
-            print("::error title=za not deployed::tervory-tank-za did not finish deploying in this run; "
-                  "ZA rooms skipped, Boston rooms continue")
-            targets = {n: u for n, u in targets.items() if not n.endswith("-za")}
-    ok = za_ok
-    # One room at a time: deploy, then wait until it is healthy before the next.
-    # Starting every room at once took every product page down together (28 Oct, #403).
+    boston = {n: u for n, u in targets.items() if not n.endswith("-za")}
+    za_rooms = {n: u for n, u in targets.items() if n.endswith("-za")}
+
+    def za_chain() -> bool:
+        """The ZA stack and its rooms build on the ZA host, so they run beside Boston's rooms."""
+        if ZA_OFFLINE:
+            print("::notice title=za offline::ZA_OFFLINE is set: tervory-tank-za"
+                  + (" and " + ", ".join(sorted(za_rooms)) if za_rooms else "") + " skipped on purpose")
+            return True
+        if want_main or za_retry:
+            za_uuid = by_name.get(SA_APP)
+            if radix_blocks(SA_APP):
+                pass
+            elif za_uuid and already_live(za_uuid, SA_APP):
+                pass
+            elif not za_uuid or not deploy(za_uuid, SA_APP) or not wait_for(za_uuid, SA_APP, ZA_TIMEOUT_S):
+                # The ZA box failing (for example a power outage there) must not hold back
+                # Boston's rooms. ZA rooms wait until tervory-tank-za deploys again.
+                print("::error title=za not deployed::tervory-tank-za did not finish deploying in this run; "
+                      "ZA rooms skipped, Boston rooms continue")
+                return False
+        return deploy_rooms(za_rooms)
+
+    results: dict[str, bool] = {}
+    za_thread = threading.Thread(target=lambda: results.__setitem__("za", za_chain()), daemon=True)
+    za_thread.start()
+    results["boston"] = deploy_rooms(boston)
+    za_thread.join()
+    return 0 if results.get("boston") and results.get("za") else 1
+
+
+def deploy_rooms(targets: dict[str, str]) -> bool:
+    """One room at a time on each host: deploy, then wait until it is healthy before the next.
+    Starting every room on one host at once took every product page down together (28 Oct, #403)."""
+    ok = True
     for name, uuid in sorted(targets.items()):
         if radix_blocks(name):
             continue
@@ -373,9 +387,9 @@ def main() -> int:
         ok = (deploy(uuid, name) and wait_for(uuid, name, wait)) and ok
         if uuid in _timed_out:
             print(f"::error title=remaining rooms deferred::{name} may still be building; "
-                  "no further rooms were queued, to avoid overlapping builds")
-            return 1
-    return 0 if ok else 1
+                  "no further rooms were queued on this host, to avoid overlapping builds")
+            return False
+    return ok
 
 
 if __name__ == "__main__":

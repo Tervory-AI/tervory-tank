@@ -1,7 +1,8 @@
 # Deploy straight after a merge to main (founder, 27 Oct): the pull request already
 # passed CI, so the deploy no longer waits for the same checks to run again on main.
 # Deploy only the apps whose code changed.
-# The main app goes first; rooms deploy only if main finished. No manual clicks after a merge.
+# The main app goes first; rooms deploy only if main finished. After main, the ZA chain (ZA stack,
+# then ZA rooms) runs beside Boston's rooms, because they build on different hosts. No manual clicks after a merge.
 # The Coolify token lives only in the repo secret COOLIFY_TOKEN and is never printed.
 name: deploy-on-merge
 
