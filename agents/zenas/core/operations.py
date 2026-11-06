@@ -76,7 +76,13 @@ async def connection(*, temporary=False):
             finally:
                 await conn.close()
         finally:
-            server.cleanup()
+            # pgserver caches the original postmaster PID. Our restart above
+            # replaces it, so cleanup alone may leave the replacement writing
+            # WAL while TemporaryDirectory removes its data directory.
+            try:
+                pgserver.pg_ctl(["-w", "stop", "-m", "fast"], pgdata=server.pgdata)
+            finally:
+                server.cleanup()
 
 
 async def sample(conn, *, region, selected, http_get=None):
