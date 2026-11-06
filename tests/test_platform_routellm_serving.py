@@ -169,8 +169,9 @@ def test_run_route_keeps_reviewed_hooks_and_code_streaming_body():
         assert any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == callee
                    for n in ast.walk(functions[caller]))
     # OPLI adds command.code to the existing streaming transport branch;
-    # the exact hash continues to protect every other byte outside the two hooks.
-    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '9c6229651d80b8907e1b5a3ad663d08fc36d9d8d3ef36c54df6247d86f397b3d'
+    # MoA seat admission uses the equivalent linear-time parser. The exact
+    # hash protects every other byte outside the same two reviewed hooks.
+    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '672584858acf99e5891a56763921f89eab10753807afff9a9431b0d86d371023'
 
 
 @pytest.mark.asyncio
