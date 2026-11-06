@@ -181,3 +181,5 @@ def mount(app):
     app.include_router(router)
     from .internal import router as workspace_router
     app.include_router(workspace_router)
+    from .terminal import router as terminal_router
+    app.include_router(terminal_router)

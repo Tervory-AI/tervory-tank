@@ -22,6 +22,7 @@ from .model_check import Budget
 from .pipeline import run
 from .retention import cleanup, save, sweep
 from .storage import Storage
+from .progress import event, category
 
 gate = asyncio.Semaphore(1)
 tasks = {}
@@ -107,7 +108,13 @@ async def relay(action: str, body: dict) -> dict:
 
 
 async def perform(body: Job, work: Path, store: Storage):
-    state = {**body.scope(), "status": "running", "stage": "intake", "receipts": []}
+    started = time.monotonic()
+    state = {**body.scope(), "status": "running", "stage": "intake", "receipts": [], "progress": []}
+    def progress(stage, outcome='delivered'):
+        state['progress'].append(event(len(state['progress']), category(stage),
+            elapsed_ms=(time.monotonic() - started) * 1000, receipts=state['receipts'], outcome=outcome))
+        save(work / 'state.json', state)
+    progress('intake', 'running')
     async def receipt(stage, outcome):
         state["stage"] = stage
         # Persist delivery intent before HTTP. If the brain is unavailable, the
@@ -116,7 +123,7 @@ async def perform(body: Job, work: Path, store: Storage):
         save(work / "pending-receipt.json", payload)
         delivered = await relay("steps", payload)
         state["receipts"].append(delivered)
-        save(work / "state.json", state)
+        progress(stage, outcome)
         (work / "pending-receipt.json").unlink()
     async def provider(identifier):
         state["provider_job_id"] = identifier
@@ -126,7 +133,7 @@ async def perform(body: Job, work: Path, store: Storage):
         save(work / "pending-gpu-relay.json", {"action": action, "payload": payload})
         result = await relay(action, payload)
         state["receipts"].append(result)
-        save(work / "state.json", state)
+        progress(state['stage'], 'failed' if payload.get('outcome') == 'failed' else 'delivered')
         (work / "pending-gpu-relay.json").unlink()
         return result
     async with gate:
@@ -135,6 +142,7 @@ async def perform(body: Job, work: Path, store: Storage):
             if body.method in {"photogrammetry", "trellis2"}:
                 transfers = await asyncio.to_thread(store.transfers, body.model_dump(mode="json"))
                 await receipt("intake", "delivered")
+                progress('gpu_submit', 'running')
                 await GPU().run(body.scope(), body.method, transfers=transfers,
                     timeout=body.timeout_seconds, cap=body.cost_cap_usd, relay=gpu_relay, save_provider=provider,
                     namespace=os.environ.get("HF_JOBS_NAMESPACE", ""))
@@ -164,6 +172,7 @@ async def perform(body: Job, work: Path, store: Storage):
                 except Exception:
                     pass  # The pending receipt is durable; no following work runs.
             state.update(status="failed", error="Forge job failed at " + state["stage"] + ". No model was approved.")
+            progress(state['stage'], 'failed')
             if (work / "report.json").exists():
                 state["report"] = json.loads((work / "report.json").read_text())
         finally:

@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Request
+from fastapi.responses import FileResponse
 from .static import ViewerFiles
 from pydantic import Field
 from app import app
@@ -108,5 +109,12 @@ async def page_config(request: Request):
 
 
 bundle = Path(__file__).with_name("widget")
+
+
+@app.get('/3d/wall', include_in_schema=False)
+async def wall():
+    return FileResponse(bundle / 'index.html', headers={'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff'})
+
+
 if bundle.is_dir():
     app.mount("/3d", ViewerFiles(directory=bundle, html=True), name="rig-three-d-test")

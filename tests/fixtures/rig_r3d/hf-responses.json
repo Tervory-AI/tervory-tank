@@ -1,0 +1,29 @@
+{
+  "source": "Offline HF Jobs API contract recording; identifiers and results are test fixtures, not a live GPU claim.",
+  "run_job": {
+    "id": "offline-rig-r3d"
+  },
+  "inspect_job": [
+    {
+      "status": {
+        "stage": "RUNNING"
+      }
+    },
+    {
+      "status": {
+        "stage": "COMPLETED"
+      }
+    }
+  ],
+  "authorization": {
+    "image": "ghcr.io/tervory-ai/forge@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "flavor": "a10g-small",
+    "timeout_seconds": 60,
+    "reserved_usd": "0.10",
+    "cost_basis": "upper_bound"
+  },
+  "validated_glb": {
+    "source": "tests/fixtures/rig_forge_models/ai-sample.glb through the real Forge CPU pipeline and measured attach anchor",
+    "sha256": "fa0c710891d40e8fa710fe5133ea78bc4e46707d94d8b93fe9f1f2dcfb36b224"
+  }
+}

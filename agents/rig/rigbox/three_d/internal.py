@@ -58,6 +58,9 @@ async def workspace(operation: str, body: Call, request: Request):
             return {"jobs": [value.job_view(r) for r in await value.store.jobs(tenant)]}
         if operation == "submit":
             return await value.submit(tenant, Job.model_validate(body.payload))
+        if operation == 'poll':
+            item = Item.model_validate(body.payload)
+            return await value.poll(tenant, item.id)
         if operation == "approve":
             item = Approval.model_validate(body.payload)
             return await value.approve(tenant, item.id, item.review, body.actor)
