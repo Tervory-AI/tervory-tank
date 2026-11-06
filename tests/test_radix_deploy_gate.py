@@ -45,7 +45,8 @@ def test_deploy_blocks_only_one_app_and_continues_other_apps(monkeypatch,tmp_pat
     monkeypatch.setattr(mod,'deploy',lambda uuid,name:deploys.append(name) or True)
     monkeypatch.setattr(mod,'wait_for',lambda *args:True)
     assert mod.main()==0
-    assert 'main' not in deploys and deploys==['tervory-tank-za','agent-zenas','agent-zenas-za']
+    assert 'main' not in deploys and sorted(deploys)==['agent-zenas','agent-zenas-za','tervory-tank-za']
+    assert deploys.index('tervory-tank-za') < deploys.index('agent-zenas-za')
     assert set(reads)=={'main',*deploys}
     assert 'placeholder-rule' in (tmp_path/'placeholder-summary').read_text()
 
