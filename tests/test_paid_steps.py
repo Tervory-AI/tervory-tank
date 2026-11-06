@@ -426,6 +426,10 @@ async def routing_pool():
 
 @pytest_asyncio.fixture(loop_scope="module")
 async def router_database(routing_pool, monkeypatch):
+    # These admission/replay regressions start after selecting a paid policy.
+    # The real local/eval-gated selection is covered by test_engine_ladder.py.
+    from test_tank_ladder import selected_policy_protocol
+    selected_policy_protocol(monkeypatch)
     monkeypatch.setenv('DATABASE_URL','postgresql://localhost/placeholder-unused')
     monkeypatch.setenv('LITELLM_MASTER_KEY','placeholder-litellm-key')
     monkeypatch.setenv('LITELLM_URL','http://placeholder-litellm')
