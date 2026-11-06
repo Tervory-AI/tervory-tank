@@ -1,0 +1,215 @@
+diff --git a/tank/gold.py b/tank/gold.py
+index 476e975824c9744bd2532e8d2c49d781a2288af0..818f0ef687e84e65bfa9e2338eff4b7f366a758d 100644
+--- a/tank/gold.py
++++ b/tank/gold.py
+@@ -19,7 +19,7 @@
+ from pydantic import BaseModel, Field
+ 
+ PLATFORM_TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
+-AGENTS = ("tank", "base", "tiger", "market_lab", "zenas", "radix", "tisan", "rig", "ghost")
++AGENTS = ("tank", "base", "tiger", "market_lab", "zenas", "radix", "tisan", "rig", "ghost", "trigger")
+ 
+ 
+ def runtime():
+diff --git a/tank/skala.py b/tank/skala.py
+index bbeb4a1f0db0f9dc3606a0eeb6a7f6c76c89d2da..7b641b251e1e0e03e9fcfae16c0b9063e277a1d4 100644
+--- a/tank/skala.py
++++ b/tank/skala.py
+@@ -154,15 +154,16 @@
+         return pkg
+ 
+ 
+-_run_cache: dict[tuple[str, str], Callable[..., Awaitable[dict[str, Any]]]] = {}
++_run_cache: dict[tuple[str, str], tuple[str, Callable[..., Awaitable[dict[str, Any]]]]] = {}
+ 
+ 
+ def _import_run(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"], Awaitable[dict[str, Any]]]:
++    fingerprint = evidence_hash([str(pkg.path.resolve()), package_hash(pkg)])
+     cached = _run_cache.get((pkg.id, pkg.version))
+-    if cached is not None:
+-        return cached
++    if cached is not None and cached[0] == fingerprint:
++        return cached[1]
+     run = _import_run_uncached(pkg)
+-    _run_cache[(pkg.id, pkg.version)] = run
++    _run_cache[(pkg.id, pkg.version)] = (fingerprint, run)
+     return run
+ 
+ 
+@@ -170,7 +171,9 @@
+     spec = importlib.util.spec_from_file_location(f"skill_{pkg.id}_{pkg.version}".replace(".", "_").replace("-", "_"), pkg.path / "run.py")
+     assert spec and spec.loader
+     mod = importlib.util.module_from_spec(spec)
+-    spec.loader.exec_module(mod)
++    # Candidate edits can have the same size and timestamp as a cached .pyc.
++    # Execute exactly the source used by the approval fingerprint.
++    exec(compile((pkg.path / "run.py").read_bytes(), str(pkg.path / "run.py"), "exec"), mod.__dict__)
+     run = getattr(mod, "run", None)
+     if run is None:
+         raise ValueError(f"{pkg.ref}: run.py has no run()")
+@@ -422,7 +425,8 @@
+     cost = 0.0
+     for i, case in enumerate(pkg.cases):
+         ctx = make_ctx()
+-        if "model" in case and not getattr(ctx, "live_evaluation", False):
++        recorded_model = "model" in case and not getattr(ctx, "live_evaluation", False)
++        if recorded_model:
+             from dataclasses import replace
+ 
+             async def saved_model(**_kwargs: Any) -> dict[str, Any]:
+@@ -456,6 +460,7 @@
+             "case_hash": evidence_hash(case),
+             "package_hash": source_fingerprint,
+             "used_model": getattr(ctx, "calls", 0) > 0,
++            "recorded_model": recorded_model and getattr(ctx, "calls", 0) > 0,
+         })
+     total = len(pkg.cases)
+     distinct = {json.dumps(case["input"], sort_keys=True) + json.dumps(case.get("model"), sort_keys=True)
+@@ -489,8 +494,16 @@
+ 
+ 
+ def package_hash(pkg: SkillPackage, files: list[dict[str, str]] | None = None) -> str:
+-    return evidence_hash([source_files(pkg) if files is None else files, pkg.cases,
+-                          pkg.eval_threshold, pkg.task_type, pkg.rung])
++    assets = []
++    for path in sorted(pkg.path.rglob("*")):
++        relative = path.relative_to(pkg.path)
++        if "__pycache__" in relative.parts or path.suffix in {".pyc", ".pyo"}:
++            continue
++        if path.is_file():
++            assets.append([relative.as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()])
++    return evidence_hash([source_files(pkg) if files is None else files, assets, pkg.cases,
++                          pkg.id, pkg.version, pkg.agent, pkg.description,
++                          pkg.input_schema, pkg.output_schema, pkg.eval_threshold, pkg.task_type, pkg.rung])
+ 
+ 
+ def version_key(version: str) -> tuple[int, int, int]:
+@@ -511,10 +524,15 @@
+ 
+ def passing_runs(pkg: SkillPackage, runs: list[dict[str, Any]]) -> int:
+     count = 0
++    fingerprint = package_hash(pkg)
++    hashes = [evidence_hash(case) for case in pkg.cases]
+     for row in runs[:3]:
+         details = eval_details(row)
+-        if (row["total"] != len(pkg.cases) or row["passed"] != row["total"] or not details
+-                or any(d.get("package_hash") != package_hash(pkg) for d in details)):
++        if (not hashes or row["total"] != len(hashes) or row["passed"] != row["total"]
++                or float(row["score"]) != 1.0 or len(details) != len(hashes)
++                or [d.get("case_hash") for d in details] != hashes
++                or any(d.get("passed") is not True or d.get("package_hash") != fingerprint
++                       or d.get("recorded_model") for d in details)):
+             break
+         count += 1
+     return count
+diff --git a/tank/skala_intake.py b/tank/skala_intake.py
+index ff8e4836e994f8402170afcf1d04360d1534e8ed..98471e40cc4addc32fbbbe68017549f2454a742b 100644
+--- a/tank/skala_intake.py
++++ b/tank/skala_intake.py
+@@ -61,12 +61,14 @@
+     async def evaluate():
+         # The room may start after Tank. Retry only this intake's pending evals;
+         # completed evidence is retained. No client requests or paid/model work.
+-        for attempt in range(10):
+-            if not await stage_ready(tank):
+-                return
+-            if attempt < 9:
+-                await asyncio.sleep(30)
+-        log.warning("Intake still pending; use the existing Skala eval control after the room is available")
++        while True:
++            try:
++                if not await stage_ready(tank):
++                    return
++            except Exception:
++                # Startup database failures must not permanently kill intake.
++                log.warning("Intake evaluation unavailable; will retry")
++            await asyncio.sleep(30)
+ 
+     @app.on_event("startup")
+     async def start():
+@@ -74,8 +76,10 @@
+         with tenant_scope(None, administrative=True):
+             task = asyncio.create_task(evaluate())
+ 
+-    @app.on_event("shutdown")
+     async def stop():
+         if task:
+             task.cancel()
+             await asyncio.gather(task, return_exceptions=True)
++
++    # Cancel the worker before Tank closes its pool.
++    app.router.on_shutdown.insert(0, stop)
+diff --git a/tank/skala_revalidation.py b/tank/skala_revalidation.py
+index 202d712beed6fbd38acdf15f3155ece53e31b4ec..e2b8641265a4eac28c6e3f808112421ae6c0d9cc 100644
+--- a/tank/skala_revalidation.py
++++ b/tank/skala_revalidation.py
+@@ -24,13 +24,15 @@
+ 
+ 
+ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
++    # Manual approval evals must use the configured Tank path too. Saved model
++    # answers are for the offline package suite, never approval evidence.
++    ctx.live_evaluation = True
+     job = ACTIVE.get()
+     if job is None:
+         return ctx
+     policy = job["policy"]
+     if isinstance(policy, str):
+         policy = json.loads(policy)
+-    ctx.live_evaluation = True
+ 
+     async def model(**kwargs):
+         if kwargs["task_type"] != job["task_type"]:
+diff --git a/tank/training.py b/tank/training.py
+index 0622a2244b6ecee726b61357a4ddf0f5f4cf8552..0f18020a9be97cedeabdbc282675cbac2c2edf15 100644
+--- a/tank/training.py
++++ b/tank/training.py
+@@ -430,6 +430,7 @@
+                 log.warning("Room gold response rejected: %s", room)
+                 continue
+             stats["rejected"] += max(0, len(rows) - 200)
++            room_stats = dict(inserted=0, rejected=0, capped=0, duplicates=0, unavailable=0)
+             try:
+                 async with runtime().pool().acquire() as conn, conn.transaction():
+                     await conn.execute("SELECT pg_advisory_xact_lock(871226)")
+@@ -453,7 +454,7 @@
+                                     PLATFORM_TENANT, region, room, day,
+                                 )
+                                 if used >= limit:
+-                                    stats["capped"] += 1
++                                    room_stats["capped"] += 1
+                                     continue
+                                 result = await conn.execute(
+                                     """INSERT INTO tank.gold_examples
+@@ -472,10 +473,17 @@
+                                 await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
+                                                                "skill_id": row["skill_id"], "source": "room_auto",
+                                                                "label_source": source, "label_family": row.get("label_family")})
+-                            stats["inserted" if result == "INSERT 0 1" else "duplicates"] += 1
++                            room_stats["inserted" if result == "INSERT 0 1" else "duplicates"] += 1
++                        except (ValueError, TypeError, OverflowError, RecursionError):
++                            # No exception text: it may contain private data or credentials.
++                            room_stats["rejected"] += 1
+                         except Exception:
+-                            # No exception text: it may contain private data or credentials.
+-                            stats["rejected"] += 1
++                            # A failed savepoint is retryable storage work, not
++                            # evidence that the source example was rejected.
++                            room_stats["unavailable"] += 1
++                # Count only writes whose outer transaction committed.
++                for key, count in room_stats.items():
++                    stats[key] += count
+             except Exception:
+                 stats["unavailable"] += 1
+                 log.warning("Room gold storage unavailable: %s", room)
+@@ -542,7 +550,9 @@
+             ):
+                 return
+             if operation == "gold":
+-                await collect_room_gold(slot.date())
++                result = await collect_room_gold(slot.date())
++                if result["unavailable"] or result["rejected_responses"]:
++                    return  # Existing source identities make partial retries idempotent.
+             elif operation == "export":
+                 await collect_once()
+                 result = await export_once(day=slot.date())
