@@ -46,6 +46,13 @@ def test_config_roster_and_invalid_windows():
 
 
 async def prepare(b, monkeypatch, *, window=True, cap=1):
+    selected_run = b.tank.run_route
+    async def selected(req, *args, **kwargs):
+        # Price-window tests start with a selected paid policy. Local-first
+        # selection has its own real-SQL tests, and does not need a price window.
+        kwargs.setdefault('_paid_policy', await b.tank.load_policy(req.task_type, req.tenant_id))
+        return await selected_run(req, *args, **kwargs)
+    monkeypatch.setattr(b.tank, 'run_route', selected)
     info = {'input_cost_per_token': 0.0000003, 'output_cost_per_token': 0.0000012}
     if window:
         info['offpeak'] = SETTINGS

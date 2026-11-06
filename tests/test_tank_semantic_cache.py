@@ -35,6 +35,8 @@ async def drain(b):
 
 @pytest_asyncio.fixture
 async def semantic(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+    from test_tank_ladder import selected_policy_protocol
+    selected_policy_protocol(monkeypatch)
     b = ladder
     b.encoder = EncoderStub()
     store = cache.VectorIndex(AsyncQdrantClient(location=":memory:"))

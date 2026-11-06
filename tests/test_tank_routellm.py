@@ -47,6 +47,8 @@ def test_model_promotion_still_requires_existing_graduation(samples, score, appr
 
 @pytest_asyncio.fixture
 async def real_tank(monkeypatch):
+    from test_tank_ladder import selected_policy_protocol
+    selected_policy_protocol(monkeypatch)
     url = os.environ.get("POOL_SCHEMA_DATABASE_URL")
     if not url:
         pytest.skip("requires disposable PostgreSQL via POOL_SCHEMA_DATABASE_URL")

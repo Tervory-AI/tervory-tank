@@ -11,6 +11,14 @@ from test_tank_tenant_boundaries import boundary  # noqa: F401 -- shared isolate
 REAL_RUN = skala.run_skill
 
 
+def selected_policy_protocol(monkeypatch):
+    """Exercise a downstream protocol with its explicit selected paid policy."""
+    import engine_ladder
+    async def selected(rt, req, policy, caller=None):
+        return policy
+    monkeypatch.setattr(engine_ladder, 'select', selected)
+
+
 async def pass_policy_swaps(b):
     """Complete fixture-only revalidations without calling a model."""
     import skala_revalidation
@@ -73,7 +81,8 @@ async def ladder(boundary, monkeypatch):  # noqa: F811 -- pytest fixture injecti
 
         async def post(self, url, **kwargs):
             b.sent.append(kwargs["json"])
-            return httpx.Response(200, headers={"content-type": "application/json", "x-litellm-response-cost": "0.001"},
+            cost = "0" if kwargs['json']['model'] in {'local', 'local-large'} else "0.001"
+            return httpx.Response(200, headers={"content-type": "application/json", "x-litellm-response-cost": cost},
                 json={"choices": [{"message": {"content": json.dumps({"answer": "paid fixture"})}}], "usage": {"prompt_tokens": 12, "completion_tokens": 6}},
                 request=httpx.Request("POST", url))
 
@@ -124,7 +133,7 @@ async def test_code_escalates_with_receipt_and_no_raw_html(ladder, monkeypatch, 
     monkeypatch.setattr(b.tank, "_run_code_candidate", code)
     for tenant in b.tenants:
         result = await b.tank.run_route(request(b, tenant, text=json.dumps({"text": "visible", "html": "<p>raw</p><script>secret</script>"})))
-        assert result.rung == 2 and result.model == "luna"
+        assert result.rung == 2 and result.model == "local" and result.cost_usd == 0
         assert result.escalation[0]["reason"] == kind
         sent = json.dumps(b.sent[-1])
         assert "visible" in sent and "<" not in sent and "secret" not in sent and "raw" not in sent
@@ -143,16 +152,16 @@ async def test_exact_semantic_cache_tenant_matter_policy_and_rejection(ladder):
     first = await b.tank.run_route(request(b, a, text="Please summarize the fixture", case_ref="matter-a"))
     exact = await b.tank.run_route(request(b, a, text="Please summarize the fixture", case_ref="matter-a"))
     semantic = await b.tank.run_route(request(b, a, text="Summarise the fixture", case_ref="matter-a"))
-    assert first.rung == 1 and exact.rung == semantic.rung == 4 and len(b.sent) == 1
+    assert first.rung == 2 and exact.rung == semantic.rung == 4 and len(b.sent) == 1
     assert exact.ledger_id != first.ledger_id and exact.cost_usd == 0
-    assert (await b.tank.run_route(request(b, other, text="Summarise the fixture", case_ref="matter-a"))).rung == 1
-    assert (await b.tank.run_route(request(b, a, text="Summarise the fixture", case_ref="matter-b"))).rung == 1
-    assert (await b.tank.run_route(request(b, a, text="Summarise not the fixture", case_ref="matter-a"))).rung == 1
-    assert (await b.tank.run_route(request(b, a, text="Summarise the fixture"))).rung == 1
-    assert (await b.tank.run_route(request(b, a, text="Please summarize the fixture"))).rung == 1  # no matter: semantic off
+    assert (await b.tank.run_route(request(b, other, text="Summarise the fixture", case_ref="matter-a"))).rung == 2
+    assert (await b.tank.run_route(request(b, a, text="Summarise the fixture", case_ref="matter-b"))).rung == 2
+    assert (await b.tank.run_route(request(b, a, text="Summarise not the fixture", case_ref="matter-a"))).rung == 2
+    assert (await b.tank.run_route(request(b, a, text="Summarise the fixture"))).rung == 2
+    assert (await b.tank.run_route(request(b, a, text="Please summarize the fixture"))).rung == 2  # no matter: semantic off
     async with b.pool.acquire() as conn:
         await conn.execute("UPDATE tank.policy SET system_prompt='New instructions',updated_at=now() WHERE tenant_id=$1", a)
-    assert (await b.tank.run_route(request(b, a, text="Please summarize the fixture", case_ref="matter-a"))).rung == 1
+    assert (await b.tank.run_route(request(b, a, text="Please summarize the fixture", case_ref="matter-a"))).rung == 2
     await b.tank.ledger_feedback(first.ledger_id, b.tank.Feedback(tenant_id=a, feedback="rejected"))
     async with b.pool.acquire() as conn:
         assert await conn.fetchval("SELECT count(*) FROM tank.route_cache WHERE tenant_id=$1", a) == 0
@@ -242,7 +251,11 @@ async def test_fixture_graduation_requires_founder_then_serves_two_tenants(ladde
                   "city": ("Boston", 90), "state": ("MA", 95), "zip": ("02108", 95), "phone": ("+16175550100", 90)}
         expected[name] = {"fields": {k: {"value": v, "source": "input", "confidence": c} for k, (v, c) in fields.items()},
                           "match_key": f"{name.lower()}|boston|ma"}
-        res = await b.tank.run_route(request(b, b.tenants[i % 2], text=json.dumps(payload)))
+        # Exercise the existing founder-controlled policy promotion protocol with
+        # an explicitly selected policy. Automatic serving selection is covered
+        # separately by test_engine_ladder; approved code otherwise serves first now.
+        serving = await b.tank.load_policy('base.normalize', b.tenants[i % 2])
+        res = await b.tank.run_route(request(b, b.tenants[i % 2], text=json.dumps(payload)), _paid_policy=serving)
         assert res.rung == 1
         if b.tank._background:
             await asyncio.gather(*list(b.tank._background))

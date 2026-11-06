@@ -3,6 +3,8 @@ import hashlib
 from pathlib import Path
 import tarfile
 import urllib.request
+from urllib.parse import urlsplit
+import shutil
 
 ARTIFACTS = {
     'large.gguf': ('https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf',
@@ -14,13 +16,43 @@ ARTIFACTS = {
 }
 
 
+class HTTPSRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        address = urlsplit(newurl)
+        trusted = ('github.com', 'githubusercontent.com', 'huggingface.co', 'hf.co')
+        host = address.hostname or ''
+        if (address.scheme != 'https' or address.username or address.port not in (None, 443)
+                or not any(host == name or host.endswith('.' + name) for name in trusted)):
+            raise ValueError('Artifact redirects must remain HTTPS')
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def extract_runtime(archive, root):
+    """Copy regular bytes only; archive links never become filesystem links."""
+    root = root.resolve()
+    for member in archive.getmembers():
+        target = (root / member.name).resolve()
+        if not target.is_relative_to(root) or '..' in Path(member.name).parts:
+            raise ValueError('Unsafe runtime archive path')
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif member.isfile() or member.issym() or member.islnk():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.extractfile(member) as source, target.open('wb') as output:
+                shutil.copyfileobj(source, output)
+            target.chmod(0o755 if member.mode & 0o111 else 0o644)
+        else:
+            raise ValueError('Unsupported runtime archive entry')
+
+
 def install(destination):
     root = Path(destination)
     root.mkdir(parents=True, exist_ok=True)
+    downloader = urllib.request.build_opener(HTTPSRedirect())
     for name, (url, expected) in ARTIFACTS.items():
         target = root / name
         digest = hashlib.sha256()
-        with urllib.request.urlopen(url, timeout=120) as response, target.open('wb') as output:
+        with downloader.open(url, timeout=120) as response, target.open('wb') as output:
             while chunk := response.read(1024 * 1024):
                 digest.update(chunk)
                 output.write(chunk)
@@ -28,7 +60,7 @@ def install(destination):
             target.unlink()
             raise ValueError('Artifact checksum mismatch: ' + name)
     with tarfile.open(root / 'llama.tar.gz') as archive:
-        archive.extractall(root, filter='data')
+        extract_runtime(archive, root)
     (root / 'llama.tar.gz').unlink()
 
 

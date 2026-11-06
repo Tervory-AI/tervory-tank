@@ -196,7 +196,6 @@ def scan(root: Path) -> list[Finding]:
 # Canonical AST/token fingerprints and occurrence counts, never a whole-file waiver.
 # A changed or additional call in an audited file needs a fresh review.
 EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
-    ('litellm/local-model/benchmark.py', 'assembled endpoint', 'bb4bd383a39b582a'): (1, 'Founder-requested CPU benchmark; hard loopback guard, local model aliases only, no credentials or production traffic.'),
     ('litellm/local-model/benchmark.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Founder-requested CPU benchmark; hard loopback guard, local model aliases only, no credentials or production traffic.'),
     ('tests/tank_routing/litellm_probe.py', 'provider import', 'd85e5baf1e8f72b6'): (1, 'Offline LiteLLM routing probe: placeholder deployments use mock_response; HTTP requests use in-process ASGITransport, never a provider.'),
     ('tests/tank_routing/litellm_probe.py', 'provider import', '0666fda020abbadd'): (1, 'Offline LiteLLM routing probe: placeholder deployments use mock_response; HTTP requests use in-process ASGITransport, never a provider.'),

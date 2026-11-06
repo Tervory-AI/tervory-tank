@@ -705,6 +705,7 @@ class RouteRequest(BaseModel):
 
 
 class RouteResponse(BaseModel):
+    engine: dict[str, Any] | None = None
     # Actual foreground dispatch evidence; absent for cache/code/batch results.
     execution: dict[str, Any] | None = None
     settings_hash: str | None = None  # No effective-settings attestation exists yet.
@@ -1302,6 +1303,10 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
     inherited=paid_steps.current.get()
     req = req.model_copy(update={"paid_run_id": inherited.run_id})
     original = kwargs.get("_paid_policy") or await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+    engine_rt = __import__("sys").modules[__name__]
+    if (kwargs.get('model_override') is None and not kwargs.get('_offpeak_dispatch')
+            and kwargs.get('_paid_policy') is None and not is_build_only_model(original['model'])):
+        original = await __import__('engine_ladder').select(engine_rt, req, original, caller)
     policy = original
     attempted = set()
     while True:
@@ -1316,7 +1321,8 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
         value = await paid_steps.checkpoint(paid_steps.fingerprint(["route", req.model_dump(exclude={"paid_run_id"}),
                                              policy["model"], kwargs.get("model_override"), bool(kwargs.get("_offpeak_dispatch")), bool(kwargs.get("_defer_paid"))]), invoke)
         if "error" not in value:
-            return (priority_queue.QueuedResponse if value["queued"] else RouteResponse).model_validate(value["answer"])
+            answer = (priority_queue.QueuedResponse if value["queued"] else RouteResponse).model_validate(value["answer"])
+            return await __import__('engine_ladder').receipt(engine_rt, req, policy, answer)
         attempted.add(policy["model"])
         if policy["model"].startswith("skill:") and policy.get("escalation_model"):
             attempted.add(policy["escalation_model"])
@@ -1403,6 +1409,9 @@ async def _run_route(
     if graduate.router_cannot_serve(model):
         raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
     priority = req.priority or policy["priority"]
+    if policy.get('_engine') and model in {'local', 'local-large'} and priority == 'offpeak':
+        # There is no provider discount to wait for on the zero-token-cost rung.
+        priority = 'standard'
 
     messages = [m.model_dump() for m in req.messages]
     if policy["system_prompt"]:
@@ -1537,7 +1546,7 @@ async def _run_route(
                                              caller=caller, task_id=task_id, model_override=model_override)
         await __import__("paid_steps").attach_receipt(queued.id, paid_authorization)
         return queued
-    if _defer_paid and priority != "urgent" and not holds_identifier:
+    if _defer_paid and priority != "urgent" and not holds_identifier and model not in {'local', 'local-large'}:
         raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
                              semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None

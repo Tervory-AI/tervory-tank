@@ -88,6 +88,8 @@ class LiteLLMStub:
 
 
 async def setup(b, monkeypatch, provider, *, cap=1, count=2, **policy_values):
+    from test_tank_ladder import selected_policy_protocol
+    selected_policy_protocol(monkeypatch)
     async def roster():
         return [{'model_name': 'batch-fixture', 'litellm_params': {'model': provider + '/' + NATIVE[provider]},
                  'model_info': {'input_cost_per_token': 0.000002, 'output_cost_per_token': 0.00001}}]

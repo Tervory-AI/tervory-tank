@@ -183,7 +183,8 @@ async def test_rung_one_receipt_records_cache_tokens(ladder, monkeypatch):  # no
     monkeypatch.setattr(b.tank.httpx, "AsyncClient", Provider)
     tenant = b.tenants[0]
     await policy(b, tenant, model="luna", rung=1, cache_scope="none", system_prompt="Fixed policy text. " * 300)
-    result = await b.tank.run_route(request(b, tenant, text="dynamic question"))
+    result = await b.tank.run_route(request(b, tenant, text="dynamic question"),
+        _paid_policy=await b.tank.load_policy('base.normalize', tenant))
     assert result.rung == 1 and result.cache_read_tokens == 1792 and result.cache_write_tokens == 0
     # The fixed policy prompt leads; Tank sends no cache marker of its own (LiteLLM places it per deployment).
     assert sent[-1]["messages"][0]["content"].startswith("Fixed policy text.")

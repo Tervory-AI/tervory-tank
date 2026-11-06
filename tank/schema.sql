@@ -3129,6 +3129,17 @@ CREATE TABLE IF NOT EXISTS tank.rig_rooms (
 -- BEGIN worker (new blocks for worker go here)
 -- END worker
 -- BEGIN platform (new blocks for platform go here)
+CREATE TABLE IF NOT EXISTS tank.engine_evals (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL, agreement numeric NOT NULL,
+    samples integer NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model,revision)
+);
+CREATE TABLE IF NOT EXISTS tank.engine_receipts (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    ledger_id uuid NOT NULL, detail jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tenant_id,ledger_id)
+);
 ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
 
 -- Home is assigned at onboarding; changing it requires a separate data migration.

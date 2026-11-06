@@ -39,6 +39,41 @@ model_list:
       hosted_in: za
       owned: true
 
+  # DECISION local CPU inference has zero provider-token charges.
+  - model_name: local
+    litellm_params:
+      model: openai/local
+      api_base: http://local-model:8080/v1
+      api_key: placeholder  # Non-secret; local server has no provider credential.
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      open_weights: true
+      family: alibaba
+      size: small
+      host: local-model
+      licence: Apache-2.0
+      licence_url: https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/blob/main/LICENSE
+
+  - model_name: local-large
+    litellm_params:
+      model: openai/local-large
+      api_base: http://local-model-large:8080/v1
+      api_key: placeholder
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      open_weights: true
+      family: alibaba
+      size: small
+      host: local-model-large
+      licence: Apache-2.0
+      licence_url: https://huggingface.co/Qwen/Qwen3-4B/blob/main/LICENSE
+
   # ---------- OpenAI (API key, Responses/Chat) ----------
   - model_name: luna            # cheap, fast workhorse: classify, extract, short drafts
     litellm_params:
@@ -815,6 +850,8 @@ litellm_settings:
   # tests/test_model_roster.py keeps them sorted. Every model here is approved for use; anything
   # outside this roster (search APIs, data vendors) is a paid route that needs approval.
   fallbacks:
+    - local: ["local-large", "llama-small", "qwen-small", "llama", "qwen"]
+    - local-large: ["llama-small", "qwen-small", "llama", "qwen"]
     - luna: ["haiku", "flash-lite", "grok", "flash"]
     - haiku: ["luna", "flash-lite", "grok", "flash"]
     - flash-lite: ["grok", "flash"]

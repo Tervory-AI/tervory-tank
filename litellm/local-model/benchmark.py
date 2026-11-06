@@ -1,7 +1,7 @@
 """Measure real CPU inference. This is not the Tank end-to-end proof."""
 import json
 import statistics
-import urllib.request
+import http.client
 from urllib.parse import urlsplit
 
 CASES = [
@@ -20,12 +20,20 @@ def benchmark(base='http://127.0.0.1:18089', model='local'):
         raise ValueError('The CPU benchmark accepts only the two local models')
     records = []
     for kind, prompt, expected in CASES * 3:
-        request = urllib.request.Request(base + '/v1/chat/completions', data=json.dumps({
+        body = json.dumps({
             'model': model, 'messages': [{'role': 'system', 'content': 'Follow the output format exactly. Return only the requested answer, without explanation.'}, {'role': 'user', 'content': prompt}],
             'max_tokens': 64, 'temperature': 0, 'cache_prompt': False,
-        }).encode(), headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(request, timeout=120) as response:
+        }).encode()
+        # No proxy, alternate URL scheme or redirect: only the validated loopback socket.
+        client = http.client.HTTPConnection(address.hostname, address.port, timeout=120)
+        try:
+            client.request('POST', '/v1/chat/completions', body=body, headers={'Content-Type': 'application/json'})
+            response = client.getresponse()
+            if response.status != 200:
+                raise RuntimeError(f'Local inference returned HTTP {response.status}')
             data = json.load(response)
+        finally:
+            client.close()
         content = data['choices'][0]['message']['content']
         assert content.strip() and (expected is None or expected.lower() in content.lower()), (kind, content)
         records.append({'task': kind, 'timings': data['timings'], 'tokens': data['usage'], 'content': content})

@@ -27,7 +27,8 @@ def test_download_rejects_wrong_bytes(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location('local_model_install', ROOT / 'litellm/local-model/install.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(module.urllib.request, 'urlopen', lambda *a, **k: io.BytesIO(b'corrupt'))
+    from types import SimpleNamespace
+    monkeypatch.setattr(module.urllib.request, 'build_opener', lambda *a: SimpleNamespace(open=lambda *a, **k: io.BytesIO(b'corrupt')))
     import pytest
     with pytest.raises(ValueError, match='checksum mismatch'):
         module.install(tmp_path)
@@ -43,3 +44,24 @@ def test_local_and_open_weight_serving_chain():
     assert 'ports' not in service and service['cpus'] == 8 and service['mem_limit'] == '6g'
     assert service['command'][-2:] == ['--reasoning', 'off']
     assert 'Apache License' in (ROOT / 'litellm/local-model/LICENSE.large').read_text()
+
+
+def test_runtime_archive_cannot_escape_and_download_cannot_redirect_to_local(tmp_path):
+    import io
+    import tarfile
+    import pytest
+    spec = importlib.util.spec_from_file_location('local_install_guard', ROOT / 'litellm/local-model/install.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode='w') as archive:
+        entry = tarfile.TarInfo('../escaped')
+        entry.size = 4
+        archive.addfile(entry, io.BytesIO(b'nope'))
+    buffer.seek(0)
+    with tarfile.open(fileobj=buffer) as archive, pytest.raises(ValueError, match='Unsafe'):
+        module.extract_runtime(archive, tmp_path / 'runtime')
+    assert not (tmp_path / 'escaped').exists()
+    for destination in ('file:///etc/passwd', 'http://huggingface.co/file', 'https://127.0.0.1/file'):
+        with pytest.raises(ValueError, match='HTTPS'):
+            module.HTTPSRedirect().redirect_request(None, None, 302, '', {}, destination)
