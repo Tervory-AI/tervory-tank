@@ -2,7 +2,6 @@
 import { fetchWithDeadline as fetch } from "../../../lib/request";
 import { request } from "../request";
 
-import { fetchWithDeadline as fetch } from "../../../lib/request";
 import { useState, useRef, type FormEvent } from "react";
 import type { AdminOperation, AdminResult, FitReview, RetailerPanel, MappingPreview } from "./types";
 import { Products } from "./products";

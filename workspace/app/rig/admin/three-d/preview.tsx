@@ -2,7 +2,6 @@
 import { fetchWithDeadline as fetch } from "../../../../lib/request";
 import { request, within } from "../../request";
 
-import { fetchWithDeadline as fetch } from "../../../../lib/request";
 import { useEffect, useRef, useState } from "react";
 
 type Stage = { rotate(value: number): void; zoom(value: number): void; dispose(): void };

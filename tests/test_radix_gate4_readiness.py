@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from test_rx1_scans import ROOT
-import readiness
+import radix_readiness as readiness
 import egress
 
 

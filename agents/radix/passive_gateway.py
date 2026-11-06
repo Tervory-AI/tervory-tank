@@ -194,7 +194,7 @@ async def lifespan(app):
 
 app = FastAPI(lifespan=lifespan)
 
-from readiness import install as install_readiness
+from radix_readiness import install as install_readiness
 install_readiness(app, service='gateway')
 
 
