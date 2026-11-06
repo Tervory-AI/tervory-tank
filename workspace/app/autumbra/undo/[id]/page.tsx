@@ -2,6 +2,8 @@ import { verifyUndoToken } from "@/lib/autumbra-undo-token";
 import { loadUndoStatus } from "@/lib/autumbra-undo-status";
 import { UndoButton } from "../UndoButton";
 
+export const metadata = { referrer: "no-referrer" };
+
 /** One-tap undo landing — linked from the owner update email. Token is the credential. */
 export default async function UndoPage({
   params,
@@ -34,14 +36,14 @@ export default async function UndoPage({
     }
   }
 
-  if (!valid) return <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
+  if (!valid) return <section style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720, overflowWrap: "anywhere" }}>
     <h1>Undo an Autumbra shield</h1>
     <p>This link is invalid or has expired.</p>
     <p>Use the Undo link in your Autumbra update email.</p>
-  </main>;
+  </section>;
 
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
+    <section style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720, overflowWrap: "anywhere" }}>
       <h1>Undo an Autumbra shield</h1>
       {alreadyUndone ? (
         <p>{alreadyMessage}</p>
@@ -59,6 +61,6 @@ export default async function UndoPage({
       <p style={{ marginTop: "2rem", fontSize: "0.95rem", color: "#6b7280" }}>
         Nothing from your logs is kept. If you need help, reply to your Autumbra update email.
       </p>
-    </main>
+    </section>
   );
 }

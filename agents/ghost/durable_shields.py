@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .fixture_edge import FixtureEdgeControl
+from .safe_files import checked_path, read_json
 
 
 SHIELDS_FILE = "shields.json"
@@ -33,6 +34,7 @@ def pending_path(data_dir: Path | str) -> Path:
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> Path:
     """Write JSON atomically: temp file, fsync, rename over the target."""
+    path = checked_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     import tempfile
     descriptor, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
@@ -75,7 +77,7 @@ def read_shields_table(data_dir: Path | str) -> tuple[dict[str, Any] | None, str
         return None, "missing"
     if primary.exists():
         try:
-            raw = json.loads(primary.read_text(encoding="utf-8"))
+            raw = read_json(primary)
             parsed = _parse_shields_blob(raw)
             if parsed is not None:
                 return parsed, "primary"
@@ -84,7 +86,7 @@ def read_shields_table(data_dir: Path | str) -> tuple[dict[str, Any] | None, str
         # Corrupt primary — try last good.
         if good.exists():
             try:
-                raw = json.loads(good.read_text(encoding="utf-8"))
+                raw = read_json(good)
                 parsed = _parse_shields_blob(raw)
                 if parsed is not None:
                     return parsed, "good"
@@ -93,7 +95,7 @@ def read_shields_table(data_dir: Path | str) -> tuple[dict[str, Any] | None, str
         return None, "corrupt"
     # Primary missing but good exists.
     try:
-        raw = json.loads(good.read_text(encoding="utf-8"))
+        raw = read_json(good)
         parsed = _parse_shields_blob(raw)
         if parsed is not None:
             return parsed, "good"
@@ -143,8 +145,8 @@ def load_pending(data_dir: Path | str) -> dict[str, dict[str, Any]]:
     if not path.exists():
         return {}
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        raw = read_json(path)
+    except (OSError, ValueError):
         return {}
     if not isinstance(raw, dict):
         return {}

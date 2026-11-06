@@ -210,6 +210,7 @@ def drain_once_for_enforce(
             mirrored = load_mirrored_settings(
                 q.root,
                 fallback_tenant_id=(os.environ.get("TENANT_ID") or "").strip()
+                or (getattr(getattr(target.state, "settings", None), "tenant_id", "") if target else "")
                 or "00000000-0000-0000-0000-0000000000ef",
             )
         if mirrored is not None:
@@ -269,8 +270,9 @@ async def _queue_drain_loop(app: FastAPI) -> None:
         try:
             if getattr(app.state, "threat_queue", None) is not None:
                 drain_once_for_enforce(app=app)
+                app.state.drain_error = None
         except Exception:
-            pass
+            app.state.drain_error = "Edge outcome could not be confirmed. Inspect the owned rule before retrying."
 
 
 
@@ -356,7 +358,7 @@ def create_enforce_app() -> FastAPI:
                 drain_task.cancel()
                 await asyncio.gather(drain_task, return_exceptions=True)
 
-    app = FastAPI(title="Autumbra Enforce", docs_url=None, redoc_url=None, lifespan=lifespan)
+    app = FastAPI(title="Autumbra Enforce", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.control = DEFAULT_CONTROL
     app.state.settings = ClientAutumbraSettings(
         tenant_id=(os.environ.get("TENANT_ID") or "").strip()
@@ -391,6 +393,7 @@ def create_enforce_app() -> FastAPI:
             "drain_loop_running": bool(getattr(app.state, "drain_loop_running", False)),
             "drain_entrypoint": "ghost.enforce_app:drain_once_for_enforce",
             "durable_shields": True,
+            "error": getattr(app.state, "drain_error", None),
         }
 
     @app.post("/v1/apply")
@@ -411,6 +414,15 @@ def create_enforce_app() -> FastAPI:
 
     @app.post("/v1/drain-once")
     async def drain_once_http(request: Request) -> JSONResponse:
+        if (request.client is None or request.client.host not in {"127.0.0.1", "::1", "testclient"}
+                or request.headers.get("x-forwarded-for")):
+            raise HTTPException(404, "Not found.")
+        # Production work enters through the signed Watch queue, not an HTTP
+        # administrative door. Explicitly injected offline controls stay usable.
+        if (getattr(app.state, "service_started", False)
+                and app.state.control is getattr(app.state, "boot_control", None)
+                and not missing_settings("enforce")):
+            raise HTTPException(404, "Not found.")
         if _content_length(request) != 0:
             return _refuse_raw_http()
         if not queue_configured() and getattr(app.state, "threat_queue", None) is None:

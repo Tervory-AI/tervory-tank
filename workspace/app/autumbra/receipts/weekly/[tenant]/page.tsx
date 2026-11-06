@@ -2,6 +2,8 @@ import { mayReadWeeklyReceipts } from "@/lib/autumbra-receipts-access";
 import { describeReceipt } from "@/lib/autumbra-copy";
 import { loadWeeklyReceipts } from "@/lib/autumbra-weekly";
 
+export const metadata = { referrer: "no-referrer" };
+
 /** Weekly owner-update receipt page — token or signed-in owner of THAT tenant. No workspace menu. */
 export default async function WeeklyReceiptPage({
   params,
@@ -17,17 +19,17 @@ export default async function WeeklyReceiptPage({
   const allowed = await mayReadWeeklyReceipts(tenant, token);
   if (!allowed) {
     return (
-      <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
+      <section style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720, overflowWrap: "anywhere" }}>
         <h1>Your Autumbra weekly update</h1>
         <p>This link is invalid or has expired.</p>
         <p>Use the receipt link in your Autumbra update email.</p>
-      </main>
+      </section>
     );
   }
   const { receipts, note, timeZone, available, unauthorized } = await loadWeeklyReceipts(tenant, token || null);
 
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
+    <section style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720, overflowWrap: "anywhere" }}>
       <h1>Your Autumbra weekly update</h1>
       <p>
         This is the receipt page linked from your Autumbra owner email. It lists what Autumbra
@@ -69,6 +71,6 @@ export default async function WeeklyReceiptPage({
       <p style={{ marginTop: "1.5rem", fontSize: "0.95rem", color: "#6b7280" }}>
         Nothing from your logs is kept. If you need help, reply to your Autumbra update email.
       </p>
-    </main>
+    </section>
   );
 }

@@ -14,6 +14,7 @@ from typing import Any
 
 from .client_settings import ClientAutumbraSettings
 from .durable_shields import _atomic_write_json
+from .safe_files import checked_path, read_json
 
 _TENANT_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -43,7 +44,7 @@ def queue_path_for_tenant(tenant_id: str) -> Path:
     single = (os.environ.get("THREAT_PAYLOAD_QUEUE") or "").strip()
     enforce_tenant = (os.environ.get("TENANT_ID") or "").strip()
     if single and enforce_tenant and enforce_tenant == tid:
-        return Path(single)
+        return checked_path(Path(single))
     base = queue_root_base()
     if base is None:
         if single:
@@ -52,7 +53,7 @@ def queue_path_for_tenant(tenant_id: str) -> Path:
         raise RuntimeError(
             "THREAT_PAYLOAD_QUEUE_ROOT or THREAT_PAYLOAD_QUEUE is not configured."
         )
-    return base / tid
+    return checked_path(base / tid)
 
 
 def mirror_settings(settings: ClientAutumbraSettings, queue_root: Path | str) -> Path:
@@ -72,11 +73,13 @@ def load_mirrored_settings(
     if not path.exists():
         return None
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        raw = read_json(path)
+    except (OSError, ValueError):
         return None
     if not isinstance(raw, dict):
         return None
+    if raw.get("tenant_id", fallback_tenant_id) != fallback_tenant_id:
+        raise ValueError("Settings belong to another client.")
     if raw.get("fix_mode") == "Apply automatically when checks pass":
         raw = {**raw, "fix_mode": "I approve each one"}
     try:
@@ -111,7 +114,7 @@ def list_founder_console_receipts(queue_root: Path | str) -> list[dict[str, Any]
     out: list[dict[str, Any]] = []
     for path in sorted(console.glob("*.json")):
         try:
-            out.append(json.loads(path.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError):
-            continue
+            out.append(read_json(path))
+        except (OSError, ValueError):
+            raise RuntimeError("Receipt storage is unavailable.") from None
     return out

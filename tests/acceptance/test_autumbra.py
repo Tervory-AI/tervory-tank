@@ -597,6 +597,7 @@ const req=createRequire(path.join(root,'workspace/package.json')),ts=req('typesc
 for(const ext of ['.ts','.tsx']) require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS}}).outputText,f);
 const original=Module._load;
 Module._load=function(name,parent,main){
+ if(name==='@/lib/trigger-signin-fetch') return {signinFetch:(...args)=>global.fetch(...args)};
  if(id==='A58' && name==='@/lib/autumbra-receipts-access') return {mayReadWeeklyReceipts:async()=>false};
  if(id==='A58' && name==='@/lib/autumbra-weekly') return {loadWeeklyReceipts:async()=>{throw Error('unauthorized read');}};
  if(name.startsWith('@/')) return original.call(this,path.join(root,'workspace',name.slice(2)),parent,main);

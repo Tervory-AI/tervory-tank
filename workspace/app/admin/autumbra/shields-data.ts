@@ -1,4 +1,4 @@
-import { signinFetch as fetch } from "@/lib/trigger-signin-fetch";
+import { autumbraRequest } from "@/lib/autumbra-request";
 import "server-only";
 
 import type { Shield, ShieldBoard, ShieldTile } from "./shields-fixtures";
@@ -11,12 +11,13 @@ const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
 async function call<T>(path: string, userId: string, method: "GET" | "POST"): Promise<T> {
   if (!TANK_API_KEY.trim()) throw new Error("Missing setting: TANK_API_KEY");
-  const res = await fetch(`${TANK_URL}/v1/ghost/shields/${path}`, {
+  return autumbraRequest(`${TANK_URL}/v1/ghost/shields/${path}`, {
     method, cache: "no-store",
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY, "x-tervory-admin": userId },
-  });
+  }, async res => {
   if (!res.ok) throw new Error(`Autumbra shields ${res.status}`);
   return (await res.json()) as T;
+  });
 }
 
 /** Read failures reach the console's existing unavailable state. */

@@ -9,7 +9,7 @@ from .app import require_tank
 from .models import Look
 from .probes import browser_check
 
-app = FastAPI(title="Autumbra Watch browser")
+app = FastAPI(title="Autumbra Watch browser", docs_url=None, redoc_url=None, openapi_url=None)
 lock = asyncio.Lock()
 
 

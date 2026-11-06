@@ -53,12 +53,17 @@ function ShieldRow({ item, act }: { item: Shield; act: Action }) {
     <details><summary>Receipts</summary><ol className="ghost-receipts">
       {item.receipts.map((r) => <li key={r.ledger_id}><strong>{r.step.replaceAll("_", " ")}</strong><code>{r.ledger_id}</code><span>{r.status}</span></li>)}
     </ol>{!item.receipts.length && <p>{canRaise ? "Use Shield to record a shield receipt." : "Use Look to start a check."}</p>}</details>
-    {(canRaise || canUndo) && <form action={action} className="ghost-shield-actions">
-      <input type="hidden" name="id" value={item.id} />
-      {canRaise && <button type="submit" name="tap" value="raise" disabled={pending}>{pending ? "Working…" : "Shield"}</button>}
-      {canUndo && <button type="submit" name="tap" value="undo" disabled={pending} className="ghost-secondary">Undo</button>}
-      {result && <p role="status">{result.message}</p>}
-    </form>}
+    {(canRaise || canUndo) && <div className="ghost-shield-actions" aria-busy={pending}>
+      {canRaise && <form action={action}>
+        <input type="hidden" name="id" value={item.id} /><input type="hidden" name="tap" value="raise" />
+        <button type="submit" disabled={pending}>{pending ? "Working…" : "Shield"}</button>
+      </form>}
+      {canUndo && <form action={action}>
+        <input type="hidden" name="id" value={item.id} /><input type="hidden" name="tap" value="undo" />
+        <button type="submit" disabled={pending} className="ghost-secondary">Undo</button>
+      </form>}
+      <p role="status" style={{minHeight: "3em", flexBasis: "100%"}}>{result?.message}</p>
+    </div>}
   </article>;
 }
 

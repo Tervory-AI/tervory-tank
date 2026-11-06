@@ -154,8 +154,8 @@ def dogfood_watch_triage(
     try:
         answer = asyncio.run(call_tank_inference(prompt))
         text = answer["content"]
-    except (HfDogfoodError, httpx.HTTPError) as exc:
-        receipt["hf_error"] = str(exc)[:300]
+    except (HfDogfoodError, httpx.HTTPError):
+        receipt["hf_error"] = "Tank request did not finish."
         receipt["note"] = "Tank request did not finish; see hf_error."
         if not soft_live:
             raise
