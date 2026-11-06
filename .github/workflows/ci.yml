@@ -224,6 +224,13 @@ jobs:
           pip install --require-hashes -r agents/rig/forge/requirements.lock
       - name: Prepare video processing tools for offline acceptance
         run: bash .github/scripts/install-video-test-tools.sh
+      - name: Prepare real Radix advisory database for offline proofs
+        run: |
+          mkdir -p "$RUNNER_TEMP/radix-osv"
+          curl --fail --silent --show-error --location --retry 3 https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip --output "$RUNNER_TEMP/radix-osv/PyPI.zip"
+          curl --fail --silent --show-error --location --retry 3 https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip --output "$RUNNER_TEMP/radix-osv/npm.zip"
+          python agents/radix/osv_bake.py "$RUNNER_TEMP/radix-osv/osv.sqlite" "PyPI=$RUNNER_TEMP/radix-osv/PyPI.zip" "npm=$RUNNER_TEMP/radix-osv/npm.zip"
+          echo "RADIX_OSV_REAL=$RUNNER_TEMP/radix-osv/osv.sqlite" >> "$GITHUB_ENV"
       - name: Prepare pinned k6 for offline Tisan smoke tests
         run: |
           python3 - <<'PYK6'
@@ -356,6 +363,8 @@ jobs:
         run: python3 .github/scripts/offline_suite.py
         env:
           PYTHONPATH: tank
+          COMMAND_TEST_TOOLS: ${{ github.workspace }}/cli/node_modules
+          TIGER_PROJECT_ROOT: ${{ github.workspace }}
           SUITE_SHARD: ${{ matrix.shard }}
           SUITE_SHARDS: 10
           # One Postgres service. tests/conftest.py gives each xdist worker its own
