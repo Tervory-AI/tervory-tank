@@ -133,6 +133,9 @@ async def select(rt, req, policy, caller=None) -> dict:
         attempts.append({'model': model, 'agreement': agreement})
         if agreement is None or agreement >= max(.99, float(policy.get('eval_threshold') or .99)):
             return {**policy, 'model': model, 'rung': 3 if graduate.is_skill(model) else 2 if model in LOCAL else 1,
+                    # DECISION default to the existing conservative equivalence
+                    # cache only where the task explicitly permits caching.
+                    'semantic_cache': policy.get('cache_scope') in {'tenant', 'platform', 'region'} and req.task_type != 'command.turn' if req else False,
                     'escalation_model': 'local' if graduate.is_skill(model) else None,
                     'fallbacks': [], '_engine': {'revision': revision, 'attempts': attempts,
                     'baseline_model': policy.get('escalation_model') if graduate.is_skill(policy['model']) else policy['model']}}
