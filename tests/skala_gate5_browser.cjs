@@ -103,8 +103,10 @@ async function contrastCheck(cdp) {
   browser=spawn('/usr/bin/chromium',['--headless','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run','--no-proxy-server','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1','--remote-debugging-port=0','--remote-debugging-address=127.0.0.1','--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe'],detached:true});
   let diagnostics='';browser.stderr.on('data',chunk=>{diagnostics+=chunk;});
   const active=path.join(profile,'DevToolsActivePort');
-  for(let i=0;!fs.existsSync(active)&&i<100;i++)await pause(50);
-  assert.ok(fs.existsSync(active),'Chromium started: '+diagnostics.slice(-1000));
+  // Cold hosted runners can take over five seconds before DevTools is ready.
+  const startupDeadline=Date.now()+30000;
+  while(!fs.existsSync(active)&&browser.exitCode===null&&browser.signalCode===null&&Date.now()<startupDeadline)await pause(50);
+  assert.ok(fs.existsSync(active),'Chromium did not become ready within 30s: '+diagnostics.slice(-1000));
   const port=fs.readFileSync(active,'utf8').split('\n')[0];
   const targets=await(await fetch('http://127.0.0.1:'+port+'/json/list')).json();
   const ws=new WebSocket(targets.find(t=>t.type==='page').webSocketDebuggerUrl);await once(ws,'open');cdp=new CDP(ws);
