@@ -1,8 +1,4 @@
-import asyncio
-from copy import deepcopy
 import json
-import os
-from pathlib import Path
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -12,10 +8,10 @@ import httpx
 import pytest
 
 from test_tiger import ROOT, TENANT_A, TENANT_B, NOW, _load, _watch
-from batch import main, job_id
+from batch import job_id
 from operations import preview
 from tiger_sheet.test_finish_batch import BATCH, URL
-from test_tiger_competitors import database, postgres
+from test_tiger_competitors import database as database, postgres as postgres
 
 
 def command(script, args):

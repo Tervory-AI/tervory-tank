@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from tiger_sheet.patch_source import module
-from tiger_sheet.test_finish_training import hub, trainer
+from tiger_sheet.test_finish_training import hub as hub, trainer as trainer
 
 
 def test_training_start_command_dry_run_reaches_launch_boundary_without_writes(trainer, hub, monkeypatch, capsys):
