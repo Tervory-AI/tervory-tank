@@ -5,7 +5,7 @@ import { addProduct, removeProduct } from "./actions";
 import { EVERY_OPTIONS, FOOT, LEDE } from "./copy";
 import { SECTIONS, searchTiger, type AlertRow, type ProductRow, type ReadRow, type Section, type TigerData } from "./model";
 import { SquadLinks } from "../squad-links";
-import { AttemptTime, PageLink, Pill, SimpleTable } from "./parts";
+import { AttemptTime, PageLink, Pill, SimpleTable, useDialogFocus } from "./parts";
 import { PositionViews } from "./position-views";
 import type { ComparisonData, WatchView } from "./position-model";
 
@@ -79,7 +79,7 @@ export function TigerApp({
   return (
     <div className={rootClass}>
       <header className="topbar">
-        <img src={comparing ? "/brand/tervory-logo.png" : "/brand/tervory-logo-reversed.png"} alt="Tervory" />
+        <img src={comparing ? "/brand/tervory-logo.png" : "/brand/tervory-logo-reversed.png"} alt="Tervory" width={186} height={34} decoding="async" />
         <button type="button" className="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Menu</button>
       </header>
 
@@ -133,7 +133,7 @@ export function TigerApp({
           {!comparing ? <button type="button" className={headerRed ? "primary" : "line"} onClick={() => setAddOpen(true)}>Add a product</button> : null}
         </header>
 
-        {notice && !comparing ? <p className="notice">{notice}</p> : null}
+        {notice ? <p className="notice" role="alert">{notice}</p> : null}
         {help && !comparing ? <p className="notice">Manage check intervals and alert preferences when adding a product. Each watch shows its latest check status; completed readings are available in History.</p> : null}
 
         {hit && !comparing ? <Results hit={hit} /> : null}
@@ -372,11 +372,12 @@ function Results({ hit }: { hit: NonNullable<ReturnType<typeof searchTiger>> }) 
 }
 
 function AddProduct({ onClose }: { onClose: () => void }) {
+  const dialog = useDialogFocus(onClose);
   const [priceOn, setPriceOn] = useState(true);
   const [stockOn, setStockOn] = useState(true);
   return (
     <div className="scrim" role="presentation" onClick={onClose}>
-      <div className="popup narrow" role="dialog" aria-modal="true" aria-labelledby="add-title" onClick={(event) => event.stopPropagation()}>
+      <div ref={dialog} tabIndex={-1} className="popup narrow" role="dialog" aria-modal="true" aria-labelledby="add-title" onClick={(event) => event.stopPropagation()}>
         <form action={addProduct} className="add-form">
           <div className="popup-head">
             <div>

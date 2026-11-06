@@ -659,8 +659,9 @@ async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, 
         PLATFORM_TENANT,
     ):
         return {"status": "reconcile the previous training job"}
-    if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
-        return {"status": "Hugging Face training is not configured"}
+    missing = [name for name in ("HF_TOKEN", "HF_ORG") if not os.environ.get(name)]
+    if missing:
+        return {"status": "Hugging Face training is not configured", "needs_settings": missing}
     return None
 
 
@@ -722,8 +723,9 @@ async def training_receipt(
 ) -> dict[str, Any]:
     if not actor.founder:
         raise HTTPException(403, "Founder access required")
-    if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
-        return {"status": "Hugging Face training is not configured"}
+    missing = [name for name in ("HF_TOKEN", "HF_ORG") if not os.environ.get(name)]
+    if missing:
+        return {"status": "Hugging Face training is not configured", "needs_settings": missing}
     return await _training_subprocess(
         "--job-id", body.job_id, "--billed-usd", str(body.billed_usd),
     )
@@ -923,7 +925,8 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
 async def export_once(*, day: date | None = None, only_agent: str | None = None) -> dict[str, Any]:
     token, org = os.environ.get("HF_TOKEN", ""), os.environ.get("HF_ORG", "")
     if not token or not org:
-        return {"status": "skipped", "reason": "not configured"}
+        missing = [name for name in ("HF_TOKEN", "HF_ORG") if not os.environ.get(name)]
+        return {"status": "skipped", "reason": "not configured", "needs_settings": missing}
     region = runtime().box_region()
     if region not in ("us-east", "za"):
         return {"status": "skipped", "reason": "unknown region"}

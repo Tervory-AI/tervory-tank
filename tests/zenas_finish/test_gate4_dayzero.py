@@ -80,7 +80,7 @@ def test_a_new_tenant_has_zero_activity_in_every_metric():
 
 
 def test_existing_finish_patch_remains_byte_for_byte_unchanged():
-    content = (ROOT / 'tank-patches/finish.patch').read_bytes()
+    content = (ROOT / 'tank-patches/zenas/finish.patch').read_bytes()
     assert hashlib.sha1(f'blob {len(content)}\0'.encode() + content).hexdigest() == '3c0003eb7cd32269f889e290ec6666c434ff5cbf'
 
 

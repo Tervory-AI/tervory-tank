@@ -13,7 +13,9 @@ import pytest
 from pydantic import ValidationError
 
 from test_b3_base_room import ROOT, _load, _scripted, BASE_CORE
-from test_base_finish_training import postgres, database
+import test_base_finish_training as database_fixtures
+postgres = database_fixtures.postgres
+database = database_fixtures.database
 import room
 from network import BoundedHTTP, admitted
 
@@ -375,21 +377,16 @@ async def test_public_file_dns_has_a_total_deadline(monkeypatch):
         await asyncio.wait_for(reference_source.destination('https://recorded.example/file.csv'),.2)
 
 
-def test_shared_patch_stack_applies_cleanly_without_modifying_vendor(tmp_path):
+def test_shared_patch_stack_is_integrated_without_modifying_sources():
     import hashlib
-    files=set()
-    patches=[ROOT/'tank-patches/gate4.patch',ROOT/'tank-patches/gate5.patch']
-    for patch in patches:
-        files.update(line[6:] for line in patch.read_text().splitlines() if line.startswith('--- a/'))
-    before={file:hashlib.sha256((ROOT/file).read_bytes()).hexdigest() for file in files}
-    for file in files:
-        target=tmp_path/file
-        target.parent.mkdir(parents=True,exist_ok=True)
-        target.write_bytes((ROOT/file).read_bytes())
-    for patch in patches:
-        subprocess.run(['git','apply','--check',str(patch)],cwd=tmp_path,check=True,capture_output=True)
-        subprocess.run(['git','apply',str(patch)],cwd=tmp_path,check=True,capture_output=True)
-    assert {file:hashlib.sha256((ROOT/file).read_bytes()).hexdigest() for file in files} == before
+    files = set()
+    for patch in (ROOT/"tank-patches/base").glob("gate[45].patch"):
+        files.update(line[6:] for line in patch.read_text().splitlines() if line.startswith("+++ b/"))
+    before = {file: hashlib.sha256((ROOT/file).read_bytes()).hexdigest() for file in files}
+    assert files and all((ROOT/file).is_file() for file in files)
+    result = subprocess.run(['node', '-e', "const {root,sources}=require('./tests/base_gate5_sources.cjs');const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');for(const [file,source] of sources)assert.equal(source,fs.readFileSync(path.join(root,file),'utf8'));"], cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert {file: hashlib.sha256((ROOT/file).read_bytes()).hexdigest() for file in files} == before
 
 
 def test_offline_browser_journeys_and_shared_security_patch():

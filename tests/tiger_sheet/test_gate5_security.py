@@ -12,7 +12,9 @@ import pytest
 from fastapi import HTTPException
 
 from test_tiger import ROOT, TENANT_A, TENANT_B, NOW, _load, _watch
-from test_tiger_competitors import database, postgres
+import test_tiger_competitors as database_fixtures
+postgres = database_fixtures.postgres
+database = database_fixtures.database
 from tiger_sheet.patch_source import source
 from batch import Checkpoint, completed, plan
 from execution import once_check, job_pool

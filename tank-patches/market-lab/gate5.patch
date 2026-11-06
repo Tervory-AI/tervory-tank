@@ -1,0 +1,372 @@
+diff --git a/workspace/app/market-lab/ask/route.ts b/workspace/app/market-lab/ask/route.ts
+index 3053147..9d1062b 100644
+--- a/workspace/app/market-lab/ask/route.ts
++++ b/workspace/app/market-lab/ask/route.ts
+@@ -6,6 +6,12 @@ export async function POST(request: Request) {
+   try {
+     const tenant = await activeTenant();
+     if (!tenant) return NextResponse.json({ error: "Sign in and choose a workspace first." }, { status: 401 });
++    const origin = request.headers.get("origin");
++    if (origin) {
++      const parsed = new URL(origin);
++      const scheme = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || new URL(request.url).protocol.slice(0,-1);
++      if (parsed.host !== request.headers.get("host") || parsed.protocol !== scheme + ":" || parsed.username || parsed.password) return NextResponse.json({ error: "Sign in and choose a workspace first." }, { status: 403 });
++    }
+     const body = await request.json();
+     if (!body || Object.keys(body).some((key) => key !== "question") || typeof body.question !== "string" || !body.question.trim() || body.question.length > 2000) {
+       return NextResponse.json({ error: "Please enter a question of up to 2,000 characters." }, { status: 400 });
+diff --git a/workspace/app/market-lab/files/route.ts b/workspace/app/market-lab/files/route.ts
+index 5aaa57b..02d818a 100644
+--- a/workspace/app/market-lab/files/route.ts
++++ b/workspace/app/market-lab/files/route.ts
+@@ -6,7 +6,7 @@ const MAX_UPLOAD = 32 * 1024 * 1024 + 256000;
+ export async function POST(request: Request) {
+   const origin = request.headers.get("origin");
+   let sameOrigin = false;
+-  try { sameOrigin = Boolean(origin && new URL(origin).host === request.headers.get("host")); } catch { /* Refuse malformed origins. */ }
++  try { const parsed = origin ? new URL(origin) : null; const scheme = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || new URL(request.url).protocol.slice(0,-1); sameOrigin = Boolean(parsed && parsed.host === request.headers.get("host") && parsed.protocol === scheme + ":" && !parsed.username && !parsed.password); } catch { /* Refuse malformed origins. */ }
+   if (!sameOrigin) {
+     return NextResponse.json({ ok: false, message: "Upload files from your Market Lab page." }, { status: 403 });
+   }
+diff --git a/workspace/app/market-lab/h7.css b/workspace/app/market-lab/h7.css
+index 03196b6..fd7e7ef 100644
+--- a/workspace/app/market-lab/h7.css
++++ b/workspace/app/market-lab/h7.css
+@@ -89,3 +89,9 @@
+   .h7-cohort-summary { padding: 16px; border-radius: 8px; background: var(--h7-surface); box-shadow: inset 0 0 0 1px var(--crm-input-border, #848da3); }
+   .h7-cohort-caption { width: 100%; }
+ }
++
++/* Launch: preserve keyboard visibility, image geometry and reduced motion. */
++.ml :is(button,a,input,select):focus-visible, .ml-h7 :is(button,a,input,select):focus-visible { outline: 2px solid #001840; outline-offset: 3px; }
++.ml-chat { min-height: 136px; }
++.ml-status { min-height: 24px; }
++@media (prefers-reduced-motion: reduce) { .ml *, .ml-h7 * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+diff --git a/workspace/app/market-lab/market-lab.css b/workspace/app/market-lab/market-lab.css
+index 36b9418..a4da21c 100644
+--- a/workspace/app/market-lab/market-lab.css
++++ b/workspace/app/market-lab/market-lab.css
+@@ -89,7 +89,7 @@ body:has(.ml) main {
+ }
+ 
+ .ml input::placeholder {
+-  color: #6b7590;
++  color: #3d4a66;
+ }
+ 
+ .ml-sr {
+@@ -369,7 +369,7 @@ body:has(.ml) main {
+ .ml-ref-date {
+   font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+   font-size: 12px;
+-  color: #6b7590;
++  color: #3d4a66;
+ }
+ 
+ .ml-composer {
+@@ -449,7 +449,7 @@ body:has(.ml) main {
+ 
+ .ml-lead {
+   margin: -14px 0 0;
+-  color: #6b7590;
++  color: #3d4a66;
+   font-size: 14px;
+   line-height: 21px;
+ }
+@@ -506,7 +506,7 @@ body:has(.ml) main {
+ 
+ .ml-chip-off {
+   background: #fff;
+-  color: #6b7590;
++  color: #3d4a66;
+ }
+ 
+ .ml-dot {
+@@ -534,7 +534,7 @@ body:has(.ml) main {
+ .ml-detail,
+ .ml-problem,
+ .ml-card-meta {
+-  color: #6b7590;
++  color: #3d4a66;
+   font-size: 13px;
+ }
+ 
+@@ -548,7 +548,7 @@ body:has(.ml) main {
+ 
+ .ml-empty-value {
+   font-size: 18px;
+-  color: #6b7590;
++  color: #3d4a66;
+ }
+ 
+ .ml-lines,
+@@ -582,7 +582,7 @@ body:has(.ml) main {
+ }
+ 
+ .ml-linkcard li span {
+-  color: #6b7590;
++  color: #3d4a66;
+   font-size: 12px;
+ }
+ 
+@@ -617,7 +617,7 @@ body:has(.ml) main {
+   align-items: center;
+   background: #f4f6fb;
+   padding: 16px 20px;
+-  color: #6b7590;
++  color: #3d4a66;
+   font-size: 14px;
+ }
+ 
+@@ -658,7 +658,7 @@ body:has(.ml) main {
+ 
+ .ml-foot p {
+   margin: 0;
+-  color: #6b7590;
++  color: #3d4a66;
+   font-size: 13px;
+   line-height: 1.45;
+ }
+@@ -725,7 +725,7 @@ body:has(.ml) main {
+ 
+ .ml-fine {
+   margin: 0;
+-  color: #6b7590;
++  color: #3d4a66;
+   font-size: 12px;
+ }
+ 
+@@ -746,7 +746,7 @@ body:has(.ml) main {
+ 
+ .ml button.ml-tab {
+   background: transparent;
+-  color: #6b7590;
++  color: #3d4a66;
+   border: 0;
+   border-bottom: 2px solid transparent;
+   border-radius: 0;
+@@ -913,7 +913,7 @@ body:has(.ml) main {
+ 
+ .ml-or {
+   margin: 0;
+-  color: #6b7590;
++  color: #3d4a66;
+   font-size: 13px;
+ }
+ 
+@@ -1196,3 +1196,9 @@ body:has(.ml) main {
+   .ml-plugins { box-sizing: border-box; overflow-y: auto; }
+   .ml-plugins > * { flex-shrink: 0; }
+ }
++
++/* Launch: preserve keyboard visibility, image geometry and reduced motion. */
++.ml :is(button,a,input,select):focus-visible, .ml-h7 :is(button,a,input,select):focus-visible { outline: 2px solid #001840; outline-offset: 3px; }
++.ml-chat { min-height: 136px; }
++.ml-status { min-height: 24px; }
++@media (prefers-reduced-motion: reduce) { .ml *, .ml-h7 * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+diff --git a/workspace/app/market-lab/view.tsx b/workspace/app/market-lab/view.tsx
+index 3c50c32..28ceeaf 100644
+--- a/workspace/app/market-lab/view.tsx
++++ b/workspace/app/market-lab/view.tsx
+@@ -125,31 +125,37 @@ function ChatBox() {
+   const [draft, setDraft] = useState("");
+   const [turns, setTurns] = useState<Turn[]>([]);
+   const [sending, setSending] = useState(false);
++  const inFlight = useRef(false);
+ 
+   async function onSubmit(event: FormEvent) {
+     event.preventDefault();
+     const text = draft.trim();
+-    if (sending) return;
++    if (inFlight.current) return;
+     if (!text) return;
+     const next: Turn[] = [...turns, { role: "user", content: text }];
+     setTurns(next);
+     setDraft("");
++    inFlight.current = true;
+     setSending(true);
+     try {
+       const res = await fetch("/market-lab/ask", {
+         method: "POST",
++        signal: AbortSignal.timeout(190000),
+         headers: { "content-type": "application/json" },
+         body: JSON.stringify({ question: text }),
+       });
+       const data = (await res.json().catch(() => null)) as { content?: string; error?: string; facts?: Fact[]; sources?: AnswerSource[] } | null;
+       if (!res.ok || !data?.content) {
++        setDraft(text);
+         setTurns([...next, { role: "assistant", content: data?.error || "Market Lab could not answer.", error: true, sources: [] }]);
+       } else {
+         setTurns([...next, { role: "assistant", content: data.content, facts: data.facts ?? [], sources: data.sources ?? [] }]);
+       }
+     } catch {
++      setDraft(text);
+       setTurns([...next, { role: "assistant", content: "Market Lab could not answer. Nothing was changed.", error: true, sources: [] }]);
+     } finally {
++      inFlight.current = false;
+       setSending(false);
+     }
+   }
+@@ -158,7 +164,7 @@ function ChatBox() {
+     <section className="ml-chat" aria-label="Ask Market Lab">
+       <h2>Ask Market Lab</h2>
+       {turns.length ? (
+-        <div className="ml-thread">
++        <div className="ml-thread" role="log" aria-live="polite">
+           {turns.map((turn, index) =>
+             turn.role === "user" ? (
+               <div className="ml-bubble ml-you" key={`you-${index}`}>
+@@ -168,7 +174,7 @@ function ChatBox() {
+             ) : (
+               <div className="ml-bubble ml-answer" key={`lab-${index}`}>
+                 <p className="ml-who">Market Lab</p>
+-                <p className="ml-said">{turn.content}</p>
++                <p className="ml-said" role={turn.error ? "alert" : undefined}>{turn.content}</p>
+                 {turn.facts?.length ? <ul className="ml-lines">{turn.facts.map((fact, index) => <li key={`${fact.href}-${index}`}><a href={fact.href}>{fact.text}</a></li>)}</ul> : null}
+                 <div className="ml-refs">
+                   <p className="ml-refs-label">{REFERENCE_LABEL}</p>
+@@ -233,8 +239,25 @@ export function PluginsDialog({
+   const [signIn, setSignIn] = useState<"provider" | "token">("token");
+   const [busy, setBusy] = useState(false);
+ 
++  const dialogRef = useRef<HTMLDivElement>(null);
+   useEffect(() => {
+-    if (!open) setNote("");
++    if (!open) { setNote(""); return; }
++    const previous = document.activeElement as HTMLElement | null;
++    const overflow = document.body.style.overflow;
++    document.body.style.overflow = "hidden";
++    const controls = () => [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),a[href]') ?? [])].filter(el => el.getClientRects().length > 0);
++    controls()[0]?.focus();
++    function key(event: KeyboardEvent) {
++      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
++      if (event.key !== "Tab") return;
++      const list = controls(), first = list[0], last = list[list.length - 1];
++      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
++      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
++    }
++    document.addEventListener("keydown", key);
++    return () => { document.body.style.overflow = overflow; document.removeEventListener("keydown", key); previous?.focus(); };
++    // onClose is a parent inline callback; opening alone owns this focus lifecycle.
++    // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [open]);
+ 
+   if (!open) return null;
+@@ -285,7 +308,7 @@ export function PluginsDialog({
+     setBusy(true);
+     setNote("Reading your files. Large reports can take a little longer.");
+     try {
+-      const response = await fetch("/market-lab/files", { method: "POST", body });
++      const response = await fetch("/market-lab/files", { method: "POST", body, signal: AbortSignal.timeout(120000) });
+       await finish(await response.json());
+     } catch {
+       setNote("The upload could not be confirmed. Check the file list before trying again.");
+@@ -338,6 +361,7 @@ export function PluginsDialog({
+     <div className="ml-shade" onClick={onClose}>
+       <div
+         className="ml-plugins"
++        ref={dialogRef}
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby={titleId}
+@@ -353,7 +377,7 @@ export function PluginsDialog({
+             Close
+           </button>
+         </div>
+-        <div className="ml-tabs" role="tablist">
++        <div className="ml-tabs" role="tablist" aria-label="Plugins">
+           {PLUGIN_TABS.map((name) => (
+             <button
+               key={name}
+@@ -361,6 +385,15 @@ export function PluginsDialog({
+               type="button"
+               role="tab"
+               aria-selected={name === tab}
++              tabIndex={name === tab ? 0 : -1}
++              onKeyDown={event => {
++                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
++                event.preventDefault();
++                const index = PLUGIN_TABS.indexOf(tab);
++                const next = event.key === "Home" ? 0 : event.key === "End" ? PLUGIN_TABS.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + PLUGIN_TABS.length) % PLUGIN_TABS.length;
++                onTab(PLUGIN_TABS[next]);
++                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role=tab]')[next]?.focus();
++              }}
+               onClick={() => {
+                 setNote("");
+                 onTab(name);
+@@ -483,6 +516,7 @@ export function PluginsDialog({
+               <input
+                 ref={fileRef}
+                 className="ml-sr"
++                aria-label="Choose files"
+                 type="file"
+                 accept=".csv,.xlsx,.pdf,.docx,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                 multiple
+@@ -680,12 +714,12 @@ export function MarketLabView({
+     <div className="ml">
+       <header className="ml-top">
+         <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
+-        <button className="ml-menu" type="button" onClick={() => setMenu(true)}>
++        <button className="ml-menu" aria-expanded={menu} aria-controls="ml-navigation" type="button" onClick={() => setMenu(true)}>
+           Menu
+         </button>
+       </header>
+       <button className="ml-dim" type="button" hidden={!menu} aria-label="Close menu" onClick={() => setMenu(false)} />
+-      <aside className={menu ? "ml-panel open" : "ml-panel"}>
++      <aside id="ml-navigation" className={menu ? "ml-panel open" : "ml-panel"}>
+         <div className="ml-brand">
+           <img className="ml-agent" src={MARKET_LAB_LOGO_SRC} alt="Market Lab" width={242} height={40} />
+         </div>
+diff --git a/workspace/app/market-lab/warnings.tsx b/workspace/app/market-lab/warnings.tsx
+index b1a9606..aebac4b 100644
+--- a/workspace/app/market-lab/warnings.tsx
++++ b/workspace/app/market-lab/warnings.tsx
+@@ -1,23 +1,26 @@
+ "use client";
+ 
+-import { useState } from "react";
++import { useRef, useState } from "react";
+ import type { MarketWarnings } from "@/lib/tank";
+ 
+ export function Warnings({ data, failed = false }: { data: MarketWarnings | null; failed?: boolean }) {
+   const [choices, setChoices] = useState<Record<string, boolean>>({});
+   const [busy, setBusy] = useState<string | null>(null);
+   const [message, setMessage] = useState<Record<string, string>>({});
++  const inFlight = useRef(false);
+   async function react(id: string, useful: boolean) {
++    if (inFlight.current) return;
++    inFlight.current = true;
+     setBusy(id);
+     try {
+-      const response = await fetch("/market-lab/warnings/feedback", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ warning_id: id, event_id: crypto.randomUUID(), useful }) });
++      const response = await fetch("/market-lab/warnings/feedback", { method: "POST", signal: AbortSignal.timeout(30000), headers: { "content-type": "application/json" }, body: JSON.stringify({ warning_id: id, event_id: crypto.randomUUID(), useful }) });
+       if (!response.ok) throw new Error("save failed");
+       await response.json();
+       setChoices(previous => ({ ...previous, [id]: useful }));
+       setMessage(previous => ({ ...previous, [id]: "Your choice is saved." }));
+     } catch {
+       setMessage(previous => ({ ...previous, [id]: "Your choice could not be saved. Please try again." }));
+-    } finally { setBusy(null); }
++    } finally { inFlight.current = false; setBusy(null); }
+   }
+   return <section id="warnings" className="ml-warnings" aria-label="Warnings">
+     <h2>Warnings</h2>
+diff --git a/workspace/app/market-lab/warnings/feedback/route.ts b/workspace/app/market-lab/warnings/feedback/route.ts
+index fac446f..ea21dcd 100644
+--- a/workspace/app/market-lab/warnings/feedback/route.ts
++++ b/workspace/app/market-lab/warnings/feedback/route.ts
+@@ -5,6 +5,14 @@ import { marketWarningRequest } from "@/lib/tank";
+ export async function POST(request: Request) {
+   const tenant = await activeTenant();
+   if (!tenant) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
++  const origin = request.headers.get("origin");
++  if (origin) {
++    try {
++      const parsed = new URL(origin);
++      const scheme = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || new URL(request.url).protocol.slice(0,-1);
++      if (parsed.host !== request.headers.get("host") || parsed.protocol !== scheme + ":" || parsed.username || parsed.password) throw new Error();
++    } catch { return NextResponse.json({ error: "Please sign in." }, { status: 403 }); }
++  }
+   let body;
+   try { body = await request.json(); } catch { return NextResponse.json({ error: "Choose Useful or Not useful." }, { status: 400 }); }
+   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

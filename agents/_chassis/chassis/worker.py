@@ -122,17 +122,19 @@ async def claim_next(conn: Any, agent: str) -> Any:
         )
 
 
-async def _finish(conn: Any, agent: str, job_id: uuid.UUID, tenant_id: uuid.UUID, result: dict[str, Any]) -> None:
+async def _finish(conn: Any, agent: str, job_id: uuid.UUID, tenant_id: uuid.UUID, result: dict[str, Any], attempts: int | None = None) -> None:
     schema = _schema(agent)
     await conn.execute(
         f"""
         UPDATE {schema}.jobs
         SET status = 'done', result = $3::jsonb, error = NULL, finished_at = now()
-        WHERE id = $1 AND tenant_id = $2
+        WHERE id = $1 AND tenant_id = $2 AND status = 'running'
+          AND ($4::int IS NULL OR attempts = $4)
         """,
         job_id,
         tenant_id,
         json.dumps(result),
+        attempts,
     )
 
 
@@ -146,23 +148,25 @@ async def _fail(conn: Any, agent: str, job_id: uuid.UUID, tenant_id: uuid.UUID, 
             UPDATE {schema}.jobs
             SET status = 'queued', error = $3, started_at = NULL,
                 run_at = now() + ($4::int * interval '1 second')
-            WHERE id = $1 AND tenant_id = $2
+            WHERE id = $1 AND tenant_id = $2 AND status = 'running' AND attempts = $5
             """,
             job_id,
             tenant_id,
             detail,
             retry_backoff_s(attempts),
+            attempts,
         )
     else:
         await conn.execute(
             f"""
             UPDATE {schema}.jobs
             SET status = 'failed', error = $3, finished_at = now()
-            WHERE id = $1 AND tenant_id = $2
+            WHERE id = $1 AND tenant_id = $2 AND status = 'running' AND attempts = $4
             """,
             job_id,
             tenant_id,
             detail,
+            attempts,
         )
     return status
 
@@ -177,7 +181,7 @@ async def run_claimed(conn: Any, agent: str, job: Any, handlers: dict[str, Handl
         if handler is None:
             raise RuntimeError("unknown job kind")
         result = await run_with_timeout(handler, ctx_for(job), int(job["timeout_s"]))
-        await _finish(conn, agent, job_id, tenant_id, result)
+        await _finish(conn, agent, job_id, tenant_id, result, int(job["attempts"]))
         log_line(agent, "job done", tenant_id=str(tenant_id), job_id=str(job_id))
     except Exception as exc:  # noqa: BLE001 — record the failure; do not log secrets from the message
         status = await _fail(

@@ -1,0 +1,90 @@
+diff --git a/tank/trigger_bot_api.py b/tank/trigger_bot_api.py
+--- a/tank/trigger_bot_api.py
++++ b/tank/trigger_bot_api.py
+@@ -210,7 +210,17 @@
+             count(*) FILTER(WHERE feedback='bad') AS bad_answers
+             FROM tank.trigger_bot_messages WHERE tenant_id=$1 GROUP BY 1 ORDER BY 1 DESC LIMIT 52''', tenant)
+         from trigger_whatsapp import reply_count
+-        return {'weeks': [dict(row) for row in rows], 'count': await reply_count(pool, tenant)}
++        from datetime import datetime, timedelta, timezone
++        anchor = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
++        anchor -= timedelta(days=anchor.weekday())
++        known = {row['week'].date(): dict(row) for row in rows}
++        weeks = []
++        for index in range(52):
++            week = anchor - timedelta(weeks=index)
++            weeks.append(known.get(week.date(), {'week': week, 'answered_from_sources': 0,
++                'faq_answers': 0, 'handovers': 0, 'bad_answers': 0}))
++        return {'weeks': weeks, 'count': await reply_count(pool, tenant),
++                'first_action': 'Add an approved source, then start a chat on your website.' if not rows else None}
+     if operation.endswith('.confirm'):
+         return await confirm_draft(bot, actor, operation, args, operation_id)
+     raise HTTPException(404)
+diff --git a/tank/trigger_learning.py b/tank/trigger_learning.py
+--- a/tank/trigger_learning.py
++++ b/tank/trigger_learning.py
+@@ -152,4 +152,5 @@
+     now = datetime.now(timezone.utc)
+     async with pool().acquire() as conn:
+         rows = await conn.fetch('SELECT format,draft,feedback_status,checker_results,accepted_write_ids,created_at FROM tank.trigger_writes WHERE tenant_id=$1 AND created_at >= $2 AND created_at < $3', actor.tenant_id, now-timedelta(days=60), now)
+-    return {'as_of': now.isoformat(), **score_rows(rows, now)}
++    return {'as_of': now.isoformat(), **score_rows(rows, now),
++            'first_action': 'Write a draft in Chats, then confirm feedback to fill your scorecard.' if not rows else None}
+diff --git a/tank/trigger_google.py b/tank/trigger_google.py
+--- a/tank/trigger_google.py
++++ b/tank/trigger_google.py
+@@ -36,7 +36,7 @@
+     values = {name: os.environ.get('TRIGGER_GOOGLE_OAUTH_' + name.upper(), '')
+               for name in ('client_id', 'client_secret')}
+     if not all(values.values()):
+-        raise HTTPException(503)  # Existing HTTP handling, no invented UI copy.
++        raise HTTPException(503, {"missing_settings": ["TRIGGER_GOOGLE_OAUTH_" + key.upper() for key, value in values.items() if not value]})
+     return values
+ 
+ 
+diff --git a/tank/trigger_meta.py b/tank/trigger_meta.py
+--- a/tank/trigger_meta.py
++++ b/tank/trigger_meta.py
+@@ -35,7 +35,7 @@
+     values = {'client_id': os.environ.get('TRIGGER_META_APP_ID', ''),
+               'client_secret': os.environ.get('TRIGGER_META_APP_SECRET', '')}
+     if not all(values.values()):
+-        raise HTTPException(503)
++        raise HTTPException(503, {"missing_settings": [env for key, env in (("client_id", "TRIGGER_META_APP_ID"), ("client_secret", "TRIGGER_META_APP_SECRET")) if not values[key]]})
+     return values
+ 
+ 
+diff --git a/tank/trigger_crm.py b/tank/trigger_crm.py
+--- a/tank/trigger_crm.py
++++ b/tank/trigger_crm.py
+@@ -67,6 +67,9 @@
+ 
+ def binding(actor: Actor) -> tuple[str, str, str]:
+     """Configuration is founder-supplied. No Trigger sign-in/BottleCRM org identity is inferred."""
++    missing = [name for name in ("TRIGGER_CRM_URL", "TRIGGER_CRM_TENANT_BINDINGS") if not os.environ.get(name)]
++    if missing:
++        raise HTTPException(503, {"missing_settings": missing})
+     try:
+         bindings = json.loads(os.environ.get("TRIGGER_CRM_TENANT_BINDINGS", "{}"))
+         if not isinstance(bindings, dict):
+@@ -80,6 +83,8 @@
+             if not isinstance(name, str) or not re.fullmatch(r"TRIGGER_CRM_PAT_[A-Z0-9_]{1,60}", name):
+                 raise ValueError
+             token = os.environ.get(name, "")
++            if not token:
++                raise HTTPException(503, {"missing_settings": [name]})
+             # Duplicate credentials/orgs could accidentally bind two tenants to one CRM org.
+             if not token or len(token) > 4096 or not token.isascii() or any(c.isspace() for c in token) or name in names or org in orgs or token in tokens:
+                 raise ValueError
+diff --git a/tank/vault.py b/tank/vault.py
+--- a/tank/vault.py
++++ b/tank/vault.py
+@@ -15,6 +15,8 @@
+ 
+ 
+ def key(name: str = "TANK_VAULT_KEY") -> bytes:
++    if not os.environ.get(name):
++        raise HTTPException(503, {"missing_settings": [name]})
+     try:
+         value = base64.urlsafe_b64decode(os.environ.get(name, ""))
+         if len(value) != 32:

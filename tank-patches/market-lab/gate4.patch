@@ -1,0 +1,176 @@
+diff --git a/workspace/app/market-lab/briefs/page.tsx b/workspace/app/market-lab/briefs/page.tsx
+index 63584f5..649de84 100644
+--- a/workspace/app/market-lab/briefs/page.tsx
++++ b/workspace/app/market-lab/briefs/page.tsx
+@@ -14,5 +14,5 @@ export default async function BriefsPage() {
+   try { rows = await readH7<Brief>(tenant, "briefs"); } catch { failed = true; }
+   return <H7Shell><h2>Monthly briefs</h2>{failed ? <section className="h7-card" role="alert"><p>Monthly briefs could not be loaded.</p><a href="/market-lab/briefs" className="h7-button">Try again</a></section>
+     : rows.length ? rows.map(row => <article className="h7-card" key={row.report_id}><h3><a href={`/market-lab/briefs/${row.report_id}`}>{row.name}</a></h3><p>{formatDay(row.made_at)}</p><p>{row.deliveries.map(state => `${state.channel === "email" ? "Email" : "Webhook"} · ${deliveryLabel(state.status)}`).join(" / ")}</p></article>)
+-    : <section className="h7-card"><p>No monthly briefs yet.</p></section>}</H7Shell>;
++    : <section className="h7-card"><p>No monthly briefs yet.</p><p>Refresh feeds to collect observations for the next monthly brief.</p></section>}</H7Shell>;
+ }
+diff --git a/workspace/app/market-lab/h7-chart.tsx b/workspace/app/market-lab/h7-chart.tsx
+index 170d7c0..a8e3a10 100644
+--- a/workspace/app/market-lab/h7-chart.tsx
++++ b/workspace/app/market-lab/h7-chart.tsx
+@@ -3,13 +3,13 @@ import { percent, plotBins } from "./h7-model";
+ 
+ const root = "/market-lab/h7/";
+ /** Figma's exact chart assets; only the empirical dot positions come from data. */
+-export function CalibrationChart({ row }: { row: Curve }) {
+-  const points = plotBins(row);
++export function CalibrationChart({ row }: { row: Curve | null }) {
++  const points = row ? plotBins(row) : [];
+   return <figure className="h7-chart"><figcaption>Prediction confidence vs actual hit rate</figcaption>
+     {([false, true] as const).map(mobile => {
+       const mode = mobile ? "mobile" : "desktop", left = mobile ? 64 : 72, width = mobile ? 207 : 400;
+       const step = width / 6;
+-      return <div className={`h7-plot ${mode}`} key={mode} aria-label={`${row.kind} / ${row.feed}`}>
++      return <div className={`h7-plot ${mode}`} key={mode} aria-label={row ? `${row.kind} / ${row.feed}` : "Prediction confidence vs actual hit rate"}>
+         {[100,75,50,25,0].map((label,index) => <span key={label}>
+           <img src={`${root}${mode}-imgGrid.svg`} alt="" style={{position:"absolute",left,top:7.5+index*36}}/>
+           <span className="h7-y-label" style={{left:mobile?0:0,top:index*36,width:mobile?56:64}}>{label}%</span>
+@@ -26,7 +26,7 @@ export function CalibrationChart({ row }: { row: Curve }) {
+           style={{position:"absolute",left:left+point.confidence*width-4,top:152-point.actual*144-4}}/>)}
+       </div>;
+     })}
+-    <p>Confidence {percent(row.mean_confidence)} / Actual hit rate {percent(row.realised_rate)}</p>
++    <p>Confidence {percent(row?.mean_confidence)} / Actual hit rate {percent(row?.realised_rate)}</p>
+     <ul className="h7-sr">{points.map((point,index) => <li key={index}>Confidence: {percent(point.confidence)} · Actual hit rate: {percent(point.actual)} · Samples: {point.count}</li>)}</ul>
+   </figure>;
+ }
+diff --git a/workspace/app/market-lab/h7-view.tsx b/workspace/app/market-lab/h7-view.tsx
+index a8c7239..9666d67 100644
+--- a/workspace/app/market-lab/h7-view.tsx
++++ b/workspace/app/market-lab/h7-view.tsx
+@@ -10,13 +10,17 @@ export function H7State({ state, page }: { state: "empty" | "error" | "loading";
+     : page === "brief" ? "No brief selected." : "No resolved predictions yet.";
+   return <section className="h7-card" role={state === "error" ? "alert" : "status"}><h3>{text}</h3>
+     {page === "calibration" ? <p>Confidence: — · Actual hit rate: — · Samples: —</p> : null}
++    {state === "empty" && page === "calibration" ? <><CalibrationChart row={null}/><p>Refresh feeds to collect observations; calibration fills after predictions resolve.</p></> : null}
++    {state === "empty" && page === "brief" ? <p>Open Monthly briefs to select a saved brief.</p> : null}
+     {state === "error" ? <a className="h7-button h7-retry" href={page === "brief" ? "" : "/market-lab/calibration"}>Try again</a> : null}</section>;
+ }
+ export function BriefView({ value }: { value: Load<Brief> }) {
+   return <><h2>Brief detail</h2>{value.state !== "ready" ? <H7State state={value.state} page="brief" /> : <>
+     <article className="h7-card"><h3>{value.data.name}</h3><p>{formatDay(value.data.made_at)}</p><p className="h7-saved-text">{value.data.summary}</p>
+-      <p className="h7-delivery">{value.data.deliveries.map(row => `${row.channel === "email" ? "Email" : "Webhook"} · ${deliveryLabel(row.status)}`).join("    ")}</p></article>
++      <p className="h7-delivery">{value.data.deliveries.length ? value.data.deliveries.map(row => `${row.channel === "email" ? "Email" : "Webhook"} · ${deliveryLabel(row.status)}`).join("    ") : "Delivery: —"}</p></article>
++    {!value.data.deliveries.length ? <p>Enable alerts to receive delivery receipts.</p> : null}
+     <h3>{value.data.sources.length} · Sources cited</h3>
++    {!value.data.sources.length ? <p>Refresh feeds to collect observations for cited briefs.</p> : null}
+     {value.data.sources.map((source, index) => <article className="h7-card" key={index}><h3>Citation {index + 1}</h3>
+       <p>{source.claim ?? source.text}</p><p>Date: {source.date ? formatDay(source.date) : "—"}</p><p>{source.url ?? "—"}</p>
+       {source.prediction_id ? <p>{source.prediction_id}</p> : null}
+@@ -30,7 +34,7 @@ export function CalibrationView({ value }: { value: Load<Curve[]> }) {
+   const rows = value.state === "ready" ? value.data : [];
+   const selectedKey = rows.some(row => cohortKey(row) === selected) ? selected : rows[0] ? cohortKey(rows[0]) : null;
+   return <><h2>Calibration</h2>{value.state === "ready" ? <p>Resolved originals only · Unknown and unmeasurable excluded</p> : null}
+-    {value.state !== "ready" ? <H7State state={value.state} page="calibration" /> : <>
++    {value.state !== "ready" || !rows.length ? <H7State state={value.state === "ready" ? "empty" : value.state} page="calibration" /> : <>
+       <section className="h7-card h7-table"><h3>Resolved predictions</h3><table><thead><tr>{["Warning pair / feed", "Frozen horizon", "Confidence", "Actual hit rate", "Samples"].map(label => <th key={label}>{label}</th>)}</tr></thead>
+         <tbody>{value.data.map(row => <tr key={cohortKey(row)}><td><button className="h7-select-cohort" aria-pressed={cohortKey(row) === selectedKey} onClick={() => setSelected(cohortKey(row))}>{row.kind} / {row.feed}</button></td><td>{period(row.horizon_seconds)}</td><td>{percent(row.mean_confidence)}</td><td>{percent(row.realised_rate)}</td><td>{row.count}</td></tr>)}</tbody></table></section>
+       {value.data.map(row => <section className="h7-cohort" key={cohortKey(row)}><div className="h7-cohort-summary"><h3><button className="h7-select-cohort" aria-pressed={cohortKey(row) === selectedKey} onClick={() => setSelected(cohortKey(row))}>{row.kind} · Horizon: {period(row.horizon_seconds)}</button></h3><p>{row.kind} / {row.feed}</p>
+diff --git a/workspace/app/market-lab/quarantine-view.tsx b/workspace/app/market-lab/quarantine-view.tsx
+index acbb0c3..ef165e2 100644
+--- a/workspace/app/market-lab/quarantine-view.tsx
++++ b/workspace/app/market-lab/quarantine-view.tsx
+@@ -10,7 +10,7 @@ const ACTIONS = {
+ } as const;
+ 
+ function BatchTable({ rows }: { rows: QuarantineBatch[] }) {
+-  if (!rows.length) return <p>None.</p>;
++  if (!rows.length) return <><p>0</p><p>Refresh feeds to collect records for review.</p></>;
+   return (
+     <div className="ml-quarantine-scroll">
+       <table>
+diff --git a/workspace/app/market-lab/source-view.tsx b/workspace/app/market-lab/source-view.tsx
+index 884e9a8..629543b 100644
+--- a/workspace/app/market-lab/source-view.tsx
++++ b/workspace/app/market-lab/source-view.tsx
+@@ -13,6 +13,7 @@ export function SourceDocumentView({ source }: { source: MarketDocument }) {
+       <span>Page {source.offset / source.page_size + 1} of {Math.ceil((source.passage_count ?? 0) / source.page_size)}</span>
+       {source.offset + source.page_size < (source.passage_count ?? 0) ? <a href={`?page=${source.offset / source.page_size + 2}`}>Next</a> : <span>Next</span>}
+     </nav> : null}
++    {!source.passages?.length ? <p>0 passages. Choose files in Plugins to upload a readable source.</p> : null}
+     {source.passages?.map(passage => <article id={`passage-${passage.index}`} key={passage.index}>
+       <h2>{passage.label}</h2><p style={{ whiteSpace: "pre-wrap" }}>{passage.text}</p>
+       {!passage.usable ? <p>These figures did not pass the data checks and are not used in answers.</p> : null}
+@@ -36,6 +37,7 @@ export function SourceDocumentView({ source }: { source: MarketDocument }) {
+       <span>Page {page} of {pageCount}</span>
+       {page < pageCount ? <a href={`?page=${page + 1}`}>Next</a> : <span aria-disabled="true">Next</span>}
+     </nav> : null}
++    {!source.points.length && !source.events.length ? <p>0 stored observations. Refresh feeds to collect data.</p> : null}
+     {source.points.length ? <><h2>Stored observations</h2>
+     <p>{source.point_count === 1 ? "1 stored observation." : `Showing ${(offset + 1).toLocaleString("en-US")}–${(offset + source.points.length).toLocaleString("en-US")} of ${source.point_count.toLocaleString("en-US")} observations. Newest first.`}</p>
+     {source.points.some((point) => point.revision_label) ? <p>For each date, Current figure is the latest version in this saved document. Earlier figures are labelled with the source’s version.</p> : null}
+diff --git a/workspace/app/market-lab/view.tsx b/workspace/app/market-lab/view.tsx
+index c384290..c5beb54 100644
+--- a/workspace/app/market-lab/view.tsx
++++ b/workspace/app/market-lab/view.tsx
+@@ -210,7 +210,7 @@ function ChatBox() {
+   );
+ }
+ 
+-function PluginsDialog({
++export function PluginsDialog({
+   open,
+   tab,
+   plugins,
+@@ -496,7 +496,7 @@ function PluginsDialog({
+                 ))}
+               </div>
+             ) : (
+-              <p className="ml-fine">No files stored.</p>
++              <p className="ml-fine">No files stored. Choose files to upload your first source.</p>
+             )}
+           </div>
+         ) : tab === "Source links" ? (
+@@ -544,7 +544,7 @@ function PluginsDialog({
+                 ))}
+               </div>
+             ) : (
+-              <p className="ml-fine">No links stored.</p>
++              <p className="ml-fine">No links stored. Use Add link to connect a public source.</p>
+             )}
+           </div>
+         ) : (
+@@ -558,7 +558,7 @@ function PluginsDialog({
+                 ))}
+               </div>
+             ) : (
+-              <p className="ml-fine">No connections stored.</p>
++              <p className="ml-fine">No connections stored. Add a connection to read your source.</p>
+             )}
+             <form className="ml-mcp" onSubmit={onAddConnection}>
+               <h3>Add connection</h3>
+@@ -773,12 +773,14 @@ export function MarketLabView({
+           <RefreshStatus status={model.refreshStatus} />
+           <div className="ml-counts">
+             <article>
+-              <p className="ml-count">{model.onCount}</p>
++              <p className="ml-count">{model.loadError ? "—" : model.onCount}</p>
+               <p>On</p>
++              {model.onCount === 0 && !model.loadError ? <p>Choose Refresh feeds to collect data.</p> : null}
+             </article>
+             <article>
+-              <p className="ml-count">{model.linkedCount}</p>
++              <p className="ml-count">{model.loadError ? "—" : model.linkedCount}</p>
+               <p>Linked pages</p>
++              {model.linkedCount === 0 && !model.loadError ? <p>Use Add link in Plugins to connect a public source.</p> : null}
+             </article>
+           </div>
+           {model.loadError ? (
+diff --git a/workspace/app/market-lab/warnings.tsx b/workspace/app/market-lab/warnings.tsx
+index d98c6c7..b1a9606 100644
+--- a/workspace/app/market-lab/warnings.tsx
++++ b/workspace/app/market-lab/warnings.tsx
+@@ -36,7 +36,7 @@ export function Warnings({ data, failed = false }: { data: MarketWarnings | null
+           </div>
+           <p role="status">{message[warning.id] ?? (choice === null ? "" : "Your choice is saved.")}</p>
+         </article>;
+-      }) : <p>No warnings yet.</p>}
++      }) : <><p>No warnings yet.</p><p>Refresh feeds to collect observations; warnings appear after enough history is saved.</p></>}
+       {data.history.length ? <details className="ml-warning-history" open={!data.warnings.length}><summary>History behind the warnings</summary>
+         {data.history.map(pair => <div key={pair.href}><h3>{pair.name}</h3><p><a href={pair.href}>{pair.text}</a></p></div>)}
+       </details> : null}

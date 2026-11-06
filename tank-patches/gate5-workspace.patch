@@ -1,0 +1,417 @@
+# Tank base commit: 7174469d3454c1493f3c852109b930e1d02f0b7a
+# Apply after finish.patch and gate4-*.patch
+--- a/workspace/app/tiger/parts.tsx
++++ b/workspace/app/tiger/parts.tsx
+@@ -1,4 +1,41 @@
+-import type { ReactNode } from "react";
++"use client";
++import { useEffect, useRef, type ReactNode } from "react";
++
++export function useDialogFocus(onClose: () => void) {
++  const ref = useRef<HTMLDivElement>(null);
++  const close = useRef(onClose);
++  close.current = onClose;
++  useEffect(() => {
++    const previous = document.activeElement as HTMLElement | null;
++    const node = ref.current;
++    if (!node) return;
++    const controls = () => Array.from(node.querySelectorAll<HTMLElement>(
++      'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'
++    )).filter(item => item.getClientRects().length > 0);
++    (controls()[0] ?? node).focus();
++    function key(event: KeyboardEvent) {
++      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close.current(); }
++      if (event.key !== "Tab") return;
++      const items = controls();
++      if (!items.length) { event.preventDefault(); node?.focus(); return; }
++      const first = items[0], last = items[items.length - 1];
++      if (!node?.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
++      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
++      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
++    }
++    function focus(event: FocusEvent) {
++      if (!node?.contains(event.target as Node)) (controls()[0] ?? node)?.focus();
++    }
++    document.addEventListener("keydown", key, true);
++    document.addEventListener("focusin", focus);
++    return () => {
++      document.removeEventListener("keydown", key, true);
++      document.removeEventListener("focusin", focus);
++      if (previous?.isConnected) previous.focus();
++    };
++  }, []);
++  return ref;
++}
+ 
+ export function Pill({ status, warning = false, image = false }: { status: string; warning?: boolean; image?: boolean }) {
+   const solid = status === "Price changed" || status === "Stock changed";
+--- a/workspace/app/tiger/view.tsx
++++ b/workspace/app/tiger/view.tsx
+@@ -5,7 +5,7 @@
+ import { EVERY_OPTIONS, FOOT, LEDE } from "./copy";
+ import { SECTIONS, searchTiger, type AlertRow, type ProductRow, type ReadRow, type Section, type TigerData } from "./model";
+ import { SquadLinks } from "../squad-links";
+-import { AttemptTime, PageLink, Pill, SimpleTable } from "./parts";
++import { AttemptTime, PageLink, Pill, SimpleTable, useDialogFocus } from "./parts";
+ import { PositionViews } from "./position-views";
+ import type { ComparisonData, WatchView } from "./position-model";
+ 
+@@ -79,7 +79,7 @@
+   return (
+     <div className={rootClass}>
+       <header className="topbar">
+-        <img src={comparing ? "/brand/tervory-logo.png" : "/brand/tervory-logo-reversed.png"} alt="Tervory" />
++        <img src={comparing ? "/brand/tervory-logo.png" : "/brand/tervory-logo-reversed.png"} alt="Tervory" width={186} height={34} decoding="async" />
+         <button type="button" className="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Menu</button>
+       </header>
+ 
+@@ -133,7 +133,7 @@
+           {!comparing ? <button type="button" className={headerRed ? "primary" : "line"} onClick={() => setAddOpen(true)}>Add a product</button> : null}
+         </header>
+ 
+-        {notice && !comparing ? <p className="notice">{notice}</p> : null}
++        {notice ? <p className="notice" role="alert">{notice}</p> : null}
+         {help && !comparing ? <p className="notice">Manage check intervals and alert preferences when adding a product. Each watch shows its latest check status; completed readings are available in History.</p> : null}
+ 
+         {hit && !comparing ? <Results hit={hit} /> : null}
+@@ -372,11 +372,12 @@
+ }
+ 
+ function AddProduct({ onClose }: { onClose: () => void }) {
++  const dialog = useDialogFocus(onClose);
+   const [priceOn, setPriceOn] = useState(true);
+   const [stockOn, setStockOn] = useState(true);
+   return (
+     <div className="scrim" role="presentation" onClick={onClose}>
+-      <div className="popup narrow" role="dialog" aria-modal="true" aria-labelledby="add-title" onClick={(event) => event.stopPropagation()}>
++      <div ref={dialog} tabIndex={-1} className="popup narrow" role="dialog" aria-modal="true" aria-labelledby="add-title" onClick={(event) => event.stopPropagation()}>
+         <form action={addProduct} className="add-form">
+           <div className="popup-head">
+             <div>
+--- a/workspace/app/tiger/plugins.tsx
++++ b/workspace/app/tiger/plugins.tsx
+@@ -1,6 +1,7 @@
+ "use client";
+ 
+ import { useRef, useState, type DragEvent, type FormEvent } from "react";
++import { useDialogFocus } from "./parts";
+ import {
+   addTigerConnection,
+   addTigerLink,
+@@ -23,12 +24,23 @@
+ } from "./plugins-data";
+ 
+ export function Plugins({ plugins, onClose, initialTab = "API keys" }: { plugins: PluginPanel; onClose: () => void; initialTab?: PluginTab }) {
++  const dialog = useDialogFocus(onClose);
+   const [tab, setTab] = useState<PluginTab>(initialTab);
+   const [note, setNote] = useState("");
+   const [busy, setBusy] = useState(false);
+   const [often, setOften] = useState<"Daily" | "Weekly">("Daily");
+   const [signIn, setSignIn] = useState<"provider" | "token">("token");
+   const fileRef = useRef<HTMLInputElement>(null);
++
++  const running = useRef(false);
++  async function perform(operation: () => Promise<{ok: boolean; message: string}>) {
++    if (running.current) return;
++    running.current = true;
++    setBusy(true);
++    try { await finish(await operation()); }
++    catch { setNote("That could not be saved. Try again."); }
++    finally { running.current = false; setBusy(false); }
++  }
+ 
+   async function finish(result: { ok: boolean; message: string }) {
+     setNote(result.message);
+@@ -46,12 +58,7 @@
+       setNote(NEED_KEY);
+       return;
+     }
+-    setBusy(true);
+-    try {
+-      await finish(await saveTigerKey(name, value, purpose || "Key"));
+-    } finally {
+-      setBusy(false);
+-    }
++    await perform(() => saveTigerKey(name, value, purpose || "Key"));
+   }
+ 
+   async function onFiles(list: FileList | File[] | null) {
+@@ -64,12 +71,7 @@
+     }
+     const body = new FormData();
+     for (const file of files) body.append("file", file);
+-    setBusy(true);
+-    try {
+-      await finish(await uploadTigerFiles(body));
+-    } finally {
+-      setBusy(false);
+-    }
++    await perform(() => uploadTigerFiles(body));
+   }
+ 
+   async function onAddLink(event: FormEvent<HTMLFormElement>) {
+@@ -83,12 +85,7 @@
+       setNote(NEED_LINK);
+       return;
+     }
+-    setBusy(true);
+-    try {
+-      await finish(await addTigerLink(url, label, often === "Daily" ? "daily" : "weekly"));
+-    } finally {
+-      setBusy(false);
+-    }
++    await perform(() => addTigerLink(url, label, often === "Daily" ? "daily" : "weekly"));
+   }
+ 
+   async function onAddConnection(event: FormEvent<HTMLFormElement>) {
+@@ -103,19 +100,14 @@
+       setNote(NEED_MCP);
+       return;
+     }
+-    setBusy(true);
+-    try {
+-      await finish(await addTigerConnection(name, server, signIn, token));
+-    } finally {
+-      setBusy(false);
+-    }
++    await perform(() => addTigerConnection(name, server, signIn, token));
+   }
+ 
+   const primary = plugins.enabled ? "primary" : "line";
+ 
+   return (
+     <div className="scrim" role="presentation" onClick={onClose}>
+-      <div className="popup" role="dialog" aria-modal="true" aria-labelledby="plugins-title" onClick={(event) => event.stopPropagation()}>
++      <div ref={dialog} tabIndex={-1} className="popup" role="dialog" aria-modal="true" aria-labelledby="plugins-title" onClick={(event) => event.stopPropagation()}>
+         <div className="popup-head">
+           <div>
+             <h2 id="plugins-title">Plugins</h2>
+@@ -130,7 +122,7 @@
+             </button>
+           ))}
+         </div>
+-        {note ? <p className="notice">{note}</p> : null}
++        {note ? <p className="notice" role="status" aria-live="polite">{note}</p> : null}
+         {!plugins.enabled ? (
+           <p className="vault-off">{plugins.message || VAULT_OFF_MESSAGE}</p>
+         ) : tab === "API keys" ? (
+@@ -146,7 +138,7 @@
+                   </div>
+                   <span className="pill"><i />Connected</span>
+                   <div className="mask">{row.mask}</div>
+-                  <button type="button" className="text" disabled={busy} onClick={() => { setBusy(true); void removeTigerSecret(row.name).then((result) => finish(result)).finally(() => setBusy(false)); }}>Remove</button>
++                  <button type="button" className="text" disabled={busy} onClick={() => { void perform(() => removeTigerSecret(row.name)); }}>Remove</button>
+                 </div>
+               ))}
+               <form className="add" onSubmit={onSaveKey}>
+@@ -189,7 +181,7 @@
+                       <td className="name">{file.name}</td>
+                       <td>{file.type}</td>
+                       <td>{file.status}</td>
+-                      <td><button type="button" className="text" disabled={busy} onClick={() => { setBusy(true); void removeTigerFile(file.id).then((result) => finish(result)).finally(() => setBusy(false)); }}>Remove</button></td>
++                      <td><button type="button" className="text" disabled={busy} onClick={() => { void perform(() => removeTigerFile(file.id)); }}>Remove</button></td>
+                     </tr>
+                   ))}
+                 </tbody>
+@@ -226,7 +218,7 @@
+                     <span className="host">{link.url}</span>
+                   </div>
+                   <span className="pill"><i />{link.status}</span>
+-                  <button type="button" className="text" disabled={busy} onClick={() => { setBusy(true); void removeTigerLink(link.id).then((result) => finish(result)).finally(() => setBusy(false)); }}>Remove</button>
++                  <button type="button" className="text" disabled={busy} onClick={() => { void perform(() => removeTigerLink(link.id)); }}>Remove</button>
+                 </div>
+               ))}
+             </div>
+@@ -245,7 +237,7 @@
+                   </div>
+                   <p>{row.hasToken ? "••••••••" : "Signed in with the provider"}</p>
+                   <span className="pill"><i />{row.status}</span>
+-                  <button type="button" className="text" disabled={busy} onClick={() => { setBusy(true); void removeTigerConnection(row.id).then((result) => finish(result)).finally(() => setBusy(false)); }}>Disconnect</button>
++                  <button type="button" className="text" disabled={busy} onClick={() => { void perform(() => removeTigerConnection(row.id)); }}>Disconnect</button>
+                 </div>
+               ))}
+             </div>
+--- a/workspace/app/tiger/plugin-actions.ts
++++ b/workspace/app/tiger/plugin-actions.ts
+@@ -20,9 +20,7 @@
+ export type PluginResult = { ok: boolean; message: string };
+ 
+ async function actor() {
+-  const tenant = await activeTenant();
+-  if (!tenant) return null;
+-  return tenant;
++  try { return await activeTenant(); } catch { return null; }
+ }
+ 
+ function safe(error: unknown, fallback: string): string {
+--- a/workspace/app/tiger/vault-server.ts
++++ b/workspace/app/tiger/vault-server.ts
+@@ -8,9 +8,9 @@
+ const SQUAD = "tiger";
+ 
+ export async function loadTigerPlugins(): Promise<PluginPanel> {
+-  const tenant = await activeTenant();
+-  if (!tenant) return offPanel("Sign in to use Plugins.");
+   try {
++    const tenant = await activeTenant();
++    if (!tenant) return offPanel("Sign in to use Plugins.");
+     const raw = await vaultPlugins(VAULT, SQUAD, tenant.tenantId, tenant.userId);
+     return mapVaultPayload(raw);
+   } catch (error) {
+--- a/workspace/app/tiger/actions.ts
++++ b/workspace/app/tiger/actions.ts
+@@ -14,7 +14,7 @@
+ function plainError(err: unknown): string {
+   const text = err instanceof Error ? err.message : "";
+   const detail = /"detail"\s*:\s*"([^"]+)"/.exec(text)?.[1] ?? text;
+-  if (detail.includes("not signed in")) return "Sign in to add a product.";
++  if (detail.includes("not signed in") || detail.includes("Trigger sign-in required")) return "Sign in to add a product.";
+   if (detail.includes("already watched") || text.includes(" 409")) return "That page is already on the watch list.";
+   if (detail.includes("url not allowed") || detail.includes("url is too long")) return "That address cannot be checked. Use a public page.";
+   if (detail.includes("every must")) return "Choose how often to check.";
+--- a/workspace/app/tiger/position-views.tsx
++++ b/workspace/app/tiger/position-views.tsx
+@@ -34,6 +34,9 @@
+       {WATCH_VIEWS.map(item => <button key={item.id} type="button" role="tab" aria-selected={view === item.id} className={view === item.id ? "on" : ""} onClick={() => setView(item.id)}>{item.label}</button>)}
+     </div>
+     <div role="tabpanel" className="watch-content">
++      {(view === "position" ? positions : view === "matches" ? reviews : sites) === null ? <div role="alert">
++        <p>Tiger is not reachable right now.</p><button type="button" className="line small" onClick={() => router.refresh()}>Try again</button>
++      </div> : null}
+       {view === "position" ? <PricePosition rows={positions} /> : view === "matches" ? <Matches rows={reviews} onChange={match => {
+         setMatches(current => current?.flatMap(row => row.id === match.id ? match.state === "confirmed" ? [] : [match] : [row]) ?? null);
+         router.refresh();
+@@ -108,6 +111,8 @@
+     finally { running.current = false; }
+   }
+   return <div className="row-actions match-actions" aria-busy={state === "busy"} data-action-state={state}>
++    {state === "failed" ? <div role="alert"><p>That could not be saved. Try again.</p>
++      <button type="button" className="line small" onClick={() => setState("ready")}>Try again</button></div> : null}
+     {row.state === "rejected" ? <><span>Rejected</span><button type="button" className="text" disabled={state !== "ready"} onClick={() => void run("undo")}>Undo</button></> : <>
+       <button type="button" className="line small" disabled={state !== "ready"} onClick={() => void run("confirm")}>Confirm</button>
+       <button type="button" className="text" disabled={state !== "ready"} onClick={() => void run("reject")}>Reject</button>
+--- a/workspace/app/tiger/tiger.css
++++ b/workspace/app/tiger/tiger.css
+@@ -820,3 +820,11 @@
+   .tiger.position-view .site-status .pill { width: 100%; }
+ }
+ .tiger.position-view .panel-top { width: 208px; }
++
++/* Reuse the existing ink/body colours and visible keyboard focus. */
++.tiger { --muted: #3d4a66; }
++.tiger :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
++.tiger .panel :focus-visible { outline-color: var(--paper); }
++.tiger.position-view .panel :focus-visible { outline-color: var(--ink); }
++.tiger .watch-content { min-height: 168px; }
++.tiger .popup { overscroll-behavior: contain; }
+--- a/workspace/lib/tank.ts
++++ b/workspace/lib/tank.ts
+@@ -805,17 +805,21 @@
+ };
+ 
+ async function tigerCall<T>(path: string, init: RequestInit): Promise<T> {
+-  const res = await tenantFetch(requestTenant(path, init), `${TANK_URL}${path}`, {
+-    ...init,
+-    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY, ...(init.headers ?? {}) },
++  const tenant = requestTenant(path, init);
++  if (!tenant || !TANK_API_KEY) throw new Error("Tiger is unreachable");
++  return tenantBoundedFetch(tenant, `${TANK_URL}${path}`, {
++    ...init, headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY, ...(init.headers ?? {}) },
+     cache: "no-store",
+-  });
+-  const text = await res.text();
+-  if (!res.ok) {
+-    throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 300)}`);
+-  }
+-  if (!text) return null as T;
+-  return JSON.parse(text) as T;
++  }, 10_000, async res => {
++    const text = await res.text();
++    if (!res.ok) {
++      let detail = "";
++      try { detail = JSON.parse(text).detail; } catch { /* No raw response in errors. */ }
++      const safe = ["url not allowed", "url is too long", "that url is already watched"].includes(detail) ? detail : "";
++      throw new Error(`Tiger ${res.status}: ${safe}`);
++    }
++    return (text ? JSON.parse(text) : null) as T;
++  });
+ }
+ 
+ export function listTigerWatches(tenantId: string): Promise<{ watches: TigerWatch[] }> {
+@@ -878,13 +882,22 @@
+   headers.set("x-tervory-user", userId);
+   headers.set("x-tervory-squad", squad);
+   if (typeof init.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
+-  return tenantFetch(requestTenant(path, init), `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
++  const tenant = requestTenant(path, init);
++  if (squad === "tiger") {
++    if (!tenant || !TANK_API_KEY) throw new Error("Tiger is unreachable");
++    return tenantBoundedFetch(tenant, `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" }, 10_000,
++      async response => new Response([204, 205, 304].includes(response.status) ? null : await response.arrayBuffer(), {status: response.status, headers: response.headers}));
++  }
++  return tenantFetch(tenant, `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
+ }
+ 
+ async function vaultJson<T>(path: string, userId: string, squad: string, init: RequestInit): Promise<T> {
+   const res = await vaultFetch(path, userId, squad, init);
+   const text = await res.text();
+-  if (!res.ok) throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 180)}`);
++  if (!res.ok) {
++    if (squad === "tiger") throw new Error(text.includes(VAULT_OFF_MESSAGE) ? VAULT_OFF_MESSAGE : `Tiger ${res.status}`);
++    throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 180)}`);
++  }
+   return (text ? JSON.parse(text) : {}) as T;
+ }
+ 
+@@ -943,7 +956,7 @@
+     body: files,
+   });
+   const text = await res.text();
+-  if (!res.ok) throw new Error(`Tank /files ${res.status}: ${text.slice(0, 180)}`);
++  if (!res.ok) throw new Error(squad === "tiger" ? `Tiger ${res.status}` : `Tank /files ${res.status}: ${text.slice(0, 180)}`);
+   return { ok: true };
+ }
+ 
+@@ -1402,7 +1415,11 @@
+ export type AccessQueueItem = { id: string; tenant_id: string; room: string; site: string; reason: string; status: string; created_at: string; live_available: boolean };
+ export type AccessPanel = { connections: AccessConnection[]; policies: { site: string; terms: string; rotation_days: number }[]; feeds: { distributor: string; site: string; source: string; fetched_at: string; row_count: number }[]; meta_enabled: boolean };
+ export async function accessRequest<T>(actor: AccessIdentity, path: string, body?: unknown): Promise<T> {
+-  const response = await tenantFetch(actor.tenantId, `${TANK_URL}/v1/access/${path}`, {
++  const send = path.startsWith("tiger/")
++    ? (tenant: string, url: string, init: RequestInit) => tenantBoundedFetch(tenant, url, init, 10_000,
++        async response => new Response([204, 205, 304].includes(response.status) ? null : await response.arrayBuffer(), {status: response.status, headers: response.headers}))
++    : tenantFetch;
++  const response = await send(actor.tenantId, `${TANK_URL}/v1/access/${path}`, {
+     method: body === undefined ? "GET" : "POST", cache: "no-store",
+     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY,
+       "x-tervory-user": actor.userId, "x-tervory-tenant": actor.tenantId },
+--- a/workspace/app/tiger/load.ts
++++ b/workspace/app/tiger/load.ts
+@@ -29,7 +29,7 @@
+     return { data: fromTiger(watches, batches.flat(), alerts, new Date(), unavailableUrls), notice: null };
+   } catch (err) {
+     const text = err instanceof Error ? err.message : "";
+-    if (text.includes("not signed in")) return { data: emptyData(), notice: null };
++    if (text.includes("not signed in") || text.includes("Trigger sign-in required")) return { data: emptyData(), notice: null };
+     return { data: emptyData(), notice: "Tiger is not reachable right now. No products are shown." };
+   }
+ }
+--- a/workspace/app/prices/page.tsx
++++ b/workspace/app/prices/page.tsx
+@@ -50,7 +50,7 @@
+       <div className="head">
+         <picture>
+           <source srcSet="/brand/tervory-logo-reversed.png" media="(prefers-color-scheme: dark)" />
+-          <img src="/brand/tervory-logo.png" alt="Tervory" />
++          <img src="/brand/tervory-logo.png" alt="Tervory" width={153} height={28} decoding="async" />
+         </picture>
+         <h1>Prices{orgName ? ` · ${orgName}` : ""}</h1>
+       </div>
+--- a/workspace/app/prices/prices.css
++++ b/workspace/app/prices/prices.css
+@@ -101,3 +101,5 @@
+   .prices h1 { font-size: 32px; }
+   .prices form.watch-form { grid-template-columns: 1fr; }
+ }
++
++.prices :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }

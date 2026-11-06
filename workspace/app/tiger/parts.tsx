@@ -1,4 +1,41 @@
-import type { ReactNode } from "react";
+"use client";
+import { useEffect, useRef, type ReactNode } from "react";
+
+export function useDialogFocus(onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const node = ref.current;
+    if (!node) return;
+    const controls = () => Array.from(node.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'
+    )).filter(item => item.getClientRects().length > 0);
+    (controls()[0] ?? node).focus();
+    function key(event: KeyboardEvent) {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close.current(); }
+      if (event.key !== "Tab") return;
+      const items = controls();
+      if (!items.length) { event.preventDefault(); node?.focus(); return; }
+      const first = items[0], last = items[items.length - 1];
+      if (!node?.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    function focus(event: FocusEvent) {
+      if (!node?.contains(event.target as Node)) (controls()[0] ?? node)?.focus();
+    }
+    document.addEventListener("keydown", key, true);
+    document.addEventListener("focusin", focus);
+    return () => {
+      document.removeEventListener("keydown", key, true);
+      document.removeEventListener("focusin", focus);
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+  return ref;
+}
 
 export function Pill({ status, warning = false, image = false }: { status: string; warning?: boolean; image?: boolean }) {
   const solid = status === "Price changed" || status === "Stock changed";

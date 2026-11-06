@@ -2326,6 +2326,7 @@ class CodeTurn(Body):
     model: str = Field(default='auto', max_length=200)
     tool_results: list[CodeResult] = Field(default_factory=list, max_length=6)
     prompt_id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    request_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     continuation: bool = False
     history: list[CodeHistory] = Field(default_factory=list, max_length=40)
 
@@ -2417,7 +2418,7 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
     permitted = {row['name'] for row in roster}
     if body.model != 'auto' and body.model not in permitted:
         raise HTTPException(403, 'Model not available on this account')
-    turn_id = str(uuid.uuid4())
+    turn_id = str(body.request_id)
     metadata = [{'name': result.name, 'size': len(result.output.encode())} for result in body.tool_results]
     async with editing(thread_id, actor) as (conn, row, state):
         from plugins import code_actor
@@ -2436,6 +2437,8 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
             if not prior or prior['content'] != body.text or prior.get('model') != body.model:
                 raise HTTPException(409, 'The answer could not be completed. Check routing policy and service availability.')
         else:
+            if state.get('code_prompt_id') == str(body.prompt_id):
+                raise HTTPException(409, 'This prompt was already submitted. Reopen the session to inspect its state.')
             state['code_prompt_id'] = str(body.prompt_id)
             state['code_mode'] = body.mode
             code_sessions.remember(state, 'user', body.text)
@@ -2452,11 +2455,16 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
         # Tool outputs, request arguments and patches stay transient. Redacted
         # user requests and final answers form the resumable code history;
         # /chats keeps the existing step labels and actual ledger receipts.
-        await conn.execute(
+        reserved = await conn.fetchval(
             "INSERT INTO tank.tasks(id,tenant_id,created_by,agent,task_type,title,input,status,started_at) "
-            "VALUES($1,$2,$3,'orchestrator','command.code',$4,$5::jsonb,'running',now())",
+            "VALUES($1,$2,$3,'orchestrator','command.code',$4,$5::jsonb,'running',now()) "
+            "ON CONFLICT(id) DO NOTHING RETURNING id",
             uuid.UUID(turn_id), actor.tenant_id, actor.user_id, body.text[:200],
             dump({'text': body.text, 'tool_results': metadata}))
+        if reserved is None:
+            # The task primary key reserves a request durably, including failed
+            # and unknown outcomes. Raising rolls back all thread/event changes.
+            raise HTTPException(409, 'This request was already submitted. Reopen the session to inspect its state.')
     read_tools = {'list_files', 'read_file', 'search', 'git'}
     schema = {name: model.model_json_schema() for name, model in CODE_TOOLS.items()
               if body.mode != 'plan' or name in read_tools}
@@ -2508,11 +2516,10 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
             cards = []
             for request in plan.requests:
                 if request.name == 'local_mcp':
-                    import jsonschema
                     tool = next((tool for tool in body.local_mcp if tool.server == request.arguments['server'] and tool.name == request.arguments['tool']), None)
                     if tool is None:
                         raise HTTPException(422, 'Local MCP tool not available')
-                    jsonschema.Draft202012Validator(tool.inputSchema).validate(request.arguments['arguments'])
+                    await code_sessions.validate_mcp(tool.inputSchema, request.arguments['arguments'])
                 if request.name == 'tervory':
                     cards.append(public_card(await propose_action(conn, row, state, PlannedAction(**request.arguments), planner_actor, origin="code")))
             await record_receipts(conn, row, state, turn_id, [answer.ledger_id])
@@ -2554,6 +2561,8 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
 
 @router.post('/threads/{thread_id}/code-stream')
 async def code_stream(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends(identity)):
+    async with db().acquire() as conn:
+        await owned(conn, thread_id, actor)
     return await code_sessions.streaming(__import__(__name__), thread_id, body, actor)
 
 

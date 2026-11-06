@@ -1,0 +1,493 @@
+diff --git a/workspace/app/rig/admin/commerce-admin.tsx b/workspace/app/rig/admin/commerce-admin.tsx
+index 1844b9e..b361dec 100644
+--- a/workspace/app/rig/admin/commerce-admin.tsx
++++ b/workspace/app/rig/admin/commerce-admin.tsx
+@@ -1,6 +1,7 @@
+ "use client";
++import { request } from "../request";
+
+-import { useEffect, useState, type FormEvent } from "react";
++import { useEffect, useRef, useState, type FormEvent } from "react";
+ import type { AdminOperation, AdminResult, CartOrder, CommerceResult } from "./types";
+
+ const platforms = { shopify: "Shopify", woocommerce: "WooCommerce", bigcommerce: "BigCommerce" } as const;
+@@ -9,9 +10,10 @@ type Act = (operation: AdminOperation, data: Record<string, unknown>) => Promise
+ export type CommerceSection = "connection" | "orders" | "delivery";
+
+ async function send(operation: AdminOperation, data: Record<string, unknown>): Promise<AdminResult> {
+-  const response = await fetch("/rig/admin/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation, data }) });
+-  if (!response.ok) return { ok: false, message: "" };
+-  return response.json();
++  return request("/rig/admin/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation, data }) }, async response => {
++    if (!response.ok) throw new Error("The retailer request was not confirmed.");
++    return response.json() as Promise<AdminResult>;
++  }, 120000);
+ }
+
+ export function orderStatus(order: CartOrder): string {
+@@ -50,6 +52,8 @@ export function OrderRows({ orders, now }: { orders: CartOrder[]; now: number })
+ }
+
+ export function CommerceAdmin({ section, initial = {}, initialOrders = [], act = send, embedded = false }: { section: CommerceSection; initial?: CommerceResult; initialOrders?: CartOrder[]; act?: Act; embedded?: boolean }) {
++  const inFlight = useRef(false);
++  const [readError, setReadError] = useState(false);
+   const [open, setOpen] = useState(false);
+   const [config, setConfig] = useState(initial);
+   const [platform, setPlatform] = useState<Platform | "">(initial.platform && initial.platform in platforms ? initial.platform as Platform : "");
+@@ -62,9 +66,18 @@ export function CommerceAdmin({ section, initial = {}, initialOrders = [], act =
+   const [invalid, setInvalid] = useState(false);
+   useEffect(() => { setNow(Date.now()); const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+   useEffect(() => {
+-    let active = true;
++    let active = true, reading = false, failures = 0;
+     if (section === "orders") {
+-      const read = () => { void act("commerce-orders", {}).then(result => { if (active && result.ok && result.commerce?.orders) setOrders(result.commerce.orders); }).catch(() => {}); };
++      const read = async () => {
++        // Reuse quote delivery's six-attempt ceiling; reload starts a new read.
++        if (!active || reading || failures >= 6) return;
++        reading = true;
++        try { const result = await act("commerce-orders", {});
++          if (!result.ok || !result.commerce?.orders) throw new Error();
++          if (active) { setOrders(result.commerce.orders); setReadError(false); failures = 0; }
++        } catch { failures++; if (active) setReadError(true); }
++        finally { reading = false; }
++      };
+       read(); const timer = setInterval(read, 5000); return () => { active = false; clearInterval(timer); };
+     }
+     void act("commerce-connect", {}).then(result => {
+@@ -78,7 +91,8 @@ export function CommerceAdmin({ section, initial = {}, initialOrders = [], act =
+   }, [act, section]);
+   async function connect(event?: FormEvent<HTMLFormElement>) {
+     event?.preventDefault();
+-    if (!platform) return;
++    if (!platform || inFlight.current) return;
++    inFlight.current = true;
+     const form = event?.currentTarget;
+     const fields = form ? new FormData(form) : null;
+     const data: Record<string, unknown> = { platform, vault_name: `rig-commerce-${platform}` };
+@@ -94,20 +108,23 @@ export function CommerceAdmin({ section, initial = {}, initialOrders = [], act =
+     setStatus("testing");
+     try { const result = await act("commerce-connect", data); if (result.ok) setConfig(old => ({ ...old, platform, site: data.site as string, store_hash: data.store_hash as string })); setStatus(result.ok ? "connected" : "failed"); }
+     catch { setStatus("failed"); }
++    finally { inFlight.current = false; }
+   }
+   async function delivery(event: FormEvent<HTMLFormElement>) {
+     event.preventDefault();
++    if (inFlight.current) return;
+     const good = min !== "" && max !== "" && Number.isInteger(Number(min)) && Number.isInteger(Number(max)) && 0 <= Number(min) && Number(min) <= Number(max) && Number(max) <= 60;
+     setInvalid(!good);
+     if (!good) { event.currentTarget.querySelector<HTMLInputElement>("input")?.focus(); return; }
++    inFlight.current = true;
+     setSaving(true);
+     try { const result = await act("store-delivery", { min_days: Number(min), max_days: Number(max) }); setInvalid(!result.ok); }
+     catch { setInvalid(true); }
+-    finally { setSaving(false); }
++    finally { inFlight.current = false; setSaving(false); }
+   }
+   const name = platform ? platforms[platform] : "";
+   const title = section === "orders" ? "Orders" : "Retailer settings";
+-  const body = section === "orders" ? <OrderRows orders={orders} now={now} /> : section === "delivery" ? <form className="rig-commerce-card" onSubmit={delivery}>
++  const body = section === "orders" ? <>{readError ? <p role="alert">Rig did not answer. Try again.</p> : <OrderRows orders={orders} now={now} />}</> : section === "delivery" ? <form className="rig-commerce-card" onSubmit={delivery}>
+     <h2>Delivery from your own stock</h2>
+     <label className="rig-commerce-field">Minimum business days<input type="number" min="0" max="60" step="1" required value={min} onChange={event => setMin(event.target.value)} aria-invalid={invalid} /></label>
+     <label className="rig-commerce-field">Maximum business days<input type="number" min="0" max="60" step="1" required value={max} onChange={event => setMax(event.target.value)} aria-invalid={invalid} /></label>
+diff --git a/workspace/app/rig/admin/retailer-admin.tsx b/workspace/app/rig/admin/retailer-admin.tsx
+index 7bd174f..430a164 100644
+--- a/workspace/app/rig/admin/retailer-admin.tsx
++++ b/workspace/app/rig/admin/retailer-admin.tsx
+@@ -1,4 +1,5 @@
+ "use client";
++import { request } from "../request";
+
+ import { useState, useRef, type FormEvent } from "react";
+ import type { AdminOperation, AdminResult, FitReview, RetailerPanel, MappingPreview } from "./types";
+@@ -9,9 +10,10 @@ const providerName = (id: string) => id === "delete-products" ? "Products" : PRO
+ const fields = (form: HTMLFormElement) => Object.fromEntries(new FormData(form).entries());
+
+ async function sendRetailer(operation: AdminOperation, data: Record<string, unknown>): Promise<AdminResult> {
+-  const response = await fetch("/rig/admin/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation, data }) });
+-  if (!response.ok) throw new Error("The retailer request was not confirmed.");
+-  return response.json() as Promise<AdminResult>;
++  return request("/rig/admin/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation, data }) }, async response => {
++    if (!response.ok) throw new Error("The retailer request was not confirmed.");
++    return response.json() as Promise<AdminResult>;
++  }, 120000);
+ }
+
+ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: RetailerPanel; act?: (operation: AdminOperation, data: Record<string, unknown>) => Promise<AdminResult> }) {
+diff --git a/workspace/app/rig/admin/three-d/preview.tsx b/workspace/app/rig/admin/three-d/preview.tsx
+index 35030e4..08903d4 100644
+--- a/workspace/app/rig/admin/three-d/preview.tsx
++++ b/workspace/app/rig/admin/three-d/preview.tsx
+@@ -1,4 +1,5 @@
+ "use client";
++import { request, within } from "../../request";
+
+ import { useEffect, useRef, useState } from "react";
+
+@@ -16,14 +17,21 @@ export function ProductPreview({ id, anchors }: { id: string; anchors: Record<st
+     setBusy(true); setStatus("Opening product preview…");
+     try {
+       const base = "/rig/admin/three-d/file/";
+-      const response = await fetch(`${base}draft/${id}`, { cache: "no-store" });
+-      if (!response.ok) throw new Error();
+-      const bytes = await response.arrayBuffer();
++      const bytes = await request(`${base}draft/${id}`, { cache: "no-store" }, async response => {
++        if (!response.ok) throw new Error();
++        return response.arrayBuffer();
++      });
+       // Literal same-origin allowlisted route. No remote import or room key in the browser.
+       const moduleUrl = base + "runtime.js";
+-      const runtime = await import(/* webpackIgnore: true */ moduleUrl) as Runtime;
++      const runtime = await within(() => import(/* webpackIgnore: true */ moduleUrl)) as Runtime;
+       if (!alive.current || !canvas.current) return;
+-      const next = await runtime.createStage(canvas.current, [{ role: "product", mount: null, review_anchors: anchors }], [bytes], true);
++      let accepting = true;
++      let next: Stage;
++      try { next = await within(async () => {
++        const opened = await runtime.createStage(canvas.current!, [{ role: "product", mount: null, review_anchors: anchors }], [bytes], true);
++        if (!accepting) opened.dispose();
++        return opened;
++      }); } finally { accepting = false; }
+       if (!alive.current) { next.dispose(); return; }
+       stage.current = next; setStatus("Check the product from every side. Coloured marks show the attachment points and their directions.");
+     } catch { if (alive.current) setStatus("The preview could not be opened. Try again before approving."); }
+diff --git a/workspace/app/rig/api/rig/route.ts b/workspace/app/rig/api/rig/route.ts
+index ef8ed93..6f77c6d 100644
+--- a/workspace/app/rig/api/rig/route.ts
++++ b/workspace/app/rig/api/rig/route.ts
+@@ -24,6 +24,9 @@ export async function POST(request: Request) {
+   } catch {
+     return Response.json({ error: "Rig did not answer. Try again." }, { status: 400 });
+   }
++  if (!body || typeof body !== "object" || Array.isArray(body)) {
++    return Response.json({ error: "Rig did not answer. Try again." }, { status: 400 });
++  }
+   const op = body.op ?? "";
+   if (op !== "search" && op !== "graph" && op !== "compare" && op !== "ask") {
+     return Response.json({ error: "Rig did not answer. Try again." }, { status: 400 });
+diff --git a/workspace/app/rig/dialog.ts b/workspace/app/rig/dialog.ts
+new file mode 100644
+index 0000000..2ddbea2
+--- /dev/null
++++ b/workspace/app/rig/dialog.ts
+@@ -0,0 +1,27 @@
++"use client";
++import { useEffect, useRef } from "react";
++
++export function useDialog(open: boolean, close: () => void) {
++  const ref = useRef<HTMLDivElement>(null);
++  const closeRef = useRef(close); closeRef.current = close;
++  useEffect(() => {
++    if (!open || !ref.current) return;
++    const dialog = ref.current, previous = document.activeElement as HTMLElement | null;
++    const menu = dialog.closest(".rig")?.querySelector<HTMLElement>(".menu");
++    const controls = () => Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')).filter(node => node.getClientRects().length);
++    controls()[0]?.focus();
++    const key = (event: KeyboardEvent) => {
++      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
++      if (event.key !== "Tab") return;
++      const nodes = controls(), first = nodes[0], last = nodes.at(-1);
++      if (!first) { event.preventDefault(); return; }
++      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { event.preventDefault(); last?.focus(); }
++      else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
++    };
++    dialog.addEventListener("keydown", key);
++    return () => { dialog.removeEventListener("keydown", key); const box = previous?.getBoundingClientRect();
++      if (previous?.isConnected && previous.matches("button, a[href], input, select, textarea, [tabindex]") && box && box.right > 0 && box.left < innerWidth && box.bottom > 0 && box.top < innerHeight) previous.focus();
++      else menu?.focus(); };
++  }, [open]);
++  return ref;
++}
+diff --git a/workspace/app/rig/lab.tsx b/workspace/app/rig/lab.tsx
+index da2bf84..7b8e961 100644
+--- a/workspace/app/rig/lab.tsx
++++ b/workspace/app/rig/lab.tsx
+@@ -1,4 +1,5 @@
+ "use client";
++import { useDialog } from "./dialog";
+
+ import { useEffect, useState } from "react";
+ import {
+@@ -82,6 +83,7 @@ export function Lab({
+   const [waiting, setWaiting] = useState<WaitingFit[]>([]);
+   const [decided, setDecided] = useState<Decided[]>([]);
+   const [approve, setApprove] = useState<WaitingFit | null>(null);
++  const approveDialog = useDialog(Boolean(approve), () => setApprove(null));
+   const [keySaved, setKeySaved] = useState(false);
+
+   useEffect(() => {
+@@ -455,7 +457,7 @@ export function Lab({
+
+       {approve ? (
+         <div className="scrim" role="presentation">
+-          <div className="popup approve" role="dialog" aria-modal="true" aria-labelledby="approve-title">
++          <div ref={approveDialog} className="popup approve" role="dialog" aria-modal="true" aria-labelledby="approve-title">
+             <div className="popup-head">
+               <h2 id="approve-title">Approve this fit?</h2>
+               <button type="button" className="text close" onClick={() => setApprove(null)}>
+diff --git a/workspace/app/rig/plugins.tsx b/workspace/app/rig/plugins.tsx
+index a0c2428..eb7e546 100644
+--- a/workspace/app/rig/plugins.tsx
++++ b/workspace/app/rig/plugins.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+
+-import { useState } from "react";
++import { useState, useRef } from "react";
+ import {
+   addRigConnectionAction,
+   addRigLinkAction,
+@@ -11,6 +11,8 @@ import {
+   saveRigKey,
+   uploadRigFileForm,
+ } from "./plugin-actions";
++import { within } from "./request";
++import { useDialog } from "./dialog";
+ import { PLUGIN_TABS, type PluginPanel, type PluginTab } from "./vault-model";
+
+ function Pill({ children, on = true }: { children: string; on?: boolean }) {
+@@ -23,6 +25,8 @@ function Pill({ children, on = true }: { children: string; on?: boolean }) {
+ }
+
+ export function Plugins({ panel, onClose }: { panel: PluginPanel; onClose: () => void }) {
++  const dialog = useDialog(true, onClose);
++  const running = useRef(false);
+   const [tab, setTab] = useState<PluginTab>("API keys");
+   const [note, setNote] = useState("");
+   const [busy, setBusy] = useState(false);
+@@ -30,19 +34,22 @@ export function Plugins({ panel, onClose }: { panel: PluginPanel; onClose: () =>
+   const [signIn, setSignIn] = useState<"provider" | "token">("token");
+
+   async function run(work: () => Promise<{ ok: boolean; message: string }>) {
+-    if (!panel.enabled || busy) return;
++    if (!panel.enabled || running.current) return;
++    running.current = true;
+     setBusy(true);
+     try {
+-      const result = await work();
++      const result = await within(work);
+       setNote(result.message);
++    } catch { setNote("Rig did not answer. Try again.");
+     } finally {
++      running.current = false;
+       setBusy(false);
+     }
+   }
+
+   return (
+     <div className="scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+-      <div className="popup" role="dialog" aria-modal="true" aria-labelledby="plugins-title">
++      <div ref={dialog} className="popup" role="dialog" aria-modal="true" aria-labelledby="plugins-title">
+         <div className="popup-head">
+           <div>
+             <h2 id="plugins-title">Plugins</h2>
+@@ -57,12 +64,18 @@ export function Plugins({ panel, onClose }: { panel: PluginPanel; onClose: () =>
+           <>
+             <div className="tabs" role="tablist">
+               {PLUGIN_TABS.map((name) => (
+-                <button key={name} type="button" role="tab" aria-selected={tab === name} className={tab === name ? "on" : ""} onClick={() => { setNote(""); setTab(name); }}>
++                <button key={name} type="button" role="tab" aria-selected={tab === name} className={tab === name ? "on" : ""} tabIndex={tab === name ? 0 : -1} onKeyDown={event => {
++                  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
++                  event.preventDefault(); const index = PLUGIN_TABS.indexOf(name);
++                  const next = event.key === "Home" ? 0 : event.key === "End" ? PLUGIN_TABS.length - 1 : (index + (event.key === "ArrowRight" ? 1 : PLUGIN_TABS.length - 1)) % PLUGIN_TABS.length;
++                  setTab(PLUGIN_TABS[next]); setNote("");
++                  (event.currentTarget.parentElement?.children[next] as HTMLElement)?.focus();
++                }} onClick={() => { setNote(""); setTab(name); }}>
+                   {name}
+                 </button>
+               ))}
+             </div>
+-            {note ? <p className="note">{note}</p> : null}
++            {note ? <p className="note" role="status">{note}</p> : null}
+
+             {tab === "API keys" ? (
+               <div className="part">
+diff --git a/workspace/app/rig/request.ts b/workspace/app/rig/request.ts
+new file mode 100644
+index 0000000..51513b8
+--- /dev/null
++++ b/workspace/app/rig/request.ts
+@@ -0,0 +1,15 @@
++// Same deadline pattern as lib/tank's boundedFetch, without server credentials.
++// One attempt only: an uncertain write is resolved through its existing receipt.
++export async function within<T>(work: () => Promise<T>, timeout = 35000, abort?: () => void): Promise<T> {
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  const deadline = new Promise<never>((_, reject) => {
++    timer = setTimeout(() => { abort?.(); reject(new Error("Rig did not answer. Try again.")); }, timeout);
++  });
++  try { return await Promise.race([work(), deadline]); }
++  finally { clearTimeout(timer); }
++}
++
++export async function request<T>(url: string, init: RequestInit, read: (response: Response) => Promise<T>, timeout = 35000): Promise<T> {
++  const controller = new AbortController();
++  return within(() => fetch(url, { ...init, signal: controller.signal, redirect: "error" }).then(read), timeout, () => controller.abort());
++}
+diff --git a/workspace/app/rig/rig.css b/workspace/app/rig/rig.css
+index ed7d177..9f21ce7 100644
+--- a/workspace/app/rig/rig.css
++++ b/workspace/app/rig/rig.css
+@@ -20,7 +20,7 @@ main:has(.rig) {
+   --paper: #f4f6fb;
+   --card: #ffffff;
+   --line: #b8bfd0;
+-  --muted: #6b7590;
++  --muted: #3d4a66;
+   --body: #3d4a66;
+   --soft: #c9d0e0;
+   --label: #8a95b0;
+@@ -896,3 +896,9 @@ main:has(.rig) {
+ }
+
+ .count .first-action { margin: 4px 0 0; font-size: 12px; line-height: 1.4; }
++
++.rig :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
++.rig .results-line { min-height: 3em; }
++@media (prefers-reduced-motion: reduce) { .rig * { scroll-behavior: auto; animation: none; transition: none; } }
++
++.rig aside :focus-visible { outline-color: var(--soft); }
+diff --git a/workspace/app/rig/search-view.tsx b/workspace/app/rig/search-view.tsx
+index 8907456..311b8ca 100644
+--- a/workspace/app/rig/search-view.tsx
++++ b/workspace/app/rig/search-view.tsx
+@@ -1,6 +1,7 @@
+ "use client";
+
+-import { useEffect, useState } from "react";
++import { useEffect, useRef, useState } from "react";
++import { request } from "./request";
+ import { type Part, type Pistol } from "./copy";
+
+ type SourceRef = { title: string; detail: string };
+@@ -25,14 +26,13 @@ function Pill({ children, on = true }: { children: string; on?: boolean }) {
+ }
+
+ async function call<T>(body: unknown): Promise<T> {
+-  const response = await fetch("/rig/api/rig", {
+-    method: "POST",
+-    headers: { "content-type": "application/json", accept: "application/json" },
++  return request("/rig/api/rig", {
++    method: "POST", headers: { "content-type": "application/json", accept: "application/json" },
+     body: JSON.stringify(body),
+-  });
+-  const data = (await response.json()) as T & { error?: string };
+-  if (!response.ok) throw new Error(data.error || "Rig did not answer. Try again.");
+-  return data;
++  }, async response => {
++    if (!response.ok) throw new Error("Rig did not answer. Try again.");
++    return await response.json() as T;
++  }, (body as { op?: string }).op === "ask" ? 190000 : 35000);
+ }
+
+ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; onQuery: (value: string) => void; hasCatalogue: boolean }) {
+@@ -46,6 +46,8 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
+   const [draft, setDraft] = useState("");
+   const [busy, setBusy] = useState(false);
+   const [final, setFinal] = useState(false);
++  const searchVersion = useRef(0), graphVersion = useRef(0);
++  useEffect(() => () => { searchVersion.current++; graphVersion.current++; }, []);
+
+   useEffect(() => {
+     if (query && query !== text) {
+@@ -58,6 +60,7 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
+
+   useEffect(() => {
+     if (!hasCatalogue) {
++      searchVersion.current++; graphVersion.current++;
+       setPistols([]); setParts([]); setAdded([]); setChosen("");
+       setThread([]); setLine(""); setFinal(false);
+     }
+@@ -102,8 +105,10 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
+   }
+
+   async function loadParts(id: string) {
++    const version = ++graphVersion.current;
+     try {
+       const body = await call<{ branches?: { category?: string; products?: Hit[] }[] }>({ op: "graph", id });
++      if (version !== graphVersion.current) return;
+       const next: Part[] = [];
+       for (const branch of body.branches ?? []) {
+         const type = branch.category === "Aftermarket sights" ? "Sights" : String(branch.category ?? "");
+@@ -121,19 +126,23 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
+       setAdded([]);
+       setFinal(false);
+     } catch {
++      if (version !== graphVersion.current) return;
+       setParts([]);
+-      setLine("");
++      setLine("Rig did not answer. Try again.");
+     }
+   }
+
+   async function run(q: string, tellParent: boolean) {
+     const trimmed = q.trim();
+     if (!trimmed || !hasCatalogue) return;
++    const version = ++searchVersion.current;
++    graphVersion.current++;
+     if (tellParent) onQuery(trimmed);
+     setText(trimmed);
+     setLine("");
+     try {
+       const body = await call<{ results?: Hit[]; exact_match?: boolean; message?: string }>({ op: "search", q: trimmed });
++      if (version !== searchVersion.current) return;
+       const hits = Array.isArray(body.results) ? body.results : [];
+       if (!hits.length) {
+         setPistols([]);
+@@ -146,7 +155,9 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
+       }
+       applyHits(trimmed, hits, body.exact_match !== false, body.message);
+     } catch {
+-      setLine("");
++      if (version !== searchVersion.current) return;
++      setPistols([]); setParts([]); setAdded([]); setChosen(""); setFinal(false);
++      setLine("Rig did not answer. Try again.");
+     }
+   }
+
+@@ -161,6 +172,7 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
+   }
+
+   function reset() {
++    graphVersion.current++;
+     setChosen("");
+     setAdded([]);
+     setParts([]);
+@@ -232,7 +244,7 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
+             Search
+           </button>
+         </form>
+-        <p className="results-line">{hasCatalogue ? line : <>— <a href="/rig/admin">Import your catalogue file or connect an official feed.</a></>}</p>
++        <p className="results-line" role="status" aria-live="polite">{hasCatalogue ? line : <>— <a href="/rig/admin">Import your catalogue file or connect an official feed.</a></>}</p>
+       </div>
+
+       <div className="search-split">
+diff --git a/workspace/app/rig/vault-server.ts b/workspace/app/rig/vault-server.ts
+index aeebc5d..3630eae 100644
+--- a/workspace/app/rig/vault-server.ts
++++ b/workspace/app/rig/vault-server.ts
+@@ -22,13 +22,13 @@ async function tank(pathname: string, userId: string, init: RequestInit): Promis
+   headers.set("x-tervory-user", userId);
+   headers.set("x-tervory-squad", SQUAD);
+   if (typeof init.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
+-  return fetch(`${TANK_URL}${pathname}`, { ...init, headers, cache: "no-store" });
++  return fetch(`${TANK_URL}${pathname}`, { ...init, headers, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(35000) });
+ }
+
+ async function tankJson<T>(pathname: string, userId: string, init: RequestInit): Promise<T> {
+   const response = await tank(pathname, userId, init);
+   const text = await response.text();
+-  if (!response.ok) throw new Error(text.slice(0, 180));
++  if (!response.ok) throw new Error("The retailer request was not confirmed.");
+   return (text ? JSON.parse(text) : {}) as T;
+ }
+
+@@ -76,7 +76,7 @@ export async function uploadRigFiles(files: FormData): Promise<void> {
+   if (!tenant) throw new Error("Sign in to change Plugins.");
+   const query = new URLSearchParams({ tenant_id: tenant.tenantId });
+   const response = await tank(pathFor("/files", query), tenant.userId, { method: "POST", body: files });
+-  if (!response.ok) throw new Error((await response.text()).slice(0, 180));
++  if (!response.ok) throw new Error("The file was not saved.");
+ }
+
+ export async function removeRigFile(fileId: string): Promise<void> {

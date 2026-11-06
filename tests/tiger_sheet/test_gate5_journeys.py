@@ -9,7 +9,6 @@ import socket
 import httpx
 import pytest
 import uvicorn
-from fastapi import Query
 
 from test_tiger import ROOT, TENANT_A, _load
 from tiger_sheet.patch_source import source

@@ -34,6 +34,9 @@ export function PositionViews({ data, initialView, query, plugins }: { data: Com
       {WATCH_VIEWS.map(item => <button key={item.id} type="button" role="tab" aria-selected={view === item.id} className={view === item.id ? "on" : ""} onClick={() => setView(item.id)}>{item.label}</button>)}
     </div>
     <div role="tabpanel" className="watch-content">
+      {(view === "position" ? positions : view === "matches" ? reviews : sites) === null ? <div role="alert">
+        <p>Tiger is not reachable right now.</p><button type="button" className="line small" onClick={() => router.refresh()}>Try again</button>
+      </div> : null}
       {view === "position" ? <PricePosition rows={positions} /> : view === "matches" ? <Matches rows={reviews} onChange={match => {
         setMatches(current => current?.flatMap(row => row.id === match.id ? match.state === "confirmed" ? [] : [match] : [row]) ?? null);
         router.refresh();
@@ -108,6 +111,8 @@ function Decision({ row, onChange }: { row: TigerMatch; onChange: (match: TigerM
     finally { running.current = false; }
   }
   return <div className="row-actions match-actions" aria-busy={state === "busy"} data-action-state={state}>
+    {state === "failed" ? <div role="alert"><p>That could not be saved. Try again.</p>
+      <button type="button" className="line small" onClick={() => setState("ready")}>Try again</button></div> : null}
     {row.state === "rejected" ? <><span>Rejected</span><button type="button" className="text" disabled={state !== "ready"} onClick={() => void run("undo")}>Undo</button></> : <>
       <button type="button" className="line small" disabled={state !== "ready"} onClick={() => void run("confirm")}>Confirm</button>
       <button type="button" className="text" disabled={state !== "ready"} onClick={() => void run("reject")}>Reject</button>

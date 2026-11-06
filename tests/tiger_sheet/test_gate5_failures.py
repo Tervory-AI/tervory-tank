@@ -10,7 +10,9 @@ import httpx
 import pytest
 
 from test_tiger import ROOT, TENANT_A, TENANT_B, _load, _watch
-from test_tiger_competitors import database, postgres
+import test_tiger_competitors as database_fixtures
+postgres = database_fixtures.postgres
+database = database_fixtures.database
 from test_tiger_alert_email import pending
 from alert_email import deliver_pending
 from rig_watch import RigWatches, TankRig

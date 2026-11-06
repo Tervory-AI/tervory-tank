@@ -8,31 +8,9 @@ const ts = req('typescript');
 const React = req('react');
 const {renderToStaticMarkup} = req('react-dom/server');
 
-// Render the proposed shared-source patch in memory. Vendor bytes stay pinned.
-const patch = fs.readFileSync(path.join(root, 'tank-patches/gate4.patch'), 'utf8').split('\n');
-const proposed = new Map();
-for (let i = 0; i < patch.length; i++) {
-  if (!patch[i].startsWith('--- a/')) continue;
-  const file = patch[i++].slice(6);
-  assert.equal(patch[i], '+++ b/' + file);
-  const before = fs.readFileSync(path.join(root, file), 'utf8').split('\n');
-  let cursor = 0, output = [];
-  while (++i < patch.length && !patch[i].startsWith('--- a/')) {
-    const hunk = /^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@/.exec(patch[i]);
-    if (!hunk) continue;
-    const start = Number(hunk[1]) - 1;
-    output.push(...before.slice(cursor, start)); cursor = start;
-    while (++i < patch.length && /^[ +\-]/.test(patch[i]) && !patch[i].startsWith('--- a/')) {
-      const line = patch[i], kind = line[0], text = line.slice(1);
-      if (kind !== '+') {assert.equal(before[cursor], text, file); cursor++;}
-      if (kind !== '-') output.push(text);
-    }
-    i--;
-  }
-  i--;
-  output.push(...before.slice(cursor));
-  proposed.set(file, output.join('\n'));
-}
+// The sync has applied the deferred patch; render the integrated production files.
+const patch = fs.readFileSync(path.join(root, 'tank-patches/base/gate4.patch'), 'utf8');
+const proposed = new Map(Array.from(patch.matchAll(/^\+\+\+ b\/(.+)$/gm), match => [match[1], fs.readFileSync(path.join(root, match[1]), 'utf8')]));
 assert.equal(proposed.size, 5);
 let states = [], stateIndex = 0;
 const fakeReact = {...React, useState(initial) {

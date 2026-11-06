@@ -198,3 +198,37 @@ async def streaming(command, thread_id, body, actor):
             with contextlib.suppress(asyncio.CancelledError):
                 await task
     return StreamingResponse(events(), media_type='text/event-stream', headers={'Cache-Control':'no-store','X-Accel-Buffering':'no'})
+
+
+async def validate_mcp(schema, arguments, timeout=5):
+    """Untrusted MCP schemas cannot fetch URLs or block the API event loop."""
+    import asyncio
+    import json
+    import sys
+    source = """
+import json, sys
+from jsonschema import Draft202012Validator
+from referencing import Registry
+try:
+    schema, arguments = json.load(sys.stdin)
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema, registry=Registry()).validate(arguments)
+except Exception:
+    sys.exit(1)
+"""
+    payload = json.dumps([schema, arguments]).encode()
+    if len(payload) > 1_500_000:
+        raise HTTPException(422, 'Code MCP schema or arguments exceed the limit')
+    process = await asyncio.create_subprocess_exec(sys.executable, '-I', '-c', source,
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL, env={})
+    try:
+        await asyncio.wait_for(process.communicate(payload), timeout)
+        if process.returncode:
+            raise HTTPException(422, 'Code MCP schema or arguments refused')
+    except asyncio.TimeoutError:
+        raise HTTPException(422, 'Code MCP validation timed out; no tool was run') from None
+    finally:
+        if process.returncode is None:
+            process.kill()
+        await process.wait()

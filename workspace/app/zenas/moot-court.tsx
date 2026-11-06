@@ -1,4 +1,5 @@
 "use client";
+import { zenasFetch } from "@/app/zenas/request";
 
 import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -50,7 +51,7 @@ export function MootCourt() {
     if (!id) return;
     const requestedSeat = seatRef.current;
     try {
-      const res = await fetch(`${BASE}hearings/${id}${requestedSeat ? `?seat=${requestedSeat}` : ""}`, { cache: "no-store" });
+      const res = await zenasFetch(`${BASE}hearings/${id}${requestedSeat ? `?seat=${requestedSeat}` : ""}`, { cache: "no-store" });
       if (selectedRef.current !== id || seatRef.current !== requestedSeat) return;
       if (!res.ok) {
         if ([401, 403, 404].includes(res.status)) { setHearing(null); setOperator(false); seatRef.current = ""; setSeat(""); }
@@ -65,7 +66,7 @@ export function MootCourt() {
       if (seatRef.current === requestedSeat) {
         accept(data.hearing, data.operator);
         if (data.hearing.fairness_pair_id) {
-          const comparison = await fetch(`${BASE}hearings/${id}/fairness`, { cache: "no-store" });
+          const comparison = await zenasFetch(`${BASE}hearings/${id}/fairness`, { cache: "no-store" });
           if (comparison.ok && selectedRef.current === id) setFairness((await comparison.json()).fairness);
         } else setFairness(null);
       }
@@ -74,7 +75,7 @@ export function MootCourt() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([fetch(BASE + "hearings"), fetch(BASE + "sources"), fetch(BASE + "participants")]).then(async ([h, s, p]) => {
+    Promise.all([zenasFetch(BASE + "hearings"), zenasFetch(BASE + "sources"), zenasFetch(BASE + "participants")]).then(async ([h, s, p]) => {
       if (!active) return;
       if (h.ok) setSummaries((await h.json()).hearings);
       else setMessage("Room unavailable");
@@ -106,7 +107,7 @@ export function MootCourt() {
     if (runAI) setAiBusy(true); else setBusy(true);
     setMessage("");
     try {
-      const res = await fetch(`${BASE}hearings/${id}/${action}${requestedSeat ? `?seat=${requestedSeat}` : ""}`, {
+      const res = await zenasFetch(`${BASE}hearings/${id}/${action}${requestedSeat ? `?seat=${requestedSeat}` : ""}`, {
         method: "POST", headers: { "content-type": "application/json" }, signal: controller?.signal,
         body: JSON.stringify({ request_id: requestId, revision: current.revision, payload }),
       });
@@ -115,7 +116,7 @@ export function MootCourt() {
       if (seatRef.current === requestedSeat) {
         accept(data.hearing, data.operator);
         if (data.hearing.fairness_pair_id) {
-          const comparison = await fetch(`${BASE}hearings/${id}/fairness`, { cache: "no-store" });
+          const comparison = await zenasFetch(`${BASE}hearings/${id}/fairness`, { cache: "no-store" });
           if (comparison.ok && selectedRef.current === id) setFairness((await comparison.json()).fairness);
         } else setFairness(null);
       }
@@ -151,14 +152,14 @@ export function MootCourt() {
     swappedStart.current = identity;
     setBusy(true);
     try {
-      const res = await fetch(`${BASE}hearings/${target}`, { cache: "no-store" });
+      const res = await zenasFetch(`${BASE}hearings/${target}`, { cache: "no-store" });
       if (!res.ok) { setMessage("Room unavailable"); return; }
       const partner = (await res.json()).hearing as Hearing;
       if (partner.phase === "locked") {
         const fingerprint = `start-paired:${target}:${partner.revision}`;
         const key = commandRequests.current.get(fingerprint) ?? crypto.randomUUID();
         commandRequests.current.set(fingerprint, key);
-        const started = await fetch(`${BASE}hearings/${target}/start`, { method: "POST", headers: { "content-type": "application/json" },
+        const started = await zenasFetch(`${BASE}hearings/${target}/start`, { method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ request_id: key, revision: partner.revision, payload: {} }) });
         if (!started.ok) { setMessage(FAILURE); return; }
       }
@@ -197,7 +198,7 @@ export function MootCourt() {
     const requestId = commandRequests.current.get(fingerprint) ?? crypto.randomUUID();
     commandRequests.current.set(fingerprint, requestId);
     try {
-      const res = await fetch(BASE + "hearings", { method: "POST", headers: { "content-type": "application/json" },
+      const res = await zenasFetch(BASE + "hearings", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ request_id: requestId, worked_id: form.get("worked"), seats }) });
       const data = await res.json();
       if (!res.ok) { setMessage(ERROR[data.error] ?? FAILURE); return; }
@@ -222,7 +223,7 @@ export function MootCourt() {
     <label className="zn-select">The hearing<select value={selected} onChange={e => selectHearing(e.target.value)}><option value="">—</option>{summaries.map(s => <option value={s.id} key={s.id}>{s.title}{s.first_side === "respondent" ? " · Swapped seats" : ""}</option>)}</select></label>
     <div className="zn-moot-ground">
       <article className="zn-card"><h2>{MOOT_PARTS[0].title}</h2>
-        {founder && !hearing && <form onSubmit={create}>
+        {!hearing && <form onSubmit={create} inert={!founder} aria-hidden={!founder} style={{ visibility: founder ? "visible" : "hidden" }}>
           <label className="zn-select">Civil appeal<select name="worked" required><option value="">—</option>{sources.map(s => <option value={s.id} key={s.id}>{s.title}</option>)}</select></label>
           {SEATS.map(s => <label className="zn-select" key={s}>{SEAT_LABELS[s]}<select name={s} defaultValue="ai"><option value="ai">AI</option>{participants.map(p => <option value={p.user_id} key={p.user_id}>{p.name}</option>)}</select></label>)}
           <button className="zn-primary" disabled={busy || !sources.length}>Create hearing</button>
@@ -267,7 +268,7 @@ export function MootCourt() {
           {operator && fairness.status !== "incomplete" && <button className="zn-outline" onClick={() => selectHearing(fairness.first_hearing === hearing?.id ? fairness.second_hearing : fairness.first_hearing)}>View other hearing</button>}
           {operator && fairness.status === "incomplete" && hearing?.id === fairness.first_hearing && <button className="zn-outline" disabled={busy} onClick={() => { swappedStart.current = null; void startSwapped(); }}>Run swapped seats</button>}
         </section>}
-        {!hearing?.ruling ? <p>{MOOT_PARTS[2].empty}</p> : <><h3>{hearing.ruling.order}</h3><ol>{hearing.ruling.reasons.map((r, i) => <li key={i}>{r}</li>)}</ol><h3>What the court actually held</h3><p>{hearing.reveal ?? "The original holding will be revealed after both hearings close."}</p>
+        {!hearing?.ruling ? <><p>{MOOT_PARTS[2].empty}</p><p>Cost: —</p><p>{MOOT_PARTS[0].empty}</p></> : <><h3>{hearing.ruling.order}</h3><ol>{hearing.ruling.reasons.map((r, i) => <li key={i}>{r}</li>)}</ol><h3>What the court actually held</h3><p>{hearing.reveal ?? "The original holding will be revealed after both hearings close."}</p>
           <p>Cost: {hearing.cost_usd === null ? "unavailable" : `$${hearing.cost_usd.toFixed(6)}`}</p>
           {operator && !hearing.published && <button className="zn-primary" disabled={busy || Boolean(hearing.fairness_pair_id && (!fairness || fairness.status === "incomplete"))} onClick={() => void command("publish")}>{hearing.fairness_pair_id ? "Publish paired hearings" : "Publish"}</button>}
           {hearing.published && <a href={`/moot/${hearing.id}${hearing.region === "za" ? "?region=za" : ""}`}>Public watch page</a>}
