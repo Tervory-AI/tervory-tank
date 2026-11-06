@@ -84,7 +84,7 @@ def _assert_bare_count_is_refused(payload: dict) -> None:
 
 
 @pytest.mark.asyncio
-async def test_record_shows_the_real_goal_and_result_and_refuses_a_bare_pass_count(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_record_shows_the_real_goal_and_result_and_refuses_a_bare_pass_count(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     async def fake_run(_pkg: skala.SkillPackage, payload: dict, _ctx: Ctx) -> dict:
         if payload["kind"] == "match":
             return {"site": "https://example.com"}
@@ -102,7 +102,7 @@ async def test_record_shows_the_real_goal_and_result_and_refuses_a_bare_pass_cou
         input_schema={},
         output_schema={},
         eval_threshold=1.0,
-        path=ROOT,
+        path=tmp_path,  # This synthetic package must not include the checkout or node_modules.
         cases=[
             {"name": "match", "input": {"kind": "match"}, "expected": {"site": "https://example.com"}, "tolerance": "exact"},
             {"name": "miss", "input": {"kind": "miss"}, "expected": {"site": "https://example.com"}, "tolerance": "exact"},
