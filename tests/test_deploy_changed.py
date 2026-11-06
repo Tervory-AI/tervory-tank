@@ -403,7 +403,7 @@ def test_deploy_job_has_room_for_every_wait(monkeypatch: pytest.MonkeyPatch) -> 
     assert "agent-zenas" in boston and za == ["agent-zenas-za"]
     # Worst case: a shared-room change deploys main, ZA, then every room one at a time.
     waits = mod.MAIN_TIMEOUT_S + mod.ZA_TIMEOUT_S + sum(mod.room_timeout(n) for n in boston + za)
-    assert waits == 1800 + 2700 + len(boston) * 900 + len(za) * 1800
+    assert waits == 1800 + 2700 + len(boston) * 900 + len(za) * 1800 + 900
     # Coolify calls besides the polls, each up to its 30 s socket timeout: the app list,
     # the backup-scope check (GET, PATCH, GET), and per app the retry GET, the
     # already-live GET, the POST and a 404 on an "already queued" id. Each wait can also
@@ -678,3 +678,24 @@ def test_ambiguous_renamed_room_source_fails_without_deployment(monkeypatch):
     monkeypatch.setattr(mod, "api", lambda method, path: (200, apps))
     monkeypatch.setattr(mod, "deploy", lambda *args: pytest.fail("ambiguous target must not deploy"))
     assert mod.main() == 1
+
+
+def test_radix_cold_build_wait_is_bounded_without_increasing_other_room_waits(monkeypatch):
+    mod = _script(monkeypatch)
+    assert mod.room_timeout("agent-radix") == 30 * 60
+    assert mod.room_timeout("agent-rig") == 15 * 60
+    assert mod.room_timeout("agent-zenas-za") == 30 * 60
+
+
+def test_radix_deploy_uses_its_cold_build_wait(monkeypatch):
+    mod = _script(monkeypatch)
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["agents/radix/app.py"])
+    monkeypatch.setattr(mod, "api", lambda *args: (200, [{"name": "agent-radix", "uuid": "radix-uuid"}]))
+    monkeypatch.setattr(mod, "last_failed", lambda *args: False)
+    monkeypatch.setattr(mod, "already_live", lambda *args: False)
+    monkeypatch.setattr(mod, "radix_blocks", lambda *args: False)
+    monkeypatch.setattr(mod, "deploy", lambda *args: True)
+    waits = []
+    monkeypatch.setattr(mod, "wait_for", lambda uuid, name, seconds: waits.append(seconds) or True)
+    assert mod.main() == 0
+    assert waits == [30 * 60]

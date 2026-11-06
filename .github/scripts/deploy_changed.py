@@ -153,6 +153,10 @@ ROOM_TIMEOUT_S = 900
 # A ZA room builds on the same slow ZA host: agent-zenas-za took 18m00s, 14m35s and
 # 19m49s (deployments 767, 874 and 694), past the 15-minute room wait.
 ZA_ROOM_TIMEOUT_S = 1800
+# Cold Radix builds install the pinned scanner/browser bundles and bake offline
+# advisory/signature data. The 6 Nov rollout exceeded 15 minutes while still
+# exporting a valid image; do not abandon its exact deployment at that point.
+RADIX_ROOM_TIMEOUT_S = 1800
 POLL_S = 15
 # The deploy job's own budget (deploy-on-merge.yml sets it below the job's
 # timeout-minutes). A room whose full wait no longer fits is not started and is
@@ -164,6 +168,8 @@ _run_started = time.time()
 
 
 def room_timeout(name: str) -> int:
+    if name == "agent-radix":
+        return RADIX_ROOM_TIMEOUT_S
     return ZA_ROOM_TIMEOUT_S if name.endswith("-za") else ROOM_TIMEOUT_S
 # deploy() records the deployment Coolify queued, so wait_for follows that exact
 # deployment rather than whichever deployment of the app is newest.
