@@ -1,0 +1,51 @@
+# Tank base commit: 7174469d3454c1493f3c852109b930e1d02f0b7a
+# Apply after finish.patch and gate4-*.patch
+--- a/tank/main.py
++++ b/tank/main.py
+@@ -3480,6 +3480,25 @@
+     return res.model_dump()
+ 
+ 
++class TigerOcrHTTP:
++    """The existing OCR skill gets only an authenticated browser boundary."""
++    def __init__(self, client):
++        self.client = client
++
++    async def post(self, url, **kwargs):
++        base = os.environ.get("TIGER_URL", "").rstrip("/")
++        key = os.environ.get("TANK_KEY_TIGER", "")
++        if not base or not key:
++            raise HTTPException(503, "TIGER_URL or TANK_KEY_TIGER is not set")
++        if url != base + "/ocr":
++            raise HTTPException(400, "url not allowed")
++        kwargs["headers"] = {**kwargs.get("headers", {}), "X-Tank-Key": key}
++        kwargs["timeout"] = 30
++        kwargs["follow_redirects"] = False
++        async with asyncio.timeout(30):
++            return await self.client.post(url, **kwargs)
++
++
+ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID | None = None, preview: bool = False, home_region: str | None = None) -> skala.SkillContext:
+     assert _http is not None
+     ref = pkg.ref + ("#preview" if preview else "")
+@@ -3494,7 +3513,7 @@
+         return await _model_for_skill(**kw)
+ 
+     return skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
+-                              _model=_model, http=_http, env=dict(SKILL_ENV))
++                              _model=_model, http=TigerOcrHTTP(_http) if pkg.id == "tiger.price_ocr" else _http, env=dict(SKILL_ENV))
+ 
+ 
+ # Evals and previews run under the platform tenant so their model spend never lands on a client.
+@@ -4336,7 +4355,10 @@
+ async def _tiger_call(method: str, path: str, params: list[tuple[str, str]], content: bytes | None) -> Any:
+     if _http is None:
+         raise HTTPException(status_code=503, detail="Tiger is unreachable")
+-    headers = {"content-type": "application/json"} if content else {}
++    key = os.environ.get("TANK_KEY_TIGER", "")
++    if not key:
++        raise HTTPException(status_code=503, detail="TANK_KEY_TIGER is not set")
++    headers = {"content-type": "application/json", "x-tank-key": key}
+     try:
+         return await _http.request(
+             method,

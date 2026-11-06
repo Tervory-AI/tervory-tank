@@ -43,6 +43,8 @@ def main():
                             "-v", f"{temp / 'litellm.yml'}:/tmp/offline.yml:ro"]
             if service == "searxng":
                 options += ["-v", f"{temp / 'searxng.yml'}:/etc/searxng/settings.yml:ro"]
+            if service == "tiger":
+                options += ["-e", "TANK_KEY=offline-tiger-fixture"]
             options += [image]
             if service == "litellm":
                 options += ["--config", "/tmp/offline.yml", "--port", "4000"]
@@ -56,8 +58,10 @@ def main():
                              "console.log('uid',process.getuid(),'health',r.status)})"]
                 else:
                     python = "/usr/local/searxng/.venv/bin/python" if service == "searxng" else "python"
+                    request = (f"urllib.request.Request({url!r}, headers={{'X-Tank-Key': os.environ['TANK_KEY']}})"
+                               if service == "tiger" else repr(url))
                     probe = [python, "-c", "import os,urllib.request; assert os.getuid()!=0; "
-                             f"print('uid',os.getuid(),'health',urllib.request.urlopen({url!r},timeout=3).status)"]
+                             f"print('uid',os.getuid(),'health',urllib.request.urlopen({request},timeout=3).status)"]
                 for attempt in range(90):
                     result = subprocess.run(["docker", "exec", name, *probe], capture_output=True, text=True)
                     if result.returncode == 0:

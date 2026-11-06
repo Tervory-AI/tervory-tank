@@ -1,0 +1,209 @@
+diff --git a/workspace/app/rig/lab.tsx b/workspace/app/rig/lab.tsx
+--- a/workspace/app/rig/lab.tsx
++++ b/workspace/app/rig/lab.tsx
+@@ -48,20 +48,17 @@
+ }
+
+ export function CatalogueNumbers({ products, fits }: { products: number | null; fits: number | null }) {
+-  if (products === null || products === 0 || fits === null) {
+-    return null;
+-  }
+   return (
+     <section className="counts" aria-label="Counts">
+       <article className="count">
+-        <b>{products}</b>
++        <b>{products ?? "—"}</b>
+         <strong>Products</strong>
+-        <p className="fine">In this account&apos;s catalogue.</p>
++        <p className="fine">In this account&apos;s catalogue.</p><p className="first-action"><a href="/rig/admin">Import your catalogue file or connect an official feed.</a></p>
+       </article>
+       <article className="count">
+-        <b>{fits}</b>
++        <b>{fits ?? "—"}</b>
+         <strong>Approved fits</strong>
+-        <p className="fine">Parts confirmed to fit a product.</p>
++        <p className="fine">Parts confirmed to fit a product.</p><p className="first-action"><a href="/rig/admin">Find fit suggestions</a></p>
+       </article>
+     </section>
+   );
+@@ -188,6 +185,7 @@
+             <section className="block">
+               <h2>What's built</h2>
+               <div className="sheet">
++                {!BUILT.length && <p>— <a href="https://tervory.com">Support</a></p>}
+                 {BUILT.map((row) => (
+                   <div className="wide-row" key={row.title}>
+                     <div>
+@@ -260,17 +258,17 @@
+             </article>
+             <section className="counts">
+               <article className="count">
+-                <b>{waiting.length ? waiting.length : null}</b>
++                <b>{fits === null ? "—" : waiting.length}</b>
+                 <strong>Waiting</strong>
+                 <p className="fine">Suggested fits not yet decided.</p>
+               </article>
+               <article className="count">
+-                <b>{products && fits !== null ? fits : null}</b>
++                <b>{fits ?? "—"}</b>
+                 <strong>Approved</strong>
+                 <p className="fine">{products && fits !== null ? "Showing to shoppers now." : null}</p>
+               </article>
+               <article className="count">
+-                <b>{decided.length ? decided.filter((row) => !row.on).length : null}</b>
++                <b>{decided.length ? decided.filter((row) => !row.on).length : "—"}</b>
+                 <strong>Rejected</strong>
+                 <p className="fine">Never shown to shoppers.</p>
+               </article>
+@@ -288,6 +286,7 @@
+                     </tr>
+                   </thead>
+                   <tbody>
++                    {!waiting.length && <tr><td colSpan={3}><b>{fits === null ? "—" : 0}</b><p><a href="/rig/admin">Find fit suggestions</a></p></td></tr>}
+                     {waiting.map((row) => (
+                       <tr key={row.id}>
+                         <td>
+@@ -321,6 +320,7 @@
+                     </tr>
+                   </thead>
+                   <tbody>
++                    {!decided.length && <tr><td colSpan={3}><b>—</b><p>Check each one against the maker's fit list before approving.</p></td></tr>}
+                     {decided.map((row) => (
+                       <tr key={row.id}>
+                         <td>
+@@ -358,19 +358,19 @@
+             </header>
+             <section className="counts">
+               <article className="count">
+-                <b />
++                <b>—</b>
+                 <strong>Live skin</strong>
+                 <p className="fine">Tervory, on rig.tervory.com.</p>
+               </article>
+               <article className="count">
+-                <b />
++                <b>—</b>
+                 <strong>Dealer skins</strong>
+-                <p className="fine">No dealer skin is on this page.</p>
+-              </article>
+-              <article className="count">
+-                <b />
++                <p className="fine">No dealer skin is on this page.</p><a href="/rig/admin">Create embed key</a>
++              </article>
++              <article className="count">
++                <b>—</b>
+                 <strong>Dealer pages live</strong>
+-                <p className="fine">Built after the main product.</p>
++                <p className="fine">Built after the main product.</p><a href="/rig/admin">Create embed key</a>
+               </article>
+             </section>
+             <section className="block">
+@@ -417,6 +417,7 @@
+             <section className="block">
+               <h2>Build plan</h2>
+               <div className="sheet">
++                {!PLAN.length && <p>— <a href="https://tervory.com">Support</a></p>}
+                 {PLAN.map((row) => (
+                   <div className="plan-row" key={row.title}>
+                     <b>{row.code}</b>
+@@ -433,6 +434,7 @@
+               <h2>Recent changes</h2>
+               <p className="intro">What went live most recently.</p>
+               <div className="sheet">
++                {!CHANGES.length && <p>— <a href="https://tervory.com">Support</a></p>}
+                 {CHANGES.map((row) => (
+                   <div className="change-row" key={row.id}>
+                     <span>Change #{row.id}</span>
+diff --git a/workspace/app/rig/admin/products.tsx b/workspace/app/rig/admin/products.tsx
+--- a/workspace/app/rig/admin/products.tsx
++++ b/workspace/app/rig/admin/products.tsx
+@@ -26,7 +26,7 @@
+     </div>
+     <div className="retailer-product-scroll"><table>
+       <thead><tr><th /><th scope="col">Product code</th><th scope="col">Product name</th><th scope="col">Price</th><th /></tr></thead>
+-      <tbody>{rows.map(row => <tr key={row.sku}>
++      <tbody>{!rows.length && <tr><td colSpan={5}><b>0</b><p>Import your catalogue file or connect an official feed.</p></td></tr>}{rows.map(row => <tr key={row.sku}>
+         <td><input type="checkbox" aria-label={row.sku} disabled={busy} checked={selected.has(row.sku)} onChange={event => setSelected(previous => {
+           const next = new Set(previous); if (event.target.checked) next.add(row.sku); else next.delete(row.sku); return next;
+         })} /></td>
+diff --git a/workspace/app/rig/admin/commerce-admin.tsx b/workspace/app/rig/admin/commerce-admin.tsx
+--- a/workspace/app/rig/admin/commerce-admin.tsx
++++ b/workspace/app/rig/admin/commerce-admin.tsx
+@@ -35,7 +35,7 @@
+ }
+
+ export function OrderRows({ orders, now }: { orders: CartOrder[]; now: number }) {
+-  return <div className="rig-commerce-card rig-commerce-orders">{orders.map(order => {
++  return <div className="rig-commerce-card rig-commerce-orders">{!orders.length && <div><strong>0</strong><p><a href="/rig/admin?cart=connection">Shop connection</a></p></div>}{orders.map(order => {
+     const status = orderStatus(order);
+     const back = order.lines.filter(line => line.kind === "back_order").map(line => line.title).join(", ");
+     const placementFailure = order.state === "needs_person" && order.payment_confirmed;
+diff --git a/workspace/app/rig/admin/three-d/screen.tsx b/workspace/app/rig/admin/three-d/screen.tsx
+--- a/workspace/app/rig/admin/three-d/screen.tsx
++++ b/workspace/app/rig/admin/three-d/screen.tsx
+@@ -31,7 +31,7 @@
+     {error ? <p role="alert" className="three-notice">{error}</p> : null}
+     {!enabled ? <section><h2>3D is not available for this organisation</h2><p>Check your add-on in billing.</p></section> : <>
+       <section>
+-        <h2>Prepare a product</h2>
++        <h2 id="prepare-product">Prepare a product</h2>
+         <p>Use photos already uploaded to your shop. Enter one file name per line, including its extension. Each photo must be a JPEG or PNG, at most 20 MB. A job can contain up to 70 photos and 1 GB in total.</p>
+         <form action={action}>
+           <input type="hidden" name="operation" value="submit" /><input type="hidden" name="jobId" value={jobId} />
+@@ -50,7 +50,7 @@
+         </form>
+       </section>
+       <section><h2>Products to review</h2>
+-        {!drafts.length ? <p>No products are waiting for approval.</p> : drafts.map(job => <article key={job.id}>
++        {!drafts.length ? <div><b>0</b><p>No products are waiting for approval.</p><p><a href="#prepare-product">Prepare product view</a></p></div> : drafts.map(job => <article key={job.id}>
+           <h3>{job.product_id}</h3>
+           <p>Dimensions: {job.report?.dimensions_mm.join(" × ")} mm</p>
+           <p>Attachment points: {Object.keys(job.report?.anchors ?? {}).join(", ")}</p>
+@@ -64,7 +64,7 @@
+           </form>
+         </article>)}
+       </section>
+-      <section><h2>Preparation progress</h2>{!jobs.length ? <p>No products have been submitted.</p> : <ul>{jobs.map(job =>
++      <section><h2>Preparation progress</h2>{!jobs.length ? <div><b>0</b><p>No products have been submitted.</p><p><a href="#prepare-product">Prepare product view</a></p></div> : <ul>{jobs.map(job =>
+         <li key={job.id}><strong>{job.product_id}</strong> — {LABELS[job.status] ?? "Check progress"}
+           {job.status === "failed" ? <p>The product did not pass preparation. Check the files and dimensions before trying again.</p> : null}
+         </li>)}</ul>}</section>
+diff --git a/workspace/app/rig/admin/retailer-admin.tsx b/workspace/app/rig/admin/retailer-admin.tsx
+--- a/workspace/app/rig/admin/retailer-admin.tsx
++++ b/workspace/app/rig/admin/retailer-admin.tsx
+@@ -174,11 +174,12 @@
+         <button disabled={busy} onClick={() => run("suggest", {})}>Find fit suggestions</button>
+       </section>
+       <section className="retailer-card"><div className="retailer-section-heading"><span>04</span><h2>Setup templates</h2></div><p>Choose the product categories that make a complete setup. Only approved combinations are shown.</p>
++        {!Object.keys(panel.templates).length && <p className="retailer-empty">0</p>}
+         {Object.entries(panel.templates).map(([category, roles]) => <div className="retailer-template" key={category}><strong>{category}</strong><small>{Object.entries(roles).map(([role, target]) => role === target ? role : `${role} (${target})`).join(" · ")}</small></div>)}
+         <form onSubmit={async e => { e.preventDefault(); const form = e.currentTarget; const data = fields(form); const roles = String(data.roles).split(",").map(s => s.trim()).filter(Boolean); if (!roles.length) return; if (await run("templates", { [String(data.category).trim()]: Object.fromEntries(roles.map(role => [role, role])) })) form.reset(); }}><fieldset disabled={busy}><legend className="retailer-sr">Save a category template</legend><label>Product category<input name="category" required maxLength={80} /></label><label>Included categories, separated by commas<input name="roles" required placeholder="shade, stand" /></label><button type="submit">Save template</button></fieldset></form>
+       </section>
+-      <section className="retailer-card"><div className="retailer-section-heading"><span>05</span><h2>What shoppers couldn’t find</h2></div><p>Search counts for your catalogue. No shopper identities.</p>{panel.missed_searches.length ? <ul className="retailer-searches">{panel.missed_searches.map(row => <li key={row.query}><span>{row.query}</span><strong>{row.count}</strong></li>)}</ul> : <p className="retailer-empty">No unmatched searches in the last 90 days.</p>}</section>
+-      <section className="retailer-card retailer-wide"><div className="retailer-section-heading"><span>06</span><h2>Import history</h2></div><p>Each file is applied in full, or nothing changes.</p>{panel.receipts.length ? <div className="retailer-history">{panel.receipts.map(row => <article key={row.id}><div><strong>{providerName(row.provider)}</strong><small>{row.site} {row.feed_id}</small><small>{new Date(row.created_at).toLocaleString()}</small></div><p>{row.provider === "delete-products" ? `${row.updated} deleted.` : <><b>{row.added}</b> added · <b>{row.updated}</b> updated · <b>{row.rejected}</b> rejected</>}</p></article>)}</div> : <p className="retailer-empty">Import a file to see the result here.</p>}</section>
++      <section className="retailer-card"><div className="retailer-section-heading"><span>05</span><h2>What shoppers couldn’t find</h2></div><p>Search counts for your catalogue. No shopper identities.</p>{panel.missed_searches.length ? <ul className="retailer-searches">{panel.missed_searches.map(row => <li key={row.query}><span>{row.query}</span><strong>{row.count}</strong></li>)}</ul> : <div><b>0</b><p className="retailer-empty">No unmatched searches in the last 90 days.</p><p><a href="/rig">Search</a></p></div>}</section>
++      <section className="retailer-card retailer-wide"><div className="retailer-section-heading"><span>06</span><h2>Import history</h2></div><p>Each file is applied in full, or nothing changes.</p>{panel.receipts.length ? <div className="retailer-history">{panel.receipts.map(row => <article key={row.id}><div><strong>{providerName(row.provider)}</strong><small>{row.site} {row.feed_id}</small><small>{new Date(row.created_at).toLocaleString()}</small></div><p>{row.provider === "delete-products" ? `${row.updated} deleted.` : <><b>{row.added}</b> added · <b>{row.updated}</b> updated · <b>{row.rejected}</b> rejected</>}</p></article>)}</div> : <div><b>0</b><p className="retailer-empty">Import a file to see the result here.</p></div>}</section>
+     </div>
+   </main>;
+ }
+diff --git a/workspace/app/rig/rig.css b/workspace/app/rig/rig.css
+--- a/workspace/app/rig/rig.css
++++ b/workspace/app/rig/rig.css
+@@ -894,3 +894,5 @@
+   .rig.modal-open .scrim:has(.approve) { background: rgba(0, 24, 64, 0.35); padding: 24px 16px; }
+   .rig.modal-open .scrim:has(.approve) .groups { display: none; }
+ }
++
++.count .first-action { margin: 4px 0 0; font-size: 12px; line-height: 1.4; }
+diff --git a/workspace/app/rig/search-view.tsx b/workspace/app/rig/search-view.tsx
+--- a/workspace/app/rig/search-view.tsx
++++ b/workspace/app/rig/search-view.tsx
+@@ -232,7 +232,7 @@
+             Search
+           </button>
+         </form>
+-        <p className="results-line">{hasCatalogue ? line : ""}</p>
++        <p className="results-line">{hasCatalogue ? line : <>— <a href="/rig/admin">Import your catalogue file or connect an official feed.</a></>}</p>
+       </div>
+
+       <div className="search-split">

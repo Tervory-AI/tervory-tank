@@ -374,7 +374,7 @@ def test_room_is_wired_and_client_queries_are_tenant_scoped() -> None:
     assert base_app.app.state.handlers.keys() == {"ping", "gold.nightly"}
 
 
-def test_tank_proxies_base_and_does_not_keep_the_worker() -> None:
+def test_tank_proxies_base_and_does_not_keep_the_worker(monkeypatch) -> None:
     import main as tank
 
     source = (ROOT / "tank" / "main.py").read_text(encoding="utf-8")
@@ -392,7 +392,8 @@ def test_tank_proxies_base_and_does_not_keep_the_worker() -> None:
             return type("Resp", (), {"status_code": 202, "content": b'{"records":2}', "headers": {"content-type": "application/json"}})()
 
     fake = FakeHttp()
-    tank._http = fake
+    monkeypatch.setattr(tank, "_http", fake)
+    monkeypatch.setenv("TANK_KEY_BASE", "placeholder-base-room-key")
 
     async def receive():
         return {"type": "http.request", "body": b'{"batch":"demo"}', "more_body": False}
@@ -421,7 +422,7 @@ def test_tank_proxies_base_and_does_not_keep_the_worker() -> None:
         assert method == "POST"
         assert url == "http://agent-base:8000/v1/base/run"
         assert kwargs["content"] == b'{"batch":"demo"}'
-        assert "x-tank-key" not in {key.lower() for key in kwargs["headers"]}
+        assert {key.lower(): value for key, value in kwargs["headers"].items()}["x-tank-key"] == "placeholder-base-room-key"
         assert "secret-key" not in repr(kwargs)
         with pytest.raises(HTTPException) as caught:
             await tank.base_proxy("nope", request)

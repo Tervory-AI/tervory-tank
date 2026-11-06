@@ -6,10 +6,12 @@ import logging
 import hmac
 import os
 import sys
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Any
 from uuid import UUID
+
+from asyncpg import PostgresError
 
 _HERE = Path(__file__).resolve().parent
 if (_HERE / "agents" / "zenas" / "pool").is_dir():
@@ -123,7 +125,8 @@ class _TankModel:
 
     async def complete(self, messages: list[dict[str, str]], *, task_type: str, provider: str) -> dict[str, Any]:
         del provider
-        data = await self.tank.route(self.tenant_id, task_type, messages)
+        from agents.zenas.core.boundary import bounded_call
+        data = await bounded_call(self.tank.route(self.tenant_id, task_type, messages))
         from agents.zenas.core.answer_failures import route_failure
         failed = route_failure(data)
         if failed is not None:
@@ -303,7 +306,22 @@ _inner_lifespan = app.router.lifespan_context
 @asynccontextmanager
 async def _room_lifespan(application):
     """After the chassis pool is up, bind law_pool and mark cut-off loads."""
-    async with _inner_lifespan(application):
+    from agents.zenas.core.configuration import room_readiness
+
+    application.state.configuration = room_readiness()
+    if not application.state.configuration["ok"]:
+        yield
+        return
+    async with AsyncExitStack() as stack:
+        try:
+            await stack.enter_async_context(_inner_lifespan(application))
+        except (OSError, RuntimeError, ValueError, PostgresError) as exc:
+            application.state.configuration = {
+                "ok": False, "needs_settings": [], "invalid_settings": ["DATABASE_URL"],
+                "error_type": type(exc).__name__,
+            }
+            yield
+            return
         raw = os.environ.get("TANK_REGION", "").strip().lower()
         try:
             region = assert_box_region(raw or None)
@@ -311,6 +329,20 @@ async def _room_lifespan(application):
             yield
             return
         bind_law_pool(application, home_region=region)
+        from agents.zenas.core.outbound import TankClient
+        application.state.tank = TankClient(
+            os.environ.get("TANK_URL", "http://tank:8000"), os.environ["TANK_KEY"],
+            AGENT, application.state.http,
+        )
+        try:
+            await PgStore(application.state.pool).apply_schema()
+        except (OSError, RuntimeError, ValueError, PostgresError) as exc:
+            application.state.configuration = {
+                "ok": False, "needs_settings": [], "invalid_settings": ["DATABASE_URL"],
+                "error_type": type(exc).__name__,
+            }
+            yield
+            return
         try:
             async with _pool_store() as store:
                 await interrupt_abandoned_loads(store)
@@ -320,6 +352,27 @@ async def _room_lifespan(application):
 
 
 app.router.lifespan_context = _room_lifespan
+
+from agents.zenas.core.boundary import guard as room_guard  # noqa: E402
+app.middleware("http")(room_guard)
+
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(request, exc):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"detail": "invalid_request"}, status_code=422)
+
+
+@app.middleware("http")
+async def configuration_guard(request, call_next):
+    from starlette.responses import JSONResponse
+
+    configuration = getattr(app.state, "configuration", None)
+    if configuration is not None and not configuration["ok"]:
+        return JSONResponse(configuration, status_code=503)
+    return await call_next(request)
 
 
 @app.post("/consents", status_code=201)
@@ -1052,9 +1105,8 @@ async def post_cases_convert(body: ConvertIn) -> dict[str, Any]:
         raise HTTPException(status_code=403, detail="wrong region")
 
     async def runner() -> None:
-        ladder = await _ready()
-        async with _pool_job_store() as pool:
-            await convert_cases(pool, ladder, _model(HEARTBEAT_TENANT), region=box)
+        from agents.zenas.core.convert import run_scheduled
+        await run_scheduled(app.state.pool, region=box)
 
     started = await begin_convert(box, runner)
     ladder = await _ready()

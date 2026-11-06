@@ -10,8 +10,8 @@ from fastapi.encoders import jsonable_encoder
 
 from test_command import TENANT, OTHER, api as api, runtime as runtime, command_pool as command_pool
 from test_command_radix_repo import repo_api as repo_api, upload, propose, JOB
-from test_radix_finish_scanners import reports as _scanner_reports
-scanner_reports = _scanner_reports
+import test_radix_finish_scanners as finish_scanners
+scanner_reports = finish_scanners.reports
 from test_rx1_scans import Ctx, FIXTURE, _dirty, _tar
 from scanlib import orchestrate, runtime as scan_runtime, secrets
 from test_radix_passive import database as database, A, B, FakeServer
@@ -33,7 +33,7 @@ async def test_production_reports_persist_and_deliver_private_zero_cost_receipts
     client, pool, tank = repo_api
     monkeypatch.setattr(scan_runtime, 'dependency_scan', DEPENDENCY_SCAN)
     monkeypatch.setenv('RADIX_OSV_DIR', str(Path(os.environ['RADIX_OSV_REAL']).parent))
-    scanner_reports['secret'] = json.dumps([{'RuleID': secrets.FIXTURE_RULE,
+    scanner_reports['findings_json'] = json.dumps([{'RuleID': secrets.FIXTURE_RULE,
         'File': 'config.env', 'StartLine': 1, 'Secret': 'REDACTED', 'Match': 'REDACTED'}]).encode()
     scanner_reports['static'] = json.dumps({'results': [{
         'check_id': 'python-sql-format', 'path': 'app.py', 'start': {'line': 2},

@@ -80,53 +80,53 @@ def test_every_skill_package_has_required_files() -> None:
     assert not missing, "\n".join(missing)
 
 
+# Bound each skill independently: the complete imported eval catalogue exceeds
+# one test deadline, while each package retains all of its cases and assertions.
+@pytest.mark.parametrize("pkg", sorted(
+    (pkg for pkg in skala.load_packages(SKILLS).values()
+     if pkg.rung == 3 and pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"}),
+    key=lambda item: item.ref), ids=lambda pkg: pkg.ref)
 @pytest.mark.asyncio
-async def test_rung3_offline_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_rung3_offline_cases(monkeypatch: pytest.MonkeyPatch, pkg: skala.SkillPackage) -> None:
     # Room-backed checkers (trigger.languagetool) need a room key before they call the
     # room; a placeholder lets them reach the stub http, so their cases count as network-bound.
     monkeypatch.setenv("TANK_KEY_TRIGGER", "offline-placeholder")
-    # Checkov lives only in Radix, like Tisan's room-only executors. Its real
-    # threshold-1.0 eval proof uses /evals/run in tests/radix_r5/room_eval_proof.py.
-    packages = [pkg for pkg in skala.load_packages(SKILLS).values()
-                if pkg.rung == 3 and pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"}]
-    assert packages, "no rung-3 skills found"
     lines: list[str] = []
     failures: list[str] = []
-    for pkg in sorted(packages, key=lambda item: item.ref):
-        run = _load_run(pkg)
-        passed = skipped = failed = 0
-        for index, case in enumerate(pkg.cases):
-            name = case.get("name") or f"case {index}"
-            ctx = StubCtx()
-            try:
-                output = await run(case.get("input") or {}, ctx)
-            except Exception as exc:  # noqa: BLE001 — a raised stub http call means the case needs the network
-                if _from_network(exc):
-                    skipped += 1
-                    continue
-                # Same rule as skala.run_evals: a must_refuse case passes when run() raises
-                # exactly the expected exception type and message.
-                expected_error = case.get("expected_error") or {}
-                if (case.get("must_refuse") and type(exc).__name__ == expected_error.get("type")
-                        and str(exc) == expected_error.get("message")):
-                    passed += 1
-                    continue
-                failed += 1
-                failures.append(f"{pkg.ref} / {name}: error: {exc}")
-                continue
-            ok, why = skala.score_case(case.get("expected") or {}, output, case.get("tolerance") or "exact")
-            if case.get("expected_error"):
-                ok, why = False, "expected refusal exception was not raised"
-            if ok:
-                passed += 1
-            elif ctx.http.called:
+    run = _load_run(pkg)
+    passed = skipped = failed = 0
+    for index, case in enumerate(pkg.cases):
+        name = case.get("name") or f"case {index}"
+        ctx = StubCtx()
+        try:
+            output = await run(case.get("input") or {}, ctx)
+        except Exception as exc:  # noqa: BLE001 — a raised stub http call means the case needs the network
+            if _from_network(exc):
                 skipped += 1
-            else:
-                failed += 1
-                failures.append(f"{pkg.ref} / {name}: {why}")
-        lines.append(
-            f"{pkg.ref}: {passed} passed, {skipped} network-skipped, {failed} failed ({len(pkg.cases)} cases)"
-        )
+                continue
+            # Same rule as skala.run_evals: a must_refuse case passes when run() raises
+            # exactly the expected exception type and message.
+            expected_error = case.get("expected_error") or {}
+            if (case.get("must_refuse") and type(exc).__name__ == expected_error.get("type")
+                    and str(exc) == expected_error.get("message")):
+                passed += 1
+                continue
+            failed += 1
+            failures.append(f"{pkg.ref} / {name}: error: {exc}")
+            continue
+        ok, why = skala.score_case(case.get("expected") or {}, output, case.get("tolerance") or "exact")
+        if case.get("expected_error"):
+            ok, why = False, "expected refusal exception was not raised"
+        if ok:
+            passed += 1
+        elif ctx.http.called:
+            skipped += 1
+        else:
+            failed += 1
+            failures.append(f"{pkg.ref} / {name}: {why}")
+    lines.append(
+        f"{pkg.ref}: {passed} passed, {skipped} network-skipped, {failed} failed ({len(pkg.cases)} cases)"
+    )
     report = "\n".join(lines)
     print(report)
     assert not failures, report + "\n" + "\n".join(failures)

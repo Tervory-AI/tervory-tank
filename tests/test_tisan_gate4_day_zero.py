@@ -237,7 +237,7 @@ async def test_empty_storage_returns_measured_zero_counts_and_no_objects(monkeyp
 
 def test_saturday_command_has_no_implicit_live_launch():
     for args in ([], ['--live'], ['--dry-run', '--live']):
-        result = subprocess.run([str(ROOT / 'scripts/saturday.sh'), *args], cwd=ROOT,
+        result = subprocess.run([str(ROOT / 'scripts/tisan-saturday.sh'), *args], cwd=ROOT,
                                 capture_output=True, text=True, timeout=10)
         assert result.returncode == 2
         assert result.stderr.strip() == 'Usage: scripts/saturday.sh --dry-run'

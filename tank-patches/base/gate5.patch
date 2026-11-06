@@ -1,0 +1,535 @@
+--- a/tank/main.py
++++ b/tank/main.py
+@@ -3830,7 +3830,10 @@
+     if _http is None:
+         raise HTTPException(status_code=503, detail="Base room is unreachable")
+     body = await request.body()
+-    headers = {}
++    key = os.environ.get("TANK_KEY_BASE", "")
++    if not key:
++        raise HTTPException(503, "Missing setting: TANK_KEY_BASE")
++    headers = {"X-Tank-Key": key}
+     content_type = request.headers.get("content-type")
+     if content_type:
+         headers["content-type"] = content_type
+--- a/tank/base_repository.py
++++ b/tank/base_repository.py
+@@ -378,7 +378,11 @@
+                 else:
+                     return
+         try:
+-            response = await self.rt._http.post(self.rt.BASE_AGENT_URL.rstrip("/") + "/v1/base/run", json={
++            key = os.environ.get("TANK_KEY_BASE", "")
++            if not key:
++                raise ValueError("Missing setting: TANK_KEY_BASE")
++            response = await self.rt._http.post(self.rt.BASE_AGENT_URL.rstrip("/") + "/v1/base/run",
++                headers={"X-Tank-Key": key}, json={
+                 "tenant_id": str(tenant), "created_by": pending["created_by"], "batch": pending["batch"],
+                 "records": records, "engine": "ffl" if pending["file_id"] else None, "preview": False, "split_by_state": False,
+             }, timeout=180, follow_redirects=False)
+--- a/workspace/app/base/reference-workflow.tsx
++++ b/workspace/app/base/reference-workflow.tsx
+@@ -1,5 +1,5 @@
+ "use client";
+-import { useCallback, useEffect, useState, type FormEvent } from "react";
++import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+ import { useRouter } from "next/navigation";
+ import { parseBusinessCsv, MAX_CSV_BYTES } from "./csv";
+ import { costTrend } from "./cost-trend";
+@@ -9,11 +9,31 @@
+ const metrics = ["licensees", "attempted", "website", "phone", "email", "email_and_phone", "email_only", "phone_only", "neither", "failed"] as const;
+ const words: Record<string, string> = { licensees: "Reference licences", attempted: "Attempted", website: "Website", phone: "Phone", email: "Email", email_and_phone: "Email and phone", email_only: "Email only", phone_only: "Phone only", neither: "Neither", failed: "Missing fields" };
+ const amount = (value: string | null) => value === null ? "price not set" : `$${Number(value).toFixed(6)}`;
++export async function bounded<T>(work: (signal: AbortSignal) => Promise<T>, timeout = 30_000): Promise<T> {
++  const controller = new AbortController();
++  let timer: ReturnType<typeof setTimeout>;
++  try {
++    return await Promise.race([work(controller.signal), new Promise<never>((_, reject) => {
++      timer = setTimeout(() => { controller.abort(); reject(new Error("Base is unavailable. Your existing work has not changed.")); }, timeout);
++    })]);
++  } catch (failure) {
++    if (failure instanceof TypeError || failure instanceof SyntaxError) throw new Error("Base is unavailable. Your existing work has not changed.");
++    throw failure;
++  } finally { clearTimeout(timer!); }
++}
+ async function read<T>(path: string, query = "", body?: Record<string, unknown>): Promise<T> {
+-  const response = await fetch(`/base/product/${path}${query ? `?${query}` : ""}`, { cache: "no-store", ...(body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
+-  const value = await response.json();
+-  if (!response.ok) throw new Error(typeof value.detail === "string" ? value.detail : "Base could not complete this request.");
+-  return value as T;
++  return bounded(async signal => {
++    const response = await fetch(`/base/product/${path}${query ? `?${query}` : ""}`, { cache: "no-store", signal, ...(body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
++    const value = await response.json();
++    if (!response.ok) throw new Error(typeof value.detail === "string" ? value.detail : "Base could not complete this request.");
++    return value as T;
++  });
++}
++// A lost acknowledgement, reload or second click must not create paid work twice.
++async function requestId(payload: unknown): Promise<string> {
++  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(payload)));
++  const hex = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join("");
++  return `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
+ }
+ export function Evidence({ field }: { field: FieldEvidence }) {
+   if (!field.verified) return <span>{reasonLabel(field.reason)}{field.source_url && <> · <a href={field.source_url} target="_blank" rel="noopener noreferrer">Source</a></>}</span>;
+@@ -23,6 +43,9 @@
+ 
+ export function ReferenceWorkflow({ signedIn }: { signedIn: boolean }) {
+   const router = useRouter();
++  const loading = useRef(false);
++  const mutation = useRef(false);
++  const generation = useRef(0);
+   const [reference, setReference] = useState<Reference | null>(null);
+   const [numbers, setNumbers] = useState<Numbers | null>(null);
+   const [comparison, setComparison] = useState<Comparison | null>(null);
+@@ -34,39 +57,49 @@
+   const [busy, setBusy] = useState(false);
+   const [records, setRecords] = useState<{ total: number; rows: VerifiedRow[] } | null>(null);
+   const [expenses, setExpenses] = useState<{ rows: Expense[]; total: number; cost: Cost; unpricedOnly: boolean } | null>(null);
++  const [readError, setReadError] = useState("");
+   const query = new URLSearchParams({ states: states.join(","), types: types.join(","), include_collectors: String(collectors) }).toString();
+   const reload = useCallback(async () => {
++    const version = ++generation.current;
+     try {
+       const [ref, data, other] = await Promise.all([read<Reference>("reference", "include_collectors=true"), read<Numbers>("numbers", query), read<Comparison>("comparison", query)]);
+-      setReference(ref); setNumbers(data); setComparison(other); setError("");
+-    } catch (failure) { setError(failure instanceof Error ? failure.message : "The reference could not be loaded."); }
++      if (version === generation.current) { setReference(ref); setNumbers(data); setComparison(other); setReadError(""); }
++    } catch (failure) { if (version === generation.current) setReadError(failure instanceof Error ? failure.message : "The reference could not be loaded."); }
+   }, [query]);
+   useEffect(() => {
+     if (!signedIn) return;
+     void reload();
+-    const timer = setInterval(() => { void reload(); }, 15000);
++    const timer = setInterval(() => {
++      if (loading.current || document.visibilityState === "hidden") return;
++      loading.current = true;
++      void reload().finally(() => { loading.current = false; });
++    }, 15000);
+     return () => clearInterval(timer);
+   }, [signedIn, reload]);
+ 
+   async function start(event: FormEvent<HTMLFormElement>) {
+-    event.preventDefault(); setBusy(true); setError("");
++    event.preventDefault(); if (mutation.current) return; mutation.current = true; setBusy(true); setError("");
+     try {
+-      const result = await read<{ records: number; states: number }>("reference/batches", "", { request_id: crypto.randomUUID(), name: "Reference list", states, types, include_collectors: collectors });
++      const result = await read<{ records: number; states: number }>("reference/batches", "", { request_id: await requestId(["reference", reference?.file, [...states].sort(), [...types].sort(), collectors]), name: "Reference list", states: [...states].sort(), types: [...types].sort(), include_collectors: collectors });
+       setMessage(`${countLabel(result.records, "licence")} received across ${countLabel(result.states, "state")}. States run one after another.`);
+       await reload(); router.refresh();
+     } catch (failure) { setError(failure instanceof Error ? failure.message : "The batch could not be confirmed. Check States done before retrying."); }
+-    finally { setBusy(false); }
++    finally { mutation.current = false; setBusy(false); }
+   }
+   async function upload(event: FormEvent<HTMLFormElement>, apollo = false) {
+     event.preventDefault(); const form = event.currentTarget;
+     const file = new FormData(form).get("file");
+-    if (!(file instanceof File)) return;
++    if (!(file instanceof File) || mutation.current) return;
++    mutation.current = true;
+     setBusy(true); setError("");
+     try {
+       if (file.size > (apollo ? 2_000_000 : MAX_CSV_BYTES)) throw new Error("This CSV is too large.");
+       const csv = await file.text();
+       if (apollo) await read("comparison", "", { csv });
+-      else await read("uploads", "", { request_id: crypto.randomUUID(), name: file.name.replace(/\.csv$/i, "").slice(0, 50), records: parseBusinessCsv(csv) });
++      else {
++        const payload = { name: file.name.replace(/\.csv$/i, "").slice(0, 50), records: parseBusinessCsv(csv) };
++        await read("uploads", "", { request_id: await requestId(payload), ...payload });
++      }
+       setMessage(apollo ? "Apollo comparison saved for the matching licences." : "Your list was received. Follow its states below.");
+       form.reset(); router.refresh();
+       setRecords(null); setExpenses(null);
+@@ -75,7 +108,7 @@
+         setStates([]); setTypes([]); setCollectors(false);
+       } else await reload();
+     } catch (failure) { setError(failure instanceof Error ? failure.message : "The upload could not be completed."); }
+-    finally { setBusy(false); }
++    finally { mutation.current = false; setBusy(false); }
+   }
+   function download(group: Group, metric: string, reason?: string) {
+     return `/base/product/records.csv?${new URLSearchParams({ states: group.state, types: group.licence_type, metric, include_collectors: String(collectors), ...(reason ? { reason } : {}) })}`;
+@@ -99,7 +132,7 @@
+       : <p role={reference?.refresh?.message ? "alert" : undefined}>{reference ? reference.refresh?.message || "The platform reference is not available yet." : "Loading the platform reference…"}</p>}
+     {reference?.file && <p>{countLabel(reference.duplicate_count || 0, "duplicate row")} {reference.duplicate_count === 1 ? "was" : "were"} found. The newest row for each licence is used.</p>}
+     {reference?.file && reference.refresh?.message && <p role="alert">{reference.refresh.message}</p>}
+-    {error && <p role="alert">{reasonLabel(error)}</p>}{message && <p role="status">{message}</p>}
++    {(error || readError) && <p role="alert">{reasonLabel(error || readError)}</p>}{message && <p role="status">{message}</p>}
+     {reference?.refresh && <p>Latest reference check: {dateLabel(reference.refresh.checked_at)} · {refreshLabel(reference.refresh.status)}</p>}
+     <form className="bcp-upload" onSubmit={start}>
+       <label>States <select className="bcp-input" aria-label="States" multiple value={states} onChange={e => setStates(Array.from(e.target.selectedOptions, option => option.value))}>{[...new Set(reference?.groups.map(group => group.state) || [])].sort().map(state => <option key={state} value={state}>{stateLabel(state)}</option>)}</select></label>
+@@ -110,14 +143,14 @@
+     </form>
+     <form id="base-upload" className="bcp-upload" onSubmit={e => upload(e)}><h3>Upload a business list</h3><label>Business CSV <input className="bcp-input" type="file" name="file" accept=".csv,text/csv" required disabled={busy} /></label><button className="bcp-secondary" disabled={busy}>Upload and verify</button><p>Include a name column. Optional website, phone, address, city, state and zip. Up to 1,000 rows, 500 KB.</p></form>
+     <h3>Verified contact details</h3><p>Counts describe the latest attempt per licence. Checks still running carry that reason until they finish. A record can have a verified field and still have missing fields. Select any count to download its records with sources and check dates.</p>
+-    <div className="bcp-product-table"><table><thead><tr><th>State and licence type</th>{metrics.map(metric => <th key={metric}>{words[metric]}</th>)}</tr></thead><tbody>{numbers?.groups.map(group => <tr key={`${group.state}-${group.licence_type}`}><th>{selectionLabel(group.state, group.licence_type)}</th>{metrics.map(metric => <td key={metric}><a href={download(group, metric)}>{group[metric].toLocaleString()}</a></td>)}</tr>)}{numbers?.groups.length === 0 && <tr><th>—</th>{metrics.map(metric => <td key={metric}>0</td>)}</tr>}</tbody></table></div>
++    <div className="bcp-product-table" tabIndex={0} role="region" aria-label="Verified contact details"><table><thead><tr><th>State and licence type</th>{metrics.map(metric => <th key={metric}>{words[metric]}</th>)}</tr></thead><tbody>{numbers?.groups.map(group => <tr key={`${group.state}-${group.licence_type}`}><th>{selectionLabel(group.state, group.licence_type)}</th>{metrics.map(metric => <td key={metric}><a href={download(group, metric)}>{group[metric].toLocaleString()}</a></td>)}</tr>)}{numbers?.groups.length === 0 && <tr><th>—</th>{metrics.map(metric => <td key={metric}>0</td>)}</tr>}</tbody></table></div>
+     {numbers?.groups.length === 0 && <p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p>}
+     {numbers?.groups.flatMap(group => Object.entries(group.failed_by_reason).map(([reason, count]) => <p key={`${group.state}-${group.licence_type}-${reason}`}><a href={download(group, "failed", reason)}>{countLabel(count, "record")} · {selectionLabel(group.state, group.licence_type)} · {reasonLabel(reason)}</a></p>))}
+     <button className="bcp-secondary" onClick={showRecords}>View verified fields and sources</button>
+     {records && <div aria-label="Verified fields"><p>{countLabel(records.total, "attempted record")}. Showing the first {records.rows.length}; downloads include every matching record.</p>{records.total === 0 && <p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p>}{records.rows.map(row => <article key={row.record_id}><h4>{row.name} · {stateLabel(row.state)}</h4><dl>{pageFields(row.fields).map(([name, value]) => <div key={name}><dt>{fieldLabels[name]}</dt><dd><Evidence field={value} /></dd></div>)}</dl></article>)}</div>}
+     <h3>Cost per verified record</h3><p>One verified record has at least one website, phone or email with a recorded source and check date. Costs include priced calls only, by month and step. Calls without a price stay out of these totals; select their count to see them.</p>
+-    <div className="bcp-product-table"><table><thead><tr><th>State</th><th>Month</th><th>Step</th><th>Verified records</th><th>Recorded spend</th><th>Cost per verified record</th></tr></thead><tbody>{numbers?.costs.map(cost => <tr key={`${cost.state}-${cost.month}-${cost.rung}`}><td>{stateLabel(cost.state)}</td><td>{monthLabel(cost.month)}</td><td>{costStep(cost)}</td><td>{cost.verified_records}</td><td><button className="bcp-text-button" onClick={() => showExpenses(cost)}>{amount(cost.known_cost_usd)}</button></td><td><button className="bcp-text-button" onClick={() => showExpenses(cost)}>{cost.status === "no verified records" ? "No records have been verified yet." : cost.status === "receipts unavailable" ? "We have not received all the cost details yet." : amount(cost.cost_per_verified_record)}</button>{cost.unpriced > 0 && <><br /><button className="bcp-text-button" onClick={() => showExpenses(cost, false, true)}>excludes {countLabel(cost.unpriced, "unpriced call")}</button></>}</td></tr>)}</tbody></table></div>
+-    {numbers?.costs.length === 0 && <div data-empty="costs"><p>No recorded costs yet.</p><figure aria-label="Cost per verified record"><svg viewBox="0 0 320 100" role="img" aria-label="Monthly cost change" style={{width:"100%",maxWidth:640}}><path d="M24 8V80H312" fill="none" stroke="currentColor"/><path d="M24 80H312" fill="none" stroke="currentColor"/><text x="4" y="84">0</text><text x="164" y="45">—</text></svg><figcaption>—</figcaption></figure><p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p><h4>Recorded calls</h4><ul><li>{numbers.unattributed_calls || numbers.records_without_receipts || numbers.groups.some(group => group.attempted > 0) ? "—" : "0 calls"}</li></ul><p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p></div>}
++    <div className="bcp-product-table" tabIndex={0} role="region" aria-label="Cost per verified record"><table><thead><tr><th>State</th><th>Month</th><th>Step</th><th>Verified records</th><th>Recorded spend</th><th>Cost per verified record</th></tr></thead><tbody>{numbers?.costs.map(cost => <tr key={`${cost.state}-${cost.month}-${cost.rung}`}><td>{stateLabel(cost.state)}</td><td>{monthLabel(cost.month)}</td><td>{costStep(cost)}</td><td>{cost.verified_records}</td><td><button className="bcp-text-button" onClick={() => showExpenses(cost)}>{amount(cost.known_cost_usd)}</button></td><td><button className="bcp-text-button" onClick={() => showExpenses(cost)}>{cost.status === "no verified records" ? "No records have been verified yet." : cost.status === "receipts unavailable" ? "We have not received all the cost details yet." : amount(cost.cost_per_verified_record)}</button>{cost.unpriced > 0 && <><br /><button className="bcp-text-button" onClick={() => showExpenses(cost, false, true)}>excludes {countLabel(cost.unpriced, "unpriced call")}</button></>}</td></tr>)}</tbody></table></div>
++    <div style={{ minHeight: !numbers || !numbers.costs.length ? 260 : 0 }}>{numbers?.costs.length === 0 && <div data-empty="costs"><p>No recorded costs yet.</p><figure aria-label="Cost per verified record"><svg viewBox="0 0 320 100" role="img" aria-label="Monthly cost change" style={{width:"100%",maxWidth:640}}><path d="M24 8V80H312" fill="none" stroke="currentColor"/><path d="M24 80H312" fill="none" stroke="currentColor"/><text x="4" y="84">0</text><text x="164" y="45">—</text></svg><figcaption>—</figcaption></figure><p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p><h4>Recorded calls</h4><ul><li>{numbers.unattributed_calls || numbers.records_without_receipts || numbers.groups.some(group => group.attempted > 0) ? "—" : "0 calls"}</li></ul><p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p></div>}</div>
+     <ul aria-label="Monthly cost change">{numbers?.costs.length === 0 && <li>—</li>}{costTrend(numbers?.costs || []).map(row => <li key={`${row.state}-${row.month}`}>{stateLabel(row.state)} · {monthLabel(row.month)} · {row.cost === null ? "We do not have a cost per verified record yet." : `$${row.cost.toFixed(6)} per verified record`} · {row.change}{row.unpriced > 0 && <> · {numbers?.costs.filter(cost => cost.state === row.state && cost.month === row.month && cost.unpriced > 0).map(cost => <button key={cost.rung} className="bcp-text-button" onClick={() => showExpenses(cost, false, true)}>excludes {countLabel(cost.unpriced, "unpriced call")} ({costStep(cost).toLowerCase()})</button>)}</>}</li>)}</ul>
+     {Boolean(numbers?.unattributed_calls) && <p>{countLabel(numbers?.unattributed_calls || 0, "earlier call")} could not be matched to a record and {numbers?.unattributed_calls === 1 ? "is" : "are"} excluded from per-record costs.</p>}
+     {expenses && <div aria-label="Cost receipts"><h4>{expenses.unpricedOnly ? "Calls without a price" : "Recorded calls"}</h4><p>Showing {expenses.rows.length} of {countLabel(expenses.total, "call")}.</p><ul>{expenses.rows.map(row => <li key={row.id}>{dateLabel(row.ts)} · {receiptLabel(row)} · {row.cost_status === "not_set" ? "price not set" : row.vendor_cost_status === "free_pass" ? `Free pass: $0 charged · list cost ${amount(row.vendor_list_cost_usd ?? null)}` : amount(row.cost_usd)}</li>)}</ul>{expenses.total === 0 && <p className="bcp-copy"><a href="#base-upload">Upload a business list</a></p>}{expenses.rows.length < expenses.total && <button className="bcp-secondary" onClick={() => showExpenses(expenses.cost, true, expenses.unpricedOnly)}>Show more calls</button>}</div>}
+@@ -128,6 +161,6 @@
+     <ul>{reference?.history?.map(file => <li key={file.id}>{dateLabel(file.published_on)} · {countLabel(file.row_count, "licence")} retained in this dated file</li>)}</ul>
+     {reference?.changes.length ? <details><summary>{countLabel(reference.changes.length, "new, lapsed or moved licence")} in the latest file</summary><ul>{reference.changes.map(change => <li key={change.licence_key}>Licence {change.licence_key} · {changeLabel(change.change)}</li>)}</ul></details> : <p>No differences between dated files to show yet.</p>}
+     <h3>Compare with Apollo</h3><form className="bcp-upload" onSubmit={e => upload(e, true)}><label>Apollo CSV <input className="bcp-input" type="file" name="file" accept=".csv,text/csv" required disabled={busy} /></label><button className="bcp-secondary" disabled={busy}>Compare the same licences</button><p>Upload the Apollo comparison CSV prepared for your Base licences. It contains matching licence numbers and Apollo’s website, phone and email results for the same businesses. Up to 2 MB. No service connection is required.</p></form>
+-    {comparison?.states.length ? <div className="bcp-product-table"><table><thead><tr><th>State and detail</th><th>Matches</th><th>Base only</th><th>Apollo only</th><th>Disagreements</th></tr></thead><tbody>{comparison.states.flatMap(state => (["website", "phone", "email"] as const).map(field => <tr key={`${state.state}-${field}`}><th>{stateLabel(state.state)} · {fieldLabels[field]}</th>{["matches", "base_only", "apollo_only", "disagreements"].map(outcome => <td key={outcome}>{state[field][outcome]}</td>)}</tr>))}</tbody></table><details><summary>See the values side by side</summary>{comparison.rows.map(row => <article key={row.licence_key}><h4>Licence {row.licence_key} · {stateLabel(row.state)}</h4>{(["website", "phone", "email"] as const).map(field => <p key={field}>{fieldLabels[field]} · Base: {String(row.base[field].value || "Not found")} · Apollo: {row.apollo[field] || "Not found"} · {comparisonLabel(row.outcomes[field])}</p>)}</article>)}</details></div> : <div data-empty="comparison"><p>No comparison imported yet.</p><table><thead><tr>{["State and detail","Matches","Base only","Apollo only","Disagreements"].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody><tr><th>—</th>{[0,1,2,3].map(key => <td key={key}>0</td>)}</tr></tbody></table><p className="bcp-copy">Apollo CSV</p></div>}
++    {comparison?.states.length ? <div className="bcp-product-table" tabIndex={0} role="region" aria-label="Compare with Apollo"><table><thead><tr><th>State and detail</th><th>Matches</th><th>Base only</th><th>Apollo only</th><th>Disagreements</th></tr></thead><tbody>{comparison.states.flatMap(state => (["website", "phone", "email"] as const).map(field => <tr key={`${state.state}-${field}`}><th>{stateLabel(state.state)} · {fieldLabels[field]}</th>{["matches", "base_only", "apollo_only", "disagreements"].map(outcome => <td key={outcome}>{state[field][outcome]}</td>)}</tr>))}</tbody></table><details><summary>See the values side by side</summary>{comparison.rows.map(row => <article key={row.licence_key}><h4>Licence {row.licence_key} · {stateLabel(row.state)}</h4>{(["website", "phone", "email"] as const).map(field => <p key={field}>{fieldLabels[field]} · Base: {String(row.base[field].value || "Not found")} · Apollo: {row.apollo[field] || "Not found"} · {comparisonLabel(row.outcomes[field])}</p>)}</article>)}</details></div> : <div data-empty="comparison"><p>No comparison imported yet.</p><table><thead><tr>{["State and detail","Matches","Base only","Apollo only","Disagreements"].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody><tr><th>—</th>{[0,1,2,3].map(key => <td key={key}>0</td>)}</tr></tbody></table><p className="bcp-copy">Apollo CSV</p></div>}
+   </section>;
+ }
+--- a/workspace/app/base/view.tsx
++++ b/workspace/app/base/view.tsx
+@@ -40,7 +40,7 @@
+   const target = document.getElementById(id);
+   if (!root || !target) return;
+   const top = target.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
+-  root.scrollTo({ top, behavior: "smooth" });
++  root.scrollTo({ top, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+ }
+ 
+ function Status({ row }: { row: BatchRow }) {
+@@ -208,7 +208,7 @@
+         </div>
+       </aside>
+ 
+-      <div className="bcp-main" data-scroll-root inert={dialogOpen || undefined}>
++      <div className="bcp-main" data-scroll-root tabIndex={0} role="region" aria-label="Base" inert={dialogOpen || undefined}>
+         <div className="bcp-body">
+           <section id="overview" className="bcp-intro">
+             <div>
+--- a/workspace/app/base/plugins.tsx
++++ b/workspace/app/base/plugins.tsx
+@@ -12,6 +12,7 @@
+ import { useRouter } from "next/navigation";
+ import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+ import { shortDate } from "./model";
++import { bounded } from "./reference-workflow";
+ import {
+   addBaseConnection,
+   addBaseLink,
+@@ -434,25 +435,36 @@
+ }) {
+   const router = useRouter();
+   const close = useRef<HTMLButtonElement>(null);
++  const closeHandler = useRef(onClose);
++  closeHandler.current = onClose;
+   const [note, setNote] = useState("");
+   const [busy, setBusy] = useState(false);
+ 
+   useEffect(() => {
++    const previous = document.activeElement as HTMLElement | null;
+     close.current?.focus();
+     function onKey(event: KeyboardEvent) {
+-      if (event.key === "Escape") onClose();
++      if (event.key === "Escape") closeHandler.current();
++      if (event.key !== "Tab") return;
++      const dialog = close.current?.closest('[role="dialog"]');
++      const items = Array.from(dialog?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href]') || []).filter(el => el.getClientRects().length);
++      const first = items[0], last = items[items.length - 1];
++      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
++      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+     }
+     window.addEventListener("keydown", onKey);
+-    return () => window.removeEventListener("keydown", onKey);
+-  }, [onClose]);
++    return () => { window.removeEventListener("keydown", onKey); previous?.focus(); };
++  }, []);
+ 
+   const run: Run = async (job) => {
+     if (!plugins.enabled || busy) return;
+     setBusy(true);
+     try {
+-      const result = await job();
++      const result = await bounded(() => job());
+       setNote(result.message);
+       if (result.ok) router.refresh();
++    } catch {
++      setNote("Plugins could not be loaded from Tank. No vault data is shown.");
+     } finally {
+       setBusy(false);
+     }
+--- a/workspace/app/base/base.css
++++ b/workspace/app/base/base.css
+@@ -75,6 +75,21 @@
+ .bcp-top {
+   display: none;
+ }
++
++/* Keyboard, contrast and predictable loading geometry reuse the approved palette. */
++.bcp :is(a,button,input,select,textarea,[tabindex]):focus-visible { outline: 3px solid #001840; outline-offset: 3px; }
++.bcp .bcp-panel :focus-visible, .bcp .bcp-top :focus-visible { outline-color: #fff; }
++.bcp .bcp-search-bar .bcp-input { border-color: #4a5570; }
++.bcp :is(input,select,textarea) { border-color: #4a5570; }
++.bcp .bcp-reference > p[role="alert"] { min-block-size: 1.5em; }
++.bcp .bcp-product-table { min-block-size: 96px; }
++.bcp .bcp-reference { min-block-size: 1400px; }
++.bcp :is(.bcp-row-copy,.bcp-hit-source,.bcp-hit-none,.bcp-copy,.bcp-thread-empty) { color: #4a5570; }
++@media (max-width: 600px) {
++  .bcp :is(button,input,select) { min-block-size: 44px; }
++  .bcp a { text-decoration: underline; }
++}
++@media (prefers-reduced-motion: reduce) { .bcp *, .bcp *::before, .bcp *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+ 
+ /* ---- Left panel: anchored ---- */
+ 
+@@ -484,7 +499,7 @@
+   border: 1px solid #b8bfd0;
+   border-radius: 999px;
+   background: #f4f6fb;
+-  color: #6b7590;
++  color: #4a5570;
+   font-size: 11px;
+   font-weight: 500;
+ }
+@@ -682,7 +697,7 @@
+ }
+ 
+ .bcp-input::placeholder {
+-  color: #7e889e;
++  color: #4a5570;
+ }
+ 
+ .bcp-input:disabled {
+@@ -887,11 +902,11 @@
+ }
+ 
+ .bcp-hit-none {
+-  color: #7e889e;
++  color: #4a5570;
+ }
+ 
+ .bcp-hit-source {
+-  color: #6b7590;
++  color: #4a5570;
+   font-size: 12px;
+ }
+ 
+--- a/workspace/app/base/product/[...path]/route.ts
++++ b/workspace/app/base/product/[...path]/route.ts
+@@ -20,8 +20,26 @@
+   let body: Record<string, unknown> | undefined;
+   if (request.method === "POST") {
+     if (!isWorkspaceOrigin(request)) return Response.json({ detail: "Open this form in your workspace." }, { status: 403 });
+-    const text = await request.text();
+-    if (Buffer.byteLength(text) > 2_100_000) return Response.json({ detail: "This file is too large." }, { status: 413 });
++    const reader = request.body?.getReader();
++    const chunks: Uint8Array[] = [];
++    let size = 0;
++    const deadline = AbortSignal.timeout(30_000);
++    let aborted: (() => void) | undefined;
++    const expired = new Promise<never>((_, reject) => {
++      aborted = () => { void reader?.cancel(); reject(new Error("body timeout")); };
++      deadline.addEventListener("abort", aborted, { once: true });
++    });
++    try {
++      while (reader) {
++        const { done, value } = await Promise.race([reader.read(), expired]);
++        if (done) break;
++        size += value.byteLength;
++        if (size > 2_100_000) { await reader.cancel(); return Response.json({ detail: "This file is too large." }, { status: 413 }); }
++        chunks.push(value);
++      }
++    } catch { return Response.json({ detail: "The request could not be read." }, { status: 400 }); }
++    finally { if (aborted) deadline.removeEventListener("abort", aborted); reader?.releaseLock(); }
++    const text = Buffer.concat(chunks).toString("utf8");
+     try {
+       const value: unknown = JSON.parse(text);
+       if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error();
+--- a/workspace/app/base/search.ts
++++ b/workspace/app/base/search.ts
+@@ -15,8 +15,17 @@
+ async function readRecords(): Promise<BaseRecord[]> {
+   const { tenantId } = await currentTenant();
+   const all: BaseRecord[] = [];
++  const deadline = Date.now() + 30_000;
+   for (let offset = 0; offset < CAP; offset += PAGE) {
+-    const page = await baseRecords(tenantId, { limit: PAGE, offset });
++    const remaining = deadline - Date.now();
++    if (remaining <= 0) throw new Error("Base is unavailable.");
++    let timer: ReturnType<typeof setTimeout>;
++    let page: BaseRecord[];
++    try {
++      page = await Promise.race([baseRecords(tenantId, { limit: PAGE, offset }), new Promise<never>((_, reject) => {
++        timer = setTimeout(() => reject(new Error("Base is unavailable.")), remaining);
++      })]);
++    } finally { clearTimeout(timer!); }
+     all.push(...page);
+     if (page.length < PAGE) break;
+   }
+--- a/workspace/app/base/batch-workflow.tsx
++++ b/workspace/app/base/batch-workflow.tsx
+@@ -3,7 +3,7 @@
+ import { useEffect, useState } from "react";
+ import { batchLabel } from "./model";
+ import { countLabel, pageFields, fieldLabels, stateLabel } from "./display";
+-import { Evidence } from "./reference-workflow";
++import { Evidence, bounded } from "./reference-workflow";
+ import type { VerifiedRow } from "./product-types";
+ 
+ export function BatchWorkflow({ signedIn, selected }: { signedIn: boolean; selected: string | null }) {
+@@ -12,15 +12,21 @@
+   useEffect(() => {
+     setResult(null); setError("");
+     if (!selected || !signedIn) return;
+-    let stopped = false;
++    let stopped = false, running = false;
+     const query = new URLSearchParams({ batch: selected, include_collectors: "true" });
+     async function poll() {
++      if (running || stopped) return;
++      running = true;
+       try {
+-        const response = await fetch(`/base/product/records?${query}`, { cache: "no-store" });
+-        const data = await response.json();
+-        if (!response.ok) throw new Error("The results could not be loaded. They will be checked again shortly.");
++        const data = await bounded(async signal => {
++          const response = await fetch(`/base/product/records?${query}`, { cache: "no-store", signal });
++          const data = await response.json();
++          if (!response.ok) throw new Error("The results could not be loaded. They will be checked again shortly.");
++          return data;
++        });
+         if (!stopped) { setResult(data); setError(""); }
+       } catch { if (!stopped) setError("The results could not be loaded. They will be checked again shortly."); }
++      finally { running = false; }
+     }
+     void poll();
+     const timer = setInterval(() => { void poll(); }, 15000);
+--- a/workspace/app/base/context-comparison.tsx
++++ b/workspace/app/base/context-comparison.tsx
+@@ -1,4 +1,5 @@
+ import { useState } from "react";
++import { bounded } from "./reference-workflow";
+ import { useRouter } from "next/navigation";
+ import { contextReport, type ContextReport } from "./context-report";
+ 
+@@ -12,8 +13,10 @@
+     setPending(true);
+     setMessage("");
+     try {
+-      const response = await fetch("/api/base/context-trial", { method: "POST" });
+-      const result = await response.json();
++      const { response, result } = await bounded(async signal => {
++        const response = await fetch("/api/base/context-trial", { method: "POST", signal });
++        return { response, result: await response.json() };
++      }, 300_000);
+       setMessage(response.ok ? `Records sent: ${result.records_sent}. ${result.message ?? "Comparison updated."}` : result.error);
+       if (response.ok && Array.isArray(result.comparison_records)) setLatestReport(contextReport(result.comparison_records));
+       router.refresh();
+--- a/workspace/lib/tank.ts
++++ b/workspace/lib/tank.ts
+@@ -345,11 +345,11 @@
+ export async function baseProductRequest(tenantId: string, path: string, query: URLSearchParams = new URLSearchParams(), body?: Record<string, unknown>): Promise<Response> {
+   const parameters = new URLSearchParams(query);
+   parameters.set("tenant_id", tenantId);
+-  return tenantFetch(tenantId, `${TANK_URL}/v1/base-product/${path}${body ? "" : `?${parameters}`}`, {
++  return tenantBoundedFetch(tenantId, `${TANK_URL}/v1/base-product/${path}${body ? "" : `?${parameters}`}`, {
+     method: body ? "POST" : "GET", cache: "no-store", redirect: "error",
+     headers: { "Content-Type": "application/json", "X-Tank-Key": TANK_API_KEY },
+     ...(body ? { body: JSON.stringify({ ...body, tenant_id: tenantId }) } : {}),
+-  });
++  }, 30_000, async response => new Response(await response.arrayBuffer(), { status: response.status, headers: response.headers }));
+ }
+ 
+ // RIG-5: all 3D Workspace traffic, including private previews, stays server-side.
+@@ -409,6 +409,18 @@
+ async function tank<T>(path: string, init: RequestInit): Promise<T> {
+   const headers = new Headers(init.headers);
+   headers.set("content-type", "application/json");
++  if (path.startsWith("/v1/base/")) {
++    const tenant = requestTenant(path, init);
++    const read = async (response: Response) => {
++      if (!response.ok) throw new Error("Base could not complete this request.");
++      return await response.json() as T;
++    };
++    if (tenant) return tenantBoundedFetch(tenant, new URL(path, TANK_URL), {...init, headers}, 30_000, read);
++    if (!["/v1/base/engines", "/v1/base/context-dev/trial"].includes(path)) throw new Error("Sign in to your workspace.");
++    headers.set("x-tank-key", TANK_API_KEY);
++    return boundedFetch(new URL(path, TANK_URL), {...init, headers, redirect: "manual"},
++      path.endsWith("/trial") ? 300_000 : 30_000, read);
++  }
+   const res = await tenantFetch(requestTenant(path, init), new URL(path, TANK_URL), {...init, headers});
+   if (!res.ok) {
+     const text = await res.text();
+@@ -598,7 +610,12 @@
+   details: { case: number; name: string | null; passed: boolean; why: string; goal: unknown; result: unknown }[];
+ };
+ 
+-export function listSkills(): Promise<Skill[]> {
++export function listSkills(bounded = false): Promise<Skill[]> {
++  if (bounded) return boundedFetch(new URL("/v1/skala", TANK_URL), { method: "GET", cache: "no-store", redirect: "manual",
++    headers: { "x-tank-key": TANK_API_KEY } }, 5_000, async response => {
++      if (!response.ok) throw new Error("Base could not complete this request.");
++      return await response.json() as Skill[];
++    });
+   return tank<Skill[]>("/v1/skala", { method: "GET" });
+ }
+ export function runSkillEvals(id: string, version: string, by: string): Promise<EvalResult> {
+@@ -878,6 +895,12 @@
+   headers.set("x-tervory-user", userId);
+   headers.set("x-tervory-squad", squad);
+   if (typeof init.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
++  if (squad === "base") {
++    const tenant = requestTenant(path, init);
++    if (!tenant) throw new Error("Sign in to change Plugins.");
++    return tenantBoundedFetch(tenant, `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" }, 30_000,
++      async response => new Response(await response.arrayBuffer(), { status: response.status, headers: response.headers }));
++  }
+   return tenantFetch(requestTenant(path, init), `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
+ }
+ 
+--- a/workspace/app/base/load.ts
++++ b/workspace/app/base/load.ts
+@@ -5,24 +5,14 @@
+ 
+ /** Reads batch counts and approved skills from Tank. Read only: nothing is queued, re-run or saved. */
+ export async function loadBase(): Promise<PageModel> {
+-  let batches: BatchIn[] | null = null;
+-  let skills: SkillIn[] | null = null;
+-  let contextTrial: ContextReport | null = null;
+-  try {
+-    const { tenantId } = await currentTenant();
+-    batches = await baseBatches(tenantId);
+-    try {
+-      contextTrial = await loadContextReport(tenantId, baseRecords);
+-    } catch {
+-      contextTrial = null;
+-    }
+-  } catch {
+-    batches = null;
+-  }
+-  try {
+-    skills = await listSkills();
+-  } catch {
+-    skills = null;
+-  }
+-  return { ...buildModel({ batches, skills, now: new Date() }), contextTrial };
++  let tenantId: string | null = null;
++  try { tenantId = (await currentTenant()).tenantId; } catch { /* Signed-out reads contain no tenant data. */ }
++  const [batches, context, skills] = await Promise.allSettled([
++    tenantId ? baseBatches(tenantId) : Promise.reject(new Error("Sign in to your workspace.")),
++    tenantId ? loadContextReport(tenantId, baseRecords) : Promise.reject(new Error("Sign in to your workspace.")),
++    listSkills(true),
++  ]);
++  return { ...buildModel({ batches: batches.status === "fulfilled" ? batches.value : null,
++    skills: skills.status === "fulfilled" ? skills.value : null, now: new Date() }),
++    contextTrial: context.status === "fulfilled" ? context.value : null };
+ }
+--- a/workspace/app/base/page.tsx
++++ b/workspace/app/base/page.tsx
+@@ -30,7 +30,8 @@
+     accountName = null;
+   }
+   // Plugins read base.vault through Tank. While the vault is off, Tank returns no items and the tab says so.
+-  const plugins = signedIn ? await loadBasePlugins() : offPanel(SIGN_IN_MESSAGE);
+-  const model = await loadBase();
++  const [plugins, model] = await Promise.all([
++    signedIn ? loadBasePlugins() : Promise.resolve(offPanel(SIGN_IN_MESSAGE)), loadBase(),
++  ]);
+   return <BaseView model={model} plugins={plugins} accountName={accountName} refresh={refreshBase} search={searchBase} ask={askBase} signedIn={Boolean(userId)} canRunTrial={isFounder(userId)} />;
+ }

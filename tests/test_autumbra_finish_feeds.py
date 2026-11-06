@@ -8,7 +8,7 @@ import pytest
 from agents.ghost import advisories as adv
 from agents.ghost.models import PLATFORM_TENANT as TENANT
 from agents.ghost.store import Store
-from test_ghost_advisories import Sources, load, make_watcher
+from test_ghost_advisories import Sources, load, make_watcher, report as report
 
 NOW = datetime(2026, 11, 5, tzinfo=timezone.utc)
 

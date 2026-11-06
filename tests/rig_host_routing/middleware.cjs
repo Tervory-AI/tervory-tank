@@ -18,9 +18,15 @@ function load(file, dependencies) {
   return module.exports;
 }
 const hosts = load('workspace/lib/product-hosts.ts', {});
+const origin = load('workspace/lib/workspace-origin.ts', {'./product-hosts': hosts});
+const setup = load('workspace/lib/workspace-setup.ts', {});
+const requestHelpers = load('workspace/lib/request.ts', {});
 let signed = true;
 const middleware = load('workspace/middleware.ts', {
   '@/lib/product-hosts': hosts,
+  './lib/workspace-origin': origin,
+  './lib/request': requestHelpers,
+  './lib/workspace-setup': { workspaceSetupMessage: () => setup.workspaceSetupMessage({ TANK_URL: 'http://tank:8000', TANK_API_KEY: 'placeholder-key', TRIGGER_SIGNIN_WORKSPACE_SECRET: 'placeholder-secret' }) },
   'next-auth/jwt': {getToken: async () => signed ? {principal: {expiresAt: Date.now() + 3600000}} : null},
   'next/server': { NextResponse: {
     rewrite: url => ({ type: 'rewrite', url: url.href }),

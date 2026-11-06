@@ -19,6 +19,7 @@ Module._load = function(name, parent, isMain) {
   };
   // Plugins are outside this menu test; do not import server action credentials.
   if (name === './plugins' && parent.filename.endsWith('/rig/lab.tsx')) return {Plugins: () => null};
+  if (name.startsWith('@/')) name = path.join(root, 'workspace', name.slice(2));
   return original.call(this, name, parent, isMain);
 };
 for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {

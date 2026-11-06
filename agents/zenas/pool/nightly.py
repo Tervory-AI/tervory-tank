@@ -747,6 +747,12 @@ async def _record_source_error(store: Store, source, exc: Exception, when: datet
 
 
 def main() -> None:
+    import sys
+    if len(sys.argv) > 1:
+        if "--dry-run" not in sys.argv[1:]:
+            raise SystemExit("Use scripts/zenas nightly for command options")
+        from agents.zenas.core.operations import main as command
+        raise SystemExit(command(["nightly", *sys.argv[1:]]))
     asyncio.run(_main())
 
 
@@ -772,22 +778,33 @@ async def _scheduled_jobs(conn, report, *, region, deadline=None, clock=None):
                     with deadline_scope(until, clock):
                         value = await job(conn, region=region)
                         check_deadline()
+                ok = not isinstance(value, dict) or value.get("ok", True)
+                report.setdefault("jobs", {})[name] = {"ok": ok}
+                if not ok:
+                    report.setdefault("failed_jobs", []).append(name)
                 if name in {"regulations", "judgment_training"}:
                     report[name] = value
             except (DeadlineReached, TimeoutError) as exc:
                 if isinstance(exc, TimeoutError) and not window.expired():
                     report[name] = {"unavailable": 1}
+                    report.setdefault("failed_jobs", []).append(name)
                 else:
                     report.setdefault("deferred_jobs", []).append(name)
             except Exception:
+                report.setdefault("failed_jobs", []).append(name)
                 if name == "regulations":
                     report[name] = {"unavailable": 1}
         else:
             try:
                 value = await job(conn, region=region)
+                ok = not isinstance(value, dict) or value.get("ok", True)
+                report.setdefault("jobs", {})[name] = {"ok": ok}
+                if not ok:
+                    report.setdefault("failed_jobs", []).append(name)
                 if name in {"regulations", "judgment_training"}:
                     report[name] = value
             except Exception:
+                report.setdefault("failed_jobs", []).append(name)
                 if name == "regulations":
                     report[name] = {"unavailable": 1}
 
@@ -820,7 +837,7 @@ async def _night_main(region, deadline):
     try:
         from agents.zenas.pool.store import PostgresStore
 
-        store = PostgresStore(conn)
+        store = PostgresStore(conn, home_region=region)
         await store.apply_schema()
         use_fixtures = os.environ.get("POOL_USE_FIXTURES", "").strip() in {"1", "true", "yes"}
         if use_fixtures:

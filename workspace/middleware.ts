@@ -4,7 +4,7 @@ import { workspaceSetupMessage } from "./lib/workspace-setup";
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { mootCanonicalRedirectUrl, productHostRewritePath, publicReturnUrl } from "@/lib/product-hosts";
+import { mootCanonicalRedirectUrl, productHostRewritePath, publicReturnUrl, opliReleasePath } from "@/lib/product-hosts";
 
 // Autumbra receipts + undo stay reachable signed-out ONLY so email tokens work;
 // each handler token-gates (no token / forged / expired / other-tenant → 401).
@@ -77,6 +77,11 @@ async function mobileSessionIsValid(token: string): Promise<boolean> {
 
 export default async function middleware(req: NextRequest) {
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const releasePath = opliReleasePath(host, req.nextUrl.pathname);
+  if (releasePath) {
+    const url = req.nextUrl.clone(); url.pathname = releasePath;
+    return NextResponse.rewrite(url);
+  }
   const canonical = mootCanonicalRedirectUrl(host, req.nextUrl.pathname, req.nextUrl.search);
   if (canonical) {
     return NextResponse.redirect(canonical, 308);
@@ -129,5 +134,5 @@ export default async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next|.*\\..*).*)", "/(api|trpc)(.*)"],
+  matcher: ["/install.sh", "/latest.json", "/releases/:path*", "/((?!_next|.*\\..*).*)", "/(api|trpc)(.*)"],
 };

@@ -65,7 +65,8 @@ export default { devIndicators: false, webpack(config) {
         port = sock.getsockname()[1]
     origin = f'http://localhost:{port}'
     env = {**os.environ, 'NEXT_TELEMETRY_DISABLED': '1', 'TERVORY_ADMIN_USER_IDS': 'offline-founder',
-           'TANK_URL': 'http://127.0.0.1:9'}
+           'TRIGGER_SIGNIN_WORKSPACE_SECRET': 'offline-fixture-secret',
+           'TANK_API_KEY': 'offline-fixture-key', 'TANK_URL': 'http://127.0.0.1:9'}
     with (tmp_path / 'next.log').open('w') as log:
         process = await asyncio.create_subprocess_exec(
             'node', str(local / 'node_modules/next/dist/bin/next'), 'dev', '--hostname', 'localhost',

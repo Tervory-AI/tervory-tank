@@ -31,6 +31,8 @@ STAMP = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
 
 @pytest_asyncio.fixture(params=['memory', 'postgres'])
 async def runtime(request, database, monkeypatch):
+    monkeypatch.setenv("TANK_KEY", "placeholder-room-key")
+    monkeypatch.setenv("TANK_KEY_TIGER", "placeholder-room-key")
     monkeypatch.setenv('DATABASE_URL', 'postgresql://placeholder@127.0.0.1/placeholder')
     monkeypatch.setenv('LITELLM_MASTER_KEY', 'placeholder-litellm-key')
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-tank-key')
@@ -56,7 +58,7 @@ async def runtime(request, database, monkeypatch):
                     VALUES($1,$2,$3,$4,$5,$6,$7)""", *row.values())
     rt = SimpleNamespace(pool=database, store=store, room=room, calls=[], inject_foreign=False,
                          main=main, actor=command.Actor(TENANT, 'placeholder-user', False, frozenset({'tiger'})))
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room.app), base_url='http://placeholder-room') as room_client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room.app), base_url='http://placeholder-room', headers={'X-Tank-Key': 'placeholder-room-key'}) as room_client:
         rt.room_client = room_client
         class Relay:
             async def request(self, method, url, **kwargs):

@@ -147,7 +147,7 @@ def test_rollback_restores_strong_model():
     assert result.policy['previous_model'] is None and result.policy['rung'] == 1
 
 
-def test_run_route_changes_only_in_the_two_reviewed_hooks():
+def test_run_route_keeps_reviewed_hooks_and_code_streaming_body():
     source = (ROOT / 'tank/main.py').read_text()
     node = next(n for n in ast.parse(source).body if isinstance(n, ast.AsyncFunctionDef) and n.name == '_run_route')
     function = ast.get_source_segment(source, node)
@@ -168,7 +168,10 @@ def test_run_route_changes_only_in_the_two_reviewed_hooks():
     for caller, callee in [('run_route', '_paid_route'), ('_paid_route', '_run_route')]:
         assert any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == callee
                    for n in ast.walk(functions[caller]))
-    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '3c3ad063490d58a6706e749f39ba47525d96139aacde69a56546d3ff422975a0'
+    # OPLI adds command.code to the existing streaming transport branch;
+    # MoA seat admission uses the equivalent linear-time parser. The exact
+    # hash protects every other byte outside the same two reviewed hooks.
+    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '672584858acf99e5891a56763921f89eab10753807afff9a9431b0d86d371023'
 
 
 @pytest.mark.asyncio

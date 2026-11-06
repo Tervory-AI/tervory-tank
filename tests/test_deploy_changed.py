@@ -648,3 +648,33 @@ def test_a_budget_skipped_room_is_not_retried_by_a_later_run(monkeypatch: pytest
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 0
     assert order == ["agent-rig"]
+
+
+def test_renamed_watch_app_is_selected_by_exact_compose_source(monkeypatch):
+    mod = _script(monkeypatch)
+    apps = [
+        {"name": "Autumbra", "uuid": "watch-uuid", "base_directory": "/agents/ghost",
+         "docker_compose_location": "/docker-compose.yml"},
+        {"name": "Autumbra Enforce - tervory.com", "uuid": "enforce-uuid",
+         "base_directory": "/agents/ghost", "docker_compose_location": "/docker-compose.enforce.yml"},
+    ]
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["agents/ghost/app.py"])
+    monkeypatch.setattr(mod, "api", lambda method, path: (200, apps))
+    monkeypatch.setattr(mod, "last_failed", lambda uuid: False)
+    monkeypatch.setattr(mod, "already_live", lambda uuid, name: False)
+    monkeypatch.setattr(mod, "radix_blocks", lambda name: False)
+    seen = []
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: seen.append(uuid) or True)
+    monkeypatch.setattr(mod, "wait_for", lambda *args: True)
+    assert mod.main() == 0
+    assert seen == ["watch-uuid"]
+
+
+def test_ambiguous_renamed_room_source_fails_without_deployment(monkeypatch):
+    mod = _script(monkeypatch)
+    apps = [{"name": name, "uuid": name, "base_directory": "/agents/ghost",
+             "docker_compose_location": "/docker-compose.yml"} for name in ("watch-one", "watch-two")]
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["agents/ghost/app.py"])
+    monkeypatch.setattr(mod, "api", lambda method, path: (200, apps))
+    monkeypatch.setattr(mod, "deploy", lambda *args: pytest.fail("ambiguous target must not deploy"))
+    assert mod.main() == 1

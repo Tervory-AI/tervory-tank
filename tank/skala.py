@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import importlib.machinery
 import copy
 import hashlib
 import json
@@ -174,14 +175,19 @@ def _import_run(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"],
     return run
 
 
+class _FreshSkillLoader(importlib.machinery.SourceFileLoader):
+    def get_code(self, fullname):
+        return self.source_to_code(self.get_data(self.path), self.path)
+
+
 def _import_run_uncached(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"], Awaitable[dict[str, Any]]]:
     _safe_package(pkg.path)
     spec = importlib.util.spec_from_file_location(f"skill_{pkg.id}_{pkg.version}".replace(".", "_").replace("-", "_"), pkg.path / "run.py")
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     # Candidate edits can have the same size and timestamp as a cached .pyc.
-    # Execute exactly the source used by the approval fingerprint.
-    exec(compile((pkg.path / "run.py").read_bytes(), str(pkg.path / "run.py"), "exec"), mod.__dict__)
+    # The source loader compiles the approved bytes rather than reusing bytecode.
+    _FreshSkillLoader(spec.name, str(pkg.path / "run.py")).exec_module(mod)
     run = getattr(mod, "run", None)
     if run is None:
         raise ValueError(f"{pkg.ref}: run.py has no run()")

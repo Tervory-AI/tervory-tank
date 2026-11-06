@@ -365,30 +365,36 @@ class PgLadder:
         owner = row.get("tenant_id")
         key = question_key(str(row.get("question") or ""))
         async with self.pool.acquire() as conn:
-            await conn.execute(
-                INSERT_CARD,
-                _as_uuid(card_id),
-                _region(str(row["region"])),
-                _as_uuid(owner) if owner else None,
-                row["jurisdiction"],
-                row["question"],
-                key,
-                json.dumps(row.get("elements") or []),
-                json.dumps(row.get("exceptions") or []),
-                json.dumps(row.get("defences") or []),
-                json.dumps(row.get("remedies") or []),
-                json.dumps(row.get("sources") or []),
-                row.get("as_at"),
-                row.get("status") or "draft",
-                row.get("approved_by"),
-                row.get("admission_no"),
-                row.get("model_used"),
-                float(row.get("cost_usd") or 0),
-                json.dumps(row.get("decision_table") or []),
-                int(row.get("edit_count") or 0),
-                bool(row.get("active")),
-            )
+            async with conn.transaction():
+                from agents.zenas.core.freshness import lock_sources, reconcile
+                await lock_sources(conn, row.get("sources") or [])
+                await conn.execute(
+                    INSERT_CARD,
+                    _as_uuid(card_id),
+                    _region(str(row["region"])),
+                    _as_uuid(owner) if owner else None,
+                    row["jurisdiction"],
+                    row["question"],
+                    key,
+                    json.dumps(row.get("elements") or []),
+                    json.dumps(row.get("exceptions") or []),
+                    json.dumps(row.get("defences") or []),
+                    json.dumps(row.get("remedies") or []),
+                    json.dumps(row.get("sources") or []),
+                    row.get("as_at"),
+                    row.get("status") or "draft",
+                    row.get("approved_by"),
+                    row.get("admission_no"),
+                    row.get("model_used"),
+                    float(row.get("cost_usd") or 0),
+                    json.dumps(row.get("decision_table") or []),
+                    int(row.get("edit_count") or 0),
+                    bool(row.get("active")),
+                )
+                await reconcile(conn, _region(str(row["region"])), _as_uuid(card_id))
+                stored = await conn.fetchrow("SELECT status,active FROM agent_zenas.rule_cards WHERE id=$1", _as_uuid(card_id))
         saved = dict(row)
+        saved.update(status=stored["status"], active=stored["active"])
         saved["id"] = card_id
         saved["question_key"] = key
         if owner is not None:
@@ -397,6 +403,8 @@ class PgLadder:
 
     async def get_rule_card(self, card_id: str, *, region: str, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
+            from agents.zenas.core.freshness import reconcile
+            await reconcile(conn, _region(region), _as_uuid(card_id), tenant_id=_as_uuid(tenant_id))
             row = await conn.fetchrow(CARD_FOR_CALLER, _region(region), _as_uuid(card_id), _as_uuid(tenant_id))
         if row is None:
             return None
@@ -425,6 +433,8 @@ class PgLadder:
         LIMIT 1
         """.strip()
         async with self.pool.acquire() as conn:
+            from agents.zenas.core.freshness import reconcile
+            await reconcile(conn, box, tenant_id=_as_uuid(tenant_id))
             row = await conn.fetchrow(sql, box, jurisdiction, key, _as_uuid(tenant_id), allow_active)
         if row is None:
             return None
@@ -448,8 +458,14 @@ class PgLadder:
                 args.append(fields[name])
                 sets.append(f"{name} = ${len(args)}")
         sql = f"UPDATE agent_zenas.rule_cards SET {', '.join(sets)} WHERE region = $1 AND id = $2"
-        async with self.pool.acquire() as conn:
+        async with self.pool.acquire() as conn, conn.transaction():
+            from agents.zenas.core.freshness import lock_sources, reconcile
+            sources = await conn.fetchval("SELECT sources FROM agent_zenas.rule_cards WHERE region=$1 AND id=$2", *args[:2])
+            if sources is None:
+                return None
+            await lock_sources(conn, json.loads(sources) if isinstance(sources, str) else sources)
             await conn.execute(sql, *args)
+            await reconcile(conn, args[0], args[1])
             row = await conn.fetchrow(
                 "SELECT * FROM agent_zenas.rule_cards WHERE region = $1 AND id = $2",
                 _region(region),

@@ -312,6 +312,11 @@ else{const data=kind==='channels'?{facebook:{status:'connected',page_id:'placeho
           .isDisabled(),
         true,
       );
+      // Disabled UI is synchronous; the fake server receives the request later.
+      // Wait for that boundary rather than assuming browser and server ordering.
+      for (let attempt = 0; typeof releaseMessage !== "function" && attempt < 500; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
       assert.equal(typeof releaseMessage, "function");
       releaseMessage();
       releaseMessage = undefined;

@@ -306,6 +306,77 @@ row('https://app.tervory.com/chats', 'As ordinary member try rig.store.onboard. 
 row('https://github.com/Tervory-AI/tervory-tank/blob/main/docs/ops/RIG-STORE-ROOMS.md#measure-rooms-locally', 'On the disposable Coolify test host run python3 tests/load/rig_rooms_load.py --rooms 2 --duration 60s after building the local image. Open its measurement.json.', 'rooms 2; two per_room entries; finite search_p95_ms and quote_p95_ms; sampled memory in bytes; failed_checks 0, http_failure_rate 0, capacity_claim null. All fixture containers are removed.', 'test_rig_rooms_acceptance.test_load_harness_records_p95_and_memory_and_cleans_only_its_fixtures', 'none')
 row('https://rig.tervory.com/v1/rig/rooms/{tenant_id}/v1/rig/commerce/webhooks/{tenant_id}', 'Rooms protocol fixture: replay the signed WooCommerce body unchanged through A’s room prefix; try an internal/retailer path and a nested room path through that prefix.', 'Valid callback accepted true; body, signature and Origin are preserved; spoofed forwarding address is replaced by the resolved peer. Both forbidden paths return 404.', 'test_rig_rooms_acceptance.test_room_gateway_preserves_signed_callback_bytes_and_refuses_control_paths', 'none')
 
+row('Scheduled catalogue refresh, offline fixture', 'Refresh each registered Shopify, WooCommerce, Google, CSV, TSV, JSON, XML and XLSX source twice.', 'First import adds products; replay updates them. Each run writes a tenant receipt; another retailer sees neither products nor receipts.', '_scheduled_feed_formats')
+row('Scheduled catalogue refresh, offline fixture', 'Fail the first source, then read a valid second source.', 'The failed source gets a safe rejection receipt. The second source imports successfully; no private response reaches reports.', 'test_rig_finish_feeds.test_failed_source_does_not_block_next_feed_or_leak_response')
+row('Scheduled catalogue refresh, offline fixture', 'Import a partly invalid file, then interrupt receipt storage during a valid update.', 'Neither attempt partially changes the catalogue. Product writes roll back when the matching receipt cannot be saved.', 'test_rig_finish_feeds.test_bad_file_preserves_catalogue_and_receipt_failure_rolls_back')
+row('Public catalogue transport, offline fixture', 'Replay XLSX bytes, redirect/error responses, mixed public/private DNS answers and an oversized stream.', 'Only complete HTTP 200 content is imported. Requests pin checked public addresses with the original TLS hostname; redirects, private addresses and oversized bodies fail closed.', '_bounded_feed_transport')
+row('Nightly catalogue schedule, local PostgreSQL', 'Register a feed for a retailer after startup; run discovery twice, then refresh.', 'Exactly one nightly pull_feeds schedule exists for the new retailer. Its import writes a durable added-count receipt.', 'test_rig_finish_feeds.test_new_feed_only_tenant_gets_nightly_schedule_without_restart')
+row('Store catalogue mapping, offline protocol fixtures', 'Resolve an option SKU; repeat with missing, ambiguous and incomplete results, mismatched variant ownership and a deleted Shopify variant.', 'Only the exact unique variant is mapped. Missing or ambiguous mappings cannot substitute another item; deleted variants use the existing product error.', '_exact_store_mapping')
+row('Store inventory, offline protocol fixtures', 'Replay tracked and untracked inventory from Shopify, WooCommerce and BigCommerce, including disabled, hidden and preorder products.', 'Untracked inventory has no artificial zero limit. Tracked counts remain exact; BigCommerce parent and variant availability both apply.', '_store_inventory')
+row('Store checkout, offline BigCommerce protocol fixture', 'Add two of an exact option SKU and start the existing store checkout.', 'The native cart receives product 31, variant 42, quantity 2 and total USD 39.90. Private variant identifiers stay out of the shopper response.', 'test_rig_finish_commerce.test_bigcommerce_option_sku_reaches_store_checkout_with_its_variant')
+row('Nightly recall retention, local PostgreSQL with row security', 'Run the maintenance job over old and recent searches from two retailers, repeat it, then attempt it with a retailer job identity.', 'Both old searches expire, both recent searches remain, replay deletes zero, and the non-maintenance identity cannot elevate access.', 'test_rig_finish_jobs.test_nightly_retention_crosses_rls_only_for_maintenance_tenant')
+row('Cart maintenance, offline worker fixture', 'Interrupt tenant discovery once; then fail the first retailer sweep and let the second proceed.', 'The worker retries discovery, processes the other retailer without administrative scope, keeps private details out of logs and stops on cancellation.', 'test_rig_finish_jobs.test_cart_worker_recovers_discovery_and_isolates_tenants')
+row('Checkout expiry, offline store protocol fixture', 'Expire two pending checkouts while the first store connection is unavailable; restore it and sweep again.', 'The first checkout durably becomes cancel_unknown; the second expires immediately. Recovery expires the first without creating another order.', 'test_rig_finish_jobs.test_unavailable_connection_does_not_block_other_checkout_expiry')
+row('Tiger price receipts, local PostgreSQL and fake bus', 'Replay the same price event twice, then submit a rebound page, unknown SKU and invalid price.', 'Exactly one tenant-bound history row is saved. Invalid price settles as fail; unrelated catalogue rows and the other retailer remain unchanged.', 'test_rig_finish_jobs.test_price_receipt_replay_is_durable_scoped_and_catalogue_bound')
+row('Tiger price subscription, offline worker fixture', 'Interrupt discovery once and then interrupt delivery for the first retailer.', 'Discovery retries; each consumer runs without administrative scope and the second retailer still processes its messages.', 'test_rig_finish_jobs.test_price_loop_recovers_discovery_and_scopes_each_consumer')
+row('Forge retention, offline storage fixture', 'Interrupt one retention tick while a completed job still owes a receipt.', 'The next tick removes bulky intermediates, retains the owed receipt and job identity, and exposes no private storage error.', 'test_rig_finish_jobs.test_forge_retention_retries_and_preserves_owed_receipts')
+row('Retailer delete route, offline Workspace transport fixture', 'Run the real Workspace delete route, actions and Tank helper through the current sign-in transport for founder, administrator and member sessions.', 'Founder and retailer administrator can delete. Member and wrong-origin requests are refused; every forwarded request uses the active tenant and user with no-store caching.', '_delete_products_signin_transport')
+
+
+async def _scheduled_feed_formats():
+    from test_rig_finish_feeds import test_every_registered_format_refreshes_with_tenant_receipt
+    for kind in ('shopify', 'woocommerce', 'google', 'csv', 'tsv', 'json', 'xml', 'xlsx'):
+        await test_every_registered_format_refreshes_with_tenant_receipt(kind)
+
+
+async def _bounded_feed_transport(monkeypatch):
+    from test_rig_finish_feeds import (
+        test_transport_pins_dns_checks_status_and_preserves_bytes,
+        test_transport_refuses_mixed_dns_and_stream_overflow,
+    )
+    for status in (200, 206, 302, 429, 500):
+        await test_transport_pins_dns_checks_status_and_preserves_bytes(monkeypatch, status)
+    await test_transport_refuses_mixed_dns_and_stream_overflow(monkeypatch)
+
+
+async def _exact_store_mapping():
+    from test_rig_finish_commerce import (
+        test_bigcommerce_exact_variant_sku_never_substitutes_another,
+        test_bigcommerce_refuses_wrong_or_missing_variant_mapping,
+        test_deleted_shopify_variant_uses_existing_product_error,
+    )
+    for matches, pages, expected in ((1, 1, {'product_id': 31, 'variant_id': 42}),
+                                    (0, 1, None), (2, 1, None), (1, 2, None)):
+        await test_bigcommerce_exact_variant_sku_never_substitutes_another(matches, pages, expected)
+    await test_bigcommerce_refuses_wrong_or_missing_variant_mapping()
+    await test_deleted_shopify_variant_uses_existing_product_error()
+
+
+async def _store_inventory():
+    from test_rig_finish_commerce import (
+        test_bigcommerce_variant_respects_parent_availability_and_inventory,
+        test_store_untracked_inventory_is_not_mistaken_for_zero_stock,
+    )
+    for tracking, quantity in (('none', None), ('product', 7), ('variant', 3)):
+        for availability, disabled, visible, available in (
+            ('available', False, True, True), ('disabled', False, True, False),
+            ('preorder', False, True, False), ('available', True, True, False),
+            ('available', False, False, False),
+        ):
+            await test_bigcommerce_variant_respects_parent_availability_and_inventory(
+                tracking, quantity, availability, disabled, visible, available)
+    for kind in ('shopify', 'woocommerce'):
+        for tracked, quantity in ((True, 0), (False, None)):
+            await test_store_untracked_inventory_is_not_mistaken_for_zero_stock(kind, tracked, quantity)
+
+
+def _delete_products_signin_transport():
+    result = subprocess.run(['node', 'tests/rig_delete_products/actions.test.cjs'],
+                            cwd=REPO, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'PASS: real Workspace route/actions/Tank helper' in result.stdout
+
+
 def _sheet_matches_rows():
     text = (REPO / 'docs/acceptance/rig.md').read_text()
     ids = re.findall(r'^\| (RIG-\d+) \|', text, flags=re.MULTILINE)

@@ -11,6 +11,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from .client_settings import ClientAutumbraSettings
 from .durable_shields import _atomic_write_json
@@ -40,6 +41,7 @@ def queue_path_for_tenant(tenant_id: str) -> Path:
     tid = (tenant_id or "").strip()
     if not tid or not _TENANT_RE.fullmatch(tid):
         raise ValueError("tenant_id must be a UUID")
+    tid = str(UUID(tid))
     # Per-Enforce process: THREAT_PAYLOAD_QUEUE points at THIS client's queue.
     single = (os.environ.get("THREAT_PAYLOAD_QUEUE") or "").strip()
     enforce_tenant = (os.environ.get("TENANT_ID") or "").strip()
