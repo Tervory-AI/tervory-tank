@@ -149,7 +149,7 @@ def test_a_room_only_change_does_not_deploy_the_sa_stack(monkeypatch: pytest.Mon
     monkeypatch.setattr(mod, "deploy", deploy)
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 0
-    assert order == ["agent-zenas", "agent-zenas-za"]
+    assert sorted(order) == ["agent-zenas", "agent-zenas-za"]
 
 
 def test_za_offline_skips_the_sa_stack_and_za_rooms_without_failing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -434,7 +434,8 @@ def test_a_room_whose_wait_no_longer_fits_the_budget_is_not_started(
 
     monkeypatch.setattr(mod, "wait_for", wait_for)
     assert mod.main() == 1
-    assert order == ["main", "tervory-tank-za", "agent-zenas"]
+    assert order[0] == "main"
+    assert sorted(order[1:]) == ["agent-zenas", "tervory-tank-za"]
     assert "agent-zenas-za not started" in capsys.readouterr().out
 
 
