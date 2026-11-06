@@ -15,7 +15,7 @@ jobs:
           python-version: '3.12'
       - name: Native test dependencies and isolated Postgres
         run: |
-          pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+          pip install --require-hashes -r tank/requirements.lock -r .github/requirements-engine.lock
           sudo systemctl start postgresql
           sudo -u postgres createuser --superuser "$USER"
           sudo -u postgres createdb --owner "$USER" engine_ci
