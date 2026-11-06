@@ -370,7 +370,7 @@ jobs:
         # tests/test_skala_patch_code_unchanged.py (#484) runs as part of the suite.
         run: python3 .github/scripts/offline_suite.py
         env:
-          PYTHONPATH: tank
+          PYTHONPATH: .:tank:agents/_chassis
           COMMAND_TEST_TOOLS: ${{ github.workspace }}/cli/node_modules
           TIGER_PROJECT_ROOT: ${{ github.workspace }}
           SUITE_SHARD: ${{ matrix.shard }}
