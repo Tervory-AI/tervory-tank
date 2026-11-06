@@ -121,10 +121,12 @@ async def run(args):
         raise ValueError('Dry run cannot submit a job or record a receipt')
     dry_run = getattr(args, 'dry_run', False)
     names = ['HF_ORG', 'HF_TOKEN']
-    if dry_run or args.submit or args.receipt or getattr(args, 'job_id', ''):
+    if (dry_run and getattr(args, 'agent', '') == 'tiger') or args.submit or args.receipt or getattr(args, 'job_id', ''):
         names.append('DATABASE_URL')
     missing = [name for name in names if not os.environ.get(name, '').strip()]
     if missing:
+        if getattr(args, 'agent', '') == 'tiger':
+            return {'status': 'not_configured', 'settings': missing}
         return {'status': 'unconfigured', 'missing_settings': missing,
                 'message': 'Missing settings: ' + ', '.join(missing)}
     import asyncpg
@@ -185,7 +187,7 @@ async def run(args):
     print(f'Maximum estimated compute cost: USD {amount:.4f}')
     if not args.submit:
         result = {'status': 'ready', 'cost_usd': amount, 'hardware': flavor}
-        if dry_run:
+        if dry_run and agent == 'tiger':
             conn = await asyncpg.connect(os.environ['DATABASE_URL'])
             try:
                 if await conn.fetchval('SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)', PLATFORM):
@@ -237,15 +239,18 @@ def cli(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--minutes', type=int, default=120)
     parser.add_argument('--day', default='')
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument('--submit', action='store_true')
-    mode.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--submit', action='store_true')
+    parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--agent', choices=['zenas', 'tiger'], default='')
     parser.add_argument('--receipt', help='Local final HF billing receipt JSON; no credentials')
     parser.add_argument('--job-id', default='')
     parser.add_argument('--billed-usd', default='0')
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
+    if args.submit and args.dry_run:
+        if args.agent == 'tiger':
+            raise SystemExit('Training operation failed; dry-run cannot submit.')
+        parser.error('Training operation failed: --submit and --dry-run are mutually exclusive')
     if args.submit:
         from datetime import date
         date.fromisoformat(args.day)
