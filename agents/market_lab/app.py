@@ -376,3 +376,7 @@ app.include_router(feed_router(key_ok=_room_key_ok, ledger_context=_ledger, engi
 from core.ml3 import build_router as ml3_router
 
 app.include_router(ml3_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))
+
+from core.readiness import install as install_readiness
+
+install_readiness(app)

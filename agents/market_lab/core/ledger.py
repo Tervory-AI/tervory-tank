@@ -126,6 +126,8 @@ class MemoryLedger:
     def briefs_for(self, tenant: str, report_id: str | None = None) -> list[dict]:
         rows = []
         for report in self.reports:
+            if not report.get('answer', '').strip():
+                continue  # Keep held audit records; never show an empty monthly brief.
             if str(report["tenant_id"]) != str(tenant) or (report_id is not None and str(report["id"]) != str(report_id)):
                 continue
             states = [dict(row) for key, row in self.brief_deliveries.items()
@@ -561,6 +563,7 @@ class PostgresLedger:
             "SELECT r.*, (SELECT jsonb_agg(jsonb_build_object('channel',d.channel,'status',d.status,'reason',d.reason) ORDER BY d.channel) "
             "FROM agent_market_lab.brief_deliveries d WHERE d.tenant_id=r.tenant_id AND d.report_id=r.id) AS deliveries "
             "FROM agent_market_lab.reports r WHERE r.tenant_id=$1 "
+            "AND length(trim(r.answer)) > 0 "
             "AND EXISTS (SELECT 1 FROM agent_market_lab.brief_deliveries d WHERE d.tenant_id=$1 AND d.report_id=r.id) "
             "AND ($2::uuid IS NULL OR r.id=$2) ORDER BY r.made_at DESC,r.id DESC LIMIT 12",
             uuid.UUID(str(tenant)), uuid.UUID(str(report_id)) if report_id else None)
