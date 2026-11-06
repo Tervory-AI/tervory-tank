@@ -47,6 +47,8 @@ test('agent Ask and Auto-edit command denials stop without another model call', 
   for (const mode of ['ask', 'auto-edit']) {
     let round = 0;
     const f = await fixture(t, [`/mode ${mode}`, 'execute', 'n', '/exit'], () => { round++; return response([request('run_command', { command: 'touch refused.txt' })]); });
+    const input = [`/mode ${mode}`, 'execute', '/exit'];
+    f.io.prompt = async label => { f.approvals.push(label); return label === '> ' ? input.shift() ?? null : 'n'; };
     const result = await f.run(); assert.equal(round, 1); assert.equal(result.status, 'needs_input');
     await assert.rejects(readFile(join(f.root, 'refused.txt')));
   }

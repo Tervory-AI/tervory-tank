@@ -1,4 +1,4 @@
-import { open } from 'node:fs/promises';
+import { open, lstat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, basename } from 'node:path';
@@ -19,8 +19,12 @@ export function serverIdentity(config) {
 export async function loadMCP(path = join(homedir(), '.tervory', 'mcp.json')) {
   let handle;
   try {
+    const before = await lstat(path);
+    if (!before.isFile() || before.isSymbolicLink()) throw refused();
     handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
     const stat = await handle.stat();
+    const after = await lstat(path);
+    if (after.isSymbolicLink() || before.dev !== stat.dev || before.ino !== stat.ino || after.dev !== stat.dev || after.ino !== stat.ino) throw refused();
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > LIMITS.fileBytes) throw refused();
     const buffer = Buffer.alloc(LIMITS.fileBytes + 1); const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
     if (bytesRead > LIMITS.fileBytes) throw refused();
@@ -99,7 +103,7 @@ export class MCPClients {
           };
           channel = new StreamableHTTPClientTransport(new URL(config.url), { fetch: guarded, requestInit: { headers: secretEntries, redirect: 'error' }, reconnectionOptions: { maxRetries: 0, initialReconnectionDelay: 1000, maxReconnectionDelay: 1000, reconnectionDelayGrowFactor: 1 } });
         }
-        const client = new Client({ name: 'tervory', version: '0.10.0' }, { capabilities: {} });
+        const client = new Client({ name: 'tervory', version: '0.10.1' }, { capabilities: {} });
         try { await client.connect(channel, { timeout: LIMITS.commandMs, signal: this.io.signal }); }
         catch { await client.close().catch(() => {}); throw refused(); }
         this.clients.set(name, { client, config, fingerprint });

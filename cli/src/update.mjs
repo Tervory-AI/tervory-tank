@@ -13,7 +13,7 @@ export const RELEASE_BASE = 'https://app.tervory.com/cli';
 export const RELEASE_BASES = Object.freeze([RELEASE_BASE,'https://opli.tervory.com']);
 const sourceFor = release => {
   const base = release.release_base ?? RELEASE_BASE;
-  if (!RELEASE_BASES.includes(base)) throw new Error('Update refused: untrusted release source.');
+  if (base !== RELEASE_BASE && base !== 'https://opli.tervory.com') throw new Error('Update refused: untrusted release source.');
   return base;
 };
 export const INSTALL_HINT = 'curl -fsSL https://app.tervory.com/cli/install.sh | sh';

@@ -18,7 +18,7 @@ def reports(monkeypatch):
     monkeypatch.setattr(static, 'semgrep_bin', lambda: 'placeholder-static-scanner')
     monkeypatch.setattr(iac, 'scan_tree', lambda root: iac.Findings(status='run'))
     monkeypatch.setattr(runtime, 'dependency_scan', lambda root: ([], True))
-    state = {'secret': b'[]', 'static': b'{"results":[],"errors":[]}', 'exit': 0, 'calls': []}
+    state = {'findings_json': b'[]', 'static': b'{"results":[],"errors":[]}', 'exit': 0, 'calls': []}
 
     def run(argv, **kwargs):
         state['calls'].append(argv)
@@ -29,7 +29,7 @@ def reports(monkeypatch):
             raise subprocess.TimeoutExpired(argv[0], 60)
         if argv[0] == 'placeholder-secret-scanner':
             assert '--redact' in argv
-            Path(argv[argv.index('--report-path') + 1]).write_bytes(state['secret'])
+            Path(argv[argv.index('--report-path') + 1]).write_bytes(state['findings_json'])
             return subprocess.CompletedProcess(argv, state['exit'], b'', b'')
         assert argv[0] == 'placeholder-static-scanner'
         assert '--metrics=off' in argv and '--disable-version-check' in argv

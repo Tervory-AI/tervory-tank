@@ -263,7 +263,8 @@ def test_overlap_is_refused_before_trainer_or_model_construction(monkeypatch):
 def test_hf_jobs_client_is_isolated_from_the_cpu_router_dependencies():
     dockerfile = projected('tank/Dockerfile')
     assert 'python -m venv /opt/hf-jobs' in dockerfile
-    assert '/opt/hf-jobs/bin/pip install --no-cache-dir -r /tmp/hf-jobs-requirements.txt' in dockerfile
+    assert '/opt/hf-jobs/bin/pip install --no-cache-dir --require-hashes -r /tmp/hf-jobs-requirements.lock' in dockerfile
+    assert (ROOT / 'tank/training_jobs/requirements.lock').is_file()
     assert 'ENV HF_JOBS_PYTHON=/opt/hf-jobs/bin/python' in dockerfile
     assert projected('tank/training_jobs/requirements.txt').splitlines() == ['huggingface-hub==1.7.2', 'asyncpg==0.30.0']
 

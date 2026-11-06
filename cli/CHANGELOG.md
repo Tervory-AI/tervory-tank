@@ -1,3 +1,7 @@
+## 0.10.1 — 2026-11-05
+
+- Reject linked MCP configuration on every platform and compare release sources exactly.
+
 ## 0.10.0 — 2026-11-05
 
 - Stream code answers with accessible terminal controls, live diffs, tool details, model/mode/cost/Auto savings, and signed install/update support on both release hosts.
