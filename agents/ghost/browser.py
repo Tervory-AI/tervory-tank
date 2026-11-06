@@ -20,7 +20,9 @@ async def invalid_input(_request, _error):
 
 @app.get("/health")
 async def health():
-    return {"ok": True}
+    from .configuration import setting_status
+    status = setting_status("watch")
+    return {"ok": True, "ready": status["configured"], **status}
 
 
 @app.post("/check", dependencies=[Depends(require_tank)])

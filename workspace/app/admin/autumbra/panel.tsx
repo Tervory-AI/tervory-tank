@@ -39,7 +39,7 @@ function Incident({ item, resolve }: { item: GhostIncident; resolve: Action }) {
     </details>}
     <details><summary>Investigation receipts</summary><ol className="ghost-receipts">
       {item.steps.map((step) => <li key={step.ledger_id}><strong>{words(step.step)}</strong><code>{step.ledger_id}</code><span>${step.cost_usd.toFixed(6)}</span></li>)}
-    </ol></details>
+    </ol>{!item.steps.length && <p>Use Look to start a check.</p>}</details>
     {["needs_review", "not_reproduced", "blocked"].includes(item.state) && <details><summary>Confirm a completed fix</summary>
       <form action={action} className="ghost-resolve">
         <input type="hidden" name="id" value={item.id} />
@@ -52,17 +52,17 @@ function Incident({ item, resolve }: { item: GhostIncident; resolve: Action }) {
   </article>;
 }
 
-function ThreatReceipts({ items }: { items: AutumbraThreatReceipt[] }) {
+function ThreatReceipts({ items }: { items: AutumbraThreatReceipt[] | null }) {
   return <section className="autumbra-threats" aria-label="ThreatPayload and advisory receipts">
     <div className="ghost-section-title autumbra-threats-title">
       <h2>ThreatPayload / advisory receipts</h2>
-      <span>{items.length} recorded</span>
+      <span>{items ? items.length : "—"} recorded</span>
     </div>
     <p className="autumbra-threats-lead">
       Bounded propose-only receipts that crossed the air-gap schema (<code>ghost.threat.v1</code>).
       Autumbra Watch never auto-enforces; burn-on-fail means nothing was changed.
     </p>
-    {items.length ? items.map((item) => (
+    {items?.length ? items.map((item) => (
       <article key={item.id} className="autumbra-threat">
         <div className="autumbra-threat-head">
           <h3>{actionLabel(item.action)} · {words(item.target)}</h3>
@@ -78,7 +78,7 @@ function ThreatReceipts({ items }: { items: AutumbraThreatReceipt[] }) {
           {!!item.cve_ids?.length && <div><dt>CVE</dt><dd>{item.cve_ids.join(", ")}</dd></div>}
         </dl>
       </article>
-    )) : <p className="ghost-empty">No ThreatPayload receipts yet. Advisory matches appear here after propose-only triage.</p>}
+    )) : <p className="ghost-empty">{items ? "No ThreatPayload receipts yet. Use Look to start a check." : "Connect Autumbra Watch to load advisory receipts."}</p>}
   </section>;
 }
 
@@ -88,14 +88,14 @@ export function AutumbraConsole({
   look,
   resolve,
   tile,
-  threatReceipts = [],
+  threatReceipts = null,
 }: {
   data: GhostPanel | null;
   error?: string;
   look: Action;
   resolve: Action;
   tile?: ReactNode;
-  threatReceipts?: AutumbraThreatReceipt[];
+  threatReceipts?: AutumbraThreatReceipt[] | null;
 }) {
   const [result, action, pending] = useActionState(look, null);
   return <main className="ghost-panel">
@@ -104,9 +104,9 @@ export function AutumbraConsole({
     {(error || data?.monitor.unavailable_checks) ? <p role="alert" className="ghost-error">{error ?? "Some checks could not finish. An unavailable check is not a healthy result."}</p> : null}
     {tile}
     <form action={action} className="ghost-look"><h2>Take a look</h2><label>Where<select name="target">{targets.map(target => <option key={target} value={target}>{labelTarget(target)}</option>)}</select></label><label>What to check<select name="signal"><option value="health">Availability</option><option value="slow">Response time</option><option value="dns">DNS</option><option value="certificate">Certificate expiry</option><option value="headers">Security headers</option></select></label><button type="submit" disabled={pending}>{pending ? "Looking…" : "Look"}</button>{result && <p role="status" className="ghost-result">{result.message}</p>}</form>
-    <div className="ghost-section-title"><h2>Investigations</h2><span>{data?.incidents.length ?? 0} recorded</span></div>
+    <div className="ghost-section-title"><h2>Investigations</h2><span>{data?.incidents.length ?? "—"} recorded</span></div>
     {data?.incidents.length ? data.incidents.map(item => <Incident key={item.id} item={item} resolve={resolve} />) : <p className="ghost-empty">{data ? "No issues recorded yet. Use Look to start a check." : "Investigations will appear when Autumbra’s room is connected."}</p>}
-    {threatReceipts.length > 0 && <ThreatReceipts items={threatReceipts} />}
+    <ThreatReceipts items={threatReceipts} />
     <aside className="ghost-connections"><h2>Connections still required</h2><p>Autumbra’s assistant that explains what it finds, its private storage, the log and deployment feeds, handing work to a worker, and the step that carries out a recovery are not connected yet. Their absence is shown here so a healthy site check cannot imply full coverage.</p><p>Autumbra Watch cannot change keys, settings, production data, or merge a pull request. Human checks require a person.</p></aside>
   </main>;
 }

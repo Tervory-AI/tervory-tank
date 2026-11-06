@@ -16,9 +16,12 @@ export default async function UndoPage({
 
   let alreadyUndone = false;
   let alreadyMessage = "";
+  let valid = false;
   if (token) {
     try {
       const payload = verifyUndoToken(token);
+      if (payload.receipt_id !== resolved.id) throw new Error("Invalid receipt");
+      valid = true;
       const status = await loadUndoStatus(payload.tenant_id, payload.receipt_id || resolved.id);
       if (status.already_undone) {
         alreadyUndone = true;
@@ -26,9 +29,16 @@ export default async function UndoPage({
           status.detail || "This block was already undone on an earlier time.";
       }
     } catch {
-      // Invalid token — UndoButton shows the expired copy.
+      // Invalid links do not render an action. A valid token can still be
+      // used when the optional already-undone status read is unavailable.
     }
   }
+
+  if (!valid) return <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
+    <h1>Undo an Autumbra shield</h1>
+    <p>This link is invalid or has expired.</p>
+    <p>Use the Undo link in your Autumbra update email.</p>
+  </main>;
 
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
@@ -37,8 +47,7 @@ export default async function UndoPage({
         <p>{alreadyMessage}</p>
       ) : (
         <p>
-          Autumbra blocked an address that was attacking your site. If that caused a problem
-          for you, tap the button below and we will remove that block.
+          Use Undo to remove the shield linked in your Autumbra update email.
         </p>
       )}
       <UndoButton

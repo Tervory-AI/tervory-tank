@@ -20,10 +20,11 @@ export default async function WeeklyReceiptPage({
       <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
         <h1>Your Autumbra weekly update</h1>
         <p>This link is invalid or has expired.</p>
+        <p>Use the receipt link in your Autumbra update email.</p>
       </main>
     );
   }
-  const { receipts, note, timeZone } = await loadWeeklyReceipts(tenant, token || null);
+  const { receipts, note, timeZone, available, unauthorized } = await loadWeeklyReceipts(tenant, token || null);
 
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
@@ -33,8 +34,11 @@ export default async function WeeklyReceiptPage({
         checked, what it found, and what it did for your site this week.
       </p>
       {note && receipts.length === 0 ? <p style={{ color: "#6b7280" }}>{note}</p> : null}
+      <p>{available === false ? "—" : receipts.length} recorded</p>
       {receipts.length === 0 ? (
-        <p>No receipts for this week yet.</p>
+        <p>{unauthorized ? "This link is invalid or has expired." : available === false
+          ? "Reconnect Autumbra to load this week's receipts."
+          : "No receipts for this week yet. Connect your site's log feed to start a check."}</p>
       ) : (
         <ul style={{ paddingLeft: "1.25rem", lineHeight: 1.6, listStyle: "disc" }}>
           {receipts.map((row, index) => {
@@ -63,8 +67,7 @@ export default async function WeeklyReceiptPage({
         </ul>
       )}
       <p style={{ marginTop: "1.5rem", fontSize: "0.95rem", color: "#6b7280" }}>
-        Nothing from your logs is kept — we read them, acted, and deleted them. If a shield
-        caused a problem, use Undo this block above or the Undo link in that same email.
+        Nothing from your logs is kept. If you need help, reply to your Autumbra update email.
       </p>
     </main>
   );

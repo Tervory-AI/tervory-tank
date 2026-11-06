@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import logging
 import os
+import sqlite3
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -76,6 +77,7 @@ from .threat_queue import (
 )
 from .never_block import may_block_ip
 from .undo_token import verify_receipts_token
+from .configuration import interval_seconds, missing_settings, setting_status
 
 
 async def require_tank(x_tank_key: str = Header(default="")) -> None:
@@ -300,7 +302,7 @@ async def deliver_weekly_owner_updates(app: FastAPI, *, now: datetime | None = N
 
 
 async def _weekly_owner_email_loop(app: "FastAPI") -> None:
-    interval = max(1, min(3600, float(os.environ.get("AUTUMBRA_WEEKLY_INTERVAL_SEC") or "3600")))
+    interval = interval_seconds("AUTUMBRA_WEEKLY_INTERVAL_SEC", 3600, 1, 3600)
     while True:
         try:
             app.state.owner_weekly_status = await deliver_weekly_owner_updates(app)
@@ -414,9 +416,23 @@ async def _standing_blocks_loop(app):
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        if not os.environ.get("TANK_KEY"):
-            raise RuntimeError("Autumbra Watch's Tank key is not configured.")
-        store = Store(Path(os.environ.get("DATA_DIR", "/data")) / "ghost.sqlite3", os.environ.get("TANK_REGION", "us-east"))
+        app.state.missing_settings = missing_settings("watch")
+        app.state.invalid_settings = []
+        region = os.environ.get("TANK_REGION") or "us-east"
+        if region not in {"us-east", "za"}:
+            app.state.invalid_settings.append("TANK_REGION")
+        if app.state.missing_settings or app.state.invalid_settings:
+            app.state.ready = False
+            yield
+            return
+        try:
+            store = Store(Path(os.environ.get("DATA_DIR") or "/data") / "ghost.sqlite3", region)
+        except (OSError, sqlite3.Error, ValueError):
+            app.state.invalid_settings = ["DATA_DIR"]
+            app.state.ready = False
+            yield
+            return
+        app.state.ready = True
         from .threat_payload import bind_settings_store
         bind_settings_store(store)
         async with httpx.AsyncClient(follow_redirects=False) as http:
@@ -465,6 +481,15 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Autumbra Watch", lifespan=lifespan)
 
+    @app.middleware("http")
+    async def require_ready(request, call_next):
+        if request.url.path != "/health" and getattr(app.state, "ready", True) is False:
+            return JSONResponse(status_code=503, content={
+                "detail": "Configure the named settings before starting Autumbra Watch.",
+                "missing_settings": app.state.missing_settings,
+                "invalid_settings": app.state.invalid_settings})
+        return await call_next(request)
+
     @app.exception_handler(RequestValidationError)
     async def invalid_input(_request, _error):
         # Pydantic's default errors include the rejected input (possibly a secret).
@@ -476,7 +501,11 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health():
-        return {"ok": hasattr(app.state, "store"), "agent": "ghost",
+        return {"ok": True, "agent": "ghost",
+                "ready": getattr(app.state, "ready", hasattr(app.state, "store")),
+                "missing_settings": getattr(app.state, "missing_settings", missing_settings("watch")),
+                "invalid_settings": getattr(app.state, "invalid_settings", []),
+                "settings": {name: setting_status(name) for name in ("watch", "inventory", "owner_email", "owner_links")},
                 "owner_email_transport": transport_status(),
                 "market_lab_intel": getattr(app.state, "intel_status", "unavailable")}
 
