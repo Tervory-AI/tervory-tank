@@ -2,6 +2,7 @@
 import asyncio
 import gzip
 import json
+import os
 from pathlib import Path
 import subprocess
 from time import monotonic
@@ -55,7 +56,7 @@ async def screen(browser, bundle, mode, props=None, api=None, width=390, slow=Fa
 @pytest.mark.asyncio
 async def test_signup_day_zero_first_action_result_sources_and_receipt(client_bundle):
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
+        browser = await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True, args=['--no-sandbox'])
         context, page, errors = await screen(browser, client_bundle, 'signup')
         await page.get_by_role('button',name='Continue to Trigger sign-in').press('Enter')
         await page.wait_for_function("window.signinRequest")
@@ -89,7 +90,7 @@ async def test_network_error_retry_and_settings_missing_never_lock_the_form(clie
             return await route.abort('failed')
         return await route.fulfill(status=503,json={'kind':'error','message':'Missing setting: TANK_KEY'})
     async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         context,page,errors=await screen(browser,client_bundle,'view',api=answer)
         for _ in range(2):
             await page.get_by_role('textbox',name='Ask Zenas',exact=True).fill('What is the civil rule?')
@@ -106,7 +107,7 @@ async def test_network_error_retry_and_settings_missing_never_lock_the_form(clie
 @pytest.mark.parametrize('mode', ['matters','review','feeds','moot','deadlines','view'])
 async def test_each_screen_is_keyboard_accessible_and_fits_a_slow_phone(client_bundle,mode):
     async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         started=monotonic()
         context,page,errors=await screen(browser,client_bundle,mode,width=360,slow=True)
         await page.wait_for_selector('button, a, input, textarea')
@@ -145,7 +146,7 @@ async def test_matters_upload_and_review_retry_recover_from_transport_failure(cl
         calls.append(route.request.url)
         return await route.abort('failed')
     async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         context,page,errors=await screen(browser,client_bundle,'matters',api=api)
         await page.get_by_label('What is this matter about?').fill('Civil contract')
         await page.get_by_role('button',name='Open',exact=True).click()
@@ -167,7 +168,7 @@ async def test_matters_upload_and_review_retry_recover_from_transport_failure(cl
 @pytest.mark.asyncio
 async def test_dialog_keyboard_trap_escape_and_focus_return(client_bundle):
     async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         context,page,errors=await screen(browser,client_bundle,'view',width=1280)
         plugins=page.get_by_role('button',name='Plugins',exact=True)
         await plugins.click()
@@ -196,7 +197,7 @@ async def test_request_deadline_unblocks_without_replaying_a_mutation(client_bun
         await release.wait()
         await route.abort('failed')
     async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         context,page,errors=await screen(browser,client_bundle,'view',api=hanging)
         await page.clock.install()
         await page.get_by_role('textbox',name='Ask Zenas',exact=True).fill('What is the civil rule?')
@@ -217,7 +218,7 @@ async def test_feed_read_retries_are_limited_and_failure_is_visible(client_bundl
         calls.append(route.request)
         await route.fulfill(status=503,json={'error':ERROR})
     async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         context,page,errors=await screen(browser,client_bundle,'feeds',api=failed)
         await page.get_by_role('button',name='South Africa',exact=True).click()
         await expect(page.get_by_role('status')).to_have_text('Feeds could not be loaded.')
