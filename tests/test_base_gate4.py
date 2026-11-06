@@ -113,6 +113,7 @@ async def test_optional_vendor_key_missing_names_it_and_never_calls_a_provider(m
 async def test_missing_evidence_settings_do_not_touch_local_files_or_storage(monkeypatch):
     import base_brain
     import browser_evidence
+    monkeypatch.setenv('TANK_KEY', 'placeholder-room-key')
     base = _load('base_gate4_storage_app',ROOT/'agents/base/app.py')
     monkeypatch.setattr(base_brain,'selected',lambda *args: object())
     monkeypatch.setattr(browser_evidence,'upload',AsyncMock())
@@ -120,7 +121,7 @@ async def test_missing_evidence_settings_do_not_touch_local_files_or_storage(mon
     for name in names:
         monkeypatch.delenv(name,raising=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=base.app),base_url='http://localhost') as client:
-        result = await client.post('/brain/evidence',json={
+        result = await client.post('/brain/evidence',headers={'X-Tank-Key':'placeholder-room-key'},json={
             'tenant_id':str(uuid4()),'task_id':str(uuid4()),'evidence_id':'0'*64})
     assert result.status_code == 503
     assert result.json()['detail']['missing_settings'] == names

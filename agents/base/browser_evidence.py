@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from chassis.storage import Storage, StorageError
 from configuration import missing_settings, not_configured
+from network import admitted
 
 LIMITS = {'.html': 2_400_000, '.jpg': 8 * 1024 * 1024, '.pdf': 10_000_000}
 
@@ -76,7 +77,7 @@ async def upload(body: EvidenceRequest, *, root: Path | None = None, store_facto
                 raise StorageError('Browser evidence is no longer available locally')
             keys = []
             for _, suffix, data, digest, _ in pending:
-                keys.append(await store.put_evidence(str(body.tenant_id), date, digest, suffix, data))
+                keys.append(await admitted(store.put_evidence(str(body.tenant_id), date, digest, suffix, data), 60))
             # Retain every file if any upload failed. Retries address the same
             # content hashes; delete only after all uploads are acknowledged.
             for name, _, _, _, inode in pending:

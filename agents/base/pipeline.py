@@ -42,7 +42,7 @@ class ModelAccountBlocked(Exception):
     """The model provider refused the account. The record stays queued."""
 
     def __init__(self, reason: str) -> None:
-        self.reason = reason[:300]
+        self.reason = "Model account unavailable; completed work was kept."
         super().__init__(self.reason)
 
 
@@ -64,6 +64,8 @@ def skill_ids(engine: str | None) -> list[str]:
 
 
 def is_account_error(exc: Exception) -> bool:
+    if getattr(exc, "account_blocked", False):
+        return True
     msg = str(getattr(exc, "detail", "") or exc).lower()
     return any(token in msg for token in _ACCOUNT_ERRORS)
 
@@ -413,7 +415,7 @@ async def enrich_one(
                         raise ModelAccountBlocked(str(getattr(exc, "detail", "") or exc)) from exc
                     passes["2c"] = {
                         "skill": named("base.extract"),
-                        "skipped": f"model call failed: {str(exc)[:120]}",
+                        "skipped": "model call failed: completed work was kept",
                     }
                 else:
                     conf = int(ex.get("confidence") or 0)
@@ -569,7 +571,7 @@ async def enrich_one(
                 raise ModelAccountBlocked(str(getattr(exc, "detail", "") or exc)) from exc
             passes["5"] = {
                 "skill": named("base.business_data"),
-                "skipped": f"model call failed: {str(exc)[:120]}",
+                "skipped": "model call failed: completed work was kept",
             }
         else:
             if biz.get("confidence"):
@@ -605,7 +607,7 @@ async def enrich_one(
             status="failed",
             profile=profile,
             passes=passes,
-            error=str(exc)[:1000],
+            error="Base could not complete this request. Completed work was kept.",
             cost_usd=cost,
         )
 

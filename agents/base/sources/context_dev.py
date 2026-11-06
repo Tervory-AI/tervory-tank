@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+try:
+    from network import BoundedHTTP, paid_post
+except ModuleNotFoundError:  # package imports in offline and shared callers
+    from agents.base.network import BoundedHTTP, paid_post
+
 import asyncio
 import ipaddress
 import hashlib
@@ -98,7 +103,7 @@ def charged_credits(response: httpx.Response, body: dict[str, Any]) -> float | N
 
 class ContextDev:
     def __init__(self, http: httpx.AsyncClient, ledger: Ledger | None, *, tenant_id: str, run_id: str) -> None:
-        self.http = http
+        self.http = BoundedHTTP(http)
         self.ledger = ledger
         self.tenant_id = str(uuid.UUID(tenant_id))
         self.run_id = str(uuid.UUID(run_id))
@@ -110,13 +115,12 @@ class ContextDev:
         self.lock = asyncio.Lock()
 
     async def _paid_admission(self, payload, record_id):
-        from chassis.paid_steps import post
         key = os.environ.get("TANK_KEY", "")
         if not key:
             raise RuntimeError("Paid-step admission is unavailable")
         digest = hashlib.sha256(json.dumps([record_id,payload],sort_keys=True,separators=(",", ":")).encode()).hexdigest()
         run_id = uuid.uuid5(uuid.UUID(str(self.run_id)), digest)
-        response = await post(self.http, os.environ.get("TANK_URL", "http://tank:8000").rstrip("/"),
+        response = await paid_post(self.http, os.environ.get("TANK_URL", "http://tank:8000").rstrip("/"),
             "/v1/paid-steps/admit", {"tenant_id": str(self.tenant_id), "run_id": str(run_id),
             "step_id": "base.context_dev.credit", "request_hash": digest}, {"X-Tank-Key": key}, timeout=30)
         response.raise_for_status()

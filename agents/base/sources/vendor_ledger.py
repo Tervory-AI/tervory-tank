@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+try:
+    from network import BoundedHTTP
+except ModuleNotFoundError:  # package imports in offline and shared callers
+    from agents.base.network import BoundedHTTP
+
 import json
 import os
 import uuid
@@ -33,7 +38,7 @@ def decoded(value: Any) -> Any:
 
 class TankVendorLedger:
     def __init__(self, conn: Any, http: Any, *, tenant_id: str, run_id: str) -> None:
-        self.conn, self.http = conn, http
+        self.conn, self.http = conn, BoundedHTTP(http)
         self.tenant_id, self.run_id = uuid.UUID(tenant_id), uuid.UUID(run_id)
         if self.tenant_id != uuid.UUID(PLATFORM_TENANT):
             raise ValueError("company trials require the platform tenant")
