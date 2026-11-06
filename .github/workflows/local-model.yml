@@ -1,0 +1,27 @@
+name: Local CPU model
+on:
+  pull_request:
+    paths: ['litellm/local-model/**', 'tests/test_local_model_runtime.py', '.github/workflows/local-model.yml']
+permissions:
+  contents: read
+jobs:
+  inference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Install verified model and runtime
+        run: python3 litellm/local-model/install.py "$RUNNER_TEMP/local-model"
+      - name: Real CPU inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/local-model/llama-b12173/llama-server" -m "$RUNNER_TEMP/local-model/model.gguf" --alias local --host 127.0.0.1 --port 18089 -t 8 -tb 8 -c 4096 -np 1 -ngl 0 > "$RUNNER_TEMP/local-model.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"; wait "$server_pid" || true' EXIT
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent http://127.0.0.1:18089/health > /dev/null; then break; fi
+            kill -0 "$server_pid"
+            sleep 1
+          done
+          python3 litellm/local-model/benchmark.py

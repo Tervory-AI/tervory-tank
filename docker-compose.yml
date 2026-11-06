@@ -124,6 +124,26 @@ services:
       retries: 10
       start_period: 20s
 
+  # DECISION Apache-2.0 Qwen2.5-1.5B-Instruct Q4_K_M, CPU only.
+  # Provider-token cost is zero; CPU, RAM and electricity are not free.
+  local-model:
+    build: ./litellm/local-model
+    platform: linux/amd64
+    restart: unless-stopped
+    cpus: 8
+    mem_limit: 3g
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3).close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   litellm:
     build: ./litellm
     restart: unless-stopped
