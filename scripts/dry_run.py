@@ -54,7 +54,10 @@ def main(argv=None):
             base = Path(temp)
             data, stage = base / 'postgres', base / 'source'
             vendor = ROOT / 'vendor/tervory-tank'
-            shutil.copytree(vendor, stage, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+            if vendor.is_dir():
+                shutil.copytree(vendor, stage, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+            else:
+                stage.mkdir()
             files = subprocess.check_output(['git', '-C', str(ROOT), 'ls-files', '--cached', '--others', '--exclude-standard'], text=True).splitlines()
             for name in set(files):
                 if name.startswith('vendor/') or not (ROOT / name).is_file():

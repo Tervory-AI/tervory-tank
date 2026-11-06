@@ -14,10 +14,6 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-_AGENTS = Path(__file__).resolve().parents[1] / "agents"
-if str(_AGENTS) not in sys.path:
-    sys.path.insert(0, str(_AGENTS))
-
 _CHASSIS = Path(__file__).resolve().parents[1] / "agents" / "_chassis"
 if str(_CHASSIS) not in sys.path:
     sys.path.insert(0, str(_CHASSIS))
