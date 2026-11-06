@@ -250,9 +250,10 @@ class Proxy:
             line = head.split(b"\r\n", 1)[0].decode("ascii", "replace")
             parts = line.split(" ")
             if len(parts) >= 2 and parts[0] == "GET" and parts[1] == "/health":
-                body = b"ok"
+                missing = getattr(self, 'missing_settings', [])
+                body = json.dumps({'ok': False, 'status': 'blocked', 'missing_settings': missing}).encode() if missing else b"ok"
                 conn.sendall(
-                    b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n" + body
+                    b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode() + b"\r\nConnection: close\r\n\r\n" + body
                 )
                 return
             target = parse_connect_target(parts[1], self._storage_host, verified_host=self._verified_host) if len(parts) >= 2 else None
@@ -480,7 +481,7 @@ def room_proxy_address() -> tuple[str, int]:
     """The app may dial only the room proxy. Any other value fails closed."""
     raw = os.environ.get("RADIX_EGRESS_PROXY", "").strip()
     if raw != ROOM_PROXY:
-        raise ProxyError("room proxy is not configured")
+        raise ProxyError("Configure setting: RADIX_EGRESS_PROXY")
     return "egress-proxy", 8080
 
 
@@ -527,12 +528,19 @@ def read_certificate() -> tuple[dict[str, Any] | None, str | None]:
 
 def main() -> int:
     path = os.environ.get("RADIX_EGRESS_POLICY", "/app/egress-policy.json")
+    missing = []
     try:
         load_policy(path)
     except PolicyError:
-        print("egress policy refused", file=sys.stderr)
-        return 1
-    proxy = Proxy(revoked=env_revoked())
+        try:
+            storage_host()
+        except PolicyError:
+            missing.append('R2_ACCOUNT_ID')
+        if not missing or not Path(path).is_file():
+            missing.append('RADIX_EGRESS_POLICY')
+        print('Radix egress paused; configure settings: ' + ', '.join(missing), file=sys.stderr)
+    proxy = Proxy(revoked=bool(missing) or env_revoked())
+    proxy.missing_settings = missing
     Server(proxy, host=private_bind_address(), port=8080).serve_forever()
     return 0
 

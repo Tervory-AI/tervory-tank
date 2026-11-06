@@ -137,3 +137,6 @@ async def _regulation_lifespan(app):
 
 
 app.router.lifespan_context = _regulation_lifespan
+
+from readiness import install as install_readiness
+install_readiness(app)
