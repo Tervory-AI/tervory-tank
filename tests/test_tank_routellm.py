@@ -48,6 +48,9 @@ def test_model_promotion_still_requires_existing_graduation(samples, score, appr
 @pytest_asyncio.fixture
 async def real_tank(monkeypatch):
     from test_tank_ladder import selected_policy_protocol
+    from test_engine_ladder import enable_local
+    # These protocol tests include a faked, calibrated local judge explicitly.
+    enable_local(monkeypatch)
     selected_policy_protocol(monkeypatch)
     url = os.environ.get("POOL_SCHEMA_DATABASE_URL")
     if not url:

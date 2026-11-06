@@ -1,6 +1,5 @@
 import asyncio
 import faulthandler
-faulthandler.dump_traceback_later(180, exit=True)
 import importlib.metadata
 import json
 from litellm import Router
@@ -11,6 +10,11 @@ def row(name, ident, cost, text):
         'api_key': 'placeholder', 'mock_response': text,
         'input_cost_per_token': cost, 'output_cost_per_token': cost},
         'model_info': {'id': ident}}
+
+
+async def completion(client, **payload):
+    """Shared fake-provider HTTP probe, also used by the offline profile proof."""
+    return await client.post('/v1/chat/completions', json=payload)
 
 
 async def main():
@@ -40,8 +44,8 @@ async def main():
         return UserAPIKeyAuth(api_key='placeholder', user_role='proxy_admin')
     proxy_server.app.dependency_overrides[user_api_key_auth] = identity
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=proxy_server.app), base_url='http://placeholder') as client:
-        response = await client.post('/v1/chat/completions', json={'model': 'placeholder-group',
-            'messages': messages, 'fallbacks': ['placeholder-fallback'], 'mock_testing_fallbacks': True})
+        response = await completion(client, model='placeholder-group',
+            messages=messages, fallbacks=['placeholder-fallback'], mock_testing_fallbacks=True)
         assert response.status_code == 200, response.text
         assert response.json()['choices'][0]['message']['content'] == 'placeholder fallback'
         print("placeholder: fallback HTTP passed", flush=True)
@@ -77,4 +81,6 @@ async def main():
         'lowest_cost_deployment': deployment['model_info']['id'], 'request_fallback': answer.choices[0].message.content,
         'pinned_direct': pinned.choices[0].message.content}))
 
-asyncio.run(main())
+if __name__ == '__main__':
+    faulthandler.dump_traceback_later(180, exit=True)
+    asyncio.run(main())

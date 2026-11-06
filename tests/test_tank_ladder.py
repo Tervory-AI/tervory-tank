@@ -129,8 +129,15 @@ async def test_rung_three_receipts_transcripts_and_direct_skill_runs(ladder):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["low_confidence", "not_answerable", "skill_error"])
-async def test_code_escalates_with_receipt_and_no_raw_html(ladder, monkeypatch, kind):
+@pytest.mark.parametrize("local_online", [False, True])
+async def test_code_escalates_with_receipt_and_no_raw_html(ladder, monkeypatch, kind, local_online):
     b = ladder
+    from test_engine_ladder import enable_local
+    if local_online:
+        enable_local(monkeypatch)
+    else:
+        monkeypatch.delenv('ENGINE_LOCAL_URL', raising=False)
+        monkeypatch.delenv('ENGINE_LARGE_URL', raising=False)
 
     async def code(*args):
         if kind == "skill_error":
@@ -140,7 +147,9 @@ async def test_code_escalates_with_receipt_and_no_raw_html(ladder, monkeypatch, 
     monkeypatch.setattr(b.tank, "_run_code_candidate", code)
     for tenant in b.tenants:
         result = await b.tank.run_route(request(b, tenant, text=json.dumps({"text": "visible", "html": "<p>raw</p><script>secret</script>"})))
-        assert result.rung == 2 and result.model == "local" and result.cost_usd == 0
+        assert result.rung == 2 and result.model == ("local" if local_online else "gpt-oss-small")
+        assert result.cost_usd == (0 if local_online else .001)
+        assert result.engine['local_status'] == ('local rung online' if local_online else 'local rung offline')
         assert result.escalation[0]["reason"] == kind
         sent = json.dumps(b.sent[-1])
         assert "visible" in sent and "<" not in sent and "secret" not in sent and "raw" not in sent

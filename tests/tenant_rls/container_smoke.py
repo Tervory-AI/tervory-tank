@@ -44,7 +44,8 @@ def main():
                             "-e", "LITELLM_LOCAL_MODEL_COST_MAP=True",
                             "-e", "LANGFUSE_ENABLED=true", "-e", "LANGFUSE_TENANT_PROJECTS=not-json",
                             "-v", f"{temp / 'litellm.yml'}:/tmp/offline.yml:ro",
-                            "-v", f"{ROOT / 'tests/tenant_rls/engine_gateway_smoke.py'}:/tmp/engine_gateway_smoke.py:ro"]
+                            "-v", f"{ROOT / 'tests/tenant_rls/engine_gateway_smoke.py'}:/tmp/engine_gateway_smoke.py:ro",
+                            "-v", f"{ROOT / 'tests/tank_routing/litellm_probe.py'}:/tmp/litellm_probe.py:ro"]
             if service == "searxng":
                 options += ["-v", f"{temp / 'searxng.yml'}:/etc/searxng/settings.yml:ro"]
             if service == "tiger":

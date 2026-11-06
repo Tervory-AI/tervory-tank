@@ -1,7 +1,9 @@
 """Offline proof against the real LiteLLM proxy; every provider response is fake."""
-import json
+import asyncio
 import sys
-import urllib.request
+from urllib.parse import urlsplit
+
+import httpx
 
 
 def config():
@@ -18,19 +20,18 @@ def config():
     }
 
 
-def verify(base):
-    with urllib.request.urlopen(base + '/model/info', timeout=10) as response:
-        roster = json.load(response)['data']
-    assert not {'local', 'local-large'} & {r['model_name'] for r in roster}
-    for model in ('local', 'local-large', 'gpt-oss-small'):
-        request = urllib.request.Request(base + '/v1/chat/completions',
-            data=json.dumps({'model': model, 'messages': [{'role': 'user', 'content': 'placeholder'}]}).encode(),
-            headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(request, timeout=15) as response:
-            answer = json.load(response)
-            assert response.status == 200 and answer['choices'][0]['message']['content'] == 'billing'
+async def verify(base):
+    # Reuse the existing audited fake-provider gateway probe; no new provider path.
+    from litellm_probe import completion
+    assert urlsplit(base).hostname == '127.0.0.1'
+    async with httpx.AsyncClient(base_url=base, timeout=15, trust_env=False) as client:
+        roster = (await client.get('/model/info')).json()['data']
+        assert not {'local', 'local-large'} & {r['model_name'] for r in roster}
+        for model in ('local', 'local-large', 'gpt-oss-small'):
+            response = await completion(client, model=model, messages=[{'role': 'user', 'content': 'placeholder'}])
+            assert response.status_code == 200 and response.json()['choices'][0]['message']['content'] == 'billing'
     print('local rung offline: hosted fallthrough and disabled tracing passed', flush=True)
 
 
 if __name__ == '__main__':
-    verify(sys.argv[1])
+    asyncio.run(verify(sys.argv[1]))
