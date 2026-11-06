@@ -562,7 +562,10 @@ async def scheduled_once(operation: str, now: datetime | None = None) -> None:
     lock = {"export": 871224, "retest": 871225, "gold": 871227}[operation]
     marker = encoded({"tenant_id": str(PLATFORM_TENANT), "region": region,
                       "operation": operation, "slot": slot.isoformat()})
-    async with runtime().pool().acquire() as conn:
+    # A session lock spans nested work, but a transaction must not: startup
+    # indexes otherwise wait on this snapshot while the work waits for a pool slot.
+    lock_pool = getattr(runtime(), "admin_pool", runtime().pool)()
+    async with lock_pool.acquire() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock):
             return
         try:

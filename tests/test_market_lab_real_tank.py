@@ -20,7 +20,11 @@ from fixture_proof.server import TENANT, database_url, services
 from fixture_proof.boot_tank import verify_imported_cases
 
 
-def test_real_tank_routes_to_real_room_and_postgres(tmp_path):
+def test_real_tank_routes_to_real_room_and_postgres(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "agents/market_lab"))
+    for name in list(sys.modules):
+        if name in {"engines", "feeds"} or name.startswith(("engines.", "feeds.")):
+            monkeypatch.delitem(sys.modules, name)
     if not os.environ.get("DATABASE_URL"):
         pytest.skip("requires a local *_test Postgres database")
     from urllib.parse import urlsplit

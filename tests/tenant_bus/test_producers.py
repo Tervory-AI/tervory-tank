@@ -60,8 +60,10 @@ async def test_marketlab_emits_once_per_saved_scored_signal(bus, monkeypatch):
     # Base (agents/base/engines, #647) and Market Lab (agents/market_lab/engines) both ship a top-level
     # `engines` package, and Market Lab imports engines.<name>.engine lazily. An earlier test on this
     # worker may have cached Base's or put agents/base first on sys.path (merge queue, #631 shard 1).
+    # Versioned market.series_fetch skills also cache a top-level feeds package;
+    # lazy presentation imports must use the room's complete current package.
     monkeypatch.syspath_prepend(str(ROOT / 'agents/market_lab'))
-    for name in [n for n in sys.modules if n == 'engines' or n.startswith('engines.')]:
+    for name in [n for n in sys.modules if n in {'engines', 'feeds'} or n.startswith(('engines.', 'feeds.'))]:
         monkeypatch.delitem(sys.modules, name)
     from test_market_lab import AREAS, NOW, MemoryLedger, perform_opportunities
     ledger = MemoryLedger()

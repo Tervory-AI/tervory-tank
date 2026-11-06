@@ -283,3 +283,25 @@ async def test_weekly_retest_records_real_code_score_and_keeps_holdouts_out(data
     assert summary['skills'][0]['trend'] == -.25
     await training.scheduled_once('retest', NOW)
     assert len(contexts) == 4 and len(await completed(database)) == 1
+
+
+@pytest.mark.asyncio
+async def test_scheduled_session_lock_does_not_hold_a_scoped_transaction(database, monkeypatch):
+    from tenant_db import TenantPool
+    runtime = SimpleNamespace(pool=lambda: TenantPool(database), admin_pool=lambda: database,
+                              box_region=lambda: 'us-east')
+    monkeypatch.setattr(training, 'runtime', lambda: runtime)
+    calls = []
+
+    async def collect(day):
+        calls.append(day)
+        async with database.acquire() as conn:
+            await asyncio.wait_for(conn.execute(
+                'CREATE INDEX CONCURRENTLY schedule_snapshot_probe ON tank.policy_log(action)'), 10)
+        return {'unavailable': 0, 'rejected_responses': 0}
+
+    monkeypatch.setattr(training, 'collect_room_gold', collect)
+    await asyncio.wait_for(training.scheduled_once('gold', NOW), 15)
+    await training.scheduled_once('gold', NOW)
+    assert calls == [training.scheduled_slot('gold', NOW).date()]
+    assert len(await completed(database)) == 1

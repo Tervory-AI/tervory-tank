@@ -23,7 +23,10 @@ def single_evaluation(function):
         # One platform evaluation holds a session connection; serializing also
         # leaves the existing pool available for its evidence and model receipts.
         lock = int.from_bytes(hashlib.sha256(b'skala.evaluation').digest()[:8], 'big', signed=True)
-        async with main.pool().acquire() as conn:
+        # This is a platform session lock, not a transaction around the eval.
+        # Keep the pending receipt committed before work, and do not block
+        # concurrent startup indexes with an idle transaction snapshot.
+        async with main.admin_pool().acquire() as conn:
             if not await conn.fetchval('SELECT pg_try_advisory_lock($1::bigint)', lock):
                 raise HTTPException(409, 'An evaluation is already running. Reload before trying again.')
             try:

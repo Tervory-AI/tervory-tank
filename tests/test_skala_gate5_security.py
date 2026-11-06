@@ -67,7 +67,9 @@ async def test_provider_exception_is_not_stored_in_eval_result(tmp_path, monkeyp
 @pytest.mark.asyncio
 async def test_evaluation_overlap_and_retry_return_one_durable_result(database, monkeypatch):
     import main
-    monkeypatch.setattr(main, '_pool', database)
+    from tenant_db import TenantPool
+    monkeypatch.setattr(main, '_pool', TenantPool(database))
+    monkeypatch.setattr(main, '_admin_pool', None)
     started, release = asyncio.Event(), asyncio.Event()
     calls = []
     @skala_jobs.single_evaluation
@@ -80,6 +82,11 @@ async def test_evaluation_overlap_and_retry_return_one_durable_result(database, 
     try:
         first = asyncio.create_task(evaluate('base.offline', '1.0.0', SimpleNamespace(by='founder')))
         await started.wait()
+        # Another session must see the reservation before work finishes. A
+        # scoped transaction here also deadlocks concurrent startup indexes.
+        assert await database.fetchval("SELECT count(*) FROM tank.policy_log WHERE task_type='skala.evaluation' AND action='pending'") == 1
+        async with database.acquire() as conn:
+            await asyncio.wait_for(conn.execute("CREATE INDEX CONCURRENTLY eval_pending_probe ON tank.policy_log(action)"), 10)
         with pytest.raises(HTTPException) as duplicate:
             await evaluate('base.offline', '1.0.0', SimpleNamespace(by='founder'))
         assert duplicate.value.status_code == 409
@@ -98,7 +105,9 @@ async def test_evaluation_overlap_and_retry_return_one_durable_result(database, 
 @pytest.mark.asyncio
 async def test_interrupted_evaluation_is_not_replayed(database, monkeypatch):
     import main
-    monkeypatch.setattr(main, '_pool', database)
+    from tenant_db import TenantPool
+    monkeypatch.setattr(main, '_pool', TenantPool(database))
+    monkeypatch.setattr(main, '_admin_pool', None)
     calls = []
     @skala_jobs.single_evaluation
     async def evaluate(skill, version, body=None):
