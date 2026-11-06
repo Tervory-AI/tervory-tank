@@ -157,6 +157,8 @@ ZA_ROOM_TIMEOUT_S = 1800
 # advisory/signature data. The 6 Nov rollout exceeded 15 minutes while still
 # exporting a valid image; do not abandon its exact deployment at that point.
 RADIX_ROOM_TIMEOUT_S = 1800
+# Tisan's browser/Figma proxy cold build took 1367 s during the same rollout.
+TISAN_ROOM_TIMEOUT_S = 1800
 POLL_S = 15
 # The deploy job's own budget (deploy-on-merge.yml sets it below the job's
 # timeout-minutes). A room whose full wait no longer fits is not started and is
@@ -170,10 +172,13 @@ _run_started = time.time()
 def room_timeout(name: str) -> int:
     if name == "agent-radix":
         return RADIX_ROOM_TIMEOUT_S
+    if name == "agent-tisan":
+        return TISAN_ROOM_TIMEOUT_S
     return ZA_ROOM_TIMEOUT_S if name.endswith("-za") else ROOM_TIMEOUT_S
 # deploy() records the deployment Coolify queued, so wait_for follows that exact
 # deployment rather than whichever deployment of the app is newest.
 _queued: dict[str, str] = {}
+_timed_out: set[str] = set()
 
 
 def _rows(body: object) -> list[dict]:
@@ -187,6 +192,7 @@ def wait_for(uuid: str, name: str, timeout_s: int = ROOM_TIMEOUT_S) -> bool:
     A deployment still queued or building when the wait runs out is reported as
     still in progress, with its id, not as a failed deployment.
     """
+    _timed_out.discard(uuid)
     started = time.time()
     deadline = started + timeout_s
     deployment = _queued.get(uuid, "")
@@ -220,6 +226,7 @@ def wait_for(uuid: str, name: str, timeout_s: int = ROOM_TIMEOUT_S) -> bool:
             last_note = time.time()
             print(f"{name}: {status or 'no status yet'} after {time.time() - started:.0f}s")
         time.sleep(POLL_S)
+    _timed_out.add(uuid)
     ref = f" (deployment {deployment})" if deployment else ""
     print(f"::error title=deploy timeout::{name} still {status or 'unknown'} after {timeout_s}s{ref}; "
           "it was not cancelled and may still finish in Coolify")
@@ -364,6 +371,10 @@ def main() -> int:
             ok = False
             continue
         ok = (deploy(uuid, name) and wait_for(uuid, name, wait)) and ok
+        if uuid in _timed_out:
+            print(f"::error title=remaining rooms deferred::{name} may still be building; "
+                  "no further rooms were queued, to avoid overlapping builds")
+            return 1
     return 0 if ok else 1
 
 

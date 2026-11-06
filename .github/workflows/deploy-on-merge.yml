@@ -29,20 +29,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     # Worst case, a shared room change (tests/test_deploy_changed.py recomputes this from
-    # the room folders in the repo): waits of main 30 min + ZA 45 min + 8 rooms x 15 min
-    # + Radix 30 min + 1 ZA room x 30 min = 255 min (15300 s); Coolify calls 52 x 30 s
-    # = 1560 s, poll overrun 12 x 45 s = 540 s, checkout 60 s: 17460 s = 291 min.
-    # DEPLOY_BUDGET_S is 295 min: deploy_changed.py starts no room whose wait would end
-    # past it, so the job ends by about 298 min, well before GitHub's 305-min kill. A room
+    # the room folders in the repo): waits of main 30 min + ZA 45 min + 7 rooms x 15 min
+    # + Radix 30 min + Tisan 30 min + 1 ZA room x 30 min = 270 min (16200 s); Coolify calls 52 x 30 s
+    # = 1560 s, poll overrun 12 x 45 s = 540 s, checkout 60 s: 18360 s = 306 min.
+    # DEPLOY_BUDGET_S is 310 min: deploy_changed.py starts no room whose wait would end
+    # past it, so the job ends by about 313 min, well before GitHub's 320-min kill. A room
     # not started is reported as an error and is not retried by later runs (they retry
     # only failed deployments): deploy it with coolify-ops or the next change to its code.
-    timeout-minutes: 305
+    timeout-minutes: 320
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
       ZA_OFFLINE: ${{ vars.ZA_OFFLINE || '' }}
       AFTER: ${{ github.sha }}
-      DEPLOY_BUDGET_S: "17700"
+      DEPLOY_BUDGET_S: "18600"
       # Existing Tank service credential, read-only call; missing/unreachable gate is reported and fails open.
       RADIX_DEPLOY_TANK_KEY: ${{ secrets.TANK_API_KEY }}
       RADIX_DEPLOY_TENANT_ID: ${{ vars.RADIX_DEPLOY_TENANT_ID }}
