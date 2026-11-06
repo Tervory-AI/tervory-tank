@@ -14,7 +14,8 @@ def test_training_start_command_dry_run_reaches_launch_boundary_without_writes(t
     api.list_jobs_hardware = lambda: [SimpleNamespace(name='a10g-small', unit_label='minute', unit_cost_micro_usd=10000)]
     def forbidden(**kwargs):
         raise AssertionError('dry-run must not launch or create artifacts')
-    api.create_repo, api.run_uv_job = forbidden, forbidden
+    monkeypatch.setattr(api, 'create_repo', forbidden, raising=False)
+    monkeypatch.setattr(api, 'run_uv_job', forbidden, raising=False)
     conn = SimpleNamespace(fetchval=AsyncMock(return_value=False), close=AsyncMock())
     import asyncpg
     monkeypatch.setattr(asyncpg, 'connect', AsyncMock(return_value=conn))

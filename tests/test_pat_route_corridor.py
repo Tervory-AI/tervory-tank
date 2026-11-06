@@ -29,6 +29,10 @@ import personal_tokens as pat
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000011")
 SAMPLE = {"uuid.UUID": str(uuid.UUID(int=7))}
 CORRIDOR = {
+    ("GET", "/v1/command/code-models"), ("GET", "/v1/command/code-sessions"),
+    ("GET", "/v1/command/code-sessions/{thread_id}"), ("GET", "/v1/command/code-mcp-policy"),
+    ("PUT", "/v1/command/code-mcp-policy"), ("POST", "/v1/command/code-attachments"),
+    ("POST", "/v1/command/threads/{thread_id}/code-stream"),
     ("POST", "/v1/command/complete"),
     ("GET", "/v1/command/models"), ("GET", "/v1/command/tools"), ("GET", "/v1/command/threads"),
     ("GET", "/v1/command/threads/{thread_id}"), ("GET", "/v1/command/threads/{thread_id}/events"),
@@ -103,9 +107,10 @@ def lookups(monkeypatch):
 
 def test_corridor_list_matches_the_workspace_proxy_plus_founder_roster():
     source = open("workspace/lib/tank.ts").read()
-    assert "GET: new RegExp(`^(tools|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`)" in source
-    assert "POST: new RegExp(`^(complete|threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`)" in source
+    assert "GET: new RegExp(`^(tools|code-mcp-policy|code-models|code-sessions|code-sessions/${id}|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`)" in source
+    assert "POST: new RegExp(`^(code-attachments|complete|threads|threads/${id}/(turn|actions|code-turn|code-stream)|cards/${id}|build)$`)" in source
     assert "PATCH: new RegExp(`^threads/${id}$`)" in source
+    assert "PUT: /^code-mcp-policy$/" in source
     routes = set(endpoints())
     assert CORRIDOR | WINDOW_CORRIDOR <= routes
     for method, path in CORRIDOR:

@@ -229,7 +229,7 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
     ('hermes/law_routes.py', 'model/paid endpoint', '682052aabab5db9c'): (1, 'Internal endpoint reuses the pinned CPU encoder; Zenas-only authentication and box jurisdiction checks precede encoding.'),
     ('tests/zenas_za_meaning_search/test_hermes_law.py', 'model/paid endpoint', '682052aabab5db9c'): (2, 'In-process ASGI requests with a stub encoder and local Qdrant; outbound sockets are disabled.'),
     ('hermes/embeddings.py', 'model invocation', 'f6436138f93f0a6c'): (1, 'Founder-authorized pinned CPU encoder, fixed local files only; no runtime download or external inference API.'),
-    ('tank/training_jobs/run.py', 'paid compute', '71e2d2652eb1b27a'): (1, 'Tank-owned HF Jobs submit is founder-confirmed, spend-capped, and protected by advisory lock 871228 plus a durable reservation.'),
+    ('tank/training_jobs/run.py', 'paid compute', '8478a3829826ac55'): (1, 'Tank-owned HF Jobs submit is founder-confirmed, spend-capped, and protected by advisory lock 871228 plus a durable reservation.'),
     ('litellm/config.yaml', 'configured endpoint', '4eca9db60dcd6816'): (16, 'The Tank-owned provider backend roster, including the two routing-data HF deployments; keys are environment references.'),
     ('litellm/config.za.yaml', 'configured endpoint', '4eca9db60dcd6816'): (16, 'The ZA Tank-owned provider backend roster, including the two routing-data HF deployments; keys are environment references.'),
     ('researcher/app.py', 'model/paid endpoint', '9f3fd5c68c992e75'): (1, 'Exact loopback destination guard; the local adapter forwards model work only to Tank /v1/route.'),

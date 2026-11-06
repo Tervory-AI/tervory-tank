@@ -101,6 +101,14 @@ def charged_credits(response: httpx.Response, body: dict[str, Any]) -> float | N
         return None
 
 
+def _api_key():
+    return os.environ.get("CONTEXT_DEV_API_KEY")
+
+
+def configured():
+    return bool(_api_key())
+
+
 class ContextDev:
     def __init__(self, http: httpx.AsyncClient, ledger: Ledger | None, *, tenant_id: str, run_id: str) -> None:
         self.http = BoundedHTTP(http)
@@ -130,7 +138,7 @@ class ContextDev:
         payload = lookup_body(name=name, domain=domain, url=url)
         if self.ledger is None:
             return {"status": "ledger_unavailable", "fields": {}}
-        key = os.environ.get("CONTEXT_DEV_API_KEY")
+        key = _api_key()
         if not key:
             return {"status": "not_configured", "fields": {},
                     "missing_settings": ["CONTEXT_DEV_API_KEY"],

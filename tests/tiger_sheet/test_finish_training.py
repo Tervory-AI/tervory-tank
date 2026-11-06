@@ -95,7 +95,7 @@ async def test_tiger_submission_uses_existing_budget_reservation_and_private_out
     api.list_jobs_hardware = lambda: [SimpleNamespace(name='a10g-small', unit_label='minute', unit_cost_micro_usd=10000)]
     api.create_repo = lambda **kwargs: submission.append(('repo', kwargs))
     api.model_info = lambda repo: SimpleNamespace(private=True)
-    api.run_uv_job = lambda *args, **kwargs: submission.append(('job', kwargs)) or SimpleNamespace(id='placeholder-job')
+    monkeypatch.setattr(api, 'run_uv_job', lambda *args, **kwargs: submission.append(('job', kwargs)) or SimpleNamespace(id='placeholder-job'), raising=False)
     conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]), close=AsyncMock())
     import asyncpg
     monkeypatch.setattr(asyncpg, 'connect', AsyncMock(return_value=conn))

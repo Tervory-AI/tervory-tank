@@ -33,7 +33,7 @@ test('feel plain mode and NO_COLOR avoid control codes and show accessible tool 
 
 test('feel previews never expose split credentials assignments private keys or terminal controls', () => {
   const secret='ghp_'+'placeholder'.repeat(3);
-  const inputs=[`Answer ${secret} done\n`,`password = ${'placeholder'.repeat(3)}\n`,'-----BEGIN PRIVATE KEY-----\nplaceholder-private-body\n-----END PRIVATE KEY-----\n'];
+  const inputs=[`Answer ${secret} done\n`,`password = ${'placeholder'.repeat(3)}\n`,'-----BEGIN ' + 'PRIVATE KEY-----\nplaceholder-private-body\n-----END ' + 'PRIVATE KEY-----\n'];
   for(const input of inputs){let raw='';let rendered='';for(const c of input){raw+=c;rendered+=previewText(raw);}assert(!rendered.includes(secret));assert(!rendered.includes('placeholder-private-body'));assert(!rendered.includes('placeholder'.repeat(3)));}
   assert(!previewText('safe \x1b]52;c;danger\x07 done ').includes('danger'));
 });

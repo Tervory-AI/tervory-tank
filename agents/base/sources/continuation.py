@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import uuid
 from decimal import Decimal
 
 from pipeline import val
+from sources.context_dev import configured
 from sources.trial import run_trial
 from sources.trial_selection import official_truth, select_records
 from sources.vendor_ledger import PLATFORM_TENANT, decoded
@@ -19,7 +19,7 @@ def has_gaps(profile):
 
 
 async def run_gaps(pool, http, tenant_id, run_id):
-    if str(tenant_id) != PLATFORM_TENANT or not os.environ.get('CONTEXT_DEV_API_KEY'):
+    if str(tenant_id) != PLATFORM_TENANT or not configured():
         return {'status': 'not_configured', 'records_sent': 0, 'lessons': 0}
     tenant, run = uuid.UUID(str(tenant_id)), uuid.UUID(str(run_id))
     async with pool.acquire() as conn:
@@ -62,8 +62,10 @@ async def run_gaps(pool, http, tenant_id, run_id):
 
 
 async def finish_context(pool, http, task_id, cfg):
-    if cfg['tenant_id'] != PLATFORM_TENANT or not os.environ.get('CONTEXT_DEV_API_KEY'):
+    if cfg['tenant_id'] != PLATFORM_TENANT or not configured():
         return
+    if http is None:
+        raise RuntimeError('Context transport is unavailable')
     tenant = uuid.UUID(cfg['tenant_id'])
     cfg['context_pending'] = True
     async with pool.acquire() as conn:

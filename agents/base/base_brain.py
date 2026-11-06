@@ -52,7 +52,7 @@ async def run_code_first(pool: Any, skills: Any, task_id: uuid.UUID, cfg: dict, 
 
     await _run_batch(pool, task_id, cfg, free_skill)
     from sources.continuation import finish_context
-    await finish_context(pool, skills._http, task_id, cfg)
+    await finish_context(pool, getattr(skills, "_http", None), task_id, cfg)
     outcome = await results(ActiveBatch(pool, cfg, call), Task(tenant_id=tenant, task_id=task_id))
     # A pause/failure is not permission to spend. Completed, sourced code
     # answers need no model conversation or paid continuation.
