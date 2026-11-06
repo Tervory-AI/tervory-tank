@@ -3,9 +3,7 @@ import asyncio
 import hashlib
 import io
 import json
-import os
 import subprocess
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -14,7 +12,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from test_rig_3d_engine import rig, job, approve_all, TENANT, WITHOUT_3D, PUBLIC_KEY, PLAIN_KEY
+from test_rig_3d_engine import rig as rig, job, TENANT, WITHOUT_3D, PUBLIC_KEY, PLAIN_KEY
 from test_rig_3d_uploads import files
 from rigbox.three_d import command
 from rigbox.three_d.assets import R2Assets

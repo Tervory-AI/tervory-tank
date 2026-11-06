@@ -1,6 +1,6 @@
 """Actual local-speech UI -> real hearing API/store -> judge fake -> saved result."""
-import asyncio
 import json
+import os
 from pathlib import Path
 from uuid import UUID,uuid4
 from urllib.parse import urlsplit,parse_qsl,urlencode
@@ -18,7 +18,7 @@ from .test_api import headers
 from .test_hearing import OWNER,HUMANS,problem
 from .test_store import transition
 from .test_voice import ScriptedJudge
-from zenas_finish.test_gate5_journeys import client_bundle,screen
+from zenas_finish.test_gate5_journeys import client_bundle as client_bundle,screen
 
 SPEECH=(Path(__file__).parent/'local_speech.js').read_text()+"\nwindow.browserErrors=[];window.addEventListener('error',event=>window.browserErrors.push(event.message));"
 
@@ -89,7 +89,7 @@ async def test_voice_hearing_judge_audio_saved_feedback_studio_and_public_replay
     state=await start(pg_store);judge=ScriptedJudge();app=application(monkeypatch,pg_store,judge)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://placeholder') as client:
       async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         contexts=[]
         for seat in ('applicant','respondent'):
             context,page,errors=await screen(browser,client_bundle,'moot',api=bridge(client,HUMANS[seat]),init_script=SPEECH,width=1440)
@@ -133,7 +133,7 @@ async def test_no_local_speech_never_falls_back_to_a_remote_microphone(monkeypat
     state=await start(pg_store,judge_ai=False);app=application(monkeypatch,pg_store,ScriptedJudge())
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://placeholder') as client:
       async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         context,page,errors=await screen(browser,client_bundle,'moot',api=bridge(client,HUMANS['applicant']),
             init_script=SPEECH+'\nwindow.speechMode='+json.dumps(mode)+';',width=1440)
         await select(page,state,'applicant')
@@ -153,7 +153,7 @@ async def test_playback_failure_keeps_saved_judge_text_and_never_uses_remote_spe
     state=await start(pg_store);judge=ScriptedJudge();app=application(monkeypatch,pg_store,judge)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://placeholder') as client:
       async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         context,page,errors=await screen(browser,client_bundle,'moot',api=bridge(client,HUMANS['applicant']),
             init_script=SPEECH+'\nwindow.speechMode='+json.dumps(mode)+';',width=1440)
         await select(page,state,'applicant');await argument(page)
@@ -172,7 +172,7 @@ async def test_microphone_permission_and_revocation_leave_no_spurious_turn(monke
     state=await start(pg_store,judge_ai=False);app=application(monkeypatch,pg_store,ScriptedJudge())
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://placeholder') as client:
       async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await p.chromium.launch(executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"), headless=True,args=['--no-sandbox'])
         context,page,errors=await screen(browser,client_bundle,'moot',api=bridge(client,HUMANS['applicant']),
             init_script=SPEECH+'\nwindow.speechMode='+json.dumps(mode)+';',width=1440)
         await select(page,state,'applicant')

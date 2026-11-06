@@ -18,7 +18,7 @@ export default async function MootIndexPage({ searchParams }: { searchParams?: P
     <main className="moot-watch" aria-label="Moot Court">
       <h1>Moot Court</h1>
       <p>
-        This is where Zenas trains in text. Public watch pages only — nothing spoken here yet.
+        This is where Zenas trains in text. Public watch pages only.
         Law students will use it later, for free.
       </p>
       <p>

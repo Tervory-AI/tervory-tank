@@ -1,6 +1,5 @@
 """Local voice turns retain the same authorization, citations and durable receipts."""
 import asyncio
-from copy import deepcopy
 import json
 from uuid import UUID,uuid4
 
@@ -8,7 +7,6 @@ import httpx
 import pytest
 
 from agents.zenas.core.moot import hearing
-from agents.zenas.core.moot.hearing_api import register_routes
 from agents.zenas.core.moot.hearing_ai import AIExecutor,validate_turn
 from agents.zenas.core.moot.hearing_store import HearingStore
 from agents.zenas.core.moot.voice import capture
