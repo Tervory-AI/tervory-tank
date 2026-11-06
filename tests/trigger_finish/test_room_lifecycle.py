@@ -12,6 +12,7 @@ async def test_failed_schema_initialisation_closes_database(monkeypatch):
     pool = SimpleNamespace(execute=AsyncMock(side_effect=RuntimeError('placeholder schema failure')),
                            close=AsyncMock())
     monkeypatch.setenv('DATABASE_URL', 'postgresql://placeholder/placeholder')
+    monkeypatch.setenv('TANK_KEY', 'placeholder-room-key')
     monkeypatch.setattr(room.asyncpg, 'create_pool', AsyncMock(return_value=pool))
     http = Mock()
     monkeypatch.setattr(room.httpx, 'AsyncClient', http)
@@ -35,6 +36,7 @@ async def test_shutdown_closes_http_then_database_even_on_failure(monkeypatch, f
     pool = SimpleNamespace(execute=AsyncMock(), close=close_pool)
     http = SimpleNamespace(aclose=close_http)
     monkeypatch.setenv('DATABASE_URL', 'postgresql://placeholder/placeholder')
+    monkeypatch.setenv('TANK_KEY', 'placeholder-room-key')
     monkeypatch.setattr(room.asyncpg, 'create_pool', AsyncMock(return_value=pool))
     monkeypatch.setattr(room.httpx, 'AsyncClient', Mock(return_value=http))
     app = FastAPI()

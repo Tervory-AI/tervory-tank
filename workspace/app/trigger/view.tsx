@@ -3,6 +3,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CHANNELS, Data, DASH, value } from "./copy";
+import { FirstAction } from "./day-zero";
 import { Field, Fields, Records } from "./records";
 import { confirmTrigger, proposeTrigger } from "./actions";
 
@@ -101,6 +102,7 @@ export default function ConsoleView({
     });
   return (
     <>
+      {!id && !preview && <FirstAction area={area} section={section} data={data} />}
       {preview ? (
         <div className="trigger-stack trigger-confirm">
           <h1>{preview.title}</h1>
@@ -153,6 +155,7 @@ export default function ConsoleView({
         />
       )}
       {error && <p role="alert">{error}</p>}
+      {!result && !preview && !id && <p className="trigger-first-receipt">— · Confirm an action to create its receipt.</p>}
       {result && (
         <div className="trigger-section">
           <p>

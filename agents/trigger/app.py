@@ -17,6 +17,9 @@ from trigger.voice import VoiceStore
 
 
 async def authorized(x_tank_key: str = Header(default="")):
+    missing = getattr(app.state, "missing_settings", [])
+    if missing:
+        raise HTTPException(503, {"missing_settings": missing})
     expected = os.environ.get("TANK_KEY", "")
     if not expected or not hmac.compare_digest(expected.encode(), x_tank_key.encode()):
         raise HTTPException(401, "Room authentication required")
@@ -24,6 +27,11 @@ async def authorized(x_tank_key: str = Header(default="")):
 
 @asynccontextmanager
 async def lifespan(app):
+    app.state.pool = None
+    app.state.missing_settings = [name for name in ("DATABASE_URL", "TANK_KEY") if not os.environ.get(name)]
+    if app.state.missing_settings:
+        yield
+        return
     async with AsyncExitStack() as resources:
         app.state.pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=3)
         resources.push_async_callback(app.state.pool.close)
@@ -40,6 +48,8 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/health")
 async def health():
+    if getattr(app.state, "missing_settings", []):
+        raise HTTPException(503, {"missing_settings": app.state.missing_settings})
     if not getattr(app.state, "pool", None):
         raise HTTPException(503, "Database unavailable")
     await app.state.pool.fetchval("SELECT 1")

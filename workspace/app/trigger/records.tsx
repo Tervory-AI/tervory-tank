@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FirstAction } from "./day-zero";
 import { CRM, Data, Resource, value } from "./copy";
 export function Field({
   label,
@@ -172,6 +173,7 @@ export default function CRMView({
   ) : (
     <>
       <h1>{spec.title}</h1>
+      <FirstAction area="crm" section={resource} data={data} />
       <Records
         columns={columns}
         items={((data.items ?? []) as Data[]).map((row) => ({

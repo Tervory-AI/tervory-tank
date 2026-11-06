@@ -6,11 +6,11 @@ import re
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def proposed_text(relative, original):
+def proposed_text(relative, original, patch_name='finish'):
     if not (ROOT / 'vendor/tervory-tank').is_dir() and (ROOT / relative).is_file():
         return (ROOT / relative).read_text()
     original = original.splitlines(keepends=True)
-    patch = (ROOT / 'tank-patches/finish.patch').read_text().splitlines(keepends=True)
+    patch = (ROOT / f'tank-patches/{patch_name}.patch').read_text().splitlines(keepends=True)
     start = patch.index('+++ b/' + relative + '\n') + 1
     output, cursor = [], 0
     index = start
