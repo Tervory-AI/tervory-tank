@@ -81,5 +81,10 @@ def install(app, tank):
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
-    # Cancel the worker before Tank closes its pool.
-    app.router.on_shutdown.insert(0, stop)
+    # Tank drains intake explicitly before closing its shared pool, retaining
+    # the existing callback registration order. Standalone apps stop it first.
+    if hasattr(tank, "_shutdown"):
+        app.state.skala_intake_stop = stop
+        app.router.on_shutdown.append(stop)
+    else:
+        app.router.on_shutdown.insert(0, stop)

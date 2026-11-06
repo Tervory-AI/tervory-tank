@@ -856,6 +856,9 @@ async def _startup() -> None:
 @app.on_event("shutdown")
 async def _shutdown() -> None:
     _graduated_sa_models.discard(_OWN_ZA_MODEL)
+    intake_stop = getattr(app.state, "skala_intake_stop", None)
+    if intake_stop is not None:
+        await intake_stop()
     await __import__("routes_registry").shutdown_products(__import__("sys").modules[__name__])
     if _batch_task:
         _batch_task.cancel()

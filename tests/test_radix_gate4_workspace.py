@@ -2,12 +2,13 @@
 from pathlib import Path
 import re
 import subprocess
+import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def patched_sources():
-    text = (ROOT / 'tank-patches/gate4.patch').read_text()
+    text = (ROOT / 'tank-patches/radix/gate4.patch').read_text()
     result = {}
     for section in text.split('diff --git ')[1:]:
         lines = section.splitlines(keepends=True)
@@ -25,18 +26,32 @@ def patched_sources():
     return result
 
 
-def test_unapplied_patch_day_zero_charts_lists_and_receipts(tmp_path):
-    sources = patched_sources()
+def verify_patch(folder, relative, sources):
+    folder.mkdir(parents=True, exist_ok=True)
+    subprocess.run(['git', 'init', '-q', str(folder)], check=True)
     for name, (before, after) in sources.items():
-        target = tmp_path / name
+        target = folder / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        if before: target.write_text(before)
-    checked = subprocess.run(['git', 'apply', '--check', str(ROOT / 'tank-patches/gate4.patch')],
-                             cwd=tmp_path, capture_output=True, text=True)
+        if before:
+            target.write_text(before)
+            assert target.read_text() in {before, after}, name
+        else:
+            target.unlink(missing_ok=True)
+    checked = subprocess.run(['git', 'apply', '--check', str(ROOT / relative)],
+                             cwd=folder, capture_output=True, text=True)
     assert checked.returncode == 0, checked.stderr
-    # Compile candidate bytes in this temporary tree; Tank/vendor stay untouched.
+    applied = subprocess.run(['git', 'apply', str(ROOT / relative)], cwd=folder,
+                             capture_output=True, text=True)
+    assert applied.returncode == 0, applied.stderr
     for name, (_, after) in sources.items():
-        (tmp_path / name).write_text(after)
+        assert (folder/name).read_text() == after, name
+
+
+def test_unapplied_patch_day_zero_charts_lists_and_receipts(tmp_path):
+    verify_patch(tmp_path/'patch-proof', 'tank-patches/radix/gate4.patch', patched_sources())
+    # Browser assertions exercise the integrated production implementation.
+    shutil.copytree(ROOT/'workspace', tmp_path/'workspace',
+                    ignore=shutil.ignore_patterns('node_modules', '.next'))
     result = subprocess.run(['node', str(ROOT / 'tests/radix_gate4/workspace.cjs'), str(tmp_path)],
                             cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr

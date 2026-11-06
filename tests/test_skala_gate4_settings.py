@@ -75,7 +75,6 @@ def forbidden(*args, **kwargs):
 socket.create_connection = forbidden
 socket.socket.connect = forbidden
 socket.getaddrinfo = forbidden
-import finish_proposals
 import main
 import httpx
 async def check():

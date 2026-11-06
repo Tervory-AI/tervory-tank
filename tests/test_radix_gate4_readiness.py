@@ -1,7 +1,6 @@
 """Missing settings keep diagnostics up and all affected operations closed."""
 from contextlib import asynccontextmanager
 import importlib.util
-from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import FastAPI

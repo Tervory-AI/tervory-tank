@@ -1,6 +1,8 @@
 // Execute the real middleware and host rewrite functions; mock only Trigger sign-in/Next transport.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
+Object.assign(process.env, {TANK_URL:'http://placeholder-tank:8000',TANK_API_KEY:'placeholder-workspace-key',TRIGGER_SIGNIN_WORKSPACE_SECRET:'placeholder-session-key'});
 const { createRequire } = require('node:module');
 const ts = createRequire(process.cwd() + '/workspace/package.json')('typescript');
 function load(file, dependencies) {
@@ -9,8 +11,9 @@ function load(file, dependencies) {
   }).outputText;
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(name => {
-    assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency: ${name}`);
-    return dependencies[name];
+    if (Object.hasOwn(dependencies, name)) return dependencies[name];
+    if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name+'.ts'), dependencies);
+    assert.fail(`Unexpected dependency: ${name}`);
   }, module, module.exports);
   return module.exports;
 }
@@ -28,7 +31,7 @@ const middleware = load('workspace/middleware.ts', {
 function request(path, forwarded = true) {
   const nextUrl = new URL('http://0.0.0.0:3000' + path);
   nextUrl.clone = () => new URL(nextUrl);
-  return { nextUrl, cookies: {get: () => undefined}, headers: new Headers(forwarded ? { 'x-forwarded-host': 'rig.tervory.com', host: 'internal:3000' } : { host: 'rig.tervory.com' }) };
+  return { nextUrl, method:'GET', url:nextUrl.href, cookies: {get: () => undefined}, headers: new Headers(forwarded ? { 'x-forwarded-host': 'rig.tervory.com', host: 'internal:3000' } : { host: 'rig.tervory.com' }) };
 }
 (async () => {
   for (const forwarded of [true, false]) {

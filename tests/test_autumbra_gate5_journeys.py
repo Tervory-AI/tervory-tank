@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 import uvicorn
 
-from acceptance.test_autumbra import box, engine, enqueue, settings, A, B, KEY
+from acceptance.test_autumbra import box as box, engine, enqueue, A, B, KEY
 from agents.ghost.undo_token import sign_receipts_token, sign_undo_token
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -93,7 +93,7 @@ export default {devIndicators:false,webpack(config){config.resolve.alias["next-a
     origin = f'http://localhost:{port}'
     env = {**os.environ, 'NEXT_TELEMETRY_DISABLED':'1', 'TERVORY_ADMIN_USER_IDS':'offline-founder',
            'TANK_URL':f'http://127.0.0.1:{sock.getsockname()[1]}', 'TANK_API_KEY':'' if missing else KEY,
-           'AUTUMBRA_UNDO_TOKEN_SECRET':'fixture-undo-key'}
+           'AUTUMBRA_UNDO_TOKEN_SECRET':'fixture-undo-key', 'TRIGGER_SIGNIN_WORKSPACE_SECRET':'placeholder-offline-session-key'}
     log_path = tmp_path / 'journey-next.log'
     with log_path.open('w') as log:
         process = await asyncio.create_subprocess_exec('node', str(local / 'node_modules/next/dist/bin/next'),
@@ -259,18 +259,22 @@ async def test_missing_setting_signed_out_and_other_owner_have_no_unsafe_action(
     try:
         weekly='/autumbra/receipts/weekly/'+A+'?'+urlencode({'token':sign_receipts_token(tenant_id=A)})
         await page.goto(j.origin+weekly)
-        await expect(page.get_by_text('Missing setting: TANK_API_KEY. Connect Autumbra to load receipts.')).to_be_visible()
-        assert j.fake.calls==[]
+        await expect(page.get_by_role('heading',name='Workspace setup')).to_be_visible()
+        await expect(page.get_by_role('status')).to_have_text('Workspace needs these settings: TANK_API_KEY.')
+        assert await page.get_by_role('button').count() == 0
+        assert j.fake.calls == []
         token=sign_undo_token(tenant_id=A,receipt_id='receipt-one',site='tervory.com')
         await page.goto(j.origin+'/autumbra/undo/receipt-one?'+urlencode({'token':token}))
-        await page.get_by_role('button',name='Undo this shield',exact=True).click()
-        await expect(page.locator('p[role=alert]')).to_have_text('Undo is not configured on this host yet.')
-        assert j.fake.calls==[]
+        await expect(page.get_by_role('heading',name='Workspace setup')).to_be_visible()
+        assert await page.get_by_role('button').count() == 0
         async with httpx.AsyncClient(trust_env=False,follow_redirects=False) as client:
-            response=await client.get(j.origin+'/admin/autumbra')
-            assert response.status_code==307 and '/sign-in?' in response.headers['location']
-            response=await client.get(j.origin+'/admin/autumbra',cookies={'offline-user':'other-owner'})
-            assert response.status_code==404
+            refused = await client.post(j.origin+'/api/autumbra/undo', json={'token':token})
+            assert refused.status_code == 503 and 'TANK_API_KEY' in refused.text
+            for cookies in [{}, {'offline-user':'other-owner'}]:
+                response=await client.get(j.origin+'/admin/autumbra', cookies=cookies)
+                assert response.status_code == 200 and 'Workspace setup' in response.text
+                assert 'ghost-panel' not in response.text
+        assert j.fake.calls == []
         await accessible(page,'main')
     finally:
         await context.close()

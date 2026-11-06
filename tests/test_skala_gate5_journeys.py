@@ -4,7 +4,7 @@ import subprocess
 
 
 def run_node(name):
-    from finish_proposals import SOURCES
+    from skala_integrated_sources import SOURCES
     result = subprocess.run(['node', name], input=json.dumps(SOURCES), text=True,
         capture_output=True, cwd=Path.cwd(), timeout=90)
     assert result.returncode == 0, result.stdout + result.stderr

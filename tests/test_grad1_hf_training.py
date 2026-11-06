@@ -48,7 +48,7 @@ def test_zenas_uses_allowlisted_smallest_a10g_that_fits():
         ([1999, 200], True, 'fewer than 2,000 public zenas training rows'),
         ([2000, 199], True, 'fewer than 200 holdout rows'),
         ([2000, 200, True], True, 'reconcile the previous training job'),
-        ([2000, 200, False], False, 'Hugging Face training is not configured'),
+        ([2000, 200, False], False, 'unconfigured'),
     ],
 )
 async def test_zenas_training_run_plain_refusals(monkeypatch, values, configured, status):
@@ -61,7 +61,11 @@ async def test_zenas_training_run_plain_refusals(monkeypatch, values, configured
         monkeypatch.delenv('HF_TOKEN', raising=False)
         monkeypatch.delenv('HF_ORG', raising=False)
     body = training.TrainingRunRequest(agent='zenas', minutes=120)
-    assert (await training._training_readiness(conn, body))['status'] == status
+    result = await training._training_readiness(conn, body)
+    assert result['status'] == status
+    if not configured:
+        assert result['missing_settings'] == ['HF_TOKEN', 'HF_ORG']
+        assert conn.fetchval.await_count == 0
 
 
 @pytest.mark.asyncio

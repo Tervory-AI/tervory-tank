@@ -25,7 +25,7 @@ function loader({fetch, mocks={}, fast=false}) {
       return load(base+'.ts');
     };
     vm.runInNewContext(source.outputText,{module,exports:module.exports,require:local,
-      process:{env:{TANK_URL:'http://placeholder-tank:8000',TANK_API_KEY:key}},fetch,
+      process:{env:{TANK_URL:'http://placeholder-tank:8000',TANK_API_KEY:'placeholder-service-value'}},fetch,
       Request,Response,Headers,URL,URLSearchParams,AbortController,AbortSignal,Uint8Array,TextDecoder,TextEncoder,
       ReadableStream,console,setTimeout:fast?(fn,ms)=>setTimeout(fn,Math.min(ms,15)):setTimeout,clearTimeout});
     return module.exports;

@@ -177,7 +177,7 @@ async def test_training_command_names_missing_settings_before_provider_access(mo
 
 
 def test_training_cli_rejects_dry_run_with_submit(monkeypatch):
-    from finish_proposals import SOURCES
+    from skala_integrated_sources import SOURCES
     filename = next(name for name in SOURCES if name.endswith('/tank/training_jobs/run.py'))
     monkeypatch.setattr(sys, 'argv', [filename, '--dry-run', '--submit', '--day', '2026-11-07'])
     with pytest.raises(SystemExit) as rejected:

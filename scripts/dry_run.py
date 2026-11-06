@@ -11,7 +11,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", required=True)
     parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    vendor = root / "vendor/tervory-tank"
+    vendor = root if (root / "tank/main.py").is_file() else root / "vendor/tervory-tank"
     # Inherited production settings cannot select a real queue, SMTP account,
     # provider or model. Each proof supplies its own temporary paths and fakes.
     prefixes = ("AUTUMBRA_", "GHOST_", "COOLIFY_", "CLOUDFLARE_", "TANK_", "THREAT_", "ENFORCE_", "WRAITH_")

@@ -5,14 +5,14 @@ import shutil
 import subprocess
 
 import pytest
-from test_radix_gate4_workspace import patched_sources
+from test_radix_gate4_workspace import patched_sources, verify_patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def gate5_sources():
     result = {}
-    for block in (ROOT/'tank-patches/gate5.patch').read_text().split('diff --git ')[1:]:
+    for block in (ROOT/'tank-patches/radix/gate5.patch').read_text().split('diff --git ')[1:]:
         lines = block.splitlines(keepends=True)
         name = next(line[6:].strip() for line in lines if line.startswith('+++ b/'))
         assert name.startswith('workspace/') and '..' not in Path(name).parts
@@ -33,24 +33,9 @@ def candidate(tmp_path):
     loader = 'tests/command_acceptance_20261031/workspace_loader.cjs'
     (tmp_path/loader).parent.mkdir(parents=True)
     shutil.copyfile(ROOT/loader, tmp_path/loader)
-    for name, (_, after) in patched_sources().items():
-        target = tmp_path/name; target.parent.mkdir(parents=True, exist_ok=True); target.write_text(after)
-    sources = gate5_sources()
-    for name, (before, after) in sources.items():
-        target = tmp_path/name
-        if before:
-            # Product checks have the pinned source; after Tank sync the same
-            # test runs beside the applied implementation. Verify either state,
-            # then reconstruct the patch's base only in this disposable tree.
-            assert target.read_text() in {before, after}, name
-            target.write_text(before)
-        elif target.exists():
-            assert target.read_text() == after, name
-            target.unlink()
-    checked = subprocess.run(['git', 'apply', '--check', str(ROOT/'tank-patches/gate5.patch')], cwd=tmp_path, capture_output=True, text=True)
-    assert checked.returncode == 0, checked.stderr
-    for name, (_, after) in sources.items():
-        target = tmp_path/name; target.parent.mkdir(parents=True, exist_ok=True); target.write_text(after)
+    proof = tmp_path/'patch-proof'
+    verify_patch(proof, 'tank-patches/radix/gate4.patch', patched_sources())
+    verify_patch(proof, 'tank-patches/radix/gate5.patch', gate5_sources())
     return tmp_path
 
 

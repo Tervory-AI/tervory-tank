@@ -390,6 +390,16 @@ def valid_auto_candidate(row: Any, room: str, region: str,
 
 
 def candidate_json(value: dict) -> str:
+    def contains_nul(item):
+        if isinstance(item, str):
+            return "\x00" in item
+        if isinstance(item, dict):
+            return any(contains_nul(key) or contains_nul(val) for key, val in item.items())
+        if isinstance(item, list):
+            return any(contains_nul(val) for val in item)
+        return False
+    if contains_nul(value):
+        raise ValueError("Candidate row contains an invalid text character")
     text = json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True)
     if len(text.encode("utf-8")) > GOLD_ROW_MAX_BYTES:
         raise ValueError("Candidate row exceeds size limit")

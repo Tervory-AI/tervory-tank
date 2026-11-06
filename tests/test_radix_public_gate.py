@@ -61,10 +61,10 @@ async def test_public_deploy_request_preserves_internal_gate_and_refuses_bad_aut
 
     # Assemble only the candidate route and its real shared dependencies in a
     # disposable tree. The patch remains unapplied to Tank and vendor.
-    patch = (ROOT / 'tank-patches/public-gate.patch').read_text()
+    patch = (ROOT / 'tank-patches/radix/public-gate.patch').read_text()
     assert patch.count('diff --git ') == 1 and f'+++ b/{ROUTE}\n' in patch
     assert '--- /dev/null\n' in patch
-    checked = subprocess.run(['git', 'apply', '--check', str(ROOT / 'tank-patches/public-gate.patch')],
+    checked = subprocess.run(['git', 'apply', '--check', str(ROOT / 'tank-patches/radix/public-gate.patch')],
                              cwd=tmp_path, capture_output=True, text=True)
     assert checked.returncode == 0, checked.stderr
     candidate = ''.join(line[1:] for line in patch.splitlines(keepends=True)
@@ -72,7 +72,7 @@ async def test_public_deploy_request_preserves_internal_gate_and_refuses_bad_aut
     target = tmp_path / ROUTE
     target.parent.mkdir(parents=True)
     target.write_text(candidate)
-    for name in ('workspace/lib/tank.ts', 'workspace/lib/product-hosts.ts', 'workspace/middleware.ts',
+    for name in ('workspace/lib/tank.ts', 'workspace/lib/workspace-origin.ts', 'workspace/lib/route-input.ts', 'workspace/lib/request.ts', 'workspace/lib/workspace-setup.ts', 'workspace/lib/product-hosts.ts', 'workspace/middleware.ts',
                  'workspace/app/v1/command/[...path]/route.ts', 'tests/command_acceptance_20261031/workspace_loader.cjs'):
         target = tmp_path / name
         target.parent.mkdir(parents=True, exist_ok=True)

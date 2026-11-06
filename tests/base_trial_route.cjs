@@ -27,7 +27,12 @@ function load(file) {
   }).outputText;
   const module = { exports: {} };
   new Function("require", "module", "exports", compiled)(
-    (name) => mocks[name] ?? workspaceRequire(name), module, module.exports,
+    (name) => {
+      if (mocks[name]) return mocks[name];
+      if (name.startsWith('@/')) return load('workspace/' + name.slice(2) + '.ts');
+      if (name.startsWith('.')) return load(path.relative(root, path.resolve(root, path.dirname(file), name + '.ts')));
+      return workspaceRequire(name);
+    }, module, module.exports,
   );
   return module.exports;
 }
@@ -35,8 +40,8 @@ mocks["@/app/base/context-trial-error"] = load("workspace/app/base/context-trial
 mocks["./context-report"] = load("workspace/app/base/context-report.ts");
 (async () => {
   const { POST } = load("workspace/app/api/base/context-trial/route.ts");
-  const request = (origin = "https://app.example.com") => new Request("https://app.example.com/api/base/context-trial", {
-    method: "POST", headers: { origin, "x-tervory-admin": "forged" },
+  const request = (origin = "https://app.tervory.com") => new Request("https://app.tervory.com/api/base/context-trial", {
+    method: "POST", headers: { origin, host: "app.tervory.com", "x-tervory-admin": "forged" },
     body: JSON.stringify({ tenant_id: "client", checked_answers: { website: "forged" } }),
   });
   assert.equal((await POST(request())).status, 404);
@@ -62,7 +67,7 @@ mocks["./context-report"] = load("workspace/app/base/context-report.ts");
     assert.deepEqual(result, { error: message });
     const state = [];
     let index = 0;
-    mocks.react = { ...React, useState: (initial) => {
+    mocks.react = { ...React, useRef: value => ({current:value}), useState: (initial) => {
       const slot = index++;
       if (!(slot in state)) state[slot] = initial;
       return [state[slot], (next) => { state[slot] = next; }];
@@ -70,7 +75,9 @@ mocks["./context-report"] = load("workspace/app/base/context-report.ts");
     const Component = load("workspace/app/base/context-comparison.tsx").ContextComparison;
     const props = { report: { records: 0, fields: [] }, canRunTrial: true };
     const section = Component(props);
-    const button = section.props.children.find(child => child?.type === "button");
+    const findButton = node => node?.type === 'button' ? node :
+      React.Children.toArray(node?.props?.children).map(findButton).find(Boolean);
+    const button = findButton(section);
     global.fetch = async () => ({ ok: false, json: async () => result });
     await button.props.onClick();
     index = 0;

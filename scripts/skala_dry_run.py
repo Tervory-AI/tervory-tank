@@ -3,7 +3,8 @@ import argparse
 import json
 import os
 
-import check
+from pathlib import Path
+import sys
 
 JOBS = {
     'intake': (('TANK_KEY_TRIGGER',), [
@@ -39,12 +40,19 @@ def main():
     args = parser.parse_args()
     chosen = list(JOBS) if args.job == 'all' else [args.job]
     missing = {name: [key for key in JOBS[name][0] if not os.environ.get(key, '').strip()] for name in chosen}
-    check.CACHE.mkdir(exist_ok=True)
-    check.LOGS.mkdir(exist_ok=True)
-    check.vendor.verify()
+    import pytest
+    root = Path(__file__).resolve().parents[1]
+    sys.path[:0] = [str(root), str(root/'tank'), str(root/'agents/_chassis'), str(root/'tests')]
     selectors = sorted({node for name in chosen for node in JOBS[name][1]})
-    with check.runtime_tree(check.product_files(), check.node_modules()) as tree:
-        report = check.pytest(tree, selectors, 'product')
+    class Results:
+        def __init__(self): self.results = {}
+        def pytest_runtest_logreport(self, report):
+            if report.when == 'call' or report.failed or report.skipped:
+                self.results[report.nodeid] = report.outcome
+    recorded = Results()
+    code = pytest.main(['-q', '--disable-socket', '--allow-unix-socket',
+        '--allow-hosts=127.0.0.1,localhost,::1', *selectors], plugins=[recorded])
+    report = {'results': recorded.results, 'exitstatus': int(code)}
     jobs = []
     for name in chosen:
         matches = {node: outcome for node, outcome in report['results'].items()
@@ -55,7 +63,6 @@ def main():
             'status': 'passed' if complete and all(value == 'passed' for value in matches.values()) else 'failed',
             'missing_settings': missing[name]})
     result = {'mode': 'dry-run', 'data': 'disposable', 'providers': 'fake', 'jobs': jobs}
-    (check.LOGS / 'dry-run.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result), flush=True)
     return 0 if report['exitstatus'] == 0 and all(job['status'] == 'passed' for job in jobs) else 1
 

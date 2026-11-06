@@ -4,7 +4,6 @@ import os
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
-import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -15,7 +14,8 @@ from agents.tisan import publish, runtime as room_runtime
 from test_tisan_requests import client as client, runtime as runtime, command_pool as command_pool, brief
 from test_tisan_publish import build, exercise, FakeServices, configured as configured, TENANT, BRANCH, NEW
 from trigger_signin_fakes import native_provider, ORG
-from test_tisan_quotes_designed import api as quote_api, database as database, HEADERS, designed
+from test_tisan_quotes_designed import api as _quote_api, database as database, HEADERS, designed
+quote_api = _quote_api
 from test_tisan_quotes import A, B, quote_fields
 
 

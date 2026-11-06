@@ -100,7 +100,7 @@ async function contrastCheck(cdp) {
  server.listen(0,'127.0.0.1');await once(server,'listening');
  const origin='http://127.0.0.1:'+server.address().port;
  try {
-  browser=spawn('/usr/bin/chromium',['--headless','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run','--no-proxy-server','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1','--remote-debugging-port=0','--remote-debugging-address=127.0.0.1','--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe']});
+  browser=spawn('/usr/bin/chromium',['--headless','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run','--no-proxy-server','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1','--remote-debugging-port=0','--remote-debugging-address=127.0.0.1','--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe'],detached:true});
   let diagnostics='';browser.stderr.on('data',chunk=>{diagnostics+=chunk;});
   const active=path.join(profile,'DevToolsActivePort');
   for(let i=0;!fs.existsSync(active)&&i<100;i++)await pause(50);
@@ -178,7 +178,14 @@ async function contrastCheck(cdp) {
   const crashes=cdp.events.filter(e=>e.method==='Runtime.exceptionThrown');assert.deepEqual(crashes,[]);
   console.log('Skala browser journeys passed: identity, day zero, eval result, receipts, approval, rollback, retirement, bulk, source review, retry, missing settings, reviewer, keyboard, phone layout and slow load.');
  } finally {
-  cdp?.ws.close();if(browser){browser.kill('SIGTERM');await Promise.race([once(browser,'exit'),pause(3000)]);if(browser.exitCode===null)browser.kill('SIGKILL');}
-  server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fs.rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});
+  cdp?.ws.close();
+  if(browser && browser.exitCode===null && browser.signalCode===null) {
+    const closed = once(browser,'close');
+    const stop = signal => {try {process.kill(-browser.pid,signal);} catch(error) {if(error.code!=='ESRCH')throw error;}};
+    stop('SIGTERM');
+    const settled = await Promise.race([closed.then(()=>true),pause(3000).then(()=>false)]);
+    if(!settled){stop('SIGKILL');await closed;}
+  }
+  server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await fs.promises.rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});
  }
 })().catch(error=>{console.error(error);process.exitCode=1;});

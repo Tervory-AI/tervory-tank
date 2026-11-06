@@ -12,7 +12,7 @@ database = _database
 
 
 def test_rendered_day_zero_and_unconfigured_pages():
-    from finish_proposals import SOURCES
+    from skala_integrated_sources import SOURCES
     sources = {name: text for name, text in SOURCES.items() if '/workspace/app/skala/' in name}
     result = subprocess.run(['node', 'tests/skala_gate4_render.cjs'], input=json.dumps(sources),
         text=True, capture_output=True, cwd=Path.cwd(), timeout=30)

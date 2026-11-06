@@ -1,5 +1,5 @@
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
-const root=path.resolve(__dirname,'..'),tools=process.env.COMMAND_TEST_TOOLS||path.join(__dirname,'browser/node_modules');
+const root=path.resolve(__dirname,'..'),tools=process.env.WORKSPACE_BROWSER_TOOLS||process.env.COMMAND_TEST_TOOLS||path.join(__dirname,'browser/node_modules');
 const {build}=require(path.join(tools,'esbuild')),{chromium}=require(path.join(tools,'playwright'));
 const base=path.join(root,'workspace');
 (async()=>{

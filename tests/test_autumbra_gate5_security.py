@@ -1,11 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-import hashlib
 import json
-from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -13,7 +9,7 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from agents.ghost import app as watch, enforce_app, threat_queue, undo_token
-from agents.ghost.client_settings import ClientAutumbraSettings, save_settings
+from agents.ghost.client_settings import ClientAutumbraSettings
 from agents.ghost.durable_shields import _atomic_write_json
 from agents.ghost.safe_files import file_lock, read_json
 from agents.ghost.store import Store

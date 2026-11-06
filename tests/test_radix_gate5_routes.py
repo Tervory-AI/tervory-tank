@@ -1,6 +1,5 @@
 """Interactive failures settle safely, keep tenant scope, and permit explicit retry."""
 import asyncio
-import json
 import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock

@@ -1,4 +1,3 @@
-import { fetchWithDeadline as fetch } from "../../../lib/request";
 /** Server-side calls to Tank. The key never reaches the browser. */
 
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
@@ -36,6 +35,7 @@ function withHome(path: string, init: RequestInit, home: Region = homeRegion(), 
 }
 
 export async function zenas(path: string, init: RequestInit = {}): Promise<Response> {
+  const {fetchWithDeadline: fetch} = await import("../../../lib/request");
   const {tenantDestination, requestTenant, isRedirect, RedirectError} = await import("@/lib/tank");
   const tenant = requestTenant("/v1/zenas/" + path, init);
   const target = tenant ? await tenantDestination(tenant) : {url: TANK_URL, key: TANK_API_KEY, home: null};
@@ -82,6 +82,7 @@ export function regionTank(region: Region): { url: string; key: string } | null 
  * (a tenant id and a region code). Matter data never goes through here.
  */
 export async function zenasIn(region: Region, path: string, init: RequestInit = {}): Promise<Response | null> {
+  const {fetchWithDeadline: fetch} = await import("../../../lib/request");
   const tank = regionTank(region);
   if (!tank) return null;
   const call = withHome(path, init, region, true);
