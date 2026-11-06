@@ -215,7 +215,7 @@ test('founder Autumbra renders existing unavailable states for failed and incomp
 });
 
 test('shield reads reject explicit offline boards and taps use the actual room without a fixture fallback', async () => {
-  const env = { TANK_API_KEY: 'offline-shield-test-key' };
+  const env = { TANK_API_KEY: 'placeholder-shield-test-key' };
   const h = harness(() => response({ fixture: true, shields: [] }), env);
   await assert.rejects(h.load('app/admin/autumbra/shields-data.ts').shieldBoard('offline-founder'), /unavailable/);
   assert.equal(h.calls.length, 2);
