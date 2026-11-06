@@ -274,6 +274,8 @@ def create_app(
     register_law_routes(app, current)
     from hermes.record_routes import register_record_routes
     register_record_routes(app, lambda: holder['records'], resolve_agent)
+    from hermes.engine_routes import register as register_engine
+    register_engine(app, lambda: holder['records'])
     return app
 
 

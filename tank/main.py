@@ -50,6 +50,7 @@ import logging
 import os
 import time
 import uuid
+import engine_memory
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -1306,7 +1307,10 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
     engine_rt = __import__("sys").modules[__name__]
     if (kwargs.get('model_override') is None and not kwargs.get('_offpeak_dispatch')
             and kwargs.get('_paid_policy') is None and not is_build_only_model(original['model'])):
+        req, recalled = await engine_memory.recall(engine_rt, req)
         original = await __import__('engine_ladder').select(engine_rt, req, original, caller)
+        if original.get('_engine'):
+            original['_engine']['memory'] = recalled
     policy = original
     attempted = set()
     while True:
@@ -1416,6 +1420,14 @@ async def _run_route(
     messages = [m.model_dump() for m in req.messages]
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
+    if policy.get('_engine') or model in {'local', 'local-large'}:
+        # GGUF chat templates may consume only the first system message. Keep
+        # the policy and recalled data in that one message, in their original order.
+        count = 0
+        while count < len(messages) and messages[count]['role'] == 'system':
+            count += 1
+        if count > 1:
+            messages = [{'role': 'system', 'content': '\n\n'.join(m['content'] for m in messages[:count])}, *messages[count:]]
     if req.task_type == "zenas.case_facts" and any(str(message.get("content", "")).startswith(_CONVERT_HEAD) for message in messages):
         # Fixed text first, so the provider prompt cache sees one stable prefix:
         # the policy prompt, then this fixed instruction, then the judgment.
@@ -1517,6 +1529,8 @@ async def _run_route(
         generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
 
     # Code may parse labelled HTML. Prompt text is never parsed or rewritten.
+    if model in {'local', 'local-large'}:
+        generation = {**generation, 'temperature': 0}
     messages = _plain_messages(messages)
     if _contains_html(messages):
         await _refuse_input(req, policy, "HTML must be supplied in html/raw_html fields with separately extracted text", task_id)

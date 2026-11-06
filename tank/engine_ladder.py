@@ -155,6 +155,10 @@ async def receipt(rt, req, policy, answer):
     value = {'rung': 'cache' if answer.rung == 4 else rung(answer.model),
              'would_have_cost_usd': would, 'baseline_model': baseline, 'estimated': True,
              'evals': info['attempts'], 'ledger_id': str(answer.ledger_id)}
+    import engine_memory
+    value['memory_hits'] = info.get('memory', {}).get('hits', 0)
+    value['memory_status'] = info.get('memory', {}).get('status', 'unavailable')
+    value['remembered'] = await engine_memory.remember(req, answer)
     async with rt.pool().acquire() as conn:
         await conn.execute("""INSERT INTO tank.engine_receipts(tenant_id,region,task_type,ledger_id,detail)
             VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(tenant_id,ledger_id) DO NOTHING""",

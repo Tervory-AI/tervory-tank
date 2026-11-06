@@ -64,8 +64,10 @@ def local_gateway(b, monkeypatch):
     """Only local models can leave this test process; paid models are fake."""
     original = httpx.AsyncClient
     calls = []
+    b.model_requests = []
     async def dispatch(request):
         data = json.loads(request.content)
+        b.model_requests.append(data)
         calls.append(data['model'])
         if data['model'] in engine.LOCAL:
             base = os.environ['ENGINE_LOCAL_URL'] if data['model'] == 'local' else os.environ['ENGINE_LARGE_URL']
