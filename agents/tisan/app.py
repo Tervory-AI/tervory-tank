@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import asyncio
 import hashlib
 import logging
 import os
@@ -55,14 +56,17 @@ async def ping(ctx: JobContext) -> dict:
         # The same text every time, so Hermes folds it into one memory and
         # counts it (seen). A Hermes outage must not fail the heartbeat.
         try:
-            saved = await ctx.memory.remember(
+            saved = await asyncio.wait_for(ctx.memory.remember(
                 ctx.tenant_id,
                 f"{ctx.agent} heartbeat",
                 "heartbeat",
                 "schedule:*/5",
                 index=False,
-            )
-            result["heartbeats_seen"] = saved.get("seen")
+            ), timeout=30)
+            seen = saved.get('seen')
+            if seen is not None and (type(seen) is not int or seen < 0):
+                raise ValueError('heartbeat unavailable')
+            result["heartbeats_seen"] = seen
         except Exception as exc:  # noqa: BLE001 — class name only, never the message
             log.warning("heartbeat memory failed (%s)", type(exc).__name__)
             result["memory"] = "unreachable"
@@ -211,4 +215,4 @@ _load_beside(_figma_cache(), 'tisan_pipeline_room', 'pipeline.py').mount(
 
 # Install last so absent configuration also guards room-specific startup DDL.
 _load_beside({}, 'tisan_runtime', 'runtime.py').install(
-    app, lambda key, filename: _load_beside(_figma_cache(), key, filename))
+    app, lambda key, filename: _load_beside(_figma_cache(), key, filename), secure=True)

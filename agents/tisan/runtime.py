@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import json
 import logging
 import os
+import hmac
 from pathlib import Path
 from uuid import UUID
 
@@ -93,7 +94,38 @@ async def missing_admin(agent):
     return absent if enforced else []
 
 
-def install(app, loader, *, preflight=None):
+def secure_routes(app):
+    @app.middleware('http')
+    async def room_boundary(request, call_next):
+        if request.url.path in {'/health', '/readiness'}:
+            return await call_next(request)
+        expected = os.environ.get('TANK_KEY', '')
+        keys = request.headers.getlist('x-tank-key')
+        supplied = keys[0] if len(keys) == 1 else ''
+        if not expected or not supplied or not hmac.compare_digest(expected.encode(), supplied.encode()):
+            return JSONResponse({'detail': 'room key required'}, status_code=401)
+        # The existing gateway remains the identity provider. Bind any tenant
+        # assertion it forwarded to the UUID the route will actually consume.
+        headers = request.headers.getlist('x-tervory-tenant')
+        if headers:
+            try:
+                tenants = {str(UUID(value)) for value in headers}
+                claims = list(request.query_params.getlist('tenant_id'))
+                if request.method in {'POST', 'PUT', 'PATCH'} and not request.url.path.startswith('/storage/'):
+                    try:
+                        body = await request.json()
+                    except ValueError:
+                        body = None
+                    if isinstance(body, dict) and body.get('tenant_id') is not None:
+                        claims.append(body['tenant_id'])
+                if len(tenants) != 1 or any(str(UUID(str(value))) not in tenants for value in claims):
+                    return JSONResponse({'detail': 'not found'}, status_code=404)
+            except (ValueError, TypeError, AttributeError):
+                return JSONResponse({'detail': 'A workspace is required.'}, status_code=422)
+        return await call_next(request)
+
+
+def install(app, loader, *, preflight=None, secure=False):
     prior = app.router.lifespan_context
 
     @asynccontextmanager
@@ -165,6 +197,9 @@ def install(app, loader, *, preflight=None):
                 'unavailable_settings': (problem or {}).get('unavailable_settings', []),
                 'capabilities': {name: {'ready': not (problem or absent or missing(names)), 'missing_settings': missing(names)}
                                  for name, names in CAPABILITIES.items()}}
+
+    if secure:
+        secure_routes(app)
 
     @app.middleware('http')
     async def prerequisites(request, call_next):
