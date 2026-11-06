@@ -25,7 +25,7 @@ Module._load = function(name, ...rest) {
   if (name === '@/lib/autumbra-undo-status') return {loadUndoStatus: async () => ({already_undone: false})};
   return originalLoad.call(this, name, ...rest);
 };
-const render = element => renderToStaticMarkup(element).replace(/<!--.*?-->/g, '');
+const render = element => renderToStaticMarkup(element);
 const action = async () => null;
 function fresh(file) {
   const resolved = require.resolve(root + '/' + file);

@@ -62,8 +62,7 @@ const server=http.createServer(async(req,res)=>{
   const load=appLoader();
   if(req.url==='/bundle.js'){res.setHeader('Content-Type','text/javascript');res.setHeader('Content-Encoding','gzip');return res.end(gzipSync(currentBundle));}
   if(req.url.startsWith('/brand/')){
-    const file=path.join(root,'workspace/public',req.url);
-    res.setHeader('Content-Type','image/png');return res.end(fs.readFileSync(fs.existsSync(file)?file:path.join(root,'workspace/public/brand/skala-on-dark.png')));
+    res.setHeader('Content-Type','image/png');return res.end(fs.readFileSync(path.join(root,'workspace/public/brand/skala-on-dark.png')));
   }
   if(req.url.startsWith('/api/')) {
     const chunks=[];for await(const chunk of req)chunks.push(chunk);
@@ -73,13 +72,14 @@ const server=http.createServer(async(req,res)=>{
     const response=await api[req.method](request);res.statusCode=response.status;
     res.setHeader('Content-Type','application/json');return res.end(Buffer.from(await response.arrayBuffer()));
   }
-  if(req.url==='/skala'||req.url==='/skala/gold') {
-    const gold=req.url.endsWith('/gold');
-    const element=await load('workspace/app/skala/'+(gold?'gold/page.tsx':'page.tsx')).default();
-    currentBundle=bundle(sources,gold?'gold/view.tsx':'view.tsx',element.props);
-    const css=read('workspace/app/skala/'+(gold?'gold/gold.css':'skala.css'));
+  async function servePage(page, entry, stylesheet) {
+    const element=await load(page).default();
+    currentBundle=bundle(sources,entry,element.props);
+    const css=read(stylesheet);
     res.setHeader('Content-Type','text/html');return res.end('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Skala</title><style>body{margin:0}'+css+'</style></head><body><main id="root">'+renderToString(element)+'</main><script src="/bundle.js"></script></body></html>');
   }
+  if(req.url==='/skala')return await servePage('workspace/app/skala/page.tsx','view.tsx','workspace/app/skala/skala.css');
+  if(req.url==='/skala/gold')return await servePage('workspace/app/skala/gold/page.tsx','gold/view.tsx','workspace/app/skala/gold/gold.css');
   res.statusCode=404;res.end('Not found');
  } catch(error){res.statusCode=error.message==='Not found'?404:500;res.end(error.message==='Not found'?'Not found':'Offline app failed');}
 });
