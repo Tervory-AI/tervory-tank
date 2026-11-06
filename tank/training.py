@@ -661,7 +661,8 @@ async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, 
     from skala_runtime import EXPORT_SETTINGS, unavailable
     problem = unavailable(EXPORT_SETTINGS)
     if problem:
-        return problem
+        return {**problem, 'status': 'Hugging Face training is not configured',
+                'needs_settings': problem['missing_settings']}
     ready = await conn.fetchval(
         """SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND agent=$2
         AND active AND public AND NOT client_matter AND region=$3

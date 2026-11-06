@@ -48,7 +48,7 @@ def test_zenas_uses_allowlisted_smallest_a10g_that_fits():
         ([1999, 200], True, 'fewer than 2,000 public zenas training rows'),
         ([2000, 199], True, 'fewer than 200 holdout rows'),
         ([2000, 200, True], True, 'reconcile the previous training job'),
-        ([2000, 200, False], False, 'unconfigured'),
+        ([2000, 200, False], False, 'Hugging Face training is not configured'),
     ],
 )
 async def test_zenas_training_run_plain_refusals(monkeypatch, values, configured, status):

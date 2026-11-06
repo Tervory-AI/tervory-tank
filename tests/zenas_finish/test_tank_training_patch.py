@@ -274,8 +274,10 @@ async def test_training_subprocess_uses_jobs_sdk_without_changing_parent_offline
     namespace = shared_functions('_training_subprocess', runtime=None)
     process = SimpleNamespace(returncode=0, communicate=AsyncMock(return_value=(b'{"status":"ready"}\n', b'')))
     create = AsyncMock(return_value=process)
-    namespace.update(asyncio=SimpleNamespace(create_subprocess_exec=create, subprocess=asyncio.subprocess),
-                     sys=sys, Path=Path, __file__=str(ROOT / 'tank/training.py'), json=json)
+    namespace.update(asyncio=SimpleNamespace(create_subprocess_exec=create, subprocess=asyncio.subprocess,
+                                            wait_for=asyncio.wait_for, CancelledError=asyncio.CancelledError),
+                     sys=sys, Path=Path, __file__=str(ROOT / 'tank/training.py'), json=json,
+                     TRAINING_COMMAND_TIMEOUT_SECONDS=__import__('training').TRAINING_COMMAND_TIMEOUT_SECONDS)
     monkeypatch.setenv('HF_JOBS_PYTHON', '/opt/hf-jobs/bin/python')
     monkeypatch.setenv('HF_HUB_OFFLINE', '1')
     result = await namespace['_training_subprocess']('--agent', 'zenas')
