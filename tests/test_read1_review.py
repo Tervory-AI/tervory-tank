@@ -179,6 +179,7 @@ async def test_public_pdf_does_not_fetch_robots(monkeypatch):
 
 @pytest.fixture
 def uploader(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "agents/base"))
     monkeypatch.syspath_prepend(str(ROOT / 'agents/_chassis'))
     spec = importlib.util.spec_from_file_location('read1_browser_evidence', ROOT / 'agents/base/browser_evidence.py')
     module = importlib.util.module_from_spec(spec)
@@ -271,6 +272,8 @@ async def test_evidence_route_checks_active_tenant_and_task_before_upload(upload
     tenant, task, other = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     key = uuid.uuid4().hex
     monkeypatch.setenv('TANK_KEY', key)
+    for name in ('R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID_BASE', 'R2_SECRET_ACCESS_KEY_BASE'):
+        monkeypatch.setenv(name, 'placeholder-evidence-setting')
     monkeypatch.setattr(base_brain, 'active', {(tenant, task): object()})
     calls = []
     async def upload(body):
