@@ -12,6 +12,13 @@ RUN --mount=type=secret,id=proxy_ca \
     pip install --no-cache-dir --no-deps --require-hashes -r requirements-routellm-wheel.txt && \
     python routellm_build.py /opt/routellm && \
     python semantic_encoder.py
+# Keep the HF Jobs SDK separate from the pinned CPU routing dependencies.
+COPY training_jobs/requirements.txt /tmp/hf-jobs-requirements.txt
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca SSL_CERT_FILE=/run/secrets/proxy_ca; fi; \
+    python -m venv /opt/hf-jobs && \
+    /opt/hf-jobs/bin/pip install --no-cache-dir -r /tmp/hf-jobs-requirements.txt
+ENV HF_JOBS_PYTHON=/opt/hf-jobs/bin/python
 # Every Tank module is copied by pattern, so a PR that adds a module never edits this line
 # (it used to be a hand-kept list that clashed on almost every Tank PR).
 COPY *.py schema.sql cl100k_base.tiktoken cl100k_base.LICENSE ./

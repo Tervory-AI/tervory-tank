@@ -484,7 +484,7 @@ function PluginsDialog({
                 ref={fileRef}
                 className="ml-sr"
                 type="file"
-                accept=".csv,.xlsx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                accept=".csv,.xlsx,.pdf,.docx,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 multiple
                 onChange={() => void onFiles(fileRef.current?.files ?? null)}
               />

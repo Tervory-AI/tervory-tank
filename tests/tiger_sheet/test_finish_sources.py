@@ -8,8 +8,8 @@ import httpx
 import pytest
 
 from test_tiger import TENANT_A, TENANT_B, NOW, _watch, _load, ROOT
-from test_tiger_competitors import database, postgres
-from tiger_works.fixture import URL, saved_page, extract, no_paid_call
+from test_tiger_competitors import database as database, postgres as postgres
+from tiger_works.fixture import URL, saved_page, extract, no_paid_call as no_paid_call
 from watch import DomainLimiter, MemoryStore, external_observation, _save_png
 from batch import run
 from tiger_sheet.test_finish_batch import BATCH

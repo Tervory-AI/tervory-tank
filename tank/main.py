@@ -1556,7 +1556,7 @@ async def _run_route(
                       "caller": caller, "skill": req.skill, "pool_read": pool_read},
     )
     try:
-        if _on_token is not None and req.task_type == "command.turn":
+        if _on_token is not None and req.task_type in {"command.turn", "command.code"}:
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
                                         {"model": model, "messages": messages, **dispatched_settings, **routing}, _on_token)
         else:

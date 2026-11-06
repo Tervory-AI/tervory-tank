@@ -430,6 +430,7 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                 log.warning("Room gold response rejected: %s", room)
                 continue
             stats["rejected"] += max(0, len(rows) - 200)
+            room_stats = dict(inserted=0, rejected=0, capped=0, duplicates=0, unavailable=0)
             try:
                 async with runtime().pool().acquire() as conn, conn.transaction():
                     await conn.execute("SELECT pg_advisory_xact_lock(871226)")
@@ -453,7 +454,7 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                                     PLATFORM_TENANT, region, room, day,
                                 )
                                 if used >= limit:
-                                    stats["capped"] += 1
+                                    room_stats["capped"] += 1
                                     continue
                                 result = await conn.execute(
                                     """INSERT INTO tank.gold_examples
@@ -472,10 +473,17 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                                 await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
                                                                "skill_id": row["skill_id"], "source": "room_auto",
                                                                "label_source": source, "label_family": row.get("label_family")})
-                            stats["inserted" if result == "INSERT 0 1" else "duplicates"] += 1
-                        except Exception:
+                            room_stats["inserted" if result == "INSERT 0 1" else "duplicates"] += 1
+                        except (ValueError, TypeError, OverflowError, RecursionError):
                             # No exception text: it may contain private data or credentials.
-                            stats["rejected"] += 1
+                            room_stats["rejected"] += 1
+                        except Exception:
+                            # A failed savepoint is retryable storage work, not
+                            # evidence that the source example was rejected.
+                            room_stats["unavailable"] += 1
+                # Count only writes whose outer transaction committed.
+                for key, count in room_stats.items():
+                    stats[key] += count
             except Exception:
                 stats["unavailable"] += 1
                 log.warning("Room gold storage unavailable: %s", room)
@@ -542,7 +550,9 @@ async def scheduled_once(operation: str, now: datetime | None = None) -> None:
             ):
                 return
             if operation == "gold":
-                await collect_room_gold(slot.date())
+                result = await collect_room_gold(slot.date())
+                if result["unavailable"] or result["rejected_responses"]:
+                    return  # Existing source identities make partial retries idempotent.
             elif operation == "export":
                 await collect_once()
                 result = await export_once(day=slot.date())
@@ -628,13 +638,17 @@ class TrainingReceiptRequest(BaseModel):
 async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, Any] | None:
     ready = await conn.fetchval(
         """SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND agent=$2
-        AND active AND public AND NOT client_matter""",
-        PLATFORM_TENANT, body.agent,
+        AND active AND public AND NOT client_matter AND region=$3
+        AND source='court_text' AND task_type='zenas.reasoning'
+        AND split_part(source_ref,':',1)=ANY($4::text[])""",
+        PLATFORM_TENANT, body.agent, runtime().box_region(), sorted(OFFICIAL_ZA_CASE_SOURCES),
     )
     holdout = await conn.fetchval(
         """SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND agent=$2
-        AND active AND public AND NOT client_matter AND holdout""",
-        PLATFORM_TENANT, body.agent,
+        AND active AND public AND NOT client_matter AND holdout AND region=$3
+        AND source='court_text' AND task_type='zenas.reasoning'
+        AND split_part(source_ref,':',1)=ANY($4::text[])""",
+        PLATFORM_TENANT, body.agent, runtime().box_region(), sorted(OFFICIAL_ZA_CASE_SOURCES),
     )
     if int(ready or 0) < 2000:
         return {"status": "fewer than 2,000 public zenas training rows", "count": int(ready or 0)}
@@ -660,7 +674,7 @@ async def _training_subprocess(*arguments: str) -> dict[str, Any]:
     child_env["HF_HUB_OFFLINE"] = "0"
     script = Path(__file__).with_name("training_jobs") / "run.py"
     process = await asyncio.create_subprocess_exec(
-        sys.executable, str(script), *arguments, "--json",
+        os.environ.get("HF_JOBS_PYTHON") or sys.executable, str(script), *arguments, "--json",
         env=child_env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
     )
     stdout, _ = await process.communicate()
@@ -848,11 +862,19 @@ async def confirm_tiger(observation_id: uuid.UUID, actor: Reviewer = Depends(req
     return {"ok": True}
 
 
+def court_training_row(row: dict[str, Any]) -> bool:
+    if row.get("agent") != "zenas":
+        return True
+    return (row.get("source") == "court_text" and row.get("task_type") == "zenas.reasoning"
+            and row.get("region") == "za"
+            and str(row.get("source_ref") or "").split(":", 1)[0] in OFFICIAL_ZA_CASE_SOURCES)
+
+
 def exportable(row: dict[str, Any]) -> bool:
     return (row.get("region") in ("us-east", "za") and row.get("region") == runtime().box_region()
             and row.get("holdout") is False and row.get("active") is True
             and row.get("public") is True and row.get("client_matter") is False
-            and row.get("tenant_id") == PLATFORM_TENANT)
+            and row.get("tenant_id") == PLATFORM_TENANT and court_training_row(row))
 
 
 async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east",
@@ -898,7 +920,7 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
         raise RuntimeError("Private dataset commit failed")
 
 
-async def export_once(*, day: date | None = None) -> dict[str, Any]:
+async def export_once(*, day: date | None = None, only_agent: str | None = None) -> dict[str, Any]:
     token, org = os.environ.get("HF_TOKEN", ""), os.environ.get("HF_ORG", "")
     if not token or not org:
         return {"status": "skipped", "reason": "not configured"}
@@ -917,11 +939,17 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
             from gold import AGENTS
             async with httpx.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=60,
                                          follow_redirects=False) as client:
+                if only_agent is not None and only_agent not in AGENTS:
+                    raise ValueError("Unknown training agent")
                 for agent in AGENTS:
+                    if only_agent is not None and agent != only_agent:
+                        continue
                     done = await conn.fetchval(
                         "SELECT 1 FROM tank.training_exports WHERE region=$3 AND day=$1 AND agent=$2", day, agent, region,
                     )
-                    if done:
+                    # Refresh today's Zenas snapshot after new official court splits,
+                    # including a snapshot written by the older mixed-gold exporter.
+                    if done and agent != "zenas":
                         continue
                     payload = []
                     holdouts = []
@@ -956,11 +984,25 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                             scope["tenant_id"], agent, region,
                         )
                         for row in held_rows:
-                            if row["tenant_id"] == PLATFORM_TENANT and not await _batch_removed(conn, scope["tenant_id"], row["batch_id"]):
+                            if (row["tenant_id"] == PLATFORM_TENANT and court_training_row(dict(row))
+                                    and not await _batch_removed(conn, scope["tenant_id"], row["batch_id"])):
                                 holdouts.append({"region": region, "public": True, "client_matter": False,
                                                  "scope": "platform", "holdout": True, "active": True,
                                                  "task_type": row["task_type"], "input": obj(row["input"]),
                                                  "output": obj(row["output"])})
+                    if agent == 'tiger':
+                        checked = await conn.fetch("""SELECT * FROM tank.gold_examples
+                            WHERE tenant_id=$1 AND agent='tiger' AND region=$2 AND public
+                              AND holdout AND status='checked' AND (NOT auto_label OR auto_approved)""",
+                            PLATFORM_TENANT, region)
+                        for gold in checked:
+                            if not admits_training(dict(gold)) or await _batch_removed(conn, PLATFORM_TENANT, gold['batch_id']):
+                                continue
+                            currency, unit = regional_labels(dict(gold))
+                            holdouts.append({'region': region, 'public': True, 'client_matter': False,
+                                'scope': 'platform', 'holdout': True, 'active': True,
+                                'task_type': gold['skill_id'], 'input': obj(gold['input']), 'output': obj(gold['expected']),
+                                'batch_id': gold['batch_id'], 'currency': currency, 'unit': unit})
                     if not payload:
                         continue
                     try:
@@ -1060,6 +1102,12 @@ async def remove_training_batch(batch_id: str, actor: Reviewer = Depends(require
 
 
 @router.post("/jobs/export", dependencies=[Depends(require_job)])
-async def export_job() -> dict[str, Any]:
-    await collect_once()
-    return await export_once()
+async def export_job(agent: str | None = None) -> dict[str, Any]:
+    from gold import AGENTS
+    if agent is not None and agent not in AGENTS:
+        raise HTTPException(422, "Unknown training agent")
+    # Zenas's dedicated run uses the owning room's acknowledged code splits.
+    # It does not collect other rooms or mix retrieval gold into court labels.
+    if agent != "zenas":
+        await collect_once()
+    return await export_once(only_agent=agent)

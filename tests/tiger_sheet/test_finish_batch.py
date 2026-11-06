@@ -1,14 +1,12 @@
 import asyncio
 import json
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 
 from test_tiger import TENANT_A, TENANT_B, NOW, _load, ROOT
-from test_tiger_competitors import database, postgres  # local-only database fixtures
+from test_tiger_competitors import database as database  # local-only database fixtures
 from batch import Checkpoint, job_id, plan, run
 
 BATCH = '33333333-3333-4333-8333-333333333333'

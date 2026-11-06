@@ -1,8 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
 from copy import deepcopy
-import json
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest

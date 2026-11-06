@@ -431,7 +431,9 @@ async def test_b59_gap_only_paid_admission(monkeypatch):
     await test_ask_or_denied_admission_never_calls_vendor_or_reserves_credit(monkeypatch)
 
 
-from test_base_finish_training import database as finish_database, postgres, recorded
+import test_base_finish_training as finish_training
+from test_base_finish_training import postgres as postgres, recorded as recorded
+finish_database = finish_training.database
 
 
 @pytest.mark.asyncio

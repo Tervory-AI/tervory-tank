@@ -1,7 +1,6 @@
 import ast
 from copy import deepcopy
 from decimal import Decimal
-import hashlib
 import json
 from pathlib import Path
 import sys
@@ -12,7 +11,7 @@ from uuid import uuid4
 import pytest
 
 from tiger_sheet.patch_source import module, source
-from test_tiger_competitors import database, postgres
+from test_tiger_competitors import database as database, postgres as postgres
 
 
 @pytest.fixture

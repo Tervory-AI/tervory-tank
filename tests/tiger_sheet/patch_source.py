@@ -7,6 +7,9 @@ import types
 
 
 def source(name):
+    integrated = Path(__file__).resolve().parents[2] / name
+    if integrated.is_file():
+        return integrated.read_text()
     project = Path(os.environ['TIGER_PROJECT_ROOT'])
     commit = (project/'vendor/tervory-tank/SOURCE').read_text().strip()
     original = subprocess.check_output(['git', '-C', os.environ['TANK_SOURCE_DIR'],

@@ -23,6 +23,8 @@ PLATFORM = UUID(int=1)
 
 
 def projected(name):
+    if (ROOT / name).is_file() and not (ROOT / 'vendor/tervory-tank').is_dir():
+        return (ROOT / name).read_text()
     base = ROOT / 'vendor/tervory-tank'
     if not base.is_dir():
         base = ROOT  # The check runner reconstructs Tank's original layout.

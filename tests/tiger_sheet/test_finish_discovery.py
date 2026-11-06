@@ -1,13 +1,12 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 
 from test_tiger import ROOT, TENANT_A, TENANT_B, _load
-from test_tiger_competitors import database, postgres
+from test_tiger_competitors import database as database, postgres as postgres
 from tiger_works.fixture import extract, saved_page
 from batch import discovery_id, job_id, load_input, plan, run
 import batch_discovery

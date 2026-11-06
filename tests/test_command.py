@@ -28,7 +28,9 @@ def request(**headers):
 
 @pytest.fixture
 def runtime(monkeypatch):
-    runtime = SimpleNamespace(TANK_API_KEY='dummy-workspace-key', box_region=lambda: 'us-east')
+    runtime = SimpleNamespace(TANK_API_KEY='dummy-workspace-key', box_region=lambda: 'us-east',
+        _storage_mask=lambda value: value, model_call_refusal=lambda *args, **kwargs: None,
+        list_models=AsyncMock(return_value=[{'name': 'placeholder-model'}, {'name': 'placeholder-pin'}]))
     monkeypatch.setitem(sys.modules, 'main', runtime)
     set_founders(monkeypatch, 'founder')
     monkeypatch.setenv('TANK_KEY_WORKERS', 'dummy-worker-key')

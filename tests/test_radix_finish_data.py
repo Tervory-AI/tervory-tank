@@ -10,7 +10,8 @@ from fastapi.encoders import jsonable_encoder
 
 from test_command import TENANT, OTHER, api as api, runtime as runtime, command_pool as command_pool
 from test_command_radix_repo import repo_api as repo_api, upload, propose, JOB
-from test_radix_finish_scanners import reports as scanner_reports
+import test_radix_finish_scanners as finish_scanners
+scanner_reports = finish_scanners.reports
 from test_rx1_scans import Ctx, FIXTURE, _dirty, _tar
 from scanlib import orchestrate, runtime as scan_runtime, secrets
 from test_radix_passive import database as database, A, B, FakeServer

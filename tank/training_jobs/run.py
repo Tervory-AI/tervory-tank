@@ -19,7 +19,7 @@ HARDWARE = frozenset({'a10g-small', 'a10g-large'})
 
 
 def training_hardware(agent: str) -> str:
-    if agent not in ('', 'zenas'):
+    if agent not in ('', 'zenas', 'tiger'):
         raise ValueError('Unsupported training agent')
     # Qwen3-4B bf16 LoRA with batch size one and gradient checkpointing fits
     # the 24 GB A10G used by the small flavor, including Zenas at 4096 tokens.
@@ -41,14 +41,14 @@ def validate_name(value: str) -> str:
     return value
 
 
-async def link_snapshot_batches(conn, job_id: str, model_repo: str, day: str) -> None:
+async def link_snapshot_batches(conn, job_id: str, model_repo: str, day: str, *, agent: str = "") -> None:
     """Remember which batches this shared model was trained on."""
     if not day:
         return
     rows = await conn.fetch(
         """SELECT batch_id, region FROM tank.training_snapshot_batches
-        WHERE tenant_id=$1 AND day=$2""",
-        PLATFORM, date.fromisoformat(day),
+        WHERE tenant_id=$1 AND day=$2 AND ($3='' OR agent=$3)""",
+        PLATFORM, date.fromisoformat(day), agent,
     )
     for row in rows:
         await conn.execute(
@@ -70,6 +70,19 @@ async def record_receipt(conn, job_id: str, actual: Decimal, evaluation: dict | 
             if Decimal(row['actual_usd']) != actual:
                 raise ValueError('Receipt conflicts with recorded bill')
             return row['ledger_id']
+        if evaluation is not None and evaluation.get('method') == 'exact_price_fields':
+            n, passed = evaluation.get('n'), evaluation.get('passed')
+            if (not row['model_repo'].split('/')[-1].startswith('tervory-own-tiger-')
+                    or type(n) is not int or type(passed) is not int or n <= 0 or not 0 <= passed <= n
+                    or evaluation.get('gold_holdout') is not True
+                    or evaluation.get('agreement') != passed / n
+                    or evaluation.get('eligible') is not (passed == n)):
+                raise ValueError('Invalid Tiger holdout evaluation')
+            # Its artifact retains the gate result. No legal policy, model route,
+            # serving endpoint or automatic promotion is changed by a Tiger bill.
+            evaluation = None
+        elif evaluation is not None and row['model_repo'].split('/')[-1].startswith('tervory-own-tiger-'):
+            raise ValueError('Invalid Tiger holdout evaluation')
         if evaluation is not None:
             n = int(evaluation.get('n', 0))
             passed = int(evaluation.get('passed', -1))
@@ -147,6 +160,10 @@ async def run(args):
             await conn.close()
         return {'status': 'complete', 'name': job_id, 'cost_usd': Decimal(args.billed_usd),
                 'ledger_id': str(ledger_id)}
+    if agent == 'tiger':
+        from train import tiger_data
+        tiger_revision = api.dataset_info(f'{org}/tervory-public-tiger').sha
+        tiger_data(api, org, args.day, revision=tiger_revision)
     flavor = training_hardware(agent)
     if flavor not in HARDWARE:
         raise ValueError('Training hardware is not allowed')
@@ -165,6 +182,8 @@ async def run(args):
             if await conn.fetchval('SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)', PLATFORM):
                 raise ValueError('Reconcile the previous training job before submitting another')
             repo = f'{org}/tervory-own-zenas-za' if agent == 'zenas' else f'{org}/tervory-squad-{uuid.uuid4().hex}'
+            if agent == 'tiger':
+                repo = f'{org}/tervory-own-tiger-{uuid.uuid4().hex}'
             pending = f'pending-{uuid.uuid4().hex}'
             # Autocommit the reservation before contacting HF. An uncertain submit
             # must remain blocking, even after an exception or process crash.
@@ -176,10 +195,10 @@ async def run(args):
             job = api.run_uv_job(str(Path(__file__).with_name('train.py')), namespace=org,
                                 flavor=flavor, timeout=args.minutes * 60,
                                 env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo,
-                                     'TRAIN_AGENT': agent},
+                                     'TRAIN_AGENT': agent, 'TIGER_DATASET_REVISION': tiger_revision if agent == 'tiger' else ''},
                                 secrets={'HF_TOKEN': os.environ['HF_TOKEN']})
             await conn.execute('UPDATE tank.training_jobs SET id=$1 WHERE id=$2 AND tenant_id=$3', job.id, pending, PLATFORM)
-            await link_snapshot_batches(conn, job.id, repo, args.day)
+            await link_snapshot_batches(conn, job.id, repo, args.day, agent="tiger" if agent == "tiger" else "")
             print(f'Training job: {job.id}')
             return {'status': 'running', 'name': job.id, 'cost_usd': amount, 'hardware': flavor}
         finally:
@@ -194,7 +213,7 @@ if __name__ == '__main__':
     parser.add_argument('--minutes', type=int, default=120)
     parser.add_argument('--day', default='')
     parser.add_argument('--submit', action='store_true')
-    parser.add_argument('--agent', choices=['zenas'], default='')
+    parser.add_argument('--agent', choices=['zenas', 'tiger'], default='')
     parser.add_argument('--receipt', help='Local final HF billing receipt JSON; no credentials')
     parser.add_argument('--job-id', default='')
     parser.add_argument('--billed-usd', default='0')

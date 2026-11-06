@@ -3,7 +3,6 @@ from datetime import date
 import gzip
 import hashlib
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock
 from uuid import uuid4, UUID
 

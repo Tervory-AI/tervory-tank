@@ -8,7 +8,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
-from test_command import runtime, TENANT, OTHER  # noqa: F401
+from test_command import runtime as runtime, TENANT, OTHER  # noqa: F401
 import test_command
 from opli_agent.proposal import proposed_files
 

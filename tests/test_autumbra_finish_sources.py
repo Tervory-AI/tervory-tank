@@ -69,13 +69,11 @@ def test_market_lab_unknown_source_rejected_and_missing_bundle_id_is_stable():
 
 
 def patch_module():
-    # Compile the proposed new module directly from its diff. Never apply the patch.
-    patch = (Path(__file__).resolve().parents[1] / 'tank-patches/finish.patch').read_text()
-    section = patch.split('diff --git a/tank/ghost_evidence.py b/tank/ghost_evidence.py\n')[1]
-    code = '\n'.join(line[1:] for line in section.splitlines() if line.startswith('+') and not line.startswith('+++'))
-    module = ModuleType('proposed_ghost_evidence')
-    exec(compile(code, 'tank-patches/finish.patch:ghost_evidence.py', 'exec'), module.__dict__)
-    assert 'return await observation(runtime(), body.target, body.signal)' in patch
+    root = Path(__file__).resolve().parents[1]
+    code = (root / 'tank/ghost_evidence.py').read_text()
+    module = ModuleType('integrated_ghost_evidence')
+    exec(compile(code, 'tank/ghost_evidence.py', 'exec'), module.__dict__)
+    assert 'return await observation(runtime(), body.target, body.signal)' in (root / 'tank/ghost_routes.py').read_text()
     return module
 
 

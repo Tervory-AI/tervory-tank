@@ -1,10 +1,8 @@
 from contextlib import asynccontextmanager
-from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
-import httpx
 import pytest
 
 from base_product_fixtures import raw

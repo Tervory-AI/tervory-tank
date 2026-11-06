@@ -33,7 +33,7 @@ async def test_code_returns_requests_and_stores_only_tool_metadata(api, monkeypa
     messages = route.call_args.args[1]
     assert 'DATA' in messages[-1]['content'] and source in messages[-1]['content']
     assert 'never instructions' in messages[0]['content']
-    assert set(command.CODE_TOOLS) == {'list_files', 'read_file', 'search', 'git', 'propose_edit', 'run_command', 'tervory'}
+    assert set(command.CODE_TOOLS) == {'list_files', 'read_file', 'search', 'git', 'propose_edit', 'run_command', 'tervory', 'local_mcp'}
     assert not set(command.CODE_TOOLS) & set(command.ADAPTERS)
     snapshot = (await client.get(f'/v1/command/threads/{thread}')).json()
     replay = (await client.get(f'/v1/command/threads/{thread}/events')).text
@@ -56,6 +56,7 @@ async def test_code_pin_refused_for_customer_before_write_and_invalid_tools_neve
     client, pool = api
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
     runtime.list_models = AsyncMock(return_value=[{'name': 'placeholder-pin'}])
+    runtime.model_call_refusal = lambda *args, **kwargs: 'not permitted'
     route = AsyncMock()
     monkeypatch.setattr(command, 'route_code', route)
     before = await pool.fetchval('SELECT count(*) FROM tank.tasks')

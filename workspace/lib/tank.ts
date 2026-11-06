@@ -187,9 +187,10 @@ export async function personalCommandRequest(request: Request, path: string[],
   const id = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
   const target = path.join("/");
   const routes: Record<string, RegExp> = {
-    GET: new RegExp(`^(tools|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`),
-    POST: new RegExp(`^(complete|threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`),
+    GET: new RegExp(`^(tools|code-mcp-policy|code-models|code-sessions|code-sessions/${id}|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`),
+    POST: new RegExp(`^(code-attachments|complete|threads|threads/${id}/(turn|actions|code-turn|code-stream)|cards/${id}|build)$`),
     PATCH: new RegExp(`^threads/${id}$`),
+    PUT: /^code-mcp-policy$/,
   };
   const agentRoutes: Record<string, RegExp[]> = {
     GET: [/^window-agents\/jobs$/, new RegExp(`^window-agents/jobs/${id}/receipt$`), /^window-agents\/vault\/github$/],
@@ -215,7 +216,7 @@ export async function personalCommandRequest(request: Request, path: string[],
         while (true) {
           const item = await reader.read(); if (item.done) break;
           size += item.value.byteLength;
-          if (size > 2_000_000) return refused(413);
+          if (size > (target === "code-attachments" ? 7_100_000 : 2_000_000)) return refused(413);
           chunks.push(item.value);
         }
       } catch { return refused(400); }

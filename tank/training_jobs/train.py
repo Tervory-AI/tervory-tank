@@ -91,9 +91,9 @@ def shared_rows(groups: list[list[dict]]) -> list[dict]:
 
 
 def context_length(agent: str) -> int:
-    if agent not in ('', 'zenas'):
+    if agent not in ('', 'zenas', 'tiger'):
         raise ValueError('Unsupported training agent')
-    return 4096 if agent == 'zenas' else 1024
+    return 4096 if agent in ('zenas', 'tiger') else 1024
 
 
 def load_snapshots(api, org: str, day: str) -> list[dict]:
@@ -110,13 +110,17 @@ def load_snapshots(api, org: str, day: str) -> list[dict]:
             continue
         if info.private is not True:
             raise ValueError('Dataset repository is not private')
-        for region in ('us-east', 'za'):
+        for region in (('za',) if selected == 'zenas' else ('us-east', 'za')):
             try:
                 path = hf_hub_download(dataset, f'snapshots/{region}/{day}.jsonl', repo_type='dataset', revision=info.sha)
             except EntryNotFoundError:
                 continue
             batch = [json.loads(line) for line in Path(path).read_text().splitlines() if line]
             validate_rows(batch)  # Reject the entire run before constructing the trainer.
+            if selected == 'zenas' and any(
+                    row.get('task_type') != 'zenas.reasoning' or _outcome(row.get('output')) is None
+                    for row in batch):
+                raise ValueError('Zenas training requires code-labelled court outcomes')
             if any(row['region'] != region for row in batch):
                 raise ValueError('Snapshot region does not match its rows')
             rows.extend(batch)
@@ -130,7 +134,7 @@ def load_holdouts(api, org: str, day: str) -> list[dict]:
     info = api.dataset_info(dataset)
     if info.private is not True:
         raise ValueError('Dataset repository is not private')
-    for region in ('us-east', 'za'):
+    for region in ('za',):
         try:
             path = hf_hub_download(dataset, f'holdouts/{region}/{day}.jsonl', repo_type='dataset', revision=info.sha)
         except Exception as exc:
@@ -139,8 +143,14 @@ def load_holdouts(api, org: str, day: str) -> list[dict]:
             raise
         rows.extend(json.loads(line) for line in Path(path).read_text().splitlines() if line)
     if any(row.get('holdout') is not True or row.get('public') is not True
-           or row.get('client_matter') is not False for row in rows):
+           or row.get('client_matter') is not False or row.get('scope') != 'platform'
+           or row.get('active') is not True or 'tenant_id' in row or row.get('region') != 'za'
+           or row.get('task_type') != 'zenas.reasoning' or _outcome(row.get('output')) is None
+           for row in rows):
         raise ValueError('Unsafe holdout dataset')
+    if len({hashlib.sha256(json.dumps(row['input'], sort_keys=True).encode()).hexdigest()
+            for row in rows}) < 200:
+        raise ValueError('At least 200 distinct court holdouts are required')
     return rows
 
 
@@ -161,6 +171,116 @@ def merge_quantize(model, tokenizer, destination: str = '/tmp/zenas-q4_k_m.gguf'
     return destination
 
 
+
+def price_fields(value):
+    from decimal import Decimal, InvalidOperation
+    if isinstance(value, str):
+        value = json.loads(value)
+    if not isinstance(value, dict):
+        raise ValueError('Price answer must be an object')
+    items = value.get('items', [value] if 'price' in value else None)
+    if not isinstance(items, list):
+        raise ValueError('Price answer needs items')
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError('Invalid price item')
+        fields = {}
+        for key in ('price', 'currency', 'availability'):
+            if key not in item:
+                continue
+            raw = item[key]
+            if key == 'price':
+                try:
+                    amount = Decimal(str(raw))
+                    if not amount.is_finite() or amount < 0:
+                        raise ValueError('Invalid price')
+                except InvalidOperation:
+                    raise ValueError('Invalid price') from None
+                fields[key] = format(amount.normalize(), 'f')
+            elif key == 'currency':
+                if not isinstance(raw, str) or not re.fullmatch('[A-Za-z]{3}', raw):
+                    raise ValueError('Invalid currency')
+                fields[key] = raw.upper()
+            else:
+                if not isinstance(raw, str):
+                    raise ValueError('Invalid availability')
+                fields[key] = raw
+        if not fields:
+            raise ValueError('No labelled price fields')
+        result.append(fields)
+    return result
+
+
+def score_prices(rows, answers):
+    if not rows or len(rows) != len(answers):
+        raise ValueError('Every held-out price needs one answer')
+    results = []
+    for row, answer in zip(rows, answers, strict=True):
+        expected = price_fields(row['output'])
+        try:
+            actual = price_fields(answer)
+            # Match each expected item once, projecting only labelled fields.
+            remaining = list(actual)
+            correct = len(expected) == len(remaining)
+            for item in expected:
+                match = next((i for i, candidate in enumerate(remaining)
+                              if all(candidate.get(key) == value for key, value in item.items())), None)
+                if match is None:
+                    correct = False
+                    break
+                remaining.pop(match)
+        except (ValueError, TypeError):
+            correct = False
+        results.append({'passed': correct})
+    passed = sum(row['passed'] for row in results)
+    return {'method': 'exact_price_fields', 'n': len(rows), 'passed': passed,
+            'agreement': passed / len(rows), 'gold_holdout': True,
+            'eligible': passed == len(rows), 'rows': results}
+
+
+def tiger_data(api, org, day, revision=None):
+    from datetime import date
+    from huggingface_hub import hf_hub_download
+    from huggingface_hub.errors import EntryNotFoundError
+    date.fromisoformat(day)
+    dataset = f'{org}/tervory-public-tiger'
+    info = api.dataset_info(dataset)
+    if info.private is not True:
+        raise ValueError('Dataset repository is not private')
+    groups = {'snapshots': [], 'holdouts': []}
+    for kind in groups:
+        for region in ('us-east', 'za'):
+            try:
+                path = hf_hub_download(dataset, f'{kind}/{region}/{day}.jsonl', repo_type='dataset', revision=revision or info.sha)
+            except EntryNotFoundError:
+                continue
+            rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+            for row in rows:
+                if (row.get('holdout') is not (kind == 'holdouts') or row.get('region') != region
+                        or row.get('task_type') not in ('tiger.price_extract', 'tiger.price_structured', 'tiger.price_read')
+                        or not isinstance(row.get('input'), dict) or 'png_base64' in row['input']):
+                    raise ValueError('Invalid Tiger dataset')
+                validate_rows([{**row, 'holdout': False}])
+                price_fields(row['output'])
+            groups[kind].extend(rows)
+    train, held = groups['snapshots'], groups['holdouts']
+    def digest(row):
+        return hashlib.sha256(json.dumps(row['input'], sort_keys=True).encode()).hexdigest()
+    if not train or not held or {digest(row) for row in train} & {digest(row) for row in held}:
+        raise ValueError('Disjoint training and held-out examples are required')
+    from urllib.parse import urlsplit, urlunsplit
+    def pages(rows):
+        return {urlunsplit(urlsplit(row['input']['url'])._replace(query='', fragment=''))
+                for row in rows if row['input'].get('url')}
+    if pages(train) & pages(held):
+        raise ValueError('A held-out page cannot also be trained')
+    partitions = {int(digest(row), 16) % 10 == 0 for row in train}
+    if partitions != {False, True}:
+        raise ValueError('Training and validation examples are required')
+    return train, held
+
+
 def main() -> None:
     from datasets import Dataset
     from huggingface_hub import HfApi
@@ -172,7 +292,16 @@ def main() -> None:
         raise ValueError('Model repository is not private')
     train_agent = os.environ.get('TRAIN_AGENT', '')
     max_length = context_length(train_agent)
-    rows = load_snapshots(api, org, day)
+    if train_agent == 'tiger':
+        rows, tiger_holdouts = tiger_data(api, org, day, revision=os.environ.get('TIGER_DATASET_REVISION'))
+    else:
+        rows = load_snapshots(api, org, day)
+    holdouts = load_holdouts(api, org, day) if train_agent == 'zenas' else []
+    held_hashes = {hashlib.sha256(json.dumps(row['input'], sort_keys=True).encode()).hexdigest()
+                   for row in holdouts}
+    if any(hashlib.sha256(json.dumps(row['input'], sort_keys=True).encode()).hexdigest()
+           in held_hashes for row in rows):
+        raise ValueError('Court holdouts overlap the training snapshot')
     train, validation, seen = [], [], set()
     for row in rows:
         digest = hashlib.sha256(json.dumps(row['input'], sort_keys=True).encode()).hexdigest()
@@ -196,8 +325,20 @@ def main() -> None:
     trainer.save_model('/tmp/lora')
     Path('/tmp/lora/evaluation.json').write_text(json.dumps({'validation_loss': metrics['eval_loss'],
                                                           'n': len(validation), 'gold_holdout': False}))
+    if train_agent == 'tiger':
+        answers = []
+        model, tokenizer = trainer.model, trainer.processing_class
+        model.eval()
+        for row in tiger_holdouts:
+            prompt = [{'role': 'user', 'content': row['task_type'] + '\n' + json.dumps(row['input'])}]
+            inputs = tokenizer.apply_chat_template(prompt, tokenize=True, add_generation_prompt=True,
+                enable_thinking=False, return_dict=True, return_tensors='pt').to(model.device)
+            import torch
+            with torch.inference_mode():
+                generated = model.generate(**inputs, max_new_tokens=1024, do_sample=False)
+            answers.append(tokenizer.decode(generated[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True))
+        Path('/tmp/lora/holdout.json').write_text(json.dumps(score_prices(tiger_holdouts, answers)))
     if train_agent == 'zenas':
-        holdouts = load_holdouts(api, org, day)
         answers = []
         model, tokenizer = trainer.model, trainer.processing_class
         for row in holdouts:
