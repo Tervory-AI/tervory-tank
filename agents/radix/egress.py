@@ -19,6 +19,7 @@ import json
 import os
 import re
 import socket
+import queue
 import ssl
 import struct
 import sys
@@ -153,6 +154,32 @@ def env_revoked() -> bool:
     return os.environ.get("RADIX_EGRESS_REVOKED", "").strip().lower() in {"1", "true", "yes"}
 
 
+DNS_SECONDS = 10
+_dns_slots = threading.BoundedSemaphore(BOUNDS['max_concurrent'])
+
+
+def lookup(host, port, **kwargs):
+    """One bounded DNS attempt, with at most the existing concurrent-scan bound."""
+    if not _dns_slots.acquire(blocking=False):
+        raise OSError('dns unavailable')
+    result = queue.Queue(maxsize=1)
+    def run():
+        try:
+            result.put(socket.getaddrinfo(host, port, **kwargs))
+        except OSError:
+            result.put(None)
+        finally:
+            _dns_slots.release()
+    threading.Thread(target=run, daemon=True).start()
+    try:
+        answer = result.get(timeout=DNS_SECONDS)
+    except queue.Empty:
+        raise OSError('dns unavailable') from None
+    if answer is None:
+        raise OSError('dns unavailable')
+    return answer
+
+
 def system_resolve(host: str, *, verified_host: str | None = None) -> str:
     """One lookup. Mixed or non-public answers are refused. The result is pinned."""
     if verified_host is not None and host != verified_host:
@@ -165,7 +192,7 @@ def system_resolve(host: str, *, verified_host: str | None = None) -> str:
         if host != approved_storage:
             raise ProxyError("destination not approved")
     try:
-        answers = socket.getaddrinfo(host, APPROVED_PORT, type=socket.SOCK_STREAM)
+        answers = lookup(host, APPROVED_PORT, type=socket.SOCK_STREAM)
     except OSError as exc:
         raise ProxyError("dns failed") from exc
     found: list[str] = []
