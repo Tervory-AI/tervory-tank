@@ -16,12 +16,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/local-model/llama-b12173/llama-server" -m "$RUNNER_TEMP/local-model/model.gguf" --alias local --host 127.0.0.1 --port 18089 -t 8 -tb 8 -c 4096 -np 1 -ngl 0 > "$RUNNER_TEMP/local-model.log" 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid"; wait "$server_pid" || true' EXIT
-          for attempt in $(seq 1 90); do
-            if curl --fail --silent http://127.0.0.1:18089/health > /dev/null; then break; fi
-            kill -0 "$server_pid"
-            sleep 1
+          for model in local local-large; do
+            filename=model.gguf
+            if [ "$model" = local-large ]; then filename=large.gguf; fi
+            "$RUNNER_TEMP/local-model/llama-b12173/llama-server" -m "$RUNNER_TEMP/local-model/$filename" --alias "$model" --host 127.0.0.1 --port 18089 -t 8 -tb 8 -c 4096 -np 1 -ngl 0 --reasoning off > "$RUNNER_TEMP/$model.log" 2>&1 &
+            server_pid=$!
+            trap 'kill "$server_pid"; wait "$server_pid" || true' EXIT
+            for attempt in $(seq 1 90); do
+              if curl --fail --silent http://127.0.0.1:18089/health > /dev/null; then break; fi
+              kill -0 "$server_pid"
+              sleep 1
+            done
+            python3 litellm/local-model/benchmark.py http://127.0.0.1:18089 "$model"
+            kill "$server_pid"
+            wait "$server_pid" || true
+            trap - EXIT
           done
-          python3 litellm/local-model/benchmark.py

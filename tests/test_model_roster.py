@@ -13,6 +13,13 @@ NAMES = {m["model_name"] for m in CONFIG["model_list"]}
 def test_every_model_has_a_price_and_a_key_from_the_environment() -> None:
     for m in CONFIG["model_list"]:
         info = m.get("model_info") or {}
+        if m["model_name"] in {"local", "local-large"}:
+            service = "local-model" if m["model_name"] == "local" else "local-model-large"
+            assert m["litellm_params"]["api_base"] == f"http://{service}:8080/v1"
+            assert m["litellm_params"]["api_key"] == "placeholder"
+            for block in (info, m["litellm_params"]):
+                assert block["input_cost_per_token"] == block["output_cost_per_token"] == 0
+            continue
         if info.get("build_only"):
             # The ChatGPT sign-in (docs/ops/CHATGPT-BUILD-MODEL.md): no API key, no
             # per-token price, and Tank keeps it off customer traffic.
