@@ -26,6 +26,11 @@ def bounded_sheets(data: bytes) -> list[tuple[str, list[list[str]], list[int]]]:
     with zipfile.ZipFile(io.BytesIO(data)) as book:
         if len(book.infolist()) > 2000 or sum(info.file_size for info in book.infolist()) > 20_000_000:
             raise ReadError('This spreadsheet is too large. Split it into smaller files.')
+        for info in book.infolist():
+            if info.filename.lower().endswith('.xml'):
+                raw = book.read(info)
+                if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper():
+                    raise ReadError('This spreadsheet contains unsupported document features.')
         positions = []
         names = sorted(name for name in book.namelist() if re.fullmatch(r'xl/worksheets/sheet\d+\.xml', name))
         for name in names:
@@ -44,6 +49,8 @@ def bounded_sheets(data: bytes) -> list[tuple[str, list[list[str]], list[int]]]:
                 column = 0
                 for letter in match[1]:
                     column = column * 26 + ord(letter) - 64
+                if int(match[2]) > MAX_ROWS:
+                    raise ReadError('Use up to 20,000 rows per sheet.')
                 if column > 200:
                     raise ReadError('Use up to 200 columns per sheet.')
             positions.append([int(row.get('r', index)) for index, row in enumerate(sheet_rows, 1)])

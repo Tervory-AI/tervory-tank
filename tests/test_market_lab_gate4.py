@@ -50,7 +50,7 @@ def test_optional_capability_reports_exact_missing_name_only(monkeypatch, settin
     app = FastAPI()
     readiness.install(app)
     with TestClient(app) as client:
-        response = client.get('/market/settings')
+        response = client.get('/market/settings', headers={'X-Tank-Key': 'placeholder-private-value'})
         assert response.status_code == 200
         data = response.json()
         assert data['missing_settings'] == []
@@ -79,7 +79,7 @@ def test_missing_upload_setting_prevents_all_side_effects(monkeypatch):
         response = client.put('/market/files/placeholder')
         assert response.status_code == 503
         assert response.json()['missing_settings'] == list(readiness.UPLOADS)
-        assert client.get('/market/settings').json()['missing_settings'] == []
+        assert client.get('/market/settings', headers={'X-Tank-Key': 'placeholder-configured'}).json()['missing_settings'] == []
     assert entered == [True]  # Optional settings do not prevent core startup.
 
 

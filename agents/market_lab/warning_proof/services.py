@@ -130,7 +130,10 @@ def services(*, log=None, api_port=None, seed_data=True):
                 stderr=log,
             )
             children.append(child)
-            wait_ready(f"http://127.0.0.1:{port}/openapi.json", child)
+            if room == 'market_lab':
+                wait_ready(f"http://127.0.0.1:{port}/market/settings", child, headers={'X-Tank-Key': env['TANK_KEY_MARKET_LAB']})
+            else:
+                wait_ready(f"http://127.0.0.1:{port}/openapi.json", child)
         tank_env = {
             **env,
             "HTTP_PROXY": f"http://127.0.0.1:{proxy.server_port}",

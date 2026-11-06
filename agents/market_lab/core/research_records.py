@@ -49,6 +49,9 @@ async def save(ledger, tenant: str, question: str, research: dict) -> dict:
 async def remember(memory, report: dict) -> None:
     if memory is None:
         return
+    from core.execution import defer
+    if defer(lambda: remember(memory, report)):
+        return
     try:
         await memory.remember(report['tenant_id'], report['answer'], 'report', report['citations'][0]['url'])
     except Exception as exc:

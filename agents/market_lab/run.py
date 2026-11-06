@@ -29,9 +29,14 @@ def main(argv=None):
             parser.error('unknown job')
         from chassis.memory import MemoryClient
         from types import SimpleNamespace
-        ctx = SimpleNamespace(tenant_id=str(args.tenant), agent='market_lab',
-                              input={'engine': args.engine}, memory=MemoryClient())
-        result = asyncio.run(app.app.state.handlers[args.job](ctx))
+        try:
+            ctx = SimpleNamespace(tenant_id=str(args.tenant), agent='market_lab',
+                                  input={'engine': args.engine}, memory=MemoryClient())
+            result = asyncio.run(app.app.state.handlers[args.job](ctx))
+        except Exception as exc:
+            print(json.dumps({'status': 'failed', 'kind': type(exc).__name__,
+                              'error': 'Market Lab could not read its stored sources. Try again shortly.'}))
+            return 1
     print(json.dumps(result, default=str, sort_keys=True))
     return 0
 

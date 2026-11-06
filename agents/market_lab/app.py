@@ -165,6 +165,9 @@ class _SafeMemory:
         self.inner = inner
 
     async def remember(self, tenant_id: str, text: str, kind: str, source: str, **kwargs: object) -> dict:
+        from core.execution import defer
+        if defer(lambda: self.remember(tenant_id, text, kind, source, **kwargs)):
+            return {'seen': None}
         try:
             saved = await self.inner.remember(tenant_id, text, kind, source, **kwargs)  # type: ignore[attr-defined]
         except Exception as exc:  # noqa: BLE001 — class name only, never the message
@@ -180,19 +183,29 @@ class _ledger:
         self.ledger: PostgresLedger | None = None
 
     async def __aenter__(self) -> PostgresLedger:
-        import asyncpg
+        from core.database import connect
 
         url = os.environ.get("DATABASE_URL", "")
         if not url:
             raise RuntimeError("DATABASE_URL is not set")
-        self.conn = await asyncpg.connect(url)
+        from core.execution import active_ledger
+        shared = active_ledger.get()
+        if shared is not None:
+            self.shared = True
+            return shared
+        self.conn = await connect(url)
         self.ledger = PostgresLedger(self.conn)
         self.ledger.memory = self.memory if self.memory is not None else getattr(app.state, "memory", None)
-        await self.ledger.apply_schema()
+        try:
+            await self.ledger.apply_schema()
+        except BaseException:
+            await self.conn.close()
+            self.conn = None
+            raise
         return self.ledger
 
     async def __aexit__(self, *_exc: object) -> None:
-        if self.conn is not None:
+        if self.conn is not None and not getattr(self, 'shared', False):
             await self.conn.close()
 
 
@@ -380,3 +393,8 @@ app.include_router(ml3_router(key_ok=_room_key_ok, ledger_context=_ledger, engin
 from core.readiness import install as install_readiness
 
 install_readiness(app)
+
+from core.execution import guarded
+
+for _kind, _handler in list(app.state.handlers.items()):
+    app.state.handlers[_kind] = guarded(_handler, _ledger)

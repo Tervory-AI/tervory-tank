@@ -228,7 +228,7 @@ async def perform_opportunities(
                 },
             },
         )
-        from chassis.events import publish
+        from core.execution import publish
         await publish(tenant_id, "marketlab.signal.scored", signal_id, {
             "signal_id": signal_id, "score": str(row["gap"]), "rank": row["rank"],
             "observed_at": clock.isoformat()})
