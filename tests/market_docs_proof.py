@@ -23,7 +23,7 @@ import asyncpg
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / 'agents/market_lab'), str(ROOT / 'agents/_chassis'), str(ROOT / 'tests')]
+sys.path[:0] = [str(ROOT / 'agents/market_lab'), str(ROOT / 'agents/_chassis'), str(ROOT / 'tests'), str(ROOT / 'tank')]
 from fixture_proof.server import database_url, free_port, wait_ready
 from fixture_proof.boot_tank import verify_imported_cases
 from test_market_lab_documents import report_pdf, spreadsheet

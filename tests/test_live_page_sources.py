@@ -44,6 +44,7 @@ def match_row(**updates):
 
 @pytest.mark.asyncio
 async def test_moot_published_route_scopes_reads_and_excludes_offline_content(monkeypatch):
+    monkeypatch.setenv("TANK_KEY", "placeholder-zenas-room-key")
     from agents.zenas import app as room
 
     conn = Connection([
@@ -52,7 +53,7 @@ async def test_moot_published_route_scopes_reads_and_excludes_offline_content(mo
     ])
     monkeypatch.setattr(room.app.state, 'pool', conn, raising=False)
     monkeypatch.setattr(room, '_box_region', lambda: 'us-east')
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room.app), base_url='http://test') as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room.app), base_url='http://test', headers={'X-Tank-Key': 'placeholder-zenas-room-key'}) as client:
         result = await client.get('/moot/published', params={'home_region': 'us-east', 'match_id': str(MATCH_ID)})
     assert result.status_code == 200
     assert [m['matchId'] for m in result.json()['matches']] == [str(MATCH_ID)]
@@ -66,12 +67,13 @@ async def test_moot_published_route_scopes_reads_and_excludes_offline_content(mo
 
 @pytest.mark.asyncio
 async def test_moot_empty_missing_and_wrong_region_never_use_fixtures(monkeypatch):
+    monkeypatch.setenv("TANK_KEY", "placeholder-zenas-room-key")
     from agents.zenas import app as room
 
     conn = Connection([])
     monkeypatch.setattr(room.app.state, 'pool', conn, raising=False)
     monkeypatch.setattr(room, '_box_region', lambda: 'us-east')
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room.app), base_url='http://test') as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room.app), base_url='http://test', headers={'X-Tank-Key': 'placeholder-zenas-room-key'}) as client:
         result = await client.get('/moot/published?home_region=us-east')
         assert result.json() == {'matches': []}
         assert (await client.get('/moot/published?home_region=za')).status_code == 403

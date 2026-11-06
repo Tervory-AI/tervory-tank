@@ -310,6 +310,10 @@ jobs:
           echo "BASE_TEST_PLAYWRIGHT=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/playwright" >> "$GITHUB_ENV"
           echo "RIG_PLAYWRIGHT_PATH=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/playwright" >> "$GITHUB_ENV"
           echo "RIG_ESBUILD_PATH=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/esbuild" >> "$GITHUB_ENV"
+      - name: Prepare pinned Workspace acceptance browser dependencies
+        run: |
+          npm ci --prefix tests/browser --ignore-scripts --no-audit --no-fund
+          echo "WORKSPACE_BROWSER_TOOLS=$GITHUB_WORKSPACE/tests/browser/node_modules" >> "$GITHUB_ENV"
       - name: Prepare CLI acceptance fixtures
         run: |
           npm ci --prefix cli --ignore-scripts --no-audit --no-fund

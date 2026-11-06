@@ -391,6 +391,18 @@ def valid_auto_candidate(row: Any, room: str, region: str,
 
 def candidate_json(value: dict) -> str:
     text = json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True)
+    # PostgreSQL JSON/text cannot store NUL. Reject source data before the
+    # savepoint so it is not mistaken for a retryable storage outage.
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str) and "\x00" in item:
+            raise ValueError("Candidate strings contain a null character")
+        if isinstance(item, dict):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            pending.extend(item)
     if len(text.encode("utf-8")) > GOLD_ROW_MAX_BYTES:
         raise ValueError("Candidate row exceeds size limit")
     return text

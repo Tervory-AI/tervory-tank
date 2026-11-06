@@ -16,6 +16,7 @@ const env = {
 const runtime = { issuer: 'https://auth.tervory.com', workspace_client_id: env.TRIGGER_SIGNIN_WORKSPACE_CLIENT_ID };
 const controls = [];
 const load = workspace({env, browser: {location: {search: '?callbackUrl=%2Frig', href: 'https://app.tervory.com/rig'}}, fetch: () => {throw Error('Acceptance must remain offline');}, mocks: {
+  'react': {useRef: value => ({current: value}), useState: value => [value, () => {}]},
   'react/jsx-runtime': {jsx: (type, props) => ({type, props}), jsxs: (type, props) => ({type, props})},
   'next-auth/react': {signIn: (...args) => {controls.push({name: 'signIn', args});},
                      signOut: (...args) => {controls.push({name: 'signOut', args});}},
@@ -30,16 +31,22 @@ const claims = {sub: '50001', exp: Math.floor(Date.now() / 1000) + 3600,
   [principal.ROLES_CLAIM]: {org_admin: {'60001': 'tenant-a'}, member: {'60002': 'tenant-b'}},
   email: 'founder@example.invalid', publicMetadata: {role: 'org_admin'},
 };
+function button(tree) {
+  if (tree?.type === 'button') return tree;
+  for (const child of [tree?.props?.children].flat()) {
+    if (child && typeof child === 'object') { const found = button(child); if (found) return found; }
+  }
+}
 async function acceptance(row) {
   const options = await load('lib/trigger-signin-options.ts').signinOptions();
   const callbacks = options.callbacks;
   const token = await callbacks.jwt({token: {}, account: {id_token: 'synthetic-native-token'}, profile: claims});
   if (row === 'S01') {
     const buttons = load('app/trigger-signin-provider.tsx');
-    buttons.TriggerSigninButton({register: true}).props.onClick();
+    button(buttons.TriggerSigninButton({register: true})).props.onClick();
     assert.equal(controls[0].args[0], 'trigger-signin');
     assert.equal(controls[0].args[2].prompt, 'create');
-    buttons.TriggerSigninButton({register: false}).props.onClick();
+    button(buttons.TriggerSigninButton({register: false})).props.onClick();
     assert.equal(controls[1].args[2].prompt, 'select_account');
     assert.equal(options.providers[0].options.id, 'trigger-signin');
     assert.deepEqual(Array.from(options.providers[0].options.checks), ['pkce', 'state', 'nonce']);
@@ -59,7 +66,7 @@ async function acceptance(row) {
     }
     assert.equal(await callbacks.redirect({url: 'https://attacker.invalid/', baseUrl: 'https://app.tervory.com'}), 'https://app.tervory.com');
   } else if (row === 'S02') {
-    load('app/trigger-signin-provider.tsx').SignoutButton().props.onClick();
+    button(load('app/trigger-signin-provider.tsx').SignoutButton()).props.onClick();
     assert.equal(controls[0].name, 'signOut');
     assert.equal(controls[0].args[0].callbackUrl, '/api/trigger-signin/signed-out');
     const response = await load('app/api/trigger-signin/signed-out/route.ts').GET();

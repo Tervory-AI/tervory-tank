@@ -15,6 +15,7 @@ const tank = {
 };
 const mock = {
   'react': React,
+  'react/jsx-runtime': require('../workspace/node_modules/react/jsx-runtime'),
   'server-only': {},
   '@/lib/trigger-signin': {currentUser:async()=>({firstName:null}),auth:async()=>{authCalls++;throw Error('must not authenticate without settings');}},
   '@/lib/tenant': {activeTenant:async()=>({tenantId:'empty-tenant',orgName:'New organisation'}),currentTenant:async()=>({tenantId:'empty-tenant',orgName:'New organisation'})},

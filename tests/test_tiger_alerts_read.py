@@ -32,6 +32,7 @@ STAMP = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
 @pytest_asyncio.fixture(params=['memory', 'postgres'])
 async def runtime(request, database, monkeypatch):
     monkeypatch.setenv("TANK_KEY", "placeholder-room-key")
+    monkeypatch.setenv("TANK_KEY_TIGER", "placeholder-room-key")
     monkeypatch.setenv('DATABASE_URL', 'postgresql://placeholder@127.0.0.1/placeholder')
     monkeypatch.setenv('LITELLM_MASTER_KEY', 'placeholder-litellm-key')
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-tank-key')

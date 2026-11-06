@@ -132,6 +132,7 @@ async def test_alert_preferences_reach_tank_and_tiger_routes(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_two_tenants_cannot_read_or_remove_each_others_saved_page_job(monkeypatch):
+    monkeypatch.setenv("TANK_KEY_TIGER", "placeholder-room-key")
     monkeypatch.setenv("TANK_KEY", "placeholder-room-key")
     from test_tg2_tiger_watchlist import URL_A
     import main as tank
