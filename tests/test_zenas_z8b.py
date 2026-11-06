@@ -414,6 +414,7 @@ async def test_run_route_sends_json_and_low_thinking_only_for_case_facts(monkeyp
     monkeypatch.setattr(main, "_redis", None)
     _Gateway.sent = []
     monkeypatch.setattr(main.httpx, "AsyncClient", _Gateway)
+    monkeypatch.setattr(main, "_http", _Gateway())
 
     async def once(model: str, task_type: str) -> main.RouteResponse:
         monkeypatch.setattr(main, "pool", lambda: _Pool(_Conn(_policy(model))))
