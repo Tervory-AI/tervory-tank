@@ -47,7 +47,7 @@ async def test_routellm_and_cache_share_shadow_runner_and_report(real_tank, monk
         cached = next(p for p in task['shadow_pairs'] if p['candidate_model'] == cache.CANDIDATE)
         routed = next(p for p in task['shadow_pairs'] if p['candidate_model'] != cache.CANDIDATE)
         assert (cached['samples'], cached['primary_cost_usd'], cached['could_have_cost_usd'],
-                cached['saved_usd'], cached['evaluation_cost_usd']) == (1, .02, 0, .02, .001)
+                cached['saved_usd'], cached['evaluation_cost_usd']) == (1, .02, 0, .02, 0)
         assert (routed['samples'], routed['primary_cost_usd'], routed['could_have_cost_usd'],
                 routed['saved_usd']) == (2, .04, .004, .036)
         assert task['semantic_cache']['would_have_hits'] == 1

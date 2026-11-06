@@ -4,6 +4,7 @@ from fastapi import HTTPException
 
 import engine_ladder as ladder
 import graduate
+import engine_quality
 
 
 def unpack(value):
@@ -29,7 +30,7 @@ async def options(rt, req, policy):
     names = info['ladder']
     earlier = names[:names.index(policy['model'])] if policy['model'] in names else []
     rows = [*rows, *({'model': name, 'checkpoint': 'runtime-b12173'} for name in earlier)]
-    return [{'model': row['model'], 'revision': ladder.digest([info['revision'], row['model'], row['checkpoint']])}
+    return [{'model': row['model'], 'revision': ladder.digest([info['revision'], row['model'], row['checkpoint'], engine_quality.revision(req.task_type)])}
             for row in rows if row['model'] != policy['model'] and affordable(roster, row['model'], policy['model'])
             and not rt.is_build_only_model(row['model'])]
 
@@ -62,7 +63,8 @@ async def winner(rt, req, policy, caller=None):
             graduated = await conn.fetchval('''SELECT true FROM tank.engine_graduations
                 WHERE tenant_id=$1 AND region=$2 AND task_type=$3 AND model=$4 AND revision=$5''',
                 req.tenant_id, rt.box_region(), req.task_type, candidate['model'], candidate['revision'])
-        if not graduated or not proven(policy, await evidence(rt, req, candidate))[0]:
+        if (not graduated or not proven(policy, await evidence(rt, req, candidate))[0]
+                or not await engine_quality.proof_passes(rt, req, candidate)):
             continue
         score = await ladder.evaluate(rt, req, policy, candidate['model'], samples, candidate['revision'], caller)
         if score is None or score < max(.99, float(policy.get('eval_threshold') or .99)):
@@ -132,18 +134,23 @@ async def tick(rt, req, policy, caller=None, limit=1):
             if answer.model != model:
                 continue
             agreement = ladder.score(row['content'], answer.content, 'exact')
+            quality = await engine_quality.assess(rt, req, policy, model, messages, row['content'], answer.content, caller)
+            if not quality.get('scores'):
+                return {'state': 'held', 'model': model, 'reason': quality['reason']}
             async with rt.pool().acquire() as conn:
                 await conn.execute('''INSERT INTO tank.engine_proofs
-                    (tenant_id,region,task_type,model,revision,input_hash,ledger_id,candidate_ledger_id,agreement)
-                    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING''',
+                    (tenant_id,region,task_type,model,revision,input_hash,ledger_id,candidate_ledger_id,agreement,quality)
+                    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) ON CONFLICT DO NOTHING''',
                     req.tenant_id, rt.box_region(), req.task_type, model, revision, fingerprint,
-                    row['id'], answer.ledger_id, agreement)
+                    row['id'], answer.ledger_id, agreement, json.dumps(quality))
             seen.add(fingerprint)
             processed += 1
             if processed >= limit:
                 break
         proof = await evidence(rt, req, candidate)
         passed, reason = proven(policy, proof)
+        if passed and not await engine_quality.proof_passes(rt, req, candidate):
+            passed, reason = False, 'DeepEval correctness, faithfulness or task criteria below 99%'
         if passed:
             async with rt.pool().acquire() as conn:
                 await conn.execute('''INSERT INTO tank.engine_graduations

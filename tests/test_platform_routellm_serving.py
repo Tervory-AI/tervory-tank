@@ -169,9 +169,9 @@ def test_run_route_keeps_reviewed_hooks_and_code_streaming_body():
         assert any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == callee
                    for n in ast.walk(functions[caller]))
     # Engine adds deterministic local generation, coalesced memory/system
-    # messages and free-model batch handling. Paid admission and streaming
+    # messages, free-model batch handling and scalar-only trace metadata. Paid admission and streaming
     # remain in this body; protect all bytes outside the two RouteLLM hooks.
-    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '9ebb11fba228c407a327eb84543728b8f5627febd9f0e44e17fa0fb38deeb57c'
+    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '1fa14756adebec62910281e742ff0ef31354d07a5d81a1ebb30bb28ec6138837'
 
 
 @pytest.mark.asyncio

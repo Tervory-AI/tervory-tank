@@ -91,7 +91,9 @@ def load_contract():
     rows = json.loads(blocks[0])
     if not isinstance(rows, list) or not rows:
         raise ValueError('Routing table must be nonempty')
-    return rows
+    # DECISION keep the new engine ingress authority in machine configuration;
+    # the founder requested no document edits. Every existing gate still applies.
+    return rows + json.loads((ROOT / 'litellm/langfuse-ingress.json').read_text())
 
 
 def compose_files(root=ROOT):

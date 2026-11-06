@@ -41,6 +41,13 @@ async def pass_policy_swaps(b):
 @pytest_asyncio.fixture
 async def ladder(boundary, monkeypatch):  # noqa: F811 -- pytest fixture injection
     b = boundary
+    # Existing lifecycle/cache protocol tests use a calibrated quality fixture.
+    # The real DeepEval worker and negative quality gate run in engine_quality tests.
+    import engine_quality
+    async def calibrated_quality(rt, req, policy, candidate, messages, primary, actual, caller=None):
+        return {'passed': True, 'scores': {'correctness': 1, 'faithfulness': 1, 'task': 1},
+                'judge': 'local-large', 'revision': engine_quality.revision(req.task_type)}
+    monkeypatch.setattr(engine_quality, 'assess', calibrated_quality)
     # These pre-existing ladder/batch protocol cases explicitly exercise Auto.
     # Default Ask and real approval/card behavior live in test_paid_steps.py.
     import paid_steps

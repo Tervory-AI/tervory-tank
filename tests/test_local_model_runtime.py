@@ -38,7 +38,7 @@ def test_download_rejects_wrong_bytes(tmp_path, monkeypatch):
 def test_local_and_open_weight_serving_chain():
     config = yaml.safe_load((ROOT / 'litellm/config.yaml').read_text())
     chains = {key: value for item in config['litellm_settings']['fallbacks'] for key, value in item.items()}
-    assert chains['local'] == ['local-large', 'llama-small', 'qwen-small', 'llama', 'qwen']
+    assert chains['local'] == ['local-large', 'gpt-oss-small', 'qwen-small', 'gpt-oss']
     assert chains['local-large'] == chains['local'][1:]
     service = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())['services']['local-model-large']
     assert 'ports' not in service and service['cpus'] == 8 and service['mem_limit'] == '6g'

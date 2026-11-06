@@ -8,9 +8,10 @@ from typing import Any
 
 from fastapi import HTTPException
 import graduate
+import engine_models
 
-LOCAL = ('local', 'local-large')
-OPEN = ('llama-small', 'qwen-small', 'llama', 'qwen')
+LOCAL = engine_models.LOCAL
+OPEN = engine_models.OPEN
 
 
 def digest(value: Any) -> str:
@@ -111,6 +112,10 @@ async def evaluate(rt, req, policy, model, samples, revision, caller) -> float |
 
 
 async def select(rt, req, policy, caller=None) -> dict:
+    if graduate.is_skill(policy['model']):
+        # A missing configured package is a refusal, not evidence that permits
+        # a model rung or a mixture of paid seats to replace it.
+        rt.get_package(*graduate.parse_skill(policy['model']))
     if not graduate.is_skill(policy['model']) and hasattr(rt, 'pool'):
         async with rt.pool().acquire() as conn:
             approved = await conn.fetchrow("""SELECT s.id,s.version FROM tank.skills s
@@ -122,7 +127,7 @@ async def select(rt, req, policy, caller=None) -> dict:
             policy = {**policy, 'model': f"skill:{approved['id']}@{approved['version']}",
                       'escalation_model': policy['model']}
     samples = await cases(rt, req)
-    revision = digest([policy, samples, 'local-runtime-b12173-qwen-v1'])
+    revision = digest([policy, samples, 'local-runtime-b12173-qwen-instruct2507-v2', engine_models.SOURCE_BLOB])
     names = {row['name'] for row in await rt.list_models()}
     attempts = []
     for model in order(policy):

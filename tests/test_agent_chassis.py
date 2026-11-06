@@ -583,7 +583,8 @@ def test_agent_boxes_do_not_share_a_network():
         assert "tervory-gw-template" not in (services[name].get("networks") or [])
     tank = services["tank"]
     assert "command" not in tank
-    assert "volumes" not in tank
+    # Tank's durable metadata-only trace outbox is private; no agent volume joins.
+    assert tank.get("volumes") == ["tank_trace_outbox:/var/lib/tank-traces"]
     assert "AGENT_DB_PASSWORD_TEMPLATE" not in tank["environment"]
     assert "agent-roles" not in (tank.get("depends_on") or {})
     roles = services["agent-roles"]

@@ -3155,6 +3155,14 @@ CREATE TABLE IF NOT EXISTS tank.engine_graduations (
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY(tenant_id,region,task_type,model,revision)
 );
+ALTER TABLE tank.engine_proofs ADD COLUMN IF NOT EXISTS quality jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS quality jsonb NOT NULL DEFAULT '{}';
+CREATE TABLE IF NOT EXISTS tank.engine_judges (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL, passed boolean NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model,revision)
+);
 CREATE TABLE IF NOT EXISTS tank.engine_evals (
     tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
     model text NOT NULL, revision text NOT NULL, agreement numeric NOT NULL,
@@ -3210,7 +3218,7 @@ DECLARE relation text;
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
         FOREACH relation IN ARRAY ARRAY['tenants','roster_observations','platform_releases','founder_morning_reports',
-            'engine_state','engine_candidates','engine_proofs','engine_graduations','engine_evals','engine_receipts']
+            'engine_state','engine_candidates','engine_proofs','engine_graduations','engine_evals','engine_receipts','engine_judges']
         LOOP
             EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',relation);
             EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',relation);

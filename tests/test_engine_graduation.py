@@ -6,6 +6,7 @@ import pytest
 
 import engine_ladder
 import graduate
+import engine_quality
 from test_tank_tenant_boundaries import boundary  # noqa: F401
 from test_engine_ladder import setup_engine
 
@@ -23,6 +24,12 @@ async def test_trained_candidate_needs_gold_and_distinct_traffic_then_auto_gradu
     monkeypatch.setattr(b.tank, '_roster_models', trained_roster)
     original = httpx.AsyncClient
     trained_answer = ['wrong']
+    quality_passes = [False]
+    async def quality(rt, request, policy, candidate, messages, primary, actual, caller=None):
+        return {'passed': quality_passes[0], 'scores': {
+            'correctness': int(quality_passes[0]), 'faithfulness': int(quality_passes[0]), 'task': 1},
+            'judge': 'local-large', 'revision': engine_quality.revision(request.task_type)}
+    monkeypatch.setattr(engine_quality, 'assess', quality)
     async def dispatch(request):
         name = json.loads(request.content)['model']
         return httpx.Response(200, headers={'x-litellm-response-cost': '0', 'x-litellm-model-group': name},
@@ -53,6 +60,14 @@ async def test_trained_candidate_needs_gold_and_distinct_traffic_then_auto_gradu
         assert await conn.fetchval('SELECT count(*) FROM tank.engine_proofs WHERE tenant_id=$1', req.tenant_id) == 0
     trained_answer[0] = 'billing'
     body['checkpoint'] = 'b'*64
+    assert (await b.client.post('/v1/engine/candidates', json=body, headers=headers)).status_code == 200
+    result = await graduate.engine_tick(b.tank, req, selected, limit=200)
+    assert result['samples'] == 200 and result['agreement'] == 1
+    assert result['state'] == 'candidate' and 'DeepEval' in result['reason']
+    assert (await engine_ladder.select(b.tank, req, policy))['model'] == 'local'
+    # Same format and 100% agreement are insufficient when quality metrics fail.
+    quality_passes[0] = True
+    body['checkpoint'] = 'd'*64
     assert (await b.client.post('/v1/engine/candidates', json=body, headers=headers)).status_code == 200
     assert (await engine_ladder.select(b.tank, req, policy))['model'] == 'local'
     result = await graduate.engine_tick(b.tank, req, selected, limit=199)

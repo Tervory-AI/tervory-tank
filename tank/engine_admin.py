@@ -41,6 +41,7 @@ def build_router(rt):
 
 async def engine_status(rt, tenant_id):
     import engine_ladder
+    import engine_tracing
     async with rt.pool().acquire() as conn:
         tasks = await conn.fetch('''SELECT task_type FROM tank.policy WHERE tenant_id=$1 OR tenant_id IS NULL
             UNION SELECT task_type FROM tank.engine_state WHERE tenant_id=$1 AND region=$2''', tenant_id, rt.box_region())
@@ -56,7 +57,7 @@ async def engine_status(rt, tenant_id):
             coalesce(sum(cost_usd),0) AS cost_usd,
             coalesce(sum(cost_usd) FILTER(WHERE task_type LIKE '%#engine-%'),0) AS evaluation_cost_usd
             FROM tank.ledger l WHERE l.tenant_id=$1 AND l.region=$2
-              AND (l.task_type LIKE '%#engine-eval' OR l.task_type LIKE '%#engine-shadow'
+              AND (l.task_type LIKE '%#engine-eval' OR l.task_type LIKE '%#engine-shadow' OR l.task_type LIKE '%#engine-judge'
                    OR EXISTS (SELECT 1 FROM tank.engine_receipts r
                        WHERE r.tenant_id=l.tenant_id AND r.region=l.region AND r.ledger_id=l.id))
             GROUP BY split_part(task_type,'#engine-',1)''',
@@ -78,5 +79,6 @@ async def engine_status(rt, tenant_id):
         for key in ('cost_usd', 'evaluation_cost_usd', 'would_have_cost_usd'):
             row[key] = float(row[key])
         row['saved_usd'] = max(0., row['would_have_cost_usd'] - row['cost_usd'])
+        row['traces_url'] = engine_tracing.traces_url(tenant_id, name)
         result.append(row)
     return {'tenant_id': str(tenant_id), 'region': rt.box_region(), 'tasks': result}

@@ -1,6 +1,6 @@
 // Bundle real components with the existing Next webpack and TypeScript toolchain.
 import { createRequire } from 'node:module';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 const root=process.cwd(),output=process.argv[2];
 const require=createRequire(path.join(root,'workspace/package.json'));
@@ -53,4 +53,10 @@ const config={mode:'production',entry:path.join(output,'entry.tsx'),output:{path
 await new Promise((resolve,reject)=>packaged.webpack(config,(error,stats)=>{
  if(error||stats.hasErrors())reject(error??new Error(stats.toString({all:false,errors:true})));else resolve();
 }));
+// Use Next's bundled minifier: unminified webpack comments/module IDs made the
+// production gzip limit depend on pytest's temporary path (160001 vs 160000).
+const clientPath=path.join(output,'client.js');
+const minified=await require('next/dist/compiled/terser').minify(readFileSync(clientPath,'utf8'));
+if(!minified.code)throw new Error('Browser bundle minification produced no code');
+writeFileSync(clientPath,minified.code);
 const fs=require('node:fs');writeFileSync(path.join(output,'client.css'),['globals.css','zenas/zenas.css','zenas/feeds/feeds.css','matters/matters.css','review/review.css'].map(p=>fs.readFileSync(path.join(root,'workspace/app',p),'utf8')).join('\n'));

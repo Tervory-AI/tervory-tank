@@ -229,24 +229,26 @@ async def test_new_policy_invalidates_approval(semantic):
 
 
 @pytest.mark.asyncio
-async def test_existing_judge_used_for_prose_and_cost_booked_separately(semantic, monkeypatch):
+async def test_calibrated_local_deepeval_judge_used_for_prose(semantic, monkeypatch):
     b = semantic
     first = await run(b, 'Explain how rain forms.')
     async with b.pool.acquire() as conn:
         await conn.execute("UPDATE tank.transcripts SET content='Water condenses in clouds.' WHERE tenant_id=$1 AND ledger_id=$2", b.tenants[0], first.ledger_id)
     calls = []
-    async def judge(model, messages, tokens):
-        calls.append((model, messages))
-        return '100', .0002
-    monkeypatch.setattr(b.tank, '_llm', judge)
+    import engine_quality
+    async def judge(rt, req, policy, candidate, messages, primary, actual, caller=None):
+        calls.append((candidate, actual))
+        return {'passed': True, 'scores': {'correctness': 1, 'faithfulness': 1, 'task': 1},
+                'judge': 'local-large', 'revision': engine_quality.revision(req.task_type)}
+    monkeypatch.setattr(engine_quality, 'assess', judge)
     second = await run(b, 'Describe how rainfall develops.')
-    assert len(calls) == 1 and 'SECOND ANSWER:\nWater condenses in clouds.' in calls[0][1][-1]['content']
+    assert calls == [(cache.CANDIDATE, 'Water condenses in clouds.')]
     assert (await observation(b, second))['agreement'] == 1
     report = await proof.snapshot(b.tenants[0], 'base.normalize')
     pair = report['tasks'][0]['shadow_pairs'][0]
-    assert pair['could_have_cost_usd'] == 0 and pair['evaluation_cost_usd'] == .0002
+    assert pair['could_have_cost_usd'] == pair['evaluation_cost_usd'] == 0
     async with b.pool.acquire() as conn:
-        assert float(await conn.fetchval("SELECT cost_usd FROM tank.ledger WHERE tenant_id=$1 AND task_type='base.normalize#shadow'", b.tank.PLATFORM_TENANT)) == .0002
+        assert float(await conn.fetchval("SELECT cost_usd FROM tank.ledger WHERE tenant_id=$1 AND task_type='base.normalize#shadow'", b.tank.PLATFORM_TENANT)) == 0
 
 
 @pytest.mark.asyncio

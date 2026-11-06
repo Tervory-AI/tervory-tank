@@ -13,7 +13,7 @@ from test_tank_tenant_boundaries import boundary  # noqa: F401
 
 def test_rung_order_and_exact_eval():
     assert engine.order({'model': 'skill:base.extract@2.0.0', 'escalation_model': 'sol'}) == [
-        'skill:base.extract@2.0.0', 'local', 'local-large', 'llama-small', 'qwen-small', 'llama', 'qwen', 'sol']
+        'skill:base.extract@2.0.0', 'local', 'local-large', 'gpt-oss-small', 'qwen-small', 'gpt-oss', 'sol']
     assert engine.score('billing', 'not billing', 'exact') == 0
     assert engine.score({'label': 'billing'}, '{"label":"billing"}', 'exact') == 1
 
