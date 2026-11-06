@@ -249,7 +249,8 @@ def test_export_storage_failure_isolated_and_retries_only_unfinished_agent(monke
     from contextlib import asynccontextmanager
     from datetime import date
     import gold
-    agents = ['base', 'tiger', 'zenas']
+    # Court snapshots refresh after new official splits; their contract has its own Zenas proofs.
+    agents = ['base', 'tiger', 'radix']
     done, batches, archives, hf_agents = set(), set(), [], []
     unavailable = {failed_agent}
     monkeypatch.setenv('HF_TOKEN', secrets.token_hex(16))
@@ -268,7 +269,7 @@ def test_export_storage_failure_isolated_and_retries_only_unfinished_agent(monke
         async def fetch(self, query, *args):
             if 'DISTINCT tenant_id' in query:
                 return [{'tenant_id': gold.PLATFORM_TENANT}]
-            if 'FROM tank.gold_examples' in query:
+            if query.lstrip().startswith('SELECT * FROM tank.gold_examples'):
                 return []  # This storage/retry fixture has no reviewed gold holdouts.
             agent = args[1]
             return [{'tenant_id': gold.PLATFORM_TENANT, 'region': region,
