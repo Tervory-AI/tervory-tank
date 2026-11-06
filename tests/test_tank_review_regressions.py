@@ -24,7 +24,8 @@ async def test_plain_comparisons_keep_receipts_and_transcripts(ladder, text, pat
                 tenant_id=tenant, version="1.0.0", input=payload), None)
             ledger_id = uuid.UUID(result["_ledger_id"])
         else:
-            result = await b.tank.run_route(request(b, tenant, text=text if path == "paid" else json.dumps(payload)))
+            selected = {'_paid_policy': await b.tank.load_policy('base.normalize', tenant)} if path == 'paid' else {}
+            result = await b.tank.run_route(request(b, tenant, text=text if path == "paid" else json.dumps(payload)), **selected)
             ledger_id = result.ledger_id
         async with b.pool.acquire() as conn:
             row = await conn.fetchrow("""SELECT l.rung,l.cost_usd,t.messages FROM tank.ledger l
@@ -118,7 +119,7 @@ async def test_unapproved_pin_escalates_without_executing_or_using_cache(ladder,
     monkeypatch.setattr(b.tank, "_run_code_candidate", executed)
     for tenant in b.tenants:
         result = await b.tank.run_route(request(b, tenant))
-        assert result.rung == 2 and result.model == "luna"
+        assert result.rung == 2 and result.model == "local"
         assert result.escalation[0]["reason"] == "skill_not_approved"
         async with b.pool.acquire() as conn:
             attempt = await conn.fetchrow("SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2", uuid.UUID(result.escalation[0]["ledger_id"]), tenant)
@@ -142,7 +143,7 @@ async def test_fresh_seeds_only_pin_approved_versions_and_preserve_overrides(lad
     for tenant in b.tenants:
         for task in refs:
             result = await b.tank.run_route(request(b, tenant, task=task))
-            assert result.rung == 2 and result.model == "luna"
+            assert result.rung == 2 and result.model == "local"
     async with b.pool.acquire() as conn:
         await conn.execute("UPDATE tank.skills SET state='approved' WHERE id=ANY($1::text[])", list(refs))
         await conn.execute("DELETE FROM tank.policy_seeds")

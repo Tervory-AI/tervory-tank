@@ -3129,6 +3129,51 @@ CREATE TABLE IF NOT EXISTS tank.rig_rooms (
 -- BEGIN worker (new blocks for worker go here)
 -- END worker
 -- BEGIN platform (new blocks for platform go here)
+CREATE TABLE IF NOT EXISTS tank.engine_state (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type)
+);
+CREATE TABLE IF NOT EXISTS tank.engine_candidates (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, checkpoint text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model)
+);
+CREATE TABLE IF NOT EXISTS tank.engine_proofs (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL, input_hash text NOT NULL,
+    ledger_id uuid NOT NULL, candidate_ledger_id uuid NOT NULL, agreement numeric NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model,revision,input_hash)
+);
+CREATE TABLE IF NOT EXISTS tank.engine_graduations (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL, previous_model text NOT NULL,
+    samples integer NOT NULL, agreement numeric NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model,revision)
+);
+ALTER TABLE tank.engine_proofs ADD COLUMN IF NOT EXISTS quality jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS quality jsonb NOT NULL DEFAULT '{}';
+CREATE TABLE IF NOT EXISTS tank.engine_judges (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL, passed boolean NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model,revision)
+);
+CREATE TABLE IF NOT EXISTS tank.engine_evals (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    model text NOT NULL, revision text NOT NULL, agreement numeric NOT NULL,
+    samples integer NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,model,revision)
+);
+CREATE TABLE IF NOT EXISTS tank.engine_receipts (
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    ledger_id uuid NOT NULL, detail jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tenant_id,ledger_id)
+);
 ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
 
 -- Home is assigned at onboarding; changing it requires a separate data migration.
@@ -3172,7 +3217,8 @@ DO $$
 DECLARE relation text;
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
-        FOREACH relation IN ARRAY ARRAY['tenants','roster_observations','platform_releases','founder_morning_reports']
+        FOREACH relation IN ARRAY ARRAY['tenants','roster_observations','platform_releases','founder_morning_reports',
+            'engine_state','engine_candidates','engine_proofs','engine_graduations','engine_evals','engine_receipts','engine_judges']
         LOOP
             EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',relation);
             EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',relation);

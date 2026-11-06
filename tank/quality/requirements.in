@@ -1,0 +1,2 @@
+# DECISION isolate DeepEval's Pydantic >=2.11 from Tank's frozen 2.10 schemas.
+deepeval==4.3.3

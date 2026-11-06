@@ -47,7 +47,7 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
     data = _parsed()
     assert set(data["services"]) == {
         "postgres", "redis", "qdrant", "hermes", "litellm", "tank", "agent-roles",
-        "r2-backup-za",
+        "r2-backup-za", "local-model", "local-model-large",
     }
     assert not data["services"]["r2-backup-za"].get("profiles")
     for name, service in data["services"].items():
@@ -139,7 +139,7 @@ def test_za_compose_names_no_us_host_and_does_not_replicate() -> None:
         assert ("product-proxy" in service.get("networks", [])) == (name == "tank"), name
         assert bool(service.get("labels")) == (name == "tank"), name
     addresses = set(re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", COMPOSE))
-    assert addresses <= {"127.0.0.1"}
+    assert addresses <= {"127.0.0.1", "0.0.0.0"}  # Container bind address, never a remote destination.
     for banned in ("workspace", "searxng", "agent-base", "agent-tiger", "agent-rig"):
         assert banned not in lowered
 
@@ -153,6 +153,11 @@ def test_za_roster_includes_the_gated_own_model() -> None:
     assert "model_name: za-local" in raw
     assert "hosted_in: za" in raw
     for item in ZA_CONFIG["model_list"]:
+        if item['model_name'] in {'local', 'local-large'}:
+            service = 'local-model' if item['model_name'] == 'local' else 'local-model-large'
+            assert item['litellm_params']['api_base'] == f'http://{service}:8080/v1'
+            assert 'ports' not in _parsed()['services'][service]
+            continue
         if item["model_name"] == "tervory-own-zenas-za":
             assert item["litellm_params"]["api_base"] == "http://zenas-own-model:8080/v1"
             assert item["litellm_params"]["api_key"] == "os.environ/ZENAS_OWN_MODEL_KEY"
@@ -441,6 +446,9 @@ async def test_empty_or_unknown_home_makes_no_call(
 
 
 class _Conn:
+    async def fetch(self, *_args, **_kwargs):
+        return []
+
     async def fetchrow(self, *_args: object, **_kwargs: object) -> dict[str, object] | None:
         if "agent_skill_submissions" in str(_args[0]):
             return None

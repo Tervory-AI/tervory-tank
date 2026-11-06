@@ -59,6 +59,10 @@ def test_default_bar_and_founder_approval(samples, agreement, reason):
 @pytest.mark.asyncio
 async def test_chat_exact_repeat_has_zero_cost_both_jobs_in_savings_and_tenants_sealed(boundary, monkeypatch):  # noqa: F811
     b = boundary
+    # This fixture measures paid-provider billing after a policy is selected.
+    # The automatic local ladder has its own real-model engine proof.
+    from test_tank_ladder import selected_policy_protocol
+    selected_policy_protocol(monkeypatch)
     from savings_defaults import initialize
     async with b.pool.acquire() as conn:
         await initialize(conn)

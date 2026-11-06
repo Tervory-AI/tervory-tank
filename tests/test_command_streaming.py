@@ -104,6 +104,8 @@ class Gateway:
 async def streaming(monkeypatch, command_pool):
     # Streaming/CLI protocol cases exercise an explicitly configured Auto seat.
     # Real default-Ask cards and resume/deny are covered in test_paid_steps.py.
+    from test_tank_ladder import selected_policy_protocol
+    selected_policy_protocol(monkeypatch)
     import paid_steps
     original_admit=paid_steps.admit
     monkeypatch.setattr(paid_steps,"db",lambda:command_pool)

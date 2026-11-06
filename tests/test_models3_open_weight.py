@@ -162,7 +162,7 @@ def test_each_open_model_has_a_cheapest_first_fallback_to_serving_models_only(fi
         costs = [price[fb] for fb in chain[name]]
         assert costs == sorted(costs)
     for primary, fbs in chain.items():
-        if primary not in OPEN:
+        if primary not in OPEN and primary not in {"local", "local-large"}:
             assert not set(fbs) & set(OPEN), primary
 
 

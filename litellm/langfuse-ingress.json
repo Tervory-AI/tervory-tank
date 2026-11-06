@@ -1,0 +1,13 @@
+[
+  {
+    "host": "langfuse.tervory.com",
+    "paths": "PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)",
+    "service": "langfuse-web",
+    "port": 3000,
+    "network": "xnmc0jkz8j9i5jh1jwanbsfv",
+    "access": "public",
+    "compose": "docker-compose.yml",
+    "router": "langfuse-https",
+    "priority": 100
+  }
+]

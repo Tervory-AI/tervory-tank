@@ -23,12 +23,37 @@ def _without_dependency_waits(compose: dict) -> None:
     ordinary `up` selects, not start order. With depends_on, a dry-run `up` still
     waits on each dependency's simulated container, and on a loaded CI runner Compose
     sometimes looked before that container was listed and stopped with
-    "agent-roles is missing dependency postgres" (31 Oct, #486). No service here
-    depends on a profiled service, so dropping depends_on cannot change selection;
-    the loop checks that no dependency is profiled."""
+    "agent-roles is missing dependency postgres" (31 Oct, #486). A dependency may
+    be profiled only when every profile enabling its parent also enables it, so
+    dropping depends_on cannot change which services the default up selects."""
     for name, service in compose["services"].items():
         for dependency in service.pop("depends_on", None) or []:
-            assert not compose["services"][dependency].get("profiles"), (name, dependency)
+            required_profiles = set(compose["services"][dependency].get("profiles") or [])
+            parent_profiles = set(service.get("profiles") or [])
+            assert not required_profiles or (
+                parent_profiles and parent_profiles <= required_profiles
+            ), (name, dependency)
+
+
+@pytest.mark.parametrize("parent_profiles,dependency_profiles,valid", [
+    ([], [], True),
+    (["engine"], ["engine"], True),
+    (["engine"], [], True),
+    ([], ["engine"], False),
+    (["engine", "other"], ["engine"], False),
+    (["engine"], ["other"], False),
+])
+def test_dependency_wait_removal_preserves_profile_selection(parent_profiles, dependency_profiles, valid):
+    compose = {"services": {
+        "parent": {"profiles": parent_profiles, "depends_on": ["dependency"]},
+        "dependency": {"profiles": dependency_profiles},
+    }}
+    if valid:
+        _without_dependency_waits(compose)
+        assert "depends_on" not in compose["services"]["parent"]
+    else:
+        with pytest.raises(AssertionError, match="parent"):
+            _without_dependency_waits(compose)
 
 
 @pytest.mark.parametrize("directory", ["deployment-artifact", "saved-coolify-compose"])

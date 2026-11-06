@@ -61,6 +61,7 @@ ROUTES = (
     ('early', 'tenant_regions', 'build_router', ('tank',), True),
     ('early', 'workspace_board', 'build_router', ('tank',), True),
     ('early', 'morning_report', 'build_router', ('tank',), True),
+    ('early', 'engine_admin', 'build_router', ('tank',), True),
 )
 
 def register_routes(tank: Any, phase: str) -> None:

@@ -50,6 +50,7 @@ import logging
 import os
 import time
 import uuid
+import engine_memory
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -705,6 +706,7 @@ class RouteRequest(BaseModel):
 
 
 class RouteResponse(BaseModel):
+    engine: dict[str, Any] | None = None
     # Actual foreground dispatch evidence; absent for cache/code/batch results.
     execution: dict[str, Any] | None = None
     settings_hash: str | None = None  # No effective-settings attestation exists yet.
@@ -1302,6 +1304,13 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
     inherited=paid_steps.current.get()
     req = req.model_copy(update={"paid_run_id": inherited.run_id})
     original = kwargs.get("_paid_policy") or await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+    engine_rt = __import__("sys").modules[__name__]
+    if (kwargs.get('model_override') is None and not kwargs.get('_offpeak_dispatch')
+            and kwargs.get('_paid_policy') is None and not is_build_only_model(original['model'])):
+        req, recalled = await engine_memory.recall(engine_rt, req)
+        original = await __import__('engine_ladder').select(engine_rt, req, original, caller)
+        if original.get('_engine'):
+            original['_engine']['memory'] = recalled
     policy = original
     attempted = set()
     while True:
@@ -1316,7 +1325,8 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
         value = await paid_steps.checkpoint(paid_steps.fingerprint(["route", req.model_dump(exclude={"paid_run_id"}),
                                              policy["model"], kwargs.get("model_override"), bool(kwargs.get("_offpeak_dispatch")), bool(kwargs.get("_defer_paid"))]), invoke)
         if "error" not in value:
-            return (priority_queue.QueuedResponse if value["queued"] else RouteResponse).model_validate(value["answer"])
+            answer = (priority_queue.QueuedResponse if value["queued"] else RouteResponse).model_validate(value["answer"])
+            return await __import__('engine_ladder').receipt(engine_rt, req, policy, answer)
         attempted.add(policy["model"])
         if policy["model"].startswith("skill:") and policy.get("escalation_model"):
             attempted.add(policy["escalation_model"])
@@ -1403,10 +1413,21 @@ async def _run_route(
     if graduate.router_cannot_serve(model):
         raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
     priority = req.priority or policy["priority"]
+    if policy.get('_engine', {}).get('free') and priority == 'offpeak':
+        # There is no provider discount to wait for on the zero-token-cost rung.
+        priority = 'standard'
 
     messages = [m.model_dump() for m in req.messages]
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
+    if policy.get('_engine') or model in {'local', 'local-large'}:
+        # GGUF chat templates may consume only the first system message. Keep
+        # the policy and recalled data in that one message, in their original order.
+        count = 0
+        while count < len(messages) and messages[count]['role'] == 'system':
+            count += 1
+        if count > 1:
+            messages = [{'role': 'system', 'content': '\n\n'.join(m['content'] for m in messages[:count])}, *messages[count:]]
     if req.task_type == "zenas.case_facts" and any(str(message.get("content", "")).startswith(_CONVERT_HEAD) for message in messages):
         # Fixed text first, so the provider prompt cache sees one stable prefix:
         # the policy prompt, then this fixed instruction, then the judgment.
@@ -1508,6 +1529,8 @@ async def _run_route(
         generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
 
     # Code may parse labelled HTML. Prompt text is never parsed or rewritten.
+    if model in {'local', 'local-large'}:
+        generation = {**generation, 'temperature': 0}
     messages = _plain_messages(messages)
     if _contains_html(messages):
         await _refuse_input(req, policy, "HTML must be supplied in html/raw_html fields with separately extracted text", task_id)
@@ -1537,7 +1560,7 @@ async def _run_route(
                                              caller=caller, task_id=task_id, model_override=model_override)
         await __import__("paid_steps").attach_receipt(queued.id, paid_authorization)
         return queued
-    if _defer_paid and priority != "urgent" and not holds_identifier:
+    if _defer_paid and priority != "urgent" and not holds_identifier and not policy.get('_engine', {}).get('free') and model not in {'local', 'local-large'}:
         raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
                              semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
@@ -1557,6 +1580,8 @@ async def _run_route(
         refusal_args={"box": box, "tenant_id": str(req.tenant_id), "task_type": req.task_type,
                       "caller": caller, "skill": req.skill, "pool_read": pool_read},
     )
+    dispatched_settings.update(await __import__('engine_tracing').metadata(
+        __import__('sys').modules[__name__], req.tenant_id, req.task_type, model, policy))
     try:
         if _on_token is not None and req.task_type in {"command.turn", "command.code"}:
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
@@ -1790,12 +1815,16 @@ async def _llm_work(model: str, messages: list[dict[str, str]], max_tokens: int,
     if _contains_html(messages):
         raise ValueError("HTML is not model input; supply extracted text")
     _screen_mask(messages)
+    trace = await __import__('engine_tracing').metadata(__import__('sys').modules[__name__],
+        (receipt or {}).get('_trace_tenant_id', PLATFORM_TENANT),
+        (receipt or {}).get('_trace_task_type', (receipt or {}).get('_paid_task_type', 'tank.shadow')), model,
+        {'model': (receipt or {}).get('_trace_baseline_model', model)})
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
             f"{LITELLM_URL}/v1/chat/completions",
             headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
             json={"model": model, "messages": messages, "max_tokens": max_tokens,
-                  "disable_fallbacks": True},
+                  "disable_fallbacks": True, **trace},
         )
     if r.status_code != 200:
         raise RuntimeError(f"{model}: {r.status_code} {r.text[:200]}")
@@ -1884,7 +1913,7 @@ async def _roster_models() -> list[dict[str, Any]]:
     global _roster_cache
     now = time.time()
     if _roster_cache is not None and now - _roster_cache[0] < _ROSTER_TTL_S:
-        return _roster_cache[1]
+        return [r for r in _roster_cache[1] if __import__('engine_runtime').available(r['model_name'])]
     rows: list[dict[str, Any]] = []
     if _http is not None and hasattr(_http, "get"):
         try:
@@ -1908,7 +1937,7 @@ async def _roster_models() -> list[dict[str, Any]]:
             rows = []
     if rows:
         _roster_cache = (now, rows)  # only LiteLLM's live answer is cached
-        return rows
+        return [r for r in rows if __import__('engine_runtime').available(r['model_name'])]
     path = _roster_path()
     if not path.is_file():
         return []
@@ -1920,7 +1949,7 @@ async def _roster_models() -> list[dict[str, Any]]:
         row = _roster_row(item)
         if row and not _build_row(row):
             first.setdefault(row["model_name"], row)
-    return list(first.values())
+    return [r for r in first.values() if __import__('engine_runtime').available(r['model_name'])]
 
 
 async def _live_price_quotes() -> list[graduate.Quote]:
@@ -2041,14 +2070,16 @@ async def _shadow_work(req: RouteRequest, policy: dict[str, Any], messages: list
         log.warning("shadow %s skipped %s: daily budget spent", req.task_type, cand)
         return
     cand_content, cand_cost, agreement, method, fields = None, 0.0, None, "failed", {}
-    receipt: dict = {}
+    receipt: dict = {'_trace_tenant_id': str(req.tenant_id), '_trace_task_type': req.task_type + '#shadow',
+                     '_trace_baseline_model': policy['model']}
+    quality = {'passed': False, 'reason': 'candidate unavailable'}
     try:
         if cache:
             cand_content = cache_content
         elif code:
             cand_content, cand_cost = await _run_code_candidate(req, cand, messages)
         else:
-            cand_content, cand_cost = await _llm(cand, messages, max_tokens, **({"receipt": receipt} if routellm else {}))
+            cand_content, cand_cost = await _llm(cand, messages, max_tokens, receipt=receipt)
         compared = graduate.compare(primary, cand_content, tolerance=float(policy.get("number_tolerance") or 0.01))
         if compared.method == "fields":
             agreement, method, fields = compared.agreement, "fields", compared.fields
@@ -2057,32 +2088,31 @@ async def _shadow_work(req: RouteRequest, policy: dict[str, Any], messages: list
             method = "answer_too_long"
         elif not budget_open:
             method = "budget_exhausted"
-        else:
-            jp = await load_policy("tank.judge", PLATFORM_TENANT)
-            jmsgs = [{"role": "system", "content": jp["system_prompt"]},
-                     {"role": "user", "content": f"REQUEST:\n{messages[-1]['content'][:3000]}\n\nFIRST ANSWER:\n{primary[:4000]}\n\nSECOND ANSWER:\n{cand_content[:4000]}"}]
-            with __import__("paid_steps").background_scope("tank.judge.shadow"):
-                verdict, jcost = await _llm(jp["model"], jmsgs, jp["max_tokens_out"])
-            cand_cost += jcost
-            found = re.search(r"\d{1,3}", verdict)
-            agreement, method = (min(100, int(found.group())) / 100 if found else None), "judge"
+        if budget_open and method != 'answer_too_long':
+            quality = await __import__('engine_quality').assess(__import__('sys').modules[__name__],
+                req, policy, cand, messages, primary, cand_content)
+        if compared.method != 'fields' and method not in {'answer_too_long', 'budget_exhausted'}:
+            agreement, method = quality.get('scores', {}).get('correctness'), 'deepeval'
+        if not quality.get('passed') and agreement is not None:
+            agreement = 0.0
+        fields.update({'_deepeval_' + key: value for key, value in quality.get('scores', {}).items()})
     except Exception as exc:  # noqa: BLE001
         log.warning("shadow %s→%s failed: %s", policy["model"], cand, type(exc).__name__ if routellm else exc)
     if routellm:
         config, primary_known = routellm
         await routellm_shadow.save(__import__("sys").modules[__name__], req, config, ledger_id,
             primary, primary_cost, primary_known, cand_content, max(cand_cost, receipt.get("cost") or 0),
-            receipt, agreement, method, fields)
+            receipt, agreement, method, fields, quality=quality)
         return
     async with __import__("paid_steps").connection(req.tenant_id) as conn:
         await conn.execute(
             """
             INSERT INTO tank.shadow (ledger_id, tenant_id, task_type, primary_model, candidate_model, primary_content,
-                                     candidate_content, candidate_cost_usd, primary_cost_usd, agreement, method, fields)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
+                                     candidate_content, candidate_cost_usd, primary_cost_usd, agreement, method, fields,quality)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb)
             """,
             ledger_id, req.tenant_id, req.task_type, policy["model"], cand, primary[:20000],
-            (cand_content or "")[:20000], cand_cost, primary_cost, agreement, method, json.dumps(fields),
+            (cand_content or "")[:20000], cand_cost, primary_cost, agreement, method, json.dumps(fields), json.dumps(quality),
         )
     # Per-model calls already have durable platform receipts, including an
     # incomplete comparison waiting on its judge. Keep zero-cost code evidence.
@@ -2160,12 +2190,18 @@ async def _load_evidence(conn: Any, policy: dict[str, Any]) -> graduate.Evidence
     if candidate:
         rows = await conn.fetch(
             """
-            SELECT agreement, fields FROM tank.shadow
+            SELECT agreement, fields,quality FROM tank.shadow
             WHERE task_type=$1 AND candidate_model=$2 AND agreement IS NOT NULL
             """,
             task_type, candidate,
         )
-        agreements = [float(row["agreement"]) for row in rows if row["agreement"] is not None]
+        import engine_quality
+        def approved_quality(row):
+            quality = row['quality']
+            if isinstance(quality, str):
+                quality = json.loads(quality)
+            return quality.get('passed') and quality.get('revision') == engine_quality.revision(task_type)
+        agreements = [float(row['agreement']) if approved_quality(row) else 0.0 for row in rows]
         feedback = await conn.fetchrow(
             """
             SELECT count(*) FILTER (WHERE feedback='rejected') AS rejected,
@@ -3138,10 +3174,12 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
     response = result.get("response") or {}
     data = response.get("body") or {}
     if response.get("status_code") != 200 or not isinstance(data, dict):
+        await __import__('engine_tracing').batch_trace(__import__('sys').modules[__name__], batch, item, {}, failed=True)
         await _batch_fallback(conn, batch, item)
         return
     content, finish = _choice_answer(data)
     if not content:
+        await __import__('engine_tracing').batch_trace(__import__('sys').modules[__name__], batch, item, data, failed=True)
         await _batch_fallback(conn, batch, item)
         return
     usage = data.get("usage") or {}
@@ -3150,6 +3188,7 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
     prices, snapshot = _batch_obj(item["prices"]), _batch_obj(item["policy"])
     baseline = prompt_cache.token_cost(prices, tokens_in, tokens_out, cache_read, cache_write)
     actual = baseline*Decimal(str(prices["discount"]))
+    await __import__('engine_tracing').batch_trace(__import__('sys').modules[__name__], batch, item, data, float(actual))
     req = RouteRequest.model_validate(_batch_obj(item["request"]))
     ledger_id = uuid.UUID(snapshot["offpeak_job_id"]) if snapshot.get("offpeak_job_id") else uuid.uuid4()
     async with conn.transaction():
@@ -3219,6 +3258,7 @@ async def _process_batch(conn: Any, batch: Any) -> None:
                     ("id","run_id","request_hash","step_id","authorization_mode")}
                 await conn.execute("""UPDATE tank.batch_items SET policy=$4::jsonb
                     WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"],req.tenant_id,item["item_id"],json.dumps(snapshot,default=str))
+            await __import__('engine_tracing').batch_trace(__import__('sys').modules[__name__], batch, item)
             lines.append(json.dumps({"custom_id": str(item["item_id"]), "method": "POST", "url": "/v1/chat/completions",
                 "body": {"model": prices["native"], "messages": snapshot["messages"], "max_tokens": snapshot["max_tokens"], **snapshot["generation"]}}))
         await conn.execute("UPDATE tank.batches SET status='submitting',submitted_at=now() WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
@@ -3252,6 +3292,7 @@ async def _process_batch(conn: Any, batch: Any) -> None:
             if result:
                 await _batch_result(conn, batch, item, result)
             else:
+                await __import__('engine_tracing').batch_trace(__import__('sys').modules[__name__], batch, item, {}, failed=True)
                 await _batch_fallback(conn, batch, item)
     await conn.execute(
         """UPDATE tank.batches b SET finished_at=now(),
@@ -3294,6 +3335,7 @@ async def process_batches_once() -> None:
 
 
 async def _batch_loop() -> None:
+    await __import__('engine_tracing').resume_batches()
     while True:
         try:
             await priority_queue.process_once(__import__("sys").modules[__name__])

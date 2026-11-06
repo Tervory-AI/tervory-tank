@@ -47,6 +47,11 @@ def test_model_promotion_still_requires_existing_graduation(samples, score, appr
 
 @pytest_asyncio.fixture
 async def real_tank(monkeypatch):
+    from test_tank_ladder import selected_policy_protocol
+    from test_engine_ladder import enable_local
+    # These protocol tests include a faked, calibrated local judge explicitly.
+    enable_local(monkeypatch)
+    selected_policy_protocol(monkeypatch)
     url = os.environ.get("POOL_SCHEMA_DATABASE_URL")
     if not url:
         pytest.skip("requires disposable PostgreSQL via POOL_SCHEMA_DATABASE_URL")
@@ -69,6 +74,14 @@ async def real_tank(monkeypatch):
     founder_headers = {'X-Tervory-Admin': 'local-founder', 'x-trigger-signin-org': ORG,
                        'x-trigger-signin-token': signin.token(sub='local-founder')}
     state = SimpleNamespace(calls=[], score=.2, router_calls=0, weak_error=False, no_price=False, fallback=False)
+    # Stub only metric verdicts here; the real metered, tenant-scoped judge route
+    # still runs. Real DeepEval and incorrect-answer rejection have their own suite.
+    import engine_quality
+    async def fixture_metrics(case, task, generate):
+        await generate('placeholder evaluation', {'type': 'object'})
+        passed = case.get('expected', True)
+        return {'passed': passed, 'scores': dict.fromkeys(('correctness', 'faithfulness', 'task'), int(passed))}
+    monkeypatch.setattr(engine_quality, 'metrics', fixture_metrics)
 
     def provider(request):
         if request.url.path.endswith("/model/info"):
@@ -78,7 +91,7 @@ async def real_tank(monkeypatch):
         model = payload["model"]
         if state.weak_error and model == "flash-lite":
             return httpx.Response(503, json={"error": "local provider failure"})
-        cost = {"sol": ".02", "flash-lite": ".002", "luna": ".001"}.get(model, ".001")
+        cost = {"sol": ".02", "flash-lite": ".002", "luna": ".001", "local": "0", "local-large": "0"}.get(model, ".001")
         headers = {"x-litellm-response-cost": cost, "x-litellm-model-group": model}
         if state.no_price and model == "flash-lite":
             headers.pop("x-litellm-response-cost")
@@ -149,14 +162,17 @@ async def test_real_tank_off_shadow_cost_judge_isolation_and_founder_gate(real_t
     assert row["routellm_status"] == "sampled"
     async with b.pool.acquire() as conn:
         sample = await conn.fetchrow("SELECT * FROM tank.shadow WHERE ledger_id=$1 AND tenant_id=$2", row["id"], a)
-        assert sample["agreement"] == 1 and sample["method"] == "judge"
+        assert sample["agreement"] == 1 and sample["method"] == "deepeval"
+        assert json.loads(sample['quality'])['judge'] == 'local'
         shadow = await conn.fetchrow("SELECT * FROM tank.ledger WHERE id=$1", sample["candidate_ledger_id"])
         assert shadow["routellm_model_cost_usd"] == Decimal(".002")
         assert shadow["cost_usd"] == Decimal(".002"), (shadow["cost_usd"],shadow["cost_status"],shadow["paid_step_mode"],shadow["model"])
-        # Candidate and judge now have distinct paid-step receipts. Their sum
-        # includes the judge once, without duplicating it on the candidate row.
+        # The candidate keeps its own paid receipt. The calibrated local judge
+        # has $0 receipts in the source tenant, not a duplicate candidate charge.
         assert await conn.fetchval("SELECT sum(cost_usd) FROM tank.ledger WHERE tenant_id=$1 AND task_type=$2",
-            b.tank.PLATFORM_TENANT,"routellm.proof#shadow") == Decimal(".003")
+            b.tank.PLATFORM_TENANT,"routellm.proof#shadow") == Decimal(".002")
+        judges = await conn.fetch("SELECT model,cost_usd FROM tank.ledger WHERE tenant_id=$1 AND task_type='routellm.proof#engine-judge'", a)
+        assert judges and all(row['model'] == 'local' and row['cost_usd'] == 0 for row in judges)
         assert shadow["paid_step_mode"] == "automatic"
         assert shadow["routellm_sample_tenant"] == a and shadow["tenant_id"] == b.tank.PLATFORM_TENANT
         assert not await conn.fetchval("SELECT count(*) FROM tank.shadow WHERE tenant_id=$1", other)

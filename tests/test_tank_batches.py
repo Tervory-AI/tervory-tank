@@ -9,6 +9,12 @@ from test_tank_tenant_boundaries import boundary  # noqa: F401 -- shared fixture
 from test_tank_ladder import ladder, policy, request  # noqa: F401 -- fixture injection
 
 
+@pytest.fixture(autouse=True)
+def selected_batch_policy(monkeypatch):
+    from test_tank_ladder import selected_policy_protocol
+    selected_policy_protocol(monkeypatch)
+
+
 @pytest.mark.asyncio
 async def test_batch_results_receipts_and_owner_only_reads(ladder, monkeypatch):  # noqa: F811
     b = ladder

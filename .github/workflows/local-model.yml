@@ -1,0 +1,51 @@
+name: Local CPU model
+on:
+  pull_request:
+    paths: ['tank/**', 'hermes/**', 'litellm/**', 'tests/test_engine_*.py', 'tests/test_local_model_runtime.py', '.github/workflows/local-model.yml']
+permissions:
+  contents: read
+jobs:
+  inference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Native test dependencies and isolated Postgres
+        run: |
+          pip install --require-hashes -r tank/requirements.lock -r .github/requirements-engine.lock
+          sudo systemctl start postgresql
+          sudo -u postgres createuser --superuser "$USER"
+          sudo -u postgres createdb --owner "$USER" engine_ci
+      - name: Install verified model and runtime
+        run: python3 litellm/local-model/install.py "$RUNNER_TEMP/local-model"
+      - name: Isolated DeepEval metrics runtime
+        run: |
+          python -m venv "$RUNNER_TEMP/deepeval"
+          "$RUNNER_TEMP/deepeval/bin/pip" install --require-hashes -r tank/quality/requirements.lock
+      - name: Real CPU models and end-to-end engine proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/local-model/llama-b12173"
+          server_pids=()
+          trap 'kill "${server_pids[@]}"; wait || true' EXIT
+          for model in local local-large; do
+            filename=model.gguf; port=18089
+            if [ "$model" = local-large ]; then filename=large.gguf; port=18090; fi
+            "$RUNNER_TEMP/local-model/llama-b12173/llama-server" -m "$RUNNER_TEMP/local-model/$filename" --alias "$model" --host 127.0.0.1 --port "$port" -t 8 -tb 8 -c 4096 -np 1 -ngl 0 --reasoning off > "$RUNNER_TEMP/$model.log" 2>&1 &
+            server_pids+=("$!")
+            for attempt in $(seq 1 90); do
+              if curl --fail --silent "http://127.0.0.1:$port/health" > /dev/null; then break; fi
+              kill -0 "${server_pids[-1]}"
+              sleep 1
+            done
+            python3 litellm/local-model/benchmark.py "http://127.0.0.1:$port" "$model"
+          done
+          export POOL_SCHEMA_DATABASE_URL='postgresql:///engine_ci?host=/var/run/postgresql'
+          export ENGINE_LOCAL_URL=http://127.0.0.1:18089
+          export ENGINE_LARGE_URL=http://127.0.0.1:18090
+          export TANK_DEEPEVAL_PYTHON="$RUNNER_TEMP/deepeval/bin/python"
+          python -m pytest tests/test_engine_ladder.py tests/test_engine_memory.py tests/test_engine_cache.py tests/test_engine_graduation.py tests/test_engine_status.py tests/test_engine_proof.py tests/test_engine_quality.py tests/test_engine_observability.py tests/test_engine_offline.py -q -s --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=180
