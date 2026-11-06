@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 import engine_ladder
+import engine_runtime
 
 VERSION = 'deepeval-4.3.3-quality-v1'
 _SPEND = ContextVar('engine_quality_spend', default=None)
@@ -134,7 +135,7 @@ async def calibrated_judge(rt, req, policy, candidate, caller=None):
     roster = {r['name']: r for r in await rt.list_models()}
     # DECISION no frontier judge by default, even when all cheap judges fail.
     names = [name for name in (*engine_ladder.LOCAL, *engine_ladder.OPEN)
-             if name != candidate and name in roster and not rt.is_build_only_model(name)
+             if engine_runtime.available(name) and name != candidate and name in roster and not rt.is_build_only_model(name)
              and all(isinstance(roster[name].get(k), (float, int)) and roster[name][k] >= 0
                      for k in ('input_usd_per_m', 'output_usd_per_m'))]
     names.sort(key=lambda name: (roster[name]['input_usd_per_m'] + roster[name]['output_usd_per_m'],

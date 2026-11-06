@@ -7,7 +7,7 @@
 FROM ghcr.io/berriai/litellm:v1.106.4
 COPY config.yaml /app/config.yaml
 COPY config.za.yaml /app/config.za.yaml
-COPY tenant_traces.py trace_sink.py /app/
+COPY tenant_traces.py trace_sink.py engine_runtime.py engine_config.py /app/
 RUN addgroup -S -g 10001 tervory \
     && adduser -S -D -u 10001 -G tervory -h /home/tervory tervory \
     && mkdir -p /home/tervory /var/lib/litellm-chatgpt /var/lib/litellm-traces \
@@ -23,3 +23,6 @@ ENV HOME=/home/tervory
 # directory's owner (10001), so LiteLLM can write the refreshed token back.
 ENV CHATGPT_TOKEN_DIR=/var/lib/litellm-chatgpt
 USER 10001:10001
+
+# DECISION configure optional deployments before LiteLLM loads either regional roster.
+ENTRYPOINT ["python", "/app/engine_config.py"]

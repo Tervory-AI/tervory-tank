@@ -81,7 +81,9 @@ class TraceSink:
                 [(event['id'], tenant, json.dumps(event)) for event in events])
 
     async def flush(self):
-        base = os.environ.get('LANGFUSE_HOST', 'http://langfuse-web:3000').rstrip('/')
+        base = os.environ.get('LANGFUSE_HOST', '').strip().rstrip('/')
+        if not base:
+            return  # Preserve any queued traces without creating stores or clients.
         url = urlsplit(base)
         # No vendor-cloud defaults or redirects, even after a setting typo.
         if url.scheme != 'http' or url.hostname not in {'langfuse-web', '127.0.0.1', 'localhost', '::1'} or url.username:

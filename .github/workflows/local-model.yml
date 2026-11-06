@@ -48,4 +48,4 @@ jobs:
           export ENGINE_LOCAL_URL=http://127.0.0.1:18089
           export ENGINE_LARGE_URL=http://127.0.0.1:18090
           export TANK_DEEPEVAL_PYTHON="$RUNNER_TEMP/deepeval/bin/python"
-          python -m pytest tests/test_engine_ladder.py tests/test_engine_memory.py tests/test_engine_cache.py tests/test_engine_graduation.py tests/test_engine_status.py tests/test_engine_proof.py tests/test_engine_quality.py tests/test_engine_observability.py -q -s --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=180
+          python -m pytest tests/test_engine_ladder.py tests/test_engine_memory.py tests/test_engine_cache.py tests/test_engine_graduation.py tests/test_engine_status.py tests/test_engine_proof.py tests/test_engine_quality.py tests/test_engine_observability.py tests/test_engine_offline.py -q -s --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=180

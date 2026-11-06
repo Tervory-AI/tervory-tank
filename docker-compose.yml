@@ -13,7 +13,7 @@ x-langfuse-environment: &langfuse-environment
   TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
   DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@langfuse-postgres:5432/langfuse
   DIRECT_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@langfuse-postgres:5432/langfuse
-  NEXTAUTH_URL: ${LANGFUSE_UI_URL}
+  NEXTAUTH_URL: ${LANGFUSE_UI_URL:-}
   NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
   SALT: ${LANGFUSE_SALT}
   ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
@@ -50,6 +50,7 @@ services:
   # DECISION self-hosted OSS Langfuse, private stores and no telemetry/export.
   # Only the authenticated web UI joins the existing proxy network. No host ports.
   langfuse-web:
+    profiles: [engine]
     image: docker.langfuse.com/langfuse/langfuse:4.76.0@sha256:59abb54faacf45b63d09f4076d45683dae26a6661974d497836543d350b16575
     restart: unless-stopped
     mem_limit: 1g
@@ -90,6 +91,7 @@ services:
       traefik.http.services.langfuse.loadbalancer.server.port: "3000"
 
   langfuse-worker:
+    profiles: [engine]
     image: docker.langfuse.com/langfuse/langfuse-worker:4.76.0@sha256:27e8b49d619a013bca38ed9b0853456e19f5667a23e8e26e3a10d4e28485f49c
     restart: unless-stopped
     mem_limit: 1g
@@ -109,6 +111,7 @@ services:
     networks: [langfuse-internal]
 
   langfuse-postgres:
+    profiles: [engine]
     # DECISION reuse the platform's PostgreSQL version, with a separate store.
     image: postgres:16.15@sha256:933463a6c8eba2b9f5cd414138738cd8d5519cd2c471214c222652f547a66a32
     restart: unless-stopped
@@ -127,6 +130,7 @@ services:
     networks: [langfuse-internal]
 
   langfuse-clickhouse:
+    profiles: [engine]
     image: clickhouse/clickhouse-server:26.3.62.3@sha256:de3e47c64078aa196dae2349e048fc98ba81947f651f5c20e06e46baea8ae40a
     user: "101:101"
     restart: unless-stopped
@@ -148,6 +152,7 @@ services:
     networks: [langfuse-internal]
 
   langfuse-minio:
+    profiles: [engine]
     image: cgr.dev/chainguard/minio@sha256:aea6c163749e1caca37f907976dcf337177ddf5f558808f2aa591618fd3a6eef
     restart: unless-stopped
     mem_limit: 512m
@@ -172,6 +177,7 @@ services:
     networks: [langfuse-internal]
 
   langfuse-redis:
+    profiles: [engine]
     image: redis:7.4.12@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039
     restart: unless-stopped
     mem_limit: 256m
@@ -304,6 +310,7 @@ services:
   # DECISION Apache-2.0 Qwen2.5-1.5B-Instruct Q4_K_M, CPU only.
   # Provider-token cost is zero; CPU, RAM and electricity are not free.
   local-model:
+    profiles: [engine]
     build: ./litellm/local-model
     platform: linux/amd64
     restart: unless-stopped
@@ -323,6 +330,7 @@ services:
 
   # DECISION reuse the pinned runtime, with a larger Apache-2.0 model for answers.
   local-model-large:
+    profiles: [engine]
     build: ./litellm/local-model
     platform: linux/amd64
     restart: unless-stopped
@@ -345,9 +353,12 @@ services:
     restart: unless-stopped
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
-      LANGFUSE_ENABLED: "true"
-      LANGFUSE_HOST: http://langfuse-web:3000
-      LANGFUSE_TENANT_PROJECTS: ${LANGFUSE_TENANT_PROJECTS}
+      # DECISION engine stays offline on current Coolify apps; opt in on owned servers.
+      ENGINE_LOCAL_URL: ${ENGINE_LOCAL_URL:-}
+      ENGINE_LARGE_URL: ${ENGINE_LARGE_URL:-}
+      LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-true}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+      LANGFUSE_TENANT_PROJECTS: ${LANGFUSE_TENANT_PROJECTS:-}
       LANGFUSE_OUTBOX_PATH: /var/lib/litellm-traces/outbox.sqlite
       TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
@@ -477,11 +488,14 @@ services:
         GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
-      LANGFUSE_ENABLED: "true"
-      LANGFUSE_UI_URL: ${LANGFUSE_UI_URL}
-      LANGFUSE_TENANT_PROJECT_IDS: ${LANGFUSE_TENANT_PROJECT_IDS}
-      LANGFUSE_TENANT_PROJECTS: ${LANGFUSE_TENANT_PROJECTS}
-      LANGFUSE_HOST: http://langfuse-web:3000
+      # DECISION engine stays offline on current Coolify apps; opt in on owned servers.
+      ENGINE_LOCAL_URL: ${ENGINE_LOCAL_URL:-}
+      ENGINE_LARGE_URL: ${ENGINE_LARGE_URL:-}
+      LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-true}
+      LANGFUSE_UI_URL: ${LANGFUSE_UI_URL:-}
+      LANGFUSE_TENANT_PROJECT_IDS: ${LANGFUSE_TENANT_PROJECT_IDS:-}
+      LANGFUSE_TENANT_PROJECTS: ${LANGFUSE_TENANT_PROJECTS:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
       LANGFUSE_OUTBOX_PATH: /var/lib/tank-traces/outbox.sqlite
       TRIGGER_SIGNIN_CONFIG_TOKEN: ${TRIGGER_SIGNIN_CONFIG_TOKEN:?founder sets read-only directory capability}
       TRIGGER_SIGNIN_SETUP_TOKEN: ${TRIGGER_SIGNIN_SETUP_TOKEN:?founder sets Boston setup token}

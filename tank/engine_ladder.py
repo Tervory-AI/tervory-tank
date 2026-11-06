@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import HTTPException
 import graduate
 import engine_models
+import engine_runtime
 
 LOCAL = engine_models.LOCAL
 OPEN = engine_models.OPEN
@@ -22,7 +23,8 @@ def order(policy: dict) -> list[str]:
     """DECISION keep the configured model as the final frontier, never as a shortcut."""
     first = [policy['model']] if graduate.is_skill(policy['model']) else []
     frontier = policy.get('escalation_model') if first else policy['model']
-    return list(dict.fromkeys([*first, *LOCAL, *OPEN, *([frontier] if frontier else [])]))
+    return [name for name in dict.fromkeys([*first, *LOCAL, *OPEN, *([frontier] if frontier else [])])
+            if engine_runtime.available(name)]
 
 
 def rung(model: str) -> str:
@@ -132,7 +134,8 @@ async def select(rt, req, policy, caller=None) -> dict:
     attempts = []
     for model in order(policy):
         if not graduate.is_skill(model) and model not in names:
-            # Unavailable local deployment is not proof a paid model is needed.
+            if model in LOCAL:
+                continue  # An offline deployment is skipped, never scored as a failed eval.
             raise HTTPException(503, f'Engine rung unavailable: {model}')
         agreement = await evaluate(rt, req, policy, model, samples, revision, caller)
         attempts.append({'model': model, 'agreement': agreement})
@@ -141,9 +144,9 @@ async def select(rt, req, policy, caller=None) -> dict:
                     # DECISION default to the existing conservative equivalence
                     # cache only where the task explicitly permits caching.
                     'semantic_cache': policy.get('cache_scope') in {'tenant', 'platform', 'region'} and req.task_type != 'command.turn' if req else False,
-                    'escalation_model': 'local' if graduate.is_skill(model) else None,
+                    'escalation_model': next((m for m in order(policy) if not graduate.is_skill(m) and m in names), None) if graduate.is_skill(model) else None,
                     'fallbacks': [], '_engine': {'revision': revision, 'attempts': attempts, 'ladder': order(policy),
-                    'free': model in LOCAL or graduate.is_skill(model),
+                    'free': model in LOCAL or graduate.is_skill(model), 'local_status': engine_runtime.local_status(),
                     'baseline_model': policy.get('escalation_model') if graduate.is_skill(policy['model']) else policy['model']}}
             if hasattr(rt, 'pool'):
                 from engine_proof import retain_proven_rung, winner
@@ -171,7 +174,7 @@ async def receipt(rt, req, policy, answer):
     tokens_out = answer.tokens_out or max(1, len(answer.content) // 4)
     a, b = prices.get('input_usd_per_m'), prices.get('output_usd_per_m')
     would = (tokens_in * a + tokens_out * b) / 1e6 if a is not None and b is not None else None
-    value = {'rung': 'cache' if answer.rung == 4 else rung(answer.model),
+    value = {'local_status': info.get('local_status', engine_runtime.local_status()), 'rung': 'cache' if answer.rung == 4 else rung(answer.model),
              'would_have_cost_usd': would, 'baseline_model': baseline, 'estimated': True,
              'evals': info['attempts'], 'ledger_id': str(answer.ledger_id)}
     if info.get('graduated_model') == answer.model and info.get('free') and value['rung'] == 'frontier':

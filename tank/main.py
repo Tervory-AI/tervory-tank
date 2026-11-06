@@ -1913,7 +1913,7 @@ async def _roster_models() -> list[dict[str, Any]]:
     global _roster_cache
     now = time.time()
     if _roster_cache is not None and now - _roster_cache[0] < _ROSTER_TTL_S:
-        return _roster_cache[1]
+        return [r for r in _roster_cache[1] if __import__('engine_runtime').available(r['model_name'])]
     rows: list[dict[str, Any]] = []
     if _http is not None and hasattr(_http, "get"):
         try:
@@ -1937,7 +1937,7 @@ async def _roster_models() -> list[dict[str, Any]]:
             rows = []
     if rows:
         _roster_cache = (now, rows)  # only LiteLLM's live answer is cached
-        return rows
+        return [r for r in rows if __import__('engine_runtime').available(r['model_name'])]
     path = _roster_path()
     if not path.is_file():
         return []
@@ -1949,7 +1949,7 @@ async def _roster_models() -> list[dict[str, Any]]:
         row = _roster_row(item)
         if row and not _build_row(row):
             first.setdefault(row["model_name"], row)
-    return list(first.values())
+    return [r for r in first.values() if __import__('engine_runtime').available(r['model_name'])]
 
 
 async def _live_price_quotes() -> list[graduate.Quote]:

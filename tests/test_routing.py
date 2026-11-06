@@ -102,7 +102,7 @@ def compose_files(root=ROOT):
     return [p for p in paths if re.search(r'(?:^|/)(?:docker-)?compose[^/]*\.ya?ml$', p)]
 
 
-def compose_config(path, root=ROOT):
+def compose_config(path, root=ROOT, profiles=('engine',)):
     """Use synthetic required inputs, defaults otherwise; never inherit production keys."""
     text = (root / path).read_text()
     required = set(re.findall(r'\$\{([A-Z][A-Z0-9_]*):?\?', text))
@@ -117,7 +117,9 @@ def compose_config(path, root=ROOT):
         if 'exclude_from_hc' in spec and not isinstance(spec['exclude_from_hc'], bool):
             raise ValueError('Invalid Coolify health metadata')
     text = re.sub(r'(?m)^(    )exclude_from_hc:', r'\1x-coolify-exclude-from-hc:', text)
-    command = ['docker', 'compose', '--env-file', '/dev/null', '--project-name', 'routing-ci',
+    # Audit optional ingresses too, while separately checking the default apps.
+    profile_args = [arg for profile in profiles for arg in ('--profile', profile)]
+    command = ['docker', 'compose', *profile_args, '--env-file', '/dev/null', '--project-name', 'routing-ci',
                '--project-directory', str((root / path).parent), '-f', '-', 'config', '--format', 'json', '--no-path-resolution']
     result = subprocess.run(command, env=env, input=text, capture_output=True, text=True, timeout=30)
     if result.returncode:
@@ -236,6 +238,20 @@ class RoutingTests(unittest.TestCase):
     def test_all_compose_files_and_routing_contract(self):
         self.assertGreaterEqual(len(self.configs), 15)
         validate(self.configs, self.rows)
+
+    def test_current_apps_exclude_engine_and_opt_in_is_valid(self):
+        for path in ('docker-compose.yml', 'docker-compose.za.yml'):
+            default = compose_config(path, profiles=())['services']
+            enabled = compose_config(path, profiles=('engine',))['services']
+            optional = {name for name in enabled if name.startswith(('local-model', 'langfuse-'))}
+            self.assertTrue({'local-model', 'local-model-large'} <= optional)
+            self.assertFalse(optional & default.keys())
+            self.assertTrue({'tank', 'litellm'} <= default.keys())
+            for name in ('tank', 'litellm'):
+                env = default[name]['environment']
+                self.assertFalse(env['ENGINE_LOCAL_URL'])
+                self.assertFalse(env['ENGINE_LARGE_URL'])
+                self.assertFalse(env['LANGFUSE_HOST'])
 
     def changed(self):
         return copy.deepcopy(self.configs), copy.deepcopy(self.rows)

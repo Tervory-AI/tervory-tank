@@ -8,6 +8,7 @@ import time
 from uuid import uuid4
 
 import yaml
+from engine_gateway_smoke import config as engine_config
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,7 +26,7 @@ def main():
         config["outgoing"]["using_tor_proxy"] = False
         config["outgoing"]["proxies"] = {}
         (temp / "searxng.yml").write_text(yaml.safe_dump(config))
-        (temp / "litellm.yml").write_text("model_list: []\n")
+        (temp / "litellm.yml").write_text(yaml.safe_dump(engine_config()))
         temp.chmod(0o755)
         for path in temp.iterdir():
             path.chmod(0o644)
@@ -40,7 +41,10 @@ def main():
                 # Documented upstream LOCAL mode avoids creating/handling a key.
                 # Not baked into an image, compose or any production environment.
                 options += ["-e", "LITELLM_DANGEROUSLY_PERMIT_WEAK_OR_UNSET_MASTER_KEY=true",
-                            "-v", f"{temp / 'litellm.yml'}:/tmp/offline.yml:ro"]
+                            "-e", "LITELLM_LOCAL_MODEL_COST_MAP=True",
+                            "-e", "LANGFUSE_ENABLED=true", "-e", "LANGFUSE_TENANT_PROJECTS=not-json",
+                            "-v", f"{temp / 'litellm.yml'}:/tmp/offline.yml:ro",
+                            "-v", f"{ROOT / 'tests/tenant_rls/engine_gateway_smoke.py'}:/tmp/engine_gateway_smoke.py:ro"]
             if service == "searxng":
                 options += ["-v", f"{temp / 'searxng.yml'}:/etc/searxng/settings.yml:ro"]
             if service == "tiger":
@@ -70,6 +74,9 @@ def main():
                     if attempt == 89:
                         raise RuntimeError(service + " failed its offline non-root health check")
                     time.sleep(0.5)
+                if service == "litellm":
+                    command("docker", "exec", name, "python", "/tmp/engine_gateway_smoke.py", "http://127.0.0.1:4000")
+                    assert "local rung offline" in command("docker", "logs", name, capture=True)
             finally:
                 command("docker", "rm", "-f", "-v", name)
 

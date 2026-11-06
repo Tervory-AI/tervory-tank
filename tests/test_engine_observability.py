@@ -14,6 +14,12 @@ import yaml
 import engine_models
 import engine_tracing
 
+@pytest.fixture(autouse=True)
+def configured_langfuse(monkeypatch):
+    monkeypatch.setenv('LANGFUSE_HOST', 'http://langfuse-web:3000')
+    monkeypatch.setenv('LANGFUSE_ENABLED', 'true')
+
+
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('tank_trace_sink', ROOT / 'litellm/trace_sink.py')
 sink_module = importlib.util.module_from_spec(spec)
@@ -118,7 +124,7 @@ def test_self_hosted_services_have_private_stores_no_telemetry_and_pinned_images
         assert env['LANGFUSE_S3_BATCH_EXPORT_ENABLED'] == 'false'
         assert '@langfuse-postgres:5432/langfuse' in env['DATABASE_URL']
         assert env['LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT'] == 'http://langfuse-minio:9000'
-    assert compose['services']['litellm']['environment']['LANGFUSE_ENABLED'] == 'true'
+    assert compose['services']['litellm']['environment']['LANGFUSE_ENABLED'] == '${LANGFUSE_ENABLED:-true}'
     from test_routing import validate
     validate({'docker-compose.yml': {'services': {'langfuse-web': compose['services']['langfuse-web']},
                                     'networks': compose['networks']}},

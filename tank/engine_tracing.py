@@ -1,6 +1,7 @@
 """Only approved scalar trace fields cross from Tank to LiteLLM."""
 import json
 import os
+import engine_runtime
 from datetime import datetime, timezone
 from urllib.parse import quote, urlencode
 import uuid
@@ -19,13 +20,13 @@ def batch_sink():
 
 
 async def resume_batches():
-    if os.environ.get('LANGFUSE_ENABLED') == 'true':
+    if engine_runtime.traces_enabled():
         batch_sink().start()
 
 
 async def batch_trace(rt, batch, item, response=None, cost=None, failed=False):
     """Native provider batches bypass LiteLLM's completion callback."""
-    if os.environ.get('LANGFUSE_ENABLED') != 'true':
+    if not engine_runtime.traces_enabled():
         return
     def obj(value):
         return json.loads(value) if isinstance(value, str) else value
@@ -43,7 +44,7 @@ async def batch_trace(rt, batch, item, response=None, cost=None, failed=False):
 
 
 async def metadata(rt, tenant_id, task_type, model, policy=None):
-    if os.environ.get('LANGFUSE_ENABLED') != 'true':
+    if not engine_runtime.traces_enabled():
         return {}
     policy = policy or {}
     roster = {row['name']: row for row in await rt.list_models()}
@@ -60,6 +61,8 @@ async def metadata(rt, tenant_id, task_type, model, policy=None):
 
 
 def traces_url(tenant_id, task_type):
+    if not engine_runtime.traces_enabled():
+        return None
     # Links use public project IDs only, never the ingestion credentials.
     project = json.loads(os.environ.get('LANGFUSE_TENANT_PROJECT_IDS', '{}')).get(str(tenant_id))
     base = os.environ.get('LANGFUSE_UI_URL', '').rstrip('/')

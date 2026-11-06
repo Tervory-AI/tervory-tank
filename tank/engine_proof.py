@@ -5,6 +5,7 @@ from fastapi import HTTPException
 import engine_ladder as ladder
 import graduate
 import engine_quality
+import engine_runtime
 
 
 def unpack(value):
@@ -31,7 +32,7 @@ async def options(rt, req, policy):
     earlier = names[:names.index(policy['model'])] if policy['model'] in names else []
     rows = [*rows, *({'model': name, 'checkpoint': 'runtime-b12173'} for name in earlier)]
     return [{'model': row['model'], 'revision': ladder.digest([info['revision'], row['model'], row['checkpoint'], engine_quality.revision(req.task_type)])}
-            for row in rows if row['model'] != policy['model'] and affordable(roster, row['model'], policy['model'])
+            for row in rows if engine_runtime.available(row['model']) and row['model'] != policy['model'] and affordable(roster, row['model'], policy['model'])
             and not rt.is_build_only_model(row['model'])]
 
 

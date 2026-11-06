@@ -11,7 +11,13 @@ import engine_ladder as engine
 from test_tank_tenant_boundaries import boundary  # noqa: F401
 
 
-def test_rung_order_and_exact_eval():
+def enable_local(monkeypatch):
+    monkeypatch.setenv('ENGINE_LOCAL_URL', os.environ.get('ENGINE_LOCAL_URL') or 'http://127.0.0.1:18089')
+    monkeypatch.setenv('ENGINE_LARGE_URL', os.environ.get('ENGINE_LARGE_URL') or 'http://127.0.0.1:18090')
+
+
+def test_rung_order_and_exact_eval(monkeypatch):
+    enable_local(monkeypatch)
     assert engine.order({'model': 'skill:base.extract@2.0.0', 'escalation_model': 'sol'}) == [
         'skill:base.extract@2.0.0', 'local', 'local-large', 'gpt-oss-small', 'qwen-small', 'gpt-oss', 'sol']
     assert engine.score('billing', 'not billing', 'exact') == 0
@@ -20,6 +26,7 @@ def test_rung_order_and_exact_eval():
 
 @pytest.mark.asyncio
 async def test_only_failed_evals_climb(monkeypatch):
+    enable_local(monkeypatch)
     async def cases(*args):
         return [{'input': 'fixture'}]
     async def roster():
@@ -52,6 +59,7 @@ async def test_eval_cases_do_not_cross_tenants(boundary):  # noqa: F811
 
 
 async def setup_engine(b, monkeypatch):
+    enable_local(monkeypatch)
     monkeypatch.setattr(b.tank, '_roster_cache', None)
     async with b.pool.acquire() as conn:
         await conn.execute("""INSERT INTO tank.policy(task_type,model,system_prompt,max_tokens_out,cache_scope)

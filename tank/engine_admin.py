@@ -42,6 +42,7 @@ def build_router(rt):
 async def engine_status(rt, tenant_id):
     import engine_ladder
     import engine_tracing
+    import engine_runtime
     async with rt.pool().acquire() as conn:
         tasks = await conn.fetch('''SELECT task_type FROM tank.policy WHERE tenant_id=$1 OR tenant_id IS NULL
             UNION SELECT task_type FROM tank.engine_state WHERE tenant_id=$1 AND region=$2''', tenant_id, rt.box_region())
@@ -73,7 +74,9 @@ async def engine_status(rt, tenant_id):
         rung = engine_ladder.rung(model) if model else 'unselected'
         if model and rung == 'frontier' and all(roster.get(model, {}).get(k) == 0 for k in ('input_usd_per_m', 'output_usd_per_m')):
             rung = 'local trained'
-        row = {'task_type': name, 'model': model, 'rung': rung, 'requests': 0, 'memory_hits': 0,
+        if model and not engine_runtime.available(model):
+            rung = 'offline'
+        row = {'task_type': name, 'model': model, 'rung': rung, 'local_status': engine_runtime.local_status(), 'requests': 0, 'memory_hits': 0,
                'cache_hits': 0, 'graduations': 0, 'cost_usd': 0., 'evaluation_cost_usd': 0.,
                'would_have_cost_usd': 0., **usage.get(name, {}), **spend.get(name, {}), **graduations.get(name, {})}
         for key in ('cost_usd', 'evaluation_cost_usd', 'would_have_cost_usd'):
@@ -81,4 +84,4 @@ async def engine_status(rt, tenant_id):
         row['saved_usd'] = max(0., row['would_have_cost_usd'] - row['cost_usd'])
         row['traces_url'] = engine_tracing.traces_url(tenant_id, name)
         result.append(row)
-    return {'tenant_id': str(tenant_id), 'region': rt.box_region(), 'tasks': result}
+    return {'tenant_id': str(tenant_id), 'region': rt.box_region(), 'local_status': engine_runtime.local_status(), 'tasks': result}
