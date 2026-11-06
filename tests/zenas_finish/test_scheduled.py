@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from test_source_freshness import room
+from .test_source_freshness import room
 
 from agents.zenas.core import convert, judgment_training, regulations, selftest
 from agents.zenas.pool import nightly

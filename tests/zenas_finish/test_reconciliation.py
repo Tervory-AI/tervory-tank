@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from uuid import UUID
 
 import pytest
-from test_source_freshness import NEXT, TENANT, card, read, room, save
+from .test_source_freshness import NEXT, TENANT, card, read, room, save
 
 
 @pytest.mark.asyncio

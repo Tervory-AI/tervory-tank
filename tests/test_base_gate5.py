@@ -369,7 +369,7 @@ async def test_trusted_tank_proxy_uses_only_the_room_key_and_refuses_a_missing_b
 
 @pytest.mark.asyncio
 async def test_public_file_dns_has_a_total_deadline(monkeypatch):
-    from engines.ffl import reference_source
+    from agents.base.engines.ffl import reference_source
     async def stuck(*args): await asyncio.Event().wait()
     monkeypatch.setattr(reference_source,'public_destination',stuck)
     monkeypatch.setattr(reference_source,'DNS_TIMEOUT',.01)

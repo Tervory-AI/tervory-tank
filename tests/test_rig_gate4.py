@@ -12,6 +12,8 @@ from urllib.parse import urlunsplit
 import pytest
 from fastapi.testclient import TestClient
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents/rig"))
+
 from rigbox.configuration import GROUPS, report, startup_missing
 from rigbox.dry_run import JOBS, TENANT, database, local_database, offline_network
 from rigbox.retailer import Retailer

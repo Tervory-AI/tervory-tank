@@ -2,7 +2,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from asyncpg.exceptions import RaiseError
-from test_source_freshness import TENANT, room, save
+from .test_source_freshness import TENANT, room, save
 
 from agents.zenas.core.erasure import erase
 from agents.zenas.pool.region import RegionError

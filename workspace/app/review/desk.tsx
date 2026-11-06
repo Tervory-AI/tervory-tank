@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { zenasFetch } from "@/app/zenas/request";
 
 import { fetchWithDeadline as fetch } from "../../lib/request";

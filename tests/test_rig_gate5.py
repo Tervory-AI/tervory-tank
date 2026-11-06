@@ -11,6 +11,9 @@ import pytest
 from fastapi import FastAPI
 
 from chassis import tenant_db
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents/rig"))
+
 from rigbox.api import mount
 from rigbox.commerce import CommerceError, Platform
 from rigbox.configuration import startup_missing

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
-from test_tank_training_patch import functions
+from .test_tank_training_patch import functions
 
 from agents.zenas.core.configuration import room_readiness
 

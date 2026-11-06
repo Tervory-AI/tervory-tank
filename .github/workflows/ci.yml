@@ -307,6 +307,9 @@ jobs:
           npm ci --prefix tests/trigger_browser_tools --ignore-scripts --no-audit --no-fund
           tests/trigger_browser_tools/node_modules/.bin/playwright install chromium
           echo "TRIGGER_BROWSER_TOOLS=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules" >> "$GITHUB_ENV"
+          echo "BASE_TEST_PLAYWRIGHT=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "RIG_PLAYWRIGHT_PATH=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "RIG_ESBUILD_PATH=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/esbuild" >> "$GITHUB_ENV"
       - name: Prepare CLI acceptance fixtures
         run: |
           npm ci --prefix cli --ignore-scripts --no-audit --no-fund

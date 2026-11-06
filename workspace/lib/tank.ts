@@ -350,7 +350,7 @@ export async function baseProductRequest(tenantId: string, path: string, query: 
     method: body ? "POST" : "GET", cache: "no-store", redirect: "error",
     headers: { "Content-Type": "application/json", "X-Tank-Key": TANK_API_KEY },
     ...(body ? { body: JSON.stringify({ ...body, tenant_id: tenantId }) } : {}),
-  }, 30_000, async response => new Response(await response.arrayBuffer(), { status: response.status, headers: response.headers }));
+  }, 30_000, async response => new Response([204, 205, 304].includes(response.status) ? null : await response.arrayBuffer(), { status: response.status, headers: response.headers }));
 }
 
 // RIG-5: all 3D Workspace traffic, including private previews, stays server-side.
@@ -904,7 +904,7 @@ async function vaultFetch(path: string, userId: string, squad: string, init: Req
     const tenant = requestTenant(path, init);
     if (!tenant || (squad === "tiger" && !TANK_API_KEY)) throw new Error(squad === "tiger" ? "Tiger is unreachable" : "Sign in to change Plugins.");
     return tenantBoundedFetch(tenant, `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" }, squad === "tiger" ? 10_000 : 30_000,
-      async response => new Response(await response.arrayBuffer(), { status: response.status, headers: response.headers }));
+      async response => new Response([204, 205, 304].includes(response.status) ? null : await response.arrayBuffer(), { status: response.status, headers: response.headers }));
   }
   return tenantFetch(requestTenant(path, init), `${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
 }
