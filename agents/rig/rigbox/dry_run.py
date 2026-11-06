@@ -58,13 +58,15 @@ async def database(url):
     name = 'rig_dry_' + uuid4().hex
     conn = await asyncpg.connect(url)
     try:
-        await conn.execute(f'CREATE DATABASE "{name}"')
+        create = await conn.fetchval("SELECT format('CREATE DATABASE %I', $1::text)", name)
+        await conn.execute(create)
         try:
             target = urlunsplit(parts._replace(path='/' + name))
             async with asyncpg.create_pool(target, min_size=1, max_size=4) as pool:
                 yield pool
         finally:
-            await conn.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+            drop = await conn.fetchval("SELECT format('DROP DATABASE %I WITH (FORCE)', $1::text)", name)
+            await conn.execute(drop)
     finally:
         await conn.close()
 

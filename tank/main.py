@@ -1074,7 +1074,6 @@ def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
 # The shared override gate for Command and MoA. Never persist policy changes
 # to pin one call; MoA uses the parent task's policy limits.
 MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn", "command.code"})
-MOA_SEAT_TASK = re.compile(r"[a-zA-Z0-9_.-]+#moa\.[a-z][a-z0-9_]{0,79}")
 _MOA_BASE = re.compile(r"[a-zA-Z0-9_.-]+")
 _MOA_SEAT = re.compile(r"[a-z][a-z0-9_]{0,79}")
 
@@ -1086,7 +1085,7 @@ def is_moa_seat(task_type: str) -> bool:
 
 
 def override_allowed(task_type: str) -> bool:
-    return task_type in MODEL_OVERRIDE_TASK_TYPES or MOA_SEAT_TASK.fullmatch(task_type) is not None
+    return task_type in MODEL_OVERRIDE_TASK_TYPES or is_moa_seat(task_type)
 
 
 def _plain_value(value: Any) -> Any:
@@ -1373,7 +1372,7 @@ async def _run_route(
     if early:
         raise HTTPException(status_code=403, detail=early)
 
-    seat = MOA_SEAT_TASK.fullmatch(req.task_type)
+    seat = is_moa_seat(req.task_type)
     if seat and model_override is None:
         raise HTTPException(status_code=400, detail="A MoA seat requires a model override")
     if model_override is not None:

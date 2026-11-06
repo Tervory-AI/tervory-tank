@@ -1,3 +1,4 @@
+const jsLiteral = value => JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -28,7 +29,7 @@ function bundle(file) {
       : createRequire(path.join(template, 'package.json')).resolve(name);
     assert(target, name); deps[name] = bundle(target);
   }
-  modules.set(file, `function(module,exports,load){const require=n=>load(${JSON.stringify(deps)}[n]);\n${code}\n}`);
+  modules.set(file, `function(module,exports,load){const require=n=>load(${jsLiteral(deps)}[n]);\n${code}\n}`);
   return file;
 }
 const entries = {};
@@ -36,10 +37,10 @@ for (const [name, file] of Object.entries({view:'app/tiger/view.tsx', loader:'ap
 const req = createRequire(path.join(template,'package.json'));
 entries.react = bundle(req.resolve('react')); entries.dom = bundle(req.resolve('react-dom/client'));
 const script = `(()=>{const process={env:{NODE_ENV:'development'}};
-const table={${[...modules].map(([k,v])=>JSON.stringify(k)+':'+v).join(',')}};
-const cached={}, entry=${JSON.stringify(entries)};
+const table={${[...modules].map(([k,v])=>jsLiteral(k)+':'+v).join(',')}};
+const cached={}, entry=${jsLiteral(entries)};
 window.signedIn=false;window.failNext=false;window.failPlugin=false;window.failDecision=false;window.calls=[];
-const actor={tenantId:${JSON.stringify(process.env.TIGER_JOURNEY_TENANT)},userId:'placeholder-new-user'};
+const actor={tenantId:${jsLiteral(process.env.TIGER_JOURNEY_TENANT)},userId:'placeholder-new-user'};
 const panel={enabled:true,message:null,secrets:[],files:[],links:[],connections:[]};
 let comparison={positions:[],matches:[],sites:[],plugins:panel};
 let route={tab:'overview',notice:''},version=0;

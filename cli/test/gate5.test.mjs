@@ -284,6 +284,10 @@ test('gate5 command JSON and a stream of small events cannot grow without a byte
 
 test('gate5 update cancellation kills a stuck extractor and leaves the installed version intact', async t => {
   const { update } = await import('../src/update.mjs'); const { createHash } = await import('node:crypto'); const { access, readlink } = await import('node:fs/promises');
+  if (process.platform === 'win32') {
+    await assert.rejects(update({ transport: forbid, io: { write: forbid }, version: '0.1.1' }), /on Windows, verify and extract the signed release archive again/);
+    return;
+  }
   const root = await folder(t); const cliDir = join(root, 'cli'); const installed = join(cliDir, '0.1.0'); await mkdir(installed, { recursive: true });
   await writeFile(join(installed, 'RELEASE.json'), JSON.stringify({ version: '0.1.0', platform: 'linux-x64-gnu' })); await symlink('0.1.0', join(cliDir, 'current'));
   const marker = join(root, 'started'); const tar = join(root, 'tar');
@@ -331,7 +335,9 @@ test('gate5 passive update failure reports a plain notification without failing 
   await writeFile(join(root, 'RELEASE.json'), JSON.stringify({ version: '0.1.0', platform: 'linux-x64-gnu' }));
   let failed = 0; let calls = 0;
   const result = await updateNotice({ root, transport: async () => { calls++; throw Error('private transport detail'); }, onFailure: (...args) => { assert.deepEqual(args, []); failed++; } });
-  assert.equal(result, null); assert.equal(calls, 1); assert.equal(failed, 1);
+  assert.equal(result, null);
+  assert.equal(calls, process.platform === 'win32' ? 0 : 1);
+  assert.equal(failed, process.platform === 'win32' ? 0 : 1);
 });
 
 test('gate5 cancelled MCP startup still closes its local stdio child', async t => {

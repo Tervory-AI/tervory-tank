@@ -200,8 +200,8 @@ test('gate4 the installed dry-run launcher makes zero outbound calls including p
   await cp(join(cli, 'package.json'), join(installed, 'package.json')); await symlink(join(cli, 'node_modules'), join(installed, 'node_modules'), 'dir');
   await writeFile(join(installed, 'RELEASE.json'), JSON.stringify({ version, platform: 'placeholder-platform' }));
   const marker = join(root, 'outbound'); const guard = join(root, 'guard.mjs');
-  await writeFile(guard, `import {writeFileSync} from 'node:fs';globalThis.fetch=()=>{writeFileSync(${JSON.stringify(marker)},'called');throw Error('Outbound forbidden');};\n`);
-  const env = { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(guard).href}` };
+  await writeFile(guard, `import {writeFileSync} from 'node:fs';globalThis.fetch=()=>{writeFileSync(process.env.TERVORY_TEST_OUTBOUND_MARKER,'called');throw Error('Outbound forbidden');};\n`);
+  const env = { ...process.env, TERVORY_TEST_OUTBOUND_MARKER: marker, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(guard).href}` };
   delete env.TERVORY_NO_UPDATE_CHECK; delete env.TERVORY_CLI_VERSION;
   const result = await execute(process.execPath, [join(installed, 'bin/tervory.mjs'), 'run', 'base', 'batch', '--dry-run', '--output', 'json'], { env });
   assert.equal(JSON.parse(result.stdout).status, 'dry_run'); assert.equal(result.stderr, ''); await assert.rejects(access(marker));
@@ -221,8 +221,14 @@ test('gate4 missing release signing settings name only the missing setting and w
 test('gate4 installer missing HOME or public key file exits plainly before download or install', async t => {
   const root = await folder(t); const marker = join(root, 'outbound'); const bin = join(root, 'bin'); await mkdir(bin);
   await writeFile(join(bin, 'curl'), `#!/bin/sh\ntouch '${marker}'\nexit 99\n`, { mode: 0o755 });
-  const env = { ...process.env, PATH: bin + ':' + process.env.PATH };
+  const env = { ...process.env, PATH: bin + (process.platform === 'win32' ? ';' : ':') + process.env.PATH };
   for (const name of ['HOME', 'TERVORY_HOME', 'TERVORY_BIN_DIR', 'TERVORY_CLI_BASE', 'TERVORY_CLI_PUBLIC_KEY_FILE']) delete env[name];
+  if (process.platform === 'win32') {
+    // Git Bash supplies HOME itself; the POSIX installer must refuse this OS.
+    await assert.rejects(execute('sh', [join(cli, 'install.sh')], { env }), error => error.stderr.includes('Unsupported system:'));
+    await assert.rejects(access(marker)); await assert.rejects(access(join(root, 'home'))); await assert.rejects(access(join(root, 'launchers')));
+    return;
+  }
   await assert.rejects(execute('sh', [join(cli, 'install.sh')], { env }), error => error.stderr.includes('Missing setting HOME.') && !error.stderr.includes('parameter not set'));
   await assert.rejects(execute('sh', [join(cli, 'install.sh')], { env: { ...env, TERVORY_HOME: join(root, 'home'), TERVORY_BIN_DIR: join(root, 'launchers'), TERVORY_CLI_PUBLIC_KEY_FILE: join(root, 'absent-public.pem') } }), error => error.stderr.includes('TERVORY_CLI_PUBLIC_KEY_FILE is not readable.'));
   await assert.rejects(access(marker)); await assert.rejects(access(join(root, 'home'))); await assert.rejects(access(join(root, 'launchers')));

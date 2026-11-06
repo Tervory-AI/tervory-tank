@@ -147,8 +147,15 @@ export async function update({ transport, io, version, root = PACKAGE_ROOT, tar 
   try {
     const file = join(staging, artifact.file);
     await writeFile(file, bytes);
-    try { await run(tar, ['-xzf', file, '-C', staging], { timeout: LIMITS.commandMs, signal: io.signal, killSignal: 'SIGKILL', maxBuffer: LIMITS.outputBytes }); }
-    catch { throw new Error('Update failed: archive extraction failed or timed out. Nothing was changed.'); }
+    const extraction = run(tar, ['-xzf', file, '-C', staging], { timeout: LIMITS.commandMs, signal: io.signal, killSignal: 'SIGKILL', maxBuffer: LIMITS.outputBytes });
+    const extractionClosed = new Promise(resolve => extraction.child.once('close', resolve));
+    try { await extraction; }
+    catch {
+      // Abort rejects execFile before the killed child has necessarily exited.
+      // Reap it before cleaning staging or reporting that the update stopped.
+      await extractionClosed;
+      throw new Error('Update failed: archive extraction failed or timed out. Nothing was changed.');
+    }
     const unpacked = join(staging, `tervory-cli-${target}`);
     const record = JSON.parse(await readFile(join(unpacked, 'RELEASE.json'), 'utf8'));
     if (record.version !== target || record.platform !== release.platform) throw new Error('Update failed: archive does not match the manifest.');

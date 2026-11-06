@@ -8,6 +8,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
+from asyncpg.utils import _quote_ident
+
 from chassis.cron import is_due
 from chassis.db import as_json, schema_for
 from chassis.tenant_db import tenant_scope
@@ -22,6 +24,14 @@ RETRY_BACKOFF_S = 30
 
 def _schema(agent: str) -> str:
     return schema_for(agent)
+
+
+def _job_statement(agent: str, template: str) -> str:
+    """Compose only a validated, PostgreSQL-quoted schema identifier.
+
+    Job values remain separate asyncpg parameters at every call site.
+    """
+    return template.format(schema=_quote_ident(schema_for(agent)))
 
 
 def retry_backoff_s(attempts: int) -> int:
@@ -123,14 +133,13 @@ async def claim_next(conn: Any, agent: str) -> Any:
 
 
 async def _finish(conn: Any, agent: str, job_id: uuid.UUID, tenant_id: uuid.UUID, result: dict[str, Any], attempts: int | None = None) -> None:
-    schema = _schema(agent)
     await conn.execute(
-        f"""
+        _job_statement(agent, """
         UPDATE {schema}.jobs
         SET status = 'done', result = $3::jsonb, error = NULL, finished_at = now()
         WHERE id = $1 AND tenant_id = $2 AND status = 'running'
           AND ($4::int IS NULL OR attempts = $4)
-        """,
+        """),
         job_id,
         tenant_id,
         json.dumps(result),
@@ -139,17 +148,16 @@ async def _finish(conn: Any, agent: str, job_id: uuid.UUID, tenant_id: uuid.UUID
 
 
 async def _fail(conn: Any, agent: str, job_id: uuid.UUID, tenant_id: uuid.UUID, attempts: int, max_attempts: int, error: str) -> str:
-    schema = _schema(agent)
     status = decide_retry(attempts=attempts, max_attempts=max_attempts)
     detail = error[:500]
     if status == "queued":
         await conn.execute(
-            f"""
+            _job_statement(agent, """
             UPDATE {schema}.jobs
             SET status = 'queued', error = $3, started_at = NULL,
                 run_at = now() + ($4::int * interval '1 second')
             WHERE id = $1 AND tenant_id = $2 AND status = 'running' AND attempts = $5
-            """,
+            """),
             job_id,
             tenant_id,
             detail,
@@ -158,11 +166,11 @@ async def _fail(conn: Any, agent: str, job_id: uuid.UUID, tenant_id: uuid.UUID, 
         )
     else:
         await conn.execute(
-            f"""
+            _job_statement(agent, """
             UPDATE {schema}.jobs
             SET status = 'failed', error = $3, finished_at = now()
             WHERE id = $1 AND tenant_id = $2 AND status = 'running' AND attempts = $4
-            """,
+            """),
             job_id,
             tenant_id,
             detail,

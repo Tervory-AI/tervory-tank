@@ -9,7 +9,7 @@ import socket
 import subprocess
 import sys
 import tempfile
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS = ('DATABASE_URL', 'TANK_KEY', 'TANK_API_KEY', 'TRIGGER_SIGNIN_WORKSPACE_SECRET',

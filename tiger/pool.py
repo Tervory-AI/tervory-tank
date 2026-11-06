@@ -7,6 +7,7 @@ boundary: two tenants never share a file, even when the session string matches.
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
 import socket
 from pathlib import Path
@@ -127,4 +128,4 @@ def session_file(root: str | Path, agent: str, tenant: str, session: str) -> Pat
 def _part(value: str) -> str:
     if not isinstance(value, str) or _PART.fullmatch(value) is None:
         raise SessionKeyError("bad session key")
-    return value
+    return os.path.basename(value)

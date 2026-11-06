@@ -1,3 +1,4 @@
+const jsLiteral = value => JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 /* Real Base React screens/actions. Authentication and HTTP boundaries are fake;
    the browser cannot contact any external service. */
 const fs=require('node:fs'), path=require('node:path'), assert=require('node:assert/strict');
@@ -18,19 +19,19 @@ function bundle(file) {
   const target=name.startsWith('.')?['','.ts','.tsx','.js','/index.js'].map(e=>base+e).find(p=>fs.existsSync(p)&&fs.statSync(p).isFile()):req.resolve(name);
   assert(target,name);deps[name]=bundle(target);
  }
- modules.set(file,`function(module,exports,load){const require=n=>load(${JSON.stringify(deps)}[n]);\n${code}\n}`);return file;
+ modules.set(file,`function(module,exports,load){const require=n=>load(${jsLiteral(deps)}[n]);\n${code}\n}`);return file;
 }
 const view=bundle(path.join(root,'workspace/app/base/view.tsx'));
 const react=bundle(req.resolve('react')),dom=bundle(req.resolve('react-dom/client'));
 const search=bundle(path.join(root,'workspace/app/base/search.ts'));
-const script=`(()=>{const process={env:{NODE_ENV:'production'}},table={${[...modules].map(([k,v])=>JSON.stringify(k)+':'+v).join(',')}},cached={};
+const script=`(()=>{const process={env:{NODE_ENV:'production'}},table={${[...modules].map(([k,v])=>jsLiteral(k)+':'+v).join(',')}},cached={};
 window.signedIn=false;window.tenant='placeholder-tenant-a';window.saved=false;window.calls=[];window.vaultFailure=false;
 const panel={enabled:true,message:null,secrets:[],files:[],links:[],connections:[]};
 const tank={baseRecords:async(tenant)=>{window.calls.push({name:'records',tenant});return window.saved&&tenant==='placeholder-tenant-a'?[{id:'record-1',batch:'First list',raw:{name:'Recorded Business',city:'Washington'},profile:{name:{value:'Recorded Business'},website:{value:'https://recorded.example',source_url:'https://recorded.example/contact',checked_at:'2026-11-05T12:00:00Z'}}}]:[];}};
 for(const name of ['saveVaultSecret','removeVaultSecret','uploadVaultFiles','removeVaultFile','addVaultLink','removeVaultLink','addVaultConnection','removeVaultConnection'])tank[name]=async(...args)=>{window.calls.push({name,tenant:args[2]});if(window.vaultFailure)return new Promise(()=>{});return {};};
 const stubs={'next/navigation':{usePathname:()=>'/base',useRouter:()=>({refresh(){}})},'next/cache':{revalidatePath(){}},'@/lib/tenant':{currentTenant:async()=>{if(!window.signedIn)throw Error('sign in');return {tenantId:window.tenant,userId:'placeholder-user'};},activeTenant:async()=>({tenantId:window.tenant,userId:'placeholder-user'})},'@/lib/tank':tank};
 function load(id){if(stubs[id])return stubs[id];if(cached[id])return cached[id].exports;const m={exports:{}};cached[id]=m;table[id](m,m.exports,load);return m.exports;}
-const React=load(${JSON.stringify(react)}),app=load(${JSON.stringify(dom)}).createRoot(document.getElementById('root')),BaseView=load(${JSON.stringify(view)}).BaseView,actions=load(${JSON.stringify(search)});
+const React=load(${jsLiteral(react)}),app=load(${jsLiteral(dom)}).createRoot(document.getElementById('root')),BaseView=load(${jsLiteral(view)}).BaseView,actions=load(${jsLiteral(search)});
 window.render=()=>app.render(React.createElement(BaseView,{key:window.tenant+window.signedIn,plugins:panel,accountName:null,model:{loadError:false,empty:true,totals:{records:0,withSite:0,withEmail:0,skipped:0},batches:[],skills:[],skillsError:false,refreshedLabel:''},refresh:async()=>{},search:actions.searchBase,ask:actions.askBase,signedIn:window.signedIn}));window.render();})();`;
 
 async function serverRouteProofs(){
