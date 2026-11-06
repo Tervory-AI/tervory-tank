@@ -214,17 +214,6 @@ The JSON table below is the single machine-readable ingress authority. `paths` i
     "priority": 100
   },
   {
-    "host": "www.mcp.tervory.com",
-    "paths": "PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)",
-    "service": "mcp",
-    "port": 8000,
-    "network": "xnmc0jkz8j9i5jh1jwanbsfv",
-    "access": "public",
-    "compose": "docker-compose.yml",
-    "router": "product-mcp-https",
-    "priority": 100
-  },
-  {
     "host": "za.tervory.com",
     "paths": "PathPrefix(`/`) && !PathPrefix(`/admin`) && !PathPrefix(`/internal`)",
     "service": "tank",
