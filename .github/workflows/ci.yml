@@ -8,6 +8,9 @@ on:
   # before it lands, so branches no longer merge main to stay current.
   merge_group:
     types: [checks_requested]
+  # Full suite once (6 Nov, founder): tank, workspace, command-acceptance and savings-page
+  # run on the pull request only. The merge queue runs the fast checks (security, lint,
+  # routing, changes), so a green PR merges in minutes instead of re-running the suite.
   # No push trigger on main (3 Nov, founder): the merge queue (merge method MERGE) already
   # ran this whole workflow on the exact commit that lands, so a run on the push was a
   # pure repeat. workflow_dispatch (above) still runs everything on main by hand:
@@ -63,9 +66,8 @@ jobs:
           retention-days: 14
 
   lint:
-    # 6 Nov: a pull request runs the same scoped suite as the merge queue (tank, workspace,
-    # command acceptance, savings page), so a green PR means the queue will pass too.
-    # Before this, PRs ran only lint/security/scope and failures surfaced only in the queue.
+    # 6 Nov: the pull request runs the scoped full suite (tank, workspace, command
+    # acceptance, savings page) once; the merge queue runs only these fast checks.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -177,7 +179,7 @@ jobs:
   tank:
     needs: [changes, runner]
     # Run even when "pick runner" was skipped; then the runner falls back to ubuntu-latest.
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     # Full suite: about 14 minutes on the hosted 4-core runner (run 41229068797: 808 s of tests in
@@ -408,7 +410,7 @@ jobs:
 
   workspace:
     needs: [changes, runner]
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
@@ -458,7 +460,7 @@ jobs:
   # Any skipped or missing test fails the job, so it never passes silently.
   command-acceptance:
     needs: [changes]
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     services:
@@ -530,7 +532,7 @@ jobs:
     needs: [changes]
     # Only when the savings pages (or what they render) change. Founder, 27 Oct: no
     # check runs on a pull request it cannot affect.
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.savings == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.changes.result == 'success' && needs.changes.outputs.savings == 'true' }}
     # Chromium system dependencies need sudo; keep this job on GitHub hosted runners.
     runs-on: ubuntu-latest
     # 8 minutes timed out twice on 22 Oct and cancelled CI on main. Usually ~1 minute.
