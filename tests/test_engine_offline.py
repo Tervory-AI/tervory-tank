@@ -157,6 +157,7 @@ async def test_unset_langfuse_host_is_noop_for_tank_and_litellm(monkeypatch, tmp
     stub = ModuleType('litellm.integrations.custom_logger')
     stub.CustomLogger = object
     monkeypatch.setitem(sys.modules, 'litellm.integrations.custom_logger', stub)
+    monkeypatch.syspath_prepend(str(ROOT / 'litellm'))
     adapter = load('offline_trace_adapter', 'litellm/tenant_traces.py')
     monkeypatch.setattr(adapter.callback.sink, 'before', forbidden)
     monkeypatch.setattr(adapter.callback.sink, 'after', forbidden)

@@ -101,6 +101,9 @@ model_list:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY
     model_info:
+      # C5 automatic cache; rate from the pinned LiteLLM 1.106.4 model map.
+      cache_read_input_token_cost: 0.000000030000
+      prompt_cache_mode: implicit
       input_cost_per_token: 0.0000003
       output_cost_per_token: 0.0000025
 
@@ -109,6 +112,9 @@ model_list:
       model: gemini/gemini-3.8-flash
       api_key: os.environ/GEMINI_API_KEY
     model_info:
+      # C5 automatic cache; rate from the pinned LiteLLM 1.106.4 model map.
+      cache_read_input_token_cost: 0.000000075000
+      prompt_cache_mode: implicit
       input_cost_per_token: 0.00000075     # introductory until 31 Dec 2026, then doubles
       output_cost_per_token: 0.00000375
 
@@ -117,6 +123,9 @@ model_list:
       model: gemini/gemini-4-argon
       api_key: os.environ/GEMINI_API_KEY
     model_info:
+      # C5 automatic cache; rate from the pinned LiteLLM 1.106.4 model map.
+      cache_read_input_token_cost: 0.000000100000
+      prompt_cache_mode: implicit
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.00001
 
@@ -159,6 +168,9 @@ model_list:
       input_cost_per_token: 0.0000003
       output_cost_per_token: 0.0000012
     model_info:
+      # C5 automatic cache; rate from the pinned LiteLLM 1.106.4 model map.
+      cache_read_input_token_cost: 0.000000006000
+      prompt_cache_mode: implicit
       input_cost_per_token: 0.0000003
       output_cost_per_token: 0.0000012
       # Guaranteed recurring off-peak periods (UTC, end exclusive).
@@ -182,6 +194,9 @@ model_list:
       input_cost_per_token: 0.00000132
       output_cost_per_token: 0.00000396
     model_info:
+      # C5 automatic cache; rate from the pinned LiteLLM 1.106.4 model map.
+      cache_read_input_token_cost: 0.000000044000
+      prompt_cache_mode: implicit
       input_cost_per_token: 0.00000132
       output_cost_per_token: 0.00000396
       offpeak:
@@ -205,6 +220,9 @@ model_list:
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
     model_info:
+      # C5 automatic cache; rate from the pinned LiteLLM 1.106.4 model map.
+      cache_read_input_token_cost: 0.000000300000
+      prompt_cache_mode: implicit
       id: kimi-direct
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
@@ -317,6 +335,9 @@ model_list:
       input_cost_per_token: 0.0000002500
       output_cost_per_token: 0.0000015000
     model_info:
+      # C5 automatic cache; rate from the pinned LiteLLM 1.106.4 model map.
+      cache_read_input_token_cost: 0.000000025000
+      prompt_cache_mode: implicit
       input_cost_per_token: 0.0000002500
       output_cost_per_token: 0.0000015000
 
@@ -329,6 +350,9 @@ model_list:
       input_cost_per_token: 0.0000009500
       output_cost_per_token: 0.0000040000
     model_info:
+      # C5 automatic cache; rate from the pinned LiteLLM 1.106.4 model map.
+      cache_read_input_token_cost: 0.000000190000
+      prompt_cache_mode: implicit
       input_cost_per_token: 0.0000009500
       output_cost_per_token: 0.0000040000
 
@@ -341,6 +365,9 @@ model_list:
       input_cost_per_token: 0.0000009500
       output_cost_per_token: 0.0000040000
     model_info:
+      # C5 automatic cache; rate from the pinned LiteLLM 1.106.4 model map.
+      cache_read_input_token_cost: 0.000000160000
+      prompt_cache_mode: implicit
       id: kimi-lite-direct
       input_cost_per_token: 0.0000009500
       output_cost_per_token: 0.0000040000
@@ -807,6 +834,16 @@ model_list:
 
 litellm_settings:
   callbacks: [tenant_traces.callback]
+  # DECISION reuse regional Redis, opt in only with Tank's user-scoped C1 key.
+  cache: true
+  cache_params:
+    type: redis
+    host: redis
+    port: 6379
+    mode: default_off
+    max_messages: null
+    supported_call_types: [acompletion]
+    ttl: 604800
   # Return the gateway's actual priced usage at the end of Command streams.
   include_cost_in_streaming_usage: true
   drop_params: true

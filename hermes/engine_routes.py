@@ -8,6 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from hermes.auth import identify
 from hermes.records import ClaimTooLong
+try:
+    from hermes import embedding_cache
+except ImportError:
+    from tank import embedding_cache
 
 
 class Recall(BaseModel):
@@ -39,11 +43,12 @@ def register(app, records):
     @app.post('/engine/recall')
     async def recall(body: Recall, x_tank_key: str = Header(default='')):
         store = ready(x_tank_key)
-        rows = await store.recall('tank', str(body.tenant_id), body.query, None, 32, 'client', user_id=body.user_id)
+        with embedding_cache.measure() as counter:
+            rows = await store.recall('tank', str(body.tenant_id), body.query, None, 32, 'client', user_id=body.user_id)
         rows = [row for row in rows if row.get('tenant_id') == str(body.tenant_id)
                 and (row.get('kind') != 'engine.outcome' or row.get('meta', {}).get('task_type') == body.task_type)]
         rows.sort(key=lambda row: (row.get('kind') != 'engine.outcome', row.get('updated_at', row.get('created_at', ''))), reverse=True)
-        return {'memories': rows[:8]}
+        return {'memories': rows[:8], 'embedding_cache': counter.values}
 
     @app.post('/engine/remember')
     async def remember(body: Outcome, x_tank_key: str = Header(default='')):
