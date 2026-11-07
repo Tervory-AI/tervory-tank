@@ -1030,23 +1030,27 @@ model_list:
       output_cost_per_token: 0.00000115
       licence: StepFun terms
 
-  # Price checked 2026-11-07: https://www.arcee.ai/blog/open-models-api-beta ($0.25/$0.80 per 1M).
-  # Note: https://docs.arcee.ai/get-started/pricing does not yet list trinity-large-thinking (2026-11-07).
+  # UNVERIFIED for Tank USD ledger: blog quotes $0.25/$0.80 per 1M
+  # (https://www.arcee.ai/blog/open-models-api-beta) but
+  # https://docs.arcee.ai/get-started/pricing does not list trinity-large-thinking (2026-11-07).
+  # Cost fields left at 0 until an official pricing-page USD figure is recorded.
   - model_name: trinity-large-thinking-direct
     litellm_params:
       model: openai/trinity-large-thinking
       api_base: https://api.arcee.ai/api/v1
       api_key: os.environ/ARCEE_API_KEY
-      input_cost_per_token: 0.00000025
-      output_cost_per_token: 0.0000008
+      input_cost_per_token: 0
+      output_cost_per_token: 0
     model_info:
-      input_cost_per_token: 0.00000025
-      output_cost_per_token: 0.0000008
+      input_cost_per_token: 0
+      output_cost_per_token: 0
       licence: Apache 2.0 / Arcee terms
+      price_unverified: blog-only-2026-11-07
 
-  # Price checked 2026-11-07: https://docs.sarvam.ai/api/pricing (₹15 / ₹60 per 1M).
-  # USD ledger: INR→USD 0.010623 (open.er-api.com 2026-11-07) → $0.159345 / $0.63738 per 1M.
+  # Official price is INR only: ₹15 / ₹60 per 1M (https://docs.sarvam.ai/api/pricing, 2026-11-07).
+  # Tank USD ledger costs set to 0 — do not invent FX/current-price USD conversions.
   # Auth header api-subscription-key per https://docs.sarvam.ai/api/token-factory/models/sarvam-105b
+  # extra_headers os.environ/… is resolved by LiteLLM proxy config load (v1.106.4 nested recurse).
   - model_name: sarvam-105b-direct
     litellm_params:
       model: openai/sarvam-105b
@@ -1054,12 +1058,14 @@ model_list:
       api_key: os.environ/SARVAM_API_KEY
       extra_headers:
         api-subscription-key: os.environ/SARVAM_API_KEY
-      input_cost_per_token: 0.000000159345
-      output_cost_per_token: 0.00000063738
+      input_cost_per_token: 0
+      output_cost_per_token: 0
     model_info:
-      input_cost_per_token: 0.000000159345
-      output_cost_per_token: 0.00000063738
+      input_cost_per_token: 0
+      output_cost_per_token: 0
       licence: Apache 2.0 / Sarvam terms
+      official_price_inr_per_1m_tokens: "15→60"
+      usd_ledger: omitted-no-invented-fx
 
   - model_name: build-chatgpt
     litellm_params:

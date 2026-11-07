@@ -27,9 +27,15 @@ def test_every_model_has_a_price_and_a_key_from_the_environment() -> None:
             assert m["litellm_params"]["model"].startswith("chatgpt/"), m["model_name"]
             assert "api_key" not in m["litellm_params"], m["model_name"]
             continue
+        assert str(m["litellm_params"]["api_key"]).startswith("os.environ/"), m["model_name"]
+        # Maker-direct soft spot: omit Tank USD ledger when official quote is INR-only
+        # or blog-only (no invented FX / no unverified ledger price).
+        if info.get("usd_ledger") == "omitted-no-invented-fx" or info.get("price_unverified"):
+            assert info.get("input_cost_per_token", 0) == 0, m["model_name"]
+            assert info.get("output_cost_per_token", 0) == 0, m["model_name"]
+            continue
         assert info.get("input_cost_per_token", 0) > 0, m["model_name"]
         assert info.get("output_cost_per_token", 0) > 0, m["model_name"]
-        assert str(m["litellm_params"]["api_key"]).startswith("os.environ/"), m["model_name"]
 
 
 def test_boston_roster_does_not_include_the_za_owned_model() -> None:

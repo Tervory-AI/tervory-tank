@@ -163,8 +163,20 @@ def test_za_roster_includes_the_gated_own_model() -> None:
             assert item["litellm_params"]["api_key"] == "os.environ/ZENAS_OWN_MODEL_KEY"
             assert item["model_info"]["hosted_in"] == "za"
             continue
-        # MODELS-3: the public Hugging Face router is the only api_base; it is not SA hosting.
-        assert item["litellm_params"].get("api_base") in (None, "https://router.huggingface.co/v1"), item["model_name"]
+        # MODELS-3 HF seats + maker-direct OpenAI-compatible bases (not SA hosting).
+        maker_bases = {
+            "https://api.minimax.io/v1",
+            "https://api.z.ai/api/paas/v4",
+            "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+            "https://api.stepfun.ai/v1",
+            "https://api.arcee.ai/api/v1",
+            "https://api.sarvam.ai/v1",
+        }
+        assert item["litellm_params"].get("api_base") in (
+            None,
+            "https://router.huggingface.co/v1",
+            *maker_bases,
+        ), item["model_name"]
         assert "hosted_in" not in (item.get("model_info") or {}), item["model_name"]
     assert main.sa_hosted_models() == frozenset({"tervory-own-zenas-za"})
 
