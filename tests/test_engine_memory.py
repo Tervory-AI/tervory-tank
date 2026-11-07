@@ -1,4 +1,5 @@
 """Real Hermes records, in-process Qdrant and Tank; no paid provider calls."""
+from contextvars import ContextVar
 import json
 import os
 import uuid
@@ -9,6 +10,8 @@ import pytest_asyncio
 from qdrant_client import QdrantClient
 
 import engine_memory
+import product_identity
+from trigger_signin_fakes import set_founders
 from hermes.record_index import RecordIndex
 from hermes.records import Records
 from hermes.service import create_app
@@ -64,6 +67,9 @@ async def test_memory_cannot_remember_another_tenants_receipt(remembered):
 async def test_correction_changes_next_local_answer_only_for_its_tenant(remembered, monkeypatch):
     b = remembered
     req = await setup_engine(b, monkeypatch)
+    actor = product_identity.User(str(req.tenant_id), "placeholder-founder", "founder")
+    monkeypatch.setattr(product_identity, "current", ContextVar("placeholder_engine_user", default=actor))
+    set_founders(monkeypatch, "placeholder-founder")
     async with b.pool.acquire() as conn:
         await conn.execute("""UPDATE tank.policy SET task_type='engine.answer', system_prompt=
             'Answer using the newest tenant fact. Output only the office city. If no office city is known, output UNKNOWN.'
@@ -71,7 +77,7 @@ async def test_correction_changes_next_local_answer_only_for_its_tenant(remember
     req = req.model_copy(update={'task_type': 'engine.answer', 'messages': [b.tank.Message(role='user', content='What is our office city?')]})
     calls = local_gateway(b, monkeypatch)
     async def fact(claim):
-        response = await b.memory_client.post('/founder/memories', headers={'X-Tervory-Admin': 'founder-fixture'},
+        response = await b.memory_client.post('/founder/memories', headers={'X-Tervory-Admin': 'placeholder-founder'},
             json={'id': str(uuid.uuid4()), 'tenant_id': str(req.tenant_id), 'agent': 'tank', 'claim': claim})
         assert response.status_code == 200, response.text
     await fact('Our office city is Paris.')

@@ -68,11 +68,14 @@ class Records:
     ):
         self.pool, self.index, self.encoder, self.model = pool, index, encoder, model
         self.agents = frozenset(agents)
+        # SQL identifiers come from startup configuration, never the requested
+        # agent string, even after its membership check.
+        self._schemas = {name: schema_for(name) for name in self.agents}
 
     def schema(self, agent: str) -> str:
         if agent not in self.agents:
             raise ValueError("Unknown agent")
-        return schema_for(agent)
+        return self._schemas[agent]
 
     async def setup(self) -> None:
         # DDL only. Never copy or backfill legacy vectors into these tables.

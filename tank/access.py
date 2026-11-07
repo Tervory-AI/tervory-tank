@@ -234,7 +234,7 @@ async def control(room: str, data: dict) -> dict:
         raise HTTPException(503, "The room's browser is not connected.")
     payload = vault.envelope(room, "control", data)
     try:
-        async with httpx.AsyncClient(timeout=35, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=35, trust_env=False, event_hooks={"request": [__import__("product_identity").request_hook]}) as client:
             response = await client.post(ROOMS[room] + "/access/control", json=payload, headers={"X-Tank-Key": key})
         if response.status_code != 200:
             raise ValueError()
@@ -805,10 +805,11 @@ async def rig_request(actor: Actor, operation: str, data: dict[str, Any] | None 
     if not key:
         raise HTTPException(503, "Rig's retailer control connection is not configured.")
     try:
-        async with httpx.AsyncClient(timeout=90, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=90, trust_env=False, event_hooks={"request": [__import__("product_identity").request_hook]}) as client:
             from rig_rooms import endpoint
             base = await endpoint(db(), actor) if os.environ.get("RIG_LIFECYCLE_KEY") else "http://agent-rig:8003"
             response = await client.post(base + "/internal/retailer/" + operation,
+                extensions=__import__("product_identity").product_extensions("rig", base),
                 headers={"x-rig-retailer-key": key}, json={"tenant_id": str(actor.tenant_id), "founder": actor.founder, "data": data or {}})
     except httpx.HTTPError:
         raise HTTPException(503, "Rig did not confirm this operation. Check its receipts before retrying.") from None

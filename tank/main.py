@@ -4722,7 +4722,7 @@ async def tisan_publish_git(request: Request) -> dict:
         tenant = str(uuid.UUID(payload['tenant_id']))
         if tenant != request.headers.get('x-tervory-tenant'):
             raise ValueError('tenant differs')
-        async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
+        async with httpx.AsyncClient(trust_env=False, follow_redirects=False, event_hooks={"request": [__import__("product_identity").request_hook]}) as http:
             return await _tisan_publish_git_commit(http, payload)
     except (ValueError, TypeError, KeyError, AttributeError, httpx.HTTPError):
         raise HTTPException(503, 'Site commit could not be confirmed; inspect the publish operation before retrying.') from None
@@ -4914,6 +4914,7 @@ async def _rig_call(method: str, path: str, params: list[tuple[str, str]], conte
             params=params,
             content=content,
             headers=headers,
+            extensions=__import__("product_identity").product_extensions("rig", base),
             timeout=timeout,
             follow_redirects=False,
         )

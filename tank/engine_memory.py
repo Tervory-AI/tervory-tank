@@ -24,7 +24,7 @@ async def recall(rt, req):
         query = rt._storage_mask(query)[:1200]
         if not query:
             return req, {'hits': 0, 'status': 'empty'}
-        result = await send('recall', {'tenant_id': str(req.tenant_id), 'task_type': req.task_type, 'query': query})
+        result = await send('recall', {'tenant_id': str(req.tenant_id), 'task_type': req.task_type, 'query': query, **user_scope(req)})
         rows = [row for row in result['memories'] if row.get('tenant_id') == str(req.tenant_id)]
         # Only factual data enters context. Stable content (not read timestamps
         # or similarity scores) invalidates the cache when a correction arrives.
@@ -50,8 +50,18 @@ async def recall(rt, req):
 
 async def remember(req, answer):
     try:
-        data = await send('remember', {'tenant_id': str(req.tenant_id), 'ledger_id': str(answer.ledger_id)})
+        data = await send('remember', {'tenant_id': str(req.tenant_id), 'ledger_id': str(answer.ledger_id), **user_scope(req)})
         return bool(data.get('remembered'))
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
         log.warning('Engine memory remember unavailable (%s)', type(exc).__name__)
         return False
+
+
+def user_scope(req):
+    from product_identity import current
+    actor = current.get()
+    if actor is None:
+        return {}
+    if actor.tenant_id != str(req.tenant_id):
+        raise ValueError("Memory tenant mismatch")
+    return {"user_id": actor.user_id}

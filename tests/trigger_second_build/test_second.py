@@ -96,7 +96,8 @@ async def env(monkeypatch):
                            approved_skill=AsyncMock(return_value=None))
     monkeypatch.setattr(room_app.state, 'tank', tank, raising=False)
     bridge_calls = []
-    async def bridge(operation, body):
+    async def bridge(operation, body, *, actor=None):
+        assert actor is not None and str(actor.tenant_id) == body["tenant_id"]
         bridge_calls.append((operation, body))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room_app), base_url='http://room') as client:
             response = await client.post('/' + operation, json=body, headers={'X-Tank-Key': 'dummy-room-key'})
