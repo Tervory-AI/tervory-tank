@@ -39,6 +39,8 @@ ROUTES = (
     ('late', 'ghost_routes', 'router', None, True),
     ('late', 'research', 'register', ('app', 'globals'), False),
     ('late', 'command', 'router', None, True),
+    ('late', 'command_tools.workspace', 'build_router', (), True),
+    ('late', 'command_tools.opli_memory', 'build_router', (), True),
     ('late', 'personal_tokens', 'register', ('app',), False),
     ('late', 'mcp_server', 'register', ('app',), False),
     ('late', 'trigger_routes', 'router', None, True),

@@ -1,3 +1,7 @@
+## 0.11.1 — 2026-11-07
+
+- Add authenticated memory controls and route code requests through Tank’s optional memory path.
+
 ## 0.11.0 — 2026-11-05
 
 - Add day-zero terminal states, local run dry runs and named missing-configuration recovery.

@@ -3480,9 +3480,9 @@ async def list_tasks(tenant_id: uuid.UUID, limit: int = 50) -> list[dict[str, An
     async with pool().acquire() as conn:
         rows = await conn.fetch(
             f"""
-            SELECT t.*, l.model, l.rung, l.cost_usd, l.latency_ms, l.feedback
+            SELECT t.*, l.model, l.rung, l.cost_usd, l.baseline_cost_usd, l.baseline_status, l.latency_ms, l.feedback
             FROM (SELECT {TASK_COLUMNS} FROM tank.tasks WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2) t
-            LEFT JOIN tank.ledger l ON l.id = t.ledger_id
+            LEFT JOIN tank.ledger l ON l.id = t.ledger_id AND l.tenant_id = t.tenant_id
             ORDER BY t.created_at DESC
             """,
             tenant_id, limit,
@@ -3495,9 +3495,9 @@ async def get_task(task_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
     async with pool().acquire() as conn:
         row = await conn.fetchrow(
             f"""
-            SELECT t.*, l.model, l.rung, l.cost_usd, l.latency_ms, l.feedback
+            SELECT t.*, l.model, l.rung, l.cost_usd, l.baseline_cost_usd, l.baseline_status, l.latency_ms, l.feedback
             FROM (SELECT {TASK_COLUMNS} FROM tank.tasks WHERE id=$1 AND tenant_id=$2) t
-            LEFT JOIN tank.ledger l ON l.id = t.ledger_id
+            LEFT JOIN tank.ledger l ON l.id = t.ledger_id AND l.tenant_id = t.tenant_id
             """,
             task_id, tenant_id,
         )
