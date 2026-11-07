@@ -481,11 +481,14 @@ def test_manual_ci_head_runs_full_suite_without_a_push_or_pr_base(monkeypatch):
     assert scope['run'] and scope['full'] and scope['tests'] == ['.']
 
 
-def test_pull_requests_run_the_same_scoped_suite_as_the_merge_queue() -> None:
-    """6 Nov: a green PR must mean the queue passes, so PRs run the scoped full suite too."""
+def test_full_suite_runs_once_on_the_pull_request_not_again_in_the_queue() -> None:
+    """6 Nov (founder): the full suite runs once, on the PR. The merge queue keeps only the fast checks."""
     jobs = _load(ROOT / ".github/workflows/ci.yml")["jobs"]
     for name in ("tank", "workspace", "command-acceptance", "savings-page"):
-        assert "event_name" not in jobs[name]["if"], name
+        cond = jobs[name]["if"]
+        assert "github.event_name != 'merge_group'" in cond, name
+        assert "pull_request" not in cond, name
     for name in ("security", "lint", "changes"):
         assert "event_name" not in str(jobs[name].get("if", "")), name
     assert "ruff check tank tests --select E9,F" in str(jobs["lint"]["steps"])
+    assert set(jobs["ci-ok"]["needs"]) >= {"security", "lint", "routing", "changes", "tank", "workspace", "command-acceptance", "savings-page"}
