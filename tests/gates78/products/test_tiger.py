@@ -381,8 +381,8 @@ def test_original_reader_ocr_and_brain_regressions(gate78_database):
     import sys
     # Run the original shipped tests unmodified. Their failures/skips remain
     # failures here; this wrapper does not replace browser/OCR/room coverage.
-    targets = ['tests/tiger_brain/test_tg3.py', 'tests/tiger_price_read', 'tests/tiger_works',
-               'tests/tiger_playbooks']
+    targets = ['tests/tiger_brain/test_tg3.py', 'tests/tiger_price_read', 'tests/test_tiger_works.py',
+               'tests/test_tiger_price_structured.py', 'tests/tiger_playbooks']
     env = dict(os.environ, POOL_SCHEMA_DATABASE_URL=gate78_database,
                TIGER_MAIL_TEST_DATABASE_URL=gate78_database)
     result = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-rs', '--disable-socket',
