@@ -74,6 +74,7 @@ async def test_nonce_replay_is_atomic_across_restart_and_cannot_restore_forgotte
 @pytest.mark.asyncio
 async def test_scope_is_filtered_before_vector_search_limit_and_empty_user_scope(tisan, monkeypatch):
     await tisan.plan(user=USER_A)
+    await tisan.view(USER_B)
     observed = []
     index = tisan.stack.records.index
     original = index.search
@@ -88,11 +89,9 @@ async def test_scope_is_filtered_before_vector_search_limit_and_empty_user_scope
 
 @pytest.mark.asyncio
 async def test_product_controls_use_restricted_role_and_staged_rls(tisan):
-    from chassis.roles import apply_roles
     await tisan.view()
     pool = tisan.runtime.app.app.state.pool
     async with pool.acquire() as conn:
-        await apply_roles(conn, {'AGENT_DB_PASSWORD_TISAN': 'placeholder-disposable-test-password'})
         async with conn.transaction():
             await conn.execute('SET LOCAL ROLE agent_tisan')
             roles = await conn.fetchrow('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')

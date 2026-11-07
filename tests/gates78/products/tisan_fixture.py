@@ -84,12 +84,18 @@ class Tisan:
         """Real signed controls obtain the actor; execute the actual builder plan path."""
         from chassis.tank import TankClient
         tenant = tenant or self.stack.tenant
-        await self.view(user, tenant)
-        actors = [state.get('verified_product_user') for state in self.room.states
-                  if state.get('verified_product_user') is not None]
-        assert actors, 'Real product assertion verifier must expose its verified actor'
-        actor = actors[-1]
-        assert actor.user_id == user and actor.tenant_id == tenant
+        actor = None
+        enabled = self.runtime.gates_memory.brain_enabled()
+        if enabled:
+            await self.view(user, tenant)
+            actors = [state.get('verified_product_user') for state in self.room.states
+                      if state.get('verified_product_user') is not None]
+            assert actors, 'Real product assertion verifier must expose its verified actor'
+            actor = actors[-1]
+            assert actor.user_id == user and actor.tenant_id == tenant
+        else:
+            authorised = await self.http.get('/v1/command/tools', headers=self.headers(user, tenant))
+            assert authorised.status_code == 200, authorised.text
         payload = {'name': 'placeholder site', 'slug': 'placeholder-site', 'locale': 'en',
             'brand': {'colours': {'ink': '#001840', 'paper': '#F4F6FB', 'accent': '#E80008', 'line': '#B8BFD0'},
                       'fonts': {'heading': 'Jost', 'body': 'Inter'}}, 'request': request}
@@ -100,7 +106,8 @@ class Tisan:
         # No test route or replacement planner implements any of those steps.
         client = TankClient('http://placeholder-tank', KEY, 'tisan', self.native_tank_http)
         result = await self.runtime.builder.execute(payload, tenant, tank=client,
-            memory=self.runtime.app.app.state.memory, user=actor.user_id, data_root=self.root)
+            memory=self.runtime.app.app.state.memory if enabled else None,
+            user=actor.user_id if actor else None, data_root=self.root)
         if plan is None:
             assert 'brain_receipt' in result, 'Actual builder execution must return its real plan receipt'
         return result
