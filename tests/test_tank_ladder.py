@@ -150,7 +150,7 @@ async def test_code_escalates_with_receipt_and_no_raw_html(ladder, monkeypatch, 
     monkeypatch.setattr(b.tank, "_run_code_candidate", code)
     for tenant in b.tenants:
         result = await b.tank.run_route(request(b, tenant, text=json.dumps({"text": "visible", "html": "<p>raw</p><script>secret</script>"})))
-        assert result.rung == 2 and result.model == ("local" if local_online else "gpt-oss-small")
+        assert result.rung == 2 and result.model == ("local" if local_online else "llama-small")
         assert result.cost_usd == (0 if local_online else .001)
         assert result.engine['local_status'] == ('local rung online' if local_online else 'local rung offline')
         assert result.escalation[0]["reason"] == kind
