@@ -109,7 +109,9 @@ async def test_gateway_hit_receipt_uses_actual_cache_signal(ladder, monkeypatch)
         await conn.execute('DELETE FROM tank.route_cache WHERE tenant_id=$1', req.tenant_id)
     hit = await run(b, req)
     assert first.cost_usd == .001 and hit.cost_usd == 0
-    assert hit.cache_layer == 'C1' and hit.cache_backend == 'litellm-redis'
+    assert hit.cache_layer == 'C1' and hit.cache_backend == 'litellm'
+    assert hit.rung == 4 and hit.execution is None
+    assert hit.cache_read_tokens == hit.cache_write_tokens == 0
     assert hit.tokens_in == 20 and hit.tokens_out == 10
     async with b.pool.acquire() as conn:
         assert await conn.fetchval('SELECT cache_hit FROM tank.ledger WHERE id=$1 AND tenant_id=$2', hit.ledger_id, req.tenant_id)

@@ -186,6 +186,6 @@ def test_gateway_entrypoint_loads_optional_config_and_preserves_callback_imports
     assert command == args[0] == 'litellm' and args[-2:] == ['--port', '4000']
     config = yaml.safe_load(Path(args[args.index('--config') + 1]).read_text())
     assert not set(engine_runtime.LOCAL) & {r['model_name'] for r in config['model_list']}
-    assert config['litellm_settings']['callbacks'] == ['tenant_traces.callback']
+    assert config['litellm_settings']['callbacks'] == ['tenant_traces.callback', 'response_cache.callback']
     assert module.os.environ['PYTHONPATH'] == str(ROOT / 'litellm')
     assert capsys.readouterr().out.strip() == 'local rung offline'

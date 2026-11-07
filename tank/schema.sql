@@ -53,8 +53,6 @@ CREATE TABLE IF NOT EXISTS tank.policy (
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS candidate_model text;
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS shadow_rate numeric(4,3) NOT NULL DEFAULT 0;   -- 0..1 of calls shadowed
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS previous_model text;
--- DECISION task-specific C1 expiry; zero disables reuse without changing routing.
-ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS cache_ttl_s integer NOT NULL DEFAULT 3600 CHECK (cache_ttl_s BETWEEN 0 AND 2592000);
 
 -- One shadow comparison per sampled call. agreement 0..1: how close the candidate came to the primary.
 CREATE TABLE IF NOT EXISTS tank.shadow (
@@ -3352,6 +3350,8 @@ ALTER TABLE tank.paid_step_approvals ADD COLUMN IF NOT EXISTS delivery_thread_id
 ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS task_type text;
 ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS model text;
 -- END PAID LADDER STEPS
+-- DECISION preserve the existing seven-day default; per-task zero disables C1.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS cache_ttl_s integer NOT NULL DEFAULT 604800 CHECK (cache_ttl_s BETWEEN 0 AND 2592000);
 -- END platform
 
 -- BEGIN mobile

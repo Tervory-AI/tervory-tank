@@ -741,7 +741,7 @@ class PolicyRow(BaseModel):
     priority: str = "standard"
     batch_eligible: bool = False
     cache_scope: str = "none"
-    cache_ttl_s: int = Field(default=3600, ge=0, le=2592000)
+    cache_ttl_s: int = Field(default=604800, ge=0, le=2592000)
     max_tokens_out: int = 1024
     system_prompt: str | None = None
     eval_threshold: float = graduate.DEFAULT_THRESHOLD
@@ -1682,6 +1682,7 @@ async def _run_route(
         cost_usd, cost_status = 0.0, "not_set"
     if c1_hit:
         cost_usd, cost_status = 0., 'set'
+        cache_read, cache_write = 0, 0  # The stored provider usage is not a new C5 hit.
     content = ""
     finish_reason = ""
     if outcome == "delivered":
@@ -1710,7 +1711,7 @@ async def _run_route(
             WHERE tank.ledger.tenant_id=EXCLUDED.tenant_id AND tank.ledger.offpeak_job_id=EXCLUDED.id
             """,
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
-            req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
+            req.task_type, 4 if c1_hit else policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
             latency_ms, outcome, task_id, error, route_seat, json.dumps(escalation), int(policy.get("acceptance_window_s", 86400)),
             sent_at, _receipt_id, cost_status, cache_read, cache_write, c1_hit,
         )
@@ -1729,12 +1730,12 @@ async def _run_route(
 
     # Graduation: shadow the candidate on a share of calls; it never affects this answer.
     # An identifier prompt is not copied to a second provider or into the transcript.
-    if priority != "urgent" and cost_status == "set" and not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
+    if not c1_hit and priority != "urgent" and cost_status == "set" and not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
         t = asyncio.create_task(_shadow(req, policy, messages, max_tokens, ledger_id, content, cost_usd))
         _background.add(t)
         t.add_done_callback(_background.discard)
 
-    if priority != "urgent" and cost_status == "set" and not holds_identifier and model_override is None and routellm_shadow.configuration(policy):
+    if not c1_hit and priority != "urgent" and cost_status == "set" and not holds_identifier and model_override is None and routellm_shadow.configuration(policy):
         t = asyncio.create_task(routellm_shadow.observe(
             __import__("sys").modules[__name__], req, policy, messages, max_tokens,
             ledger_id, content, cost_usd, answered, "x-litellm-response-cost" in r.headers))
@@ -1752,7 +1753,7 @@ async def _run_route(
             )
     if content and not holds_identifier and masked_content == content:
         await _cache_write(req, policy, identity, ledger_id)
-        if priority != "urgent" and cost_status == "set":
+        if not c1_hit and priority != "urgent" and cost_status == "set":
             if _deferred_snapshot is not None:
                 semantic_cache.schedule_batch(__import__("sys").modules[__name__], req, _deferred_snapshot,
                                                ledger_id, content, cost_usd)
@@ -1760,11 +1761,11 @@ async def _run_route(
                 semantic_cache.schedule(__import__("sys").modules[__name__], req, cache_policy, identity,
                                         messages, cache_probe, ledger_id, content, cost_usd)
     return RouteResponse(
-        ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
+        ledger_id=ledger_id, model=answered, rung=4 if c1_hit else policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd if cost_status == "set" else None, latency_ms=latency_ms,
         finish_reason=finish_reason, escalation=escalation, cache_read_tokens=cache_read, cache_write_tokens=cache_write,
-        cache_layer='C1' if c1_hit else None, cache_backend='litellm-redis' if c1_hit else None,
-        execution=execution_receipt.capture(ledger_id=str(ledger_id), tenant_id=str(req.tenant_id), task_type=req.task_type,
+        cache_layer='C1' if c1_hit else None, cache_backend='litellm' if c1_hit else None,
+        execution=None if c1_hit else execution_receipt.capture(ledger_id=str(ledger_id), tenant_id=str(req.tenant_id), task_type=req.task_type,
             requested_model=model, answered_model=answered, dispatched=dispatched_settings,
             headers=r.headers, response=data, delivered=outcome == "delivered"),
     )

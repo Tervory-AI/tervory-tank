@@ -850,7 +850,7 @@ litellm_settings:
     mode: default_off
     max_messages: null
     supported_call_types: [acompletion]
-    ttl: 3600
+    ttl: 604800
   # Return the gateway's actual priced usage at the end of Command streams.
   include_cost_in_streaming_usage: true
   drop_params: true

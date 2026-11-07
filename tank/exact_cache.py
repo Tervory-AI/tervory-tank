@@ -19,11 +19,14 @@ def user_scope(req):
     return actor.user_id
 
 
-def eligible(req, policy):
-    return (user_scope(req) is not None
-            and policy.get('cache_scope') in {'tenant', 'platform', 'region'}
-            and int(policy.get('cache_ttl_s', 3600)) > 0
+def policy_eligible(req, policy):
+    return (policy.get('cache_scope') in {'tenant', 'platform', 'region'}
+            and int(policy.get('cache_ttl_s', 604800)) > 0
             and (not policy.get('matter_matching') or bool(req.case_ref)))
+
+
+def eligible(req, policy):
+    return user_scope(req) is not None and policy_eligible(req, policy)
 
 
 def request_options(req, policy, identity, model, *, safe=True, streaming=False):
@@ -33,7 +36,7 @@ def request_options(req, policy, identity, model, *, safe=True, streaming=False)
         return {'cache': {'no-cache': True, 'no-store': True, 'use-cache': False}}
     scope = [str(req.tenant_id), user_scope(req), req.task_type, *identity[:2], model]
     digest = hashlib.sha256(json.dumps(scope, separators=(',', ':')).encode()).hexdigest()
-    ttl = int(policy.get('cache_ttl_s', 3600))
+    ttl = int(policy.get('cache_ttl_s', 604800))
     return {'cache': {'use-cache': True, 'ttl': ttl, 's-maxage': ttl,
                       'namespace': 'tank:C1:v1:' + digest}}
 
@@ -59,7 +62,9 @@ async def record(rt, req, policy, answer):
     """Keep cache receipts for every task, including policies outside engine auto-routing."""
     if not isinstance(answer, rt.RouteResponse):
         return answer
-    attempted = int(eligible(req, policy))
+    # Include the existing service-scoped SQL fast path in the denominator too.
+    # Unsigned calls still cannot opt into LiteLLM's personal response cache.
+    attempted = int(policy_eligible(req, policy))
     hit = answer.cache_layer == 'C1'
     if not attempted and not hit:
         return answer
