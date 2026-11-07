@@ -64,7 +64,21 @@ async def google_signing_keys(kid: str = Query(default="", max_length=200)):
     return keys
 
 
-async def call_room(method: str, room: str, path: str, *, body=None, params=None, tenant=None, timeout=60):
+def lifecycle_message(timestamp: str, method: str, path: str, content: bytes,
+                      *, tenant: str = "", user: str = "") -> bytes:
+    """Existing Autumbra/Rig form, plus optional tenant\nuser binding for memory-bearing calls.
+
+    Shared-key HMAC alone never establishes an end user. When Tank already has a
+    verified tenant+user, both are signed into the message so a forged header
+    cannot widen scope. Calls without a user keep the historical three-line form.
+    """
+    if tenant and user:
+        return f"{timestamp}\n{method}\n{path}\n{tenant}\n{user}\n".encode() + content
+    return f"{timestamp}\n{method}\n{path}\n".encode() + content
+
+
+async def call_room(method: str, room: str, path: str, *, body=None, params=None, tenant=None,
+                    user=None, timeout=60):
     rig_lifecycle = room == "ghost" and path.startswith("/rig/rooms/")
     lifecycle = rig_lifecycle or (room == "ghost" and path.startswith("/ghost/autumbra/enforce/"))
     key = os.environ.get("RIG_LIFECYCLE_KEY" if rig_lifecycle else "AUTUMBRA_LIFECYCLE_KEY" if lifecycle else f"TANK_KEY_{room.upper()}", "")
@@ -72,17 +86,25 @@ async def call_room(method: str, room: str, path: str, *, body=None, params=None
     if not key or http is None:
         raise HTTPException(503, "The room is unavailable.")
     headers={"X-Tank-Key": key}
-    if tenant is not None:
-        headers["X-Tervory-Tenant"]=str(uuid.UUID(str(tenant)))
+    tenant_s = str(uuid.UUID(str(tenant))) if tenant is not None else ""
+    user_s = str(user).strip() if user is not None else ""
+    if tenant_s:
+        headers["X-Tervory-Tenant"] = tenant_s
+    if user_s:
+        headers["X-Tervory-User"] = user_s
     try:
         base = "http://enforce-lifecycle:8000" if lifecycle else ROOMS[room]
         if lifecycle:
             content = json.dumps(body, separators=(",", ":")).encode() if body is not None else b""
             timestamp = str(int(time.time()))
-            message = f"{timestamp}\n{method}\n{path}\n".encode() + content
+            message = lifecycle_message(timestamp, method, path, content, tenant=tenant_s, user=user_s)
             headers = {"X-Lifecycle-Timestamp": timestamp,
                        "X-Lifecycle-Signature": hmac.new(key.encode(), message, hashlib.sha256).hexdigest(),
                        "Content-Type": "application/json"}
+            if tenant_s:
+                headers["X-Tervory-Tenant"] = tenant_s
+            if user_s:
+                headers["X-Tervory-User"] = user_s
             response = await http.request(method, base + path, content=content, params=params,
                                           headers=headers, follow_redirects=False, timeout=timeout)
         else:
@@ -309,6 +331,7 @@ async def blocks_share(body: BlockShare, request: Request):
 
 
 # Ghost's existing memory client reaches Hermes only through this same-box corridor.
+# Body/query user_id is never identity: only an already-verified actor may scope rows.
 async def ghost_memory(method, path, *, body=None, params=None):
     core = runtime()
     if core._http is None:
@@ -323,8 +346,13 @@ async def ghost_memory(method, path, *, body=None, params=None):
 
 @router.get("/autumbra/memory/records", dependencies=[Depends(require_ghost)])
 async def ghost_memory_records(tenant_id: uuid.UUID, tier: Literal["client", "platform"] = "client",
-                               limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0)):
-    return await ghost_memory("GET", "/records", params={"tenant_id": str(tenant_id), "tier": tier, "agent": "ghost", "limit": limit, "offset": offset})
+                               limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0),
+                               user_id: str | None = Query(default=None, min_length=1, max_length=200)):
+    # Omitting user_id returns declared tenant-wide kinds only (blocked_address).
+    params = {"tenant_id": str(tenant_id), "tier": tier, "agent": "ghost", "limit": limit, "offset": offset}
+    if user_id is not None:
+        params["user_id"] = user_id
+    return await ghost_memory("GET", "/records", params=params)
 
 
 @router.post("/autumbra/memory/memories", dependencies=[Depends(require_ghost)])
@@ -337,14 +365,22 @@ async def ghost_memory_write(request: Request):
         uuid.UUID(body["tenant_id"])
         if body.get("kind") != "blocked_address" or body.get("index") is not False:
             raise ValueError()
+        # Standing blocks are tenant-wide; refuse a caller-supplied personal owner.
+        meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
+        if body.get("user_id") or meta.get("user_id"):
+            raise ValueError()
     except (ValueError, TypeError, KeyError):
         raise HTTPException(422, "Invalid Autumbra Watch request.") from None
     return await ghost_memory("POST", "/memories", body={**body, "agent": "ghost"})
 
 
 @router.delete("/autumbra/memory/memories/{id}", dependencies=[Depends(require_ghost)])
-async def ghost_memory_forget(id: uuid.UUID, tenant_id: uuid.UUID):
-    return await ghost_memory("DELETE", "/memories/" + str(id), params={"tenant_id": str(tenant_id)})
+async def ghost_memory_forget(id: uuid.UUID, tenant_id: uuid.UUID,
+                              user_id: str | None = Query(default=None, min_length=1, max_length=200)):
+    params = {"tenant_id": str(tenant_id)}
+    if user_id is not None:
+        params["user_id"] = user_id
+    return await ghost_memory("DELETE", "/memories/" + str(id), params=params)
 
 
 class BlockWithdrawal(BaseModel):
