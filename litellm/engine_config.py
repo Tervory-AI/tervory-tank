@@ -11,6 +11,12 @@ import engine_runtime
 
 def configure(config):
     config = deepcopy(config)
+    settings = config.get('litellm_settings', {})
+    if not engine_runtime.exact_cache_enabled() and 'response_cache.callback' in settings.get('callbacks', []):
+        # Do not initialize a new Redis cache or its callback on today's deploy.
+        settings['callbacks'] = [name for name in settings['callbacks'] if name != 'response_cache.callback']
+        settings.pop('cache', None)
+        settings.pop('cache_params', None)
     rows = []
     for row in config.get('model_list', []):
         name = row['model_name']

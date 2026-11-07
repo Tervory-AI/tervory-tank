@@ -840,7 +840,17 @@ model_list:
       build_only: true
 
 litellm_settings:
-  callbacks: [tenant_traces.callback]
+  callbacks: [tenant_traces.callback, response_cache.callback]
+  # DECISION reuse regional Redis, opt in only with Tank's user-scoped C1 key.
+  cache: true
+  cache_params:
+    type: redis
+    host: redis
+    port: 6379
+    mode: default_off
+    max_messages: null
+    supported_call_types: [acompletion]
+    ttl: 604800
   # Return the gateway's actual priced usage at the end of Command streams.
   include_cost_in_streaming_usage: true
   drop_params: true

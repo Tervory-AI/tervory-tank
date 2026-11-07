@@ -69,6 +69,7 @@ async def engine_status(rt, tenant_id):
     usage, spend, graduations = ({r['task_type']: dict(r) for r in rows} for rows in (receipts, costs, moves))
     result = []
     roster = {r['name']: r for r in await rt.list_models()}
+    cache_usage = await __import__('exact_cache').status(rt, tenant_id)
     for name in sorted({r['task_type'] for r in tasks}):
         model = current.get(name)
         rung = engine_ladder.rung(model) if model else 'unselected'
@@ -83,5 +84,7 @@ async def engine_status(rt, tenant_id):
             row[key] = float(row[key])
         row['saved_usd'] = max(0., row['would_have_cost_usd'] - row['cost_usd'])
         row['traces_url'] = engine_tracing.traces_url(tenant_id, name)
+        row['cache_layers'] = cache_usage.get(name, {'C1': {'attempts': 0, 'hits': 0,
+            'hit_rate': 0., 'saved_usd': 0., 'estimated': True}})
         result.append(row)
     return {'tenant_id': str(tenant_id), 'region': rt.box_region(), 'local_status': engine_runtime.local_status(), 'tasks': result}
