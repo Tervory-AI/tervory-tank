@@ -1,6 +1,6 @@
 {
   "product": "workspace",
-  "source_sha": "18c0620110e334a307e668259044282343dff9d8",
+  "source_sha": "d412e7e9043f4010d150f5fcb15b9c605e6c5b9b",
   "entrypoints": [
     "POST /v1/command/workspace/chat",
     "POST /v1/command/workspace/task.create",

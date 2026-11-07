@@ -26,7 +26,7 @@ import workspace_fixture
 
 workspace_entry = workspace_fixture.workspace_entry
 
-SOURCE_SHA = '18c0620110e334a307e668259044282343dff9d8'
+SOURCE_SHA = 'd412e7e9043f4010d150f5fcb15b9c605e6c5b9b'
 ROOT = Path(__file__).resolve().parents[3]
 CHAT = {'messages': [{'role': 'user', 'content': 'placeholder summarize the project'}], 'task_type': 'tier0.answer'}
 
@@ -258,6 +258,8 @@ async def test_paid_entry_runs_real_tank_lifecycle(workspace_entry, entry):
     result = response.json()
     assert len(e.provider_calls) == 1
     assert result['memory_bracket']['paid_calls'] == 1
+    paid_at = next(index for index, event in enumerate(e.timeline) if event[0] == 'PAID')
+    assert e.timeline.index(('POST', '/recall')) < paid_at < e.timeline.index(('POST', '/memories'))
     assert result['ledger_id']
     rows = await e.stack.client(USER_A).records(e.stack.tenant)
     assert any(r['kind'] in {'workspace.receipt', 'workspace.task'} for r in rows)

@@ -38,11 +38,13 @@ async def workspace_entry(gate78_memory, monkeypatch):
     memory = build_workspace_memory_client(http=stack.http, base_url='http://hermes')
     monkeypatch.setattr(main, 'memory', memory, raising=False)
     requests = []
+    timeline = []
     fault = {'method': None, 'status': 503}
     originals = []
 
     async def observe(request):
         requests.append(request)
+        timeline.append((request.method, request.url.path))
     stack.http.event_hooks['request'].append(observe)
     # An outage is injected at the HTTP boundary, never into memory/orchestration.
     transport = stack.http._transport
@@ -59,6 +61,7 @@ async def workspace_entry(gate78_memory, monkeypatch):
             return httpx.Response(200, json={'data': [{'model_name': 'placeholder-gate78-model',
                 'litellm_params': {'model': 'placeholder/provider'},
                 'model_info': {'input_cost_per_token': .001, 'output_cost_per_token': .001}}]})
+        timeline.append(('PAID', request.url.path))
         calls.append(json.loads(request.content))
         return httpx.Response(200, json={'id': 'placeholder-completion', 'model': 'placeholder-gate78-model',
             'choices': [{'message': {'content': 'placeholder completed answer'}}],
@@ -92,7 +95,7 @@ async def workspace_entry(gate78_memory, monkeypatch):
             'urn:placeholder:workspace:fixture', meta={'task_key': 'placeholder-task', **meta})
     entry = SimpleNamespace(stack=stack, pool=pool, main=main, client=client, request=request,
         headers=headers, provider=provider, memory=memory, provider_calls=calls, requests=requests,
-        fault=fault, snapshot=snapshot, seed=seed, originals=originals)
+        fault=fault, snapshot=snapshot, seed=seed, originals=originals, timeline=timeline)
     try:
         yield entry
     finally:
