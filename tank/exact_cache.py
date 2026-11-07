@@ -3,6 +3,7 @@ import hashlib
 import json
 
 import product_identity
+import engine_runtime
 
 
 class CachedAnswer(str):
@@ -42,6 +43,8 @@ def request_options(req, policy, identity, model, *, safe=True, streaming=False)
 
 
 async def gateway_options(rt, req, policy, identity, model, **kwargs):
+    if not engine_runtime.exact_cache_enabled():
+        return {}
     options = request_options(req, policy, identity, model, **kwargs)
     if options['cache'].get('use-cache'):
         async with rt.pool().acquire() as conn:

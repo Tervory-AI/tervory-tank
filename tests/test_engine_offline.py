@@ -175,6 +175,7 @@ def test_runtime_copies_and_gateway_startup_agree():
 
 
 def test_gateway_entrypoint_loads_optional_config_and_preserves_callback_imports(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv('ENGINE_C1_ENABLED', '1')
     module = load('engine_startup_test', 'litellm/engine_config.py')
     monkeypatch.setattr(module.tempfile, 'tempdir', str(tmp_path))
     monkeypatch.delenv('USE_DDTRACE', raising=False)

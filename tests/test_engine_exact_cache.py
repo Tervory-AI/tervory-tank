@@ -25,6 +25,7 @@ def set_user(monkeypatch, tenant, user='placeholder-user-a'):
 
 
 async def setup(b, monkeypatch):
+    monkeypatch.setenv('ENGINE_C1_ENABLED', '1')
     selected_policy_protocol(monkeypatch)
     monkeypatch.setattr(b.tank.semantic_cache, 'lookup', AsyncMock(return_value=None))
     monkeypatch.setattr(b.tank.semantic_cache, 'schedule', Mock())
@@ -154,6 +155,43 @@ def test_key_changes_with_model_input_policy_and_scope(monkeypatch):
         assert not exact_cache.request_options(req, pol, ('a', 'b', ''), 'placeholder-model', **options)['cache']['use-cache']
     set_user(monkeypatch, 'placeholder-foreign-tenant')
     assert not exact_cache.request_options(req, pol, ('a', 'b', ''), 'placeholder-model')['cache']['use-cache']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('setting', [None, '', '0', 'true', 'invalid'])
+async def test_no_new_setting_keeps_gateway_cache_inactive(monkeypatch, setting):
+    if setting is None:
+        monkeypatch.delenv('ENGINE_C1_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('ENGINE_C1_ENABLED', setting)
+    req = SimpleNamespace(tenant_id='placeholder-tenant', task_type='placeholder-task', case_ref=None)
+    set_user(monkeypatch, req.tenant_id)
+    assert await exact_cache.gateway_options(object(), req, {'cache_scope':'tenant'}, ('a','b',''), 'placeholder-model') == {}
+    spec = importlib.util.spec_from_file_location('c1_gateway_config_default', Path('litellm/engine_config.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for name in ('config.yaml', 'config.za.yaml'):
+        original = yaml.safe_load((Path('litellm') / name).read_text())
+        configured = module.configure(original)
+        settings = configured['litellm_settings']
+        assert 'cache' not in settings and 'cache_params' not in settings
+        assert settings['callbacks'] == ['tenant_traces.callback']
+        assert original['litellm_settings']['cache'] is True
+        monkeypatch.setenv('ENGINE_C1_ENABLED', '1')
+        enabled = module.configure(original)['litellm_settings']
+        assert enabled['cache'] is True and enabled['cache_params']['mode'] == 'default_off'
+        assert enabled['callbacks'] == ['tenant_traces.callback', 'response_cache.callback']
+        if setting is None:
+            monkeypatch.delenv('ENGINE_C1_ENABLED')
+        else:
+            monkeypatch.setenv('ENGINE_C1_ENABLED', setting)
+
+
+@pytest.mark.parametrize('name', ['docker-compose.yml', 'docker-compose.za.yml'])
+def test_c1_activation_is_shared_by_tank_and_gateway_and_unset_by_default(name):
+    config = yaml.safe_load(Path(name).read_text())
+    for service in ('tank', 'litellm'):
+        assert config['services'][service]['environment']['ENGINE_C1_ENABLED'] == '${ENGINE_C1_ENABLED:-}'
 
 
 @pytest.mark.asyncio

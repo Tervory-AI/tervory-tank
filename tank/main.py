@@ -1667,7 +1667,7 @@ async def _run_route(
     cache_read, cache_write = prompt_cache.cache_tokens(usage)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
-    c1_hit = (dispatched_settings['cache'].get('use-cache') is True
+    c1_hit = (dispatched_settings.get('cache', {}).get('use-cache') is True
               and r.headers.get('x-tervory-cache-layer') == 'C1' and outcome == 'delivered')
     cost_status = "set"
     if priority == "offpeak":

@@ -144,6 +144,7 @@ services:
     environment:
       # DECISION engine stays offline on current Coolify apps; opt in on owned servers.
       ENGINE_LOCAL_URL: ${ENGINE_LOCAL_URL:-}
+      ENGINE_C1_ENABLED: ${ENGINE_C1_ENABLED:-}
       ENGINE_LARGE_URL: ${ENGINE_LARGE_URL:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-}
       TANK_REGION: za
@@ -188,6 +189,7 @@ services:
     environment:
       # DECISION engine stays offline on current Coolify apps; opt in on owned servers.
       ENGINE_LOCAL_URL: ${ENGINE_LOCAL_URL:-}
+      ENGINE_C1_ENABLED: ${ENGINE_C1_ENABLED:-}
       ENGINE_LARGE_URL: ${ENGINE_LARGE_URL:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-}
       TRIGGER_SIGNIN_CONFIG_TOKEN: ${TRIGGER_SIGNIN_CONFIG_TOKEN:?founder sets read-only directory capability}

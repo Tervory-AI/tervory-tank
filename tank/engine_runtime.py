@@ -4,6 +4,10 @@ import os
 LOCAL = ('local', 'local-large')
 
 
+def exact_cache_enabled():
+    return os.environ.get('ENGINE_C1_ENABLED', '').strip() == '1'
+
+
 def local_url(model):
     # DECISION URLs, not an enabled profile alone, opt serving into local models.
     # No implicit Boston/ZA endpoint. Small is the master switch for both rungs.
