@@ -1,5 +1,6 @@
 """Real Hermes HTTP + PostgreSQL + local Qdrant ownership regression."""
 import httpx
+from hermes_lifecycle import personal_headers
 import pytest
 
 from test_agent_memory_records import memory as memory_fixture, Encoder
@@ -17,7 +18,11 @@ async def test_same_tenant_list_never_leaks_another_user(memory, monkeypatch):
                                meta={"user_id": "placeholder-user-b"})
     app = create_app(InMemoryStore(), Encoder(), records=m.records)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://placeholder") as client:
-        response = await client.get("/records", headers={"X-Tank-Key": "placeholder-agent-key"},
+        headers, _ = personal_headers(
+            "placeholder-agent-key", "GET", "/records",
+            tenant=m.tenant, user="placeholder-user-a",
+        )
+        response = await client.get("/records", headers=headers,
                                     params={"tenant_id": m.tenant, "user_id": "placeholder-user-a"})
     assert response.status_code == 200
     assert row["id"] not in {item["id"] for item in response.json()["memories"]}
@@ -34,13 +39,19 @@ async def test_real_app_ownership_on_every_operation(memory, monkeypatch):
     monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "placeholder-user-a,placeholder-user-b")
     monkeypatch.setitem(TENANT_WIDE_KINDS, m.agent, frozenset({"placeholder.shared"}))
     app = create_app(InMemoryStore(), Encoder(), records=m.records)
-    headers = {"X-Tank-Key": "placeholder-agent-key"}
+    key = "placeholder-agent-key"
+    bare = {"X-Tank-Key": key}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://placeholder") as client:
         async def write(owner=None, kind="placeholder.personal", tenant=None, **changes):
-            return await client.post("/memories", headers=headers, json={
+            body = {
                 "tenant_id": tenant or m.tenant, "text": "placeholder claim", "kind": kind,
                 "source": "https://placeholder.example/evidence",
-                "meta": {"user_id": owner} if owner else {}, **changes})
+                "meta": {"user_id": owner} if owner else {}, **changes}
+            if owner:
+                body["user_id"] = owner
+                headers, raw = personal_headers(key, "POST", "/memories", tenant=body["tenant_id"], user=owner, body=body)
+                return await client.post("/memories", headers=headers, content=raw)
+            return await client.post("/memories", headers=bare, json=body)
         assert (await write()).status_code == 422
         assert (await write(meta={"scope": "tenant"})).status_code == 422
         for owner in ([], {}, 4, " "):
@@ -55,24 +66,30 @@ async def test_real_app_ownership_on_every_operation(memory, monkeypatch):
         assert replay.status_code == 409
         for user, own, other in (("placeholder-user-a", a, b), ("placeholder-user-b", b, a)):
             params = {"tenant_id": m.tenant, "user_id": user}
-            rows = (await client.get("/records", params=params, headers=headers)).json()["memories"]
+            list_headers, _ = personal_headers(key, "GET", "/records", tenant=m.tenant, user=user)
+            rows = (await client.get("/records", params=params, headers=list_headers)).json()["memories"]
             ids = {row["id"] for row in rows}
             assert {own["id"], shared["id"]} <= ids
             assert not {other["id"], foreign["id"]} & ids
             if user.endswith("-a"):
                 assert private_shared["id"] not in ids
-            found = await client.post("/recall", headers=headers, json={**params, "query": "placeholder query"})
+            recall_body = {**params, "query": "placeholder query"}
+            rh, rr = personal_headers(key, "POST", "/recall", tenant=m.tenant, user=user, body=recall_body)
+            found = await client.post("/recall", headers=rh, content=rr)
             assert found.status_code == 200
             assert {row["id"] for row in found.json()["memories"]} == ids
             for identity in (other["id"], foreign["id"]):
-                assert (await client.get("/records/" + identity, params=params, headers=headers)).status_code == 404
-                assert (await client.delete("/memories/" + identity, params=params, headers=headers)).status_code == 404
-            assert (await client.get("/records/" + own["id"], params=params, headers=headers)).status_code == 200
+                gh, _ = personal_headers(key, "GET", f"/records/{identity}", tenant=m.tenant, user=user)
+                assert (await client.get("/records/" + identity, params=params, headers=gh)).status_code == 404
+                dh, _ = personal_headers(key, "DELETE", f"/memories/{identity}", tenant=m.tenant, user=user)
+                assert (await client.delete("/memories/" + identity, params=params, headers=dh)).status_code == 404
+            oh, _ = personal_headers(key, "GET", f"/records/{own['id']}", tenant=m.tenant, user=user)
+            assert (await client.get("/records/" + own["id"], params=params, headers=oh)).status_code == 200
         # Missing identity never broadens a personal read or deletion.
         unscoped = {"tenant_id": m.tenant}
-        rows = (await client.get("/records", headers=headers, params=unscoped)).json()["memories"]
+        rows = (await client.get("/records", headers=bare, params=unscoped)).json()["memories"]
         assert [row["id"] for row in rows] == [shared["id"]]
-        assert (await client.delete("/memories/" + b["id"], headers=headers, params=unscoped)).status_code == 404
+        assert (await client.delete("/memories/" + b["id"], headers=bare, params=unscoped)).status_code == 404
         await Publisher(m.records).set_policy(m.agent, m.tenant, "placeholder-user-a", True, inventory())
         founder_headers = {"X-Tank-Key": "placeholder-workspace-key", "X-Tervory-Admin": "placeholder-user-a"}
         for row in (b, private_shared, foreign):
@@ -86,7 +103,8 @@ async def test_real_app_ownership_on_every_operation(memory, monkeypatch):
             json={"tenant_id": m.tenant, "agent": m.agent, "source_row": a["id"]})
         assert published.status_code == 200
         # User A's bulk forget leaves B's personal rows intact.
-        deleted = await client.delete("/tenants/" + m.tenant, headers=headers, params={"user_id": "placeholder-user-a"})
+        th, _ = personal_headers(key, "DELETE", "/tenants/" + m.tenant, tenant=m.tenant, user="placeholder-user-a")
+        deleted = await client.delete("/tenants/" + m.tenant, headers=th, params={"user_id": "placeholder-user-a"})
         assert deleted.status_code == 200
         assert await m.records.get(m.agent, m.tenant, b["id"]) is not None
 
@@ -134,3 +152,9 @@ async def test_chassis_sends_verified_owner_on_all_personal_calls():
     assert json.loads(seen[1].content)["user_id"] == user
     assert seen[2].url.params["user_id"] == user
     assert seen[3].url.params["user_id"] == user
+    for req in seen:
+        assert req.headers["X-Tank-Key"] == "placeholder-key"
+        assert req.headers["X-Tervory-User"] == user
+        assert req.headers["X-Tervory-Tenant"] == tenant
+        assert req.headers["X-Lifecycle-Timestamp"]
+        assert req.headers["X-Lifecycle-Signature"]

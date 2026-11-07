@@ -151,13 +151,67 @@ class MemoryClient:
             raise RuntimeError("tank key is not set")
         if "/v1/memory" in self._base:
             raise RuntimeError("MemoryClient must call Hermes directly; Tank /v1/memory is banned")
-        headers = {"X-Tank-Key": self._api_key}
+        import hashlib
+        import hmac
+        import json
+        import time
+        from urllib.parse import parse_qs, urlparse
+        from uuid import UUID
+
+        # Bind verified tenant+user into the existing lifecycle HMAC (same form as
+        # tank/ghost_routes.lifecycle_message). Agent key alone is not end-user proof;
+        # Hermes requires this for personal ops. Tenant-wide (no user) stays unsigned.
+        raw = b""
+        tenant = ""
+        user = ""
+        if body is not None:
+            raw = json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
+            tenant = str(body.get("tenant_id") or "")
+            meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
+            user = str(body.get("user_id") or meta.get("user_id") or "").strip()
+        elif "?" in path:
+            q = parse_qs(urlparse("http://x" + path).query)
+            tenant = (q.get("tenant_id") or [""])[0]
+            user = (q.get("user_id") or [""])[0].strip()
+        headers: dict[str, str] = {"X-Tank-Key": self._api_key}
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        if tenant and user:
+            try:
+                tenant = str(UUID(str(tenant)))
+            except ValueError:
+                tenant = ""
+            if tenant and user:
+                ts = str(int(time.time()))
+                route = path.split("?", 1)[0]
+                message = (
+                    f"{ts}\n{method.upper()}\n{route}\n{tenant}\n{user}\n".encode()
+                    + raw
+                )
+                headers.update(
+                    {
+                        "X-Lifecycle-Timestamp": ts,
+                        "X-Lifecycle-Signature": hmac.new(
+                            self._api_key.encode(), message, hashlib.sha256
+                        ).hexdigest(),
+                        "X-Tervory-Tenant": tenant,
+                        "X-Tervory-User": user,
+                    }
+                )
+
+        async def _do(http: httpx.AsyncClient) -> httpx.Response:
+            if body is not None:
+                return await http.request(
+                    method, self._base + path, content=raw, headers=headers
+                )
+            return await http.request(method, self._base + path, headers=headers)
+
         try:
             if self._http is not None:
-                response = await self._http.request(method, self._base + path, json=body, headers=headers)
+                response = await _do(self._http)
             else:
                 async with httpx.AsyncClient(timeout=30) as http:
-                    response = await http.request(method, self._base + path, json=body, headers=headers)
+                    response = await _do(http)
         except httpx.HTTPError:
             raise RuntimeError("hermes unreachable") from None
         if response.status_code >= 400:

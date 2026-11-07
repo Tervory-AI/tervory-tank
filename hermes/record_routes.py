@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from fastapi import Header, HTTPException, Query
+from fastapi import Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -81,6 +81,7 @@ def register_record_routes(app, records, resolve_agent):
 
     @app.get("/records")
     async def listing(
+        request: Request,
         tenant_id: uuid.UUID,
         agent: str | None = None,
         tier: Literal["client", "platform"] = "client",
@@ -90,13 +91,46 @@ def register_record_routes(app, records, resolve_agent):
         offset: int = Query(default=0, ge=0),
     ):
         selected = resolve_agent(identify(x_tank_key), agent, write=False)
+        if user_id is not None and str(user_id).strip():
+            from hermes.signed_identity import verify_personal_identity
+            verify_personal_identity(
+                key=x_tank_key,
+                method="GET",
+                path="/records",
+                timestamp=request.headers.get("X-Lifecycle-Timestamp", ""),
+                signature=request.headers.get("X-Lifecycle-Signature", ""),
+                tenant_header=request.headers.get("X-Tervory-Tenant", ""),
+                user_header=request.headers.get("X-Tervory-User", ""),
+                body=b"",
+                body_tenant=str(tenant_id),
+                body_user=str(user_id).strip(),
+            )
         return {"memories": await ready(selected).list(selected, str(tenant_id), tier, limit, offset, user_id=user_id)}
 
     @app.get("/records/{id}")
-    async def get_record(id: uuid.UUID, tenant_id: uuid.UUID, agent: str | None = None,
-                         user_id: str | None = Query(default=None, min_length=1, max_length=200),
-                         x_tank_key: str = Header(default="")):
+    async def get_record(
+        request: Request,
+        id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        agent: str | None = None,
+        user_id: str | None = Query(default=None, min_length=1, max_length=200),
+        x_tank_key: str = Header(default=""),
+    ):
         selected = resolve_agent(identify(x_tank_key), agent, write=False)
+        if user_id is not None and str(user_id).strip():
+            from hermes.signed_identity import verify_personal_identity
+            verify_personal_identity(
+                key=x_tank_key,
+                method="GET",
+                path=f"/records/{id}",
+                timestamp=request.headers.get("X-Lifecycle-Timestamp", ""),
+                signature=request.headers.get("X-Lifecycle-Signature", ""),
+                tenant_header=request.headers.get("X-Tervory-Tenant", ""),
+                user_header=request.headers.get("X-Tervory-User", ""),
+                body=b"",
+                body_tenant=str(tenant_id),
+                body_user=str(user_id).strip(),
+            )
         row = await ready(selected).get(selected, str(tenant_id), str(id), user_id=user_id)
         if row is None:
             raise HTTPException(404, "not found")

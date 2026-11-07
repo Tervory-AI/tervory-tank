@@ -8,12 +8,12 @@ Proof boundary (honest):
 - Local RSA OIDC issuer: tests/trigger_signin_fakes.Provider (not a cloud IdP).
 - Thin ASGI mount only wires those production calls; it does NOT invent ownership
   checks. Edit/forget foreign ids rely on gates_memory.require_owned_record + Hermes.
-- NOT claimed: Hermes verifying OIDC itself. Agent-key + user_id remains the Hermes
-  data-plane contract; products must bind user_id from the verified actor.
+- Hermes verifies lifecycle-bound tenant+user for personal ops (same HMAC form as
+  Tank/Ghost lifecycle). Agent-key alone cannot assert a personal user_id.
+- OIDC itself is verified at Tank ingress; Hermes verifies the forwarded lifecycle binding.
 """
 from __future__ import annotations
 
-from pathlib import Path
 
 import json
 import sys
@@ -74,41 +74,12 @@ def _assert_headers(token: str) -> dict:
 @pytest.mark.asyncio
 async def test_oidc_ingress_to_hermes_full_personal_crud_list_publish(memory, monkeypatch):
     from agents.opli import gates_memory
-    # trigger.app imports proselint (Trigger room dep). Load only the production
-    # identity helpers without pulling the full room stack.
-    import importlib.util
-    from dataclasses import dataclass
-    from uuid import UUID as _UUID
-    from fastapi import HTTPException as _HTTPException
-
-    @dataclass(frozen=True)
-    class SignedInActor:
-        """Mirrors agents/trigger/app.py:SignedInActor (production fields only)."""
-        tenant_id: _UUID
-        user_id: str
-
-    def refuse_scope_widen(
-        actor: SignedInActor,
-        *,
-        body_tenant_id: _UUID | None = None,
-        body_user_id: str | None = None,
-    ) -> None:
-        """Byte-stable copy of agents/trigger/app.py:refuse_scope_widen."""
-        if body_tenant_id is not None and body_tenant_id != actor.tenant_id:
-            raise _HTTPException(403, "Memory ownership required")
-        if body_user_id is not None and str(body_user_id).strip() and str(body_user_id).strip() != actor.user_id:
-            raise _HTTPException(403, "Memory ownership required")
-
-    # Prove the copy matches production source text (no silent drift).
-    _src = Path(__file__).resolve().parents[1].joinpath("agents/trigger/app.py").read_text()
-    assert 'raise HTTPException(403, "Memory ownership required")' in _src
-    assert "Body tenant/user cannot widen or replace the signed-in scope." in _src
+    from trigger.app import SignedInActor, refuse_scope_widen
 
     m = memory
     monkeypatch.setenv("TANK_KEY_" + m.agent.upper(), AGENT_KEY)
     monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", f"{USER_A},{USER_B}")
     monkeypatch.setenv("OPLI_MEMORY_ENABLED", "true")
-    # Treat test agent like opli for declared tenant-wide kinds used by gates_memory.
     monkeypatch.setitem(
         TENANT_WIDE_KINDS,
         m.agent,
@@ -425,7 +396,7 @@ async def test_oidc_ingress_to_hermes_full_personal_crud_list_publish(memory, mo
             )
             assert refused.status_code == 401
 
-        # Documented Hermes data-plane boundary: agent key + forged user_id writes as that user.
+        # Direct Hermes: agent-key + forged user_id without lifecycle → 401 (closed).
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=hermes), base_url="http://hermes"
         ) as hc:
@@ -441,9 +412,7 @@ async def test_oidc_ingress_to_hermes_full_personal_crud_list_publish(memory, mo
                     "meta": {"user_id": ATTACKER},
                 },
             )
-            assert forged.status_code == 201, forged.text
-            listed_a = await m.records.list(m.agent, m.tenant, user_id=USER_A)
-            assert forged.json()["id"] not in {r["id"] for r in listed_a}
+            assert forged.status_code == 401, forged.text
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ import time
 import uuid
 
 import httpx
+from hermes_lifecycle import personal_headers
 import pytest
 from fastapi import FastAPI, Request
 
@@ -92,39 +93,47 @@ async def test_two_users_same_tenant_hermes_sql_before_vector(memory, monkeypatc
     from hermes.service import create_app
     from hermes.store import InMemoryStore
     m = memory
-    monkeypatch.setenv("TANK_KEY_" + m.agent.upper(), "placeholder-agent-key")
+    key = "placeholder-agent-key"
+    monkeypatch.setenv("TANK_KEY_" + m.agent.upper(), key)
     monkeypatch.setitem(TENANT_WIDE_KINDS, m.agent, frozenset({"placeholder.shared"}))
     app = create_app(InMemoryStore(), Encoder(), records=m.records)
-    headers = {"X-Tank-Key": "placeholder-agent-key"}
+    bare = {"X-Tank-Key": key}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://placeholder") as client:
-        a = (await client.post("/memories", headers=headers, json={
+        body_a = {
             "tenant_id": m.tenant, "text": "placeholder secret a", "kind": "placeholder.personal",
             "source": "https://placeholder.example/a", "user_id": "placeholder-user-a",
             "meta": {"user_id": "placeholder-user-a"},
-        })).json()
-        await client.post("/memories", headers=headers, json={
+        }
+        ha, ra = personal_headers(key, "POST", "/memories", tenant=m.tenant, user="placeholder-user-a", body=body_a)
+        a = (await client.post("/memories", headers=ha, content=ra)).json()
+        body_b = {
             "tenant_id": m.tenant, "text": "placeholder secret b", "kind": "placeholder.personal",
             "source": "https://placeholder.example/b", "user_id": "placeholder-user-b",
             "meta": {"user_id": "placeholder-user-b"},
-        })
-        shared = (await client.post("/memories", headers=headers, json={
+        }
+        hb, rb = personal_headers(key, "POST", "/memories", tenant=m.tenant, user="placeholder-user-b", body=body_b)
+        await client.post("/memories", headers=hb, content=rb)
+        shared = (await client.post("/memories", headers=bare, json={
             "tenant_id": m.tenant, "text": "placeholder shared", "kind": "placeholder.shared",
             "source": "https://placeholder.example/s",
         })).json()
-        # Missing user on personal kind refused.
-        assert (await client.post("/memories", headers=headers, json={
+        # Missing user on personal kind refused (and unsigned personal would 401).
+        assert (await client.post("/memories", headers=bare, json={
             "tenant_id": m.tenant, "text": "placeholder missing", "kind": "placeholder.personal",
             "source": "https://placeholder.example/m",
         })).status_code == 422
-        # Forged meta owner conflicting with body user_id refused.
-        assert (await client.post("/memories", headers=headers, json={
+        forged = {
             "tenant_id": m.tenant, "text": "placeholder forged", "kind": "placeholder.personal",
             "source": "https://placeholder.example/f", "user_id": "placeholder-user-a",
             "meta": {"user_id": "placeholder-user-b"},
-        })).status_code == 422
-        hits = (await client.post("/recall", headers=headers, json={
+        }
+        hf, rf = personal_headers(key, "POST", "/memories", tenant=m.tenant, user="placeholder-user-a", body=forged)
+        assert (await client.post("/memories", headers=hf, content=rf)).status_code == 422
+        recall_body = {
             "tenant_id": m.tenant, "query": "placeholder secret", "user_id": "placeholder-user-a",
-        })).json()["memories"]
+        }
+        hr, rr = personal_headers(key, "POST", "/recall", tenant=m.tenant, user="placeholder-user-a", body=recall_body)
+        hits = (await client.post("/recall", headers=hr, content=rr)).json()["memories"]
         ids = {row["id"] for row in hits}
         assert a["id"] in ids and shared["id"] in ids
         assert all((row.get("meta") or {}).get("user_id") in (None, "placeholder-user-a") or row["kind"] == "placeholder.shared"

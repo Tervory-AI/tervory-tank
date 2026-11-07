@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
+from hermes_lifecycle import personal_headers
 import pytest
 import pytest_asyncio
 from qdrant_client import QdrantClient
@@ -80,10 +81,11 @@ async def test_personal_recall_list_get_forget_and_tenant_isolation(product):
             ids = {row['id'] for row in rows}
             assert own['id'] in ids
             assert other['id'] not in ids and foreign['id'] not in ids
-        headers = {'X-Tank-Key': p.key}
         params = {'tenant_id': p.tenant, 'user_id': user}
-        assert (await p.http.get('/records/' + own['id'], params=params, headers=headers)).status_code == 200
-        assert (await p.http.get('/records/' + other['id'], params=params, headers=headers)).status_code == 404
+        oh, _ = personal_headers(p.key, 'GET', '/records/' + own['id'], tenant=p.tenant, user=user)
+        assert (await p.http.get('/records/' + own['id'], params=params, headers=oh)).status_code == 200
+        xh, _ = personal_headers(p.key, 'GET', '/records/' + other['id'], tenant=p.tenant, user=user)
+        assert (await p.http.get('/records/' + other['id'], params=params, headers=xh)).status_code == 404
         with pytest.raises(RuntimeError, match='hermes answered 404'):
             await p.client.forget(other['id'], p.tenant, user_id=user)
     assert await p.client.records(p.tenant) == []
@@ -121,6 +123,8 @@ async def test_shared_wrong_keys_and_invalid_kind_are_refused(product):
     for key, code in (('placeholder-shared-key', 403), ('placeholder-wrong-key', 401)):
         response = await p.http.post('/memories', headers={'X-Tank-Key': key}, json=body)
         assert response.status_code == code
+    # Correct agent key but unsigned personal body → signed identity required.
+    assert (await p.http.post('/memories', headers={'X-Tank-Key': p.key}, json=body)).status_code == 401
     response = await p.http.post('/memories', headers={'X-Tank-Key': p.key}, json={**body, 'kind': 'Invalid kind'})
     assert response.status_code == 422
     assert await p.client.records(p.tenant, user_id='placeholder-user') == []
@@ -157,18 +161,31 @@ async def test_explicit_edit_checks_sql_owner_and_preserves_create_conflicts(pro
     row = await p.client.remember(p.tenant, 'placeholder original', p.name + '.receipt', 'placeholder-source', user_id=owner)
     body = dict(tenant_id=p.tenant, user_id=owner, text='placeholder changed',
                 kind=p.name + '.receipt', source='placeholder-source')
-    headers = {'X-Tank-Key': p.key}
     path = '/memories/' + row['id']
+    bare = {'X-Tank-Key': p.key}
+
+    async def patch_signed(payload, *, path=path, key=p.key):
+        # Unsigned personal patch is refused; sign only when a user_id is present.
+        uid = payload.get('user_id')
+        if uid is None or (isinstance(uid, str) and not str(uid).strip()):
+            return await p.http.patch(path, json=payload, headers={'X-Tank-Key': key})
+        # Identity immutable: sign as the body user_id being asserted.
+        headers, raw = personal_headers(key, 'PATCH', path, tenant=str(payload['tenant_id']), user=str(uid), body=payload)
+        return await p.http.patch(path, headers=headers, content=raw)
+
     for change, code in [({'user_id':'placeholder-other'},404), ({'tenant_id':p.other},404),
                          ({'user_id':None},422), ({'meta':{'user_id':'placeholder-other'}},422),
                          ({'kind':p.name+'.task'},404), ({'id':str(uuid4())},422)]:
-        assert (await p.http.patch(path, json={**body, **change}, headers=headers)).status_code == code
-    assert (await p.http.patch('/memories/'+str(uuid4()), json=body, headers=headers)).status_code == 404
-    assert (await p.http.patch(path, json=body, headers={'X-Tank-Key':'placeholder-shared-key'})).status_code == 403
-    assert (await p.http.post('/memories', json={**body,'id':row['id']}, headers=headers)).status_code == 409
+        assert (await patch_signed({**body, **change})).status_code == code
+    assert (await patch_signed(body, path='/memories/'+str(uuid4()))).status_code == 404
+    # Workspace/shared key cannot write; identity signing also fails closed without agent key match.
+    assert (await patch_signed(body, key='placeholder-shared-key')).status_code in (401, 403)
+    # Replay create conflict still signed as personal write.
+    ch, cr = personal_headers(p.key, 'POST', '/memories', tenant=p.tenant, user=owner, body={**body,'id':row['id']})
+    assert (await p.http.post('/memories', headers=ch, content=cr)).status_code == 409
     rows = await p.client.records(p.tenant, user_id=owner)
     assert len(rows) == 1 and rows[0]['claim'] == 'placeholder original'
-    result = await p.http.patch(path, json=body, headers=headers)
+    result = await patch_signed(body)
     assert result.status_code == 200 and result.json()['id'] == row['id']
     assert result.json()['updated'] and not result.json()['index_pending']
     recalled = await p.client.recall(p.tenant, 'placeholder changed', user_id=owner)
@@ -179,12 +196,12 @@ async def test_explicit_edit_checks_sql_owner_and_preserves_create_conflicts(pro
             raise RuntimeError('placeholder embedding unavailable')
         return embed(text)
     monkeypatch.setattr(p.encoder, 'embed', unavailable)
-    pending = await p.http.patch(path, json={**body, 'text':'placeholder pending correction'}, headers=headers)
+    pending = await patch_signed({**body, 'text':'placeholder pending correction'})
     assert pending.status_code == 200 and pending.json()['index_pending']
     assert await p.client.recall(p.tenant, 'placeholder changed', user_id=owner) == []
     assert (await p.client.records(p.tenant, user_id=owner))[0]['claim'] == 'placeholder pending correction'
     monkeypatch.setattr(p.encoder, 'embed', embed)
-    repaired = await p.http.patch(path, json=body, headers=headers)
+    repaired = await patch_signed(body)
     assert repaired.status_code == 200 and not repaired.json()['index_pending']
 
 
