@@ -21,6 +21,7 @@ async def test_same_tenant_list_never_leaks_another_user(memory, monkeypatch):
         headers, _ = personal_headers(
             "placeholder-agent-key", "GET", "/records",
             tenant=m.tenant, user="placeholder-user-a",
+            params={"tenant_id": m.tenant, "user_id": "placeholder-user-a"},
         )
         response = await client.get("/records", headers=headers,
                                     params={"tenant_id": m.tenant, "user_id": "placeholder-user-a"})
@@ -66,7 +67,7 @@ async def test_real_app_ownership_on_every_operation(memory, monkeypatch):
         assert replay.status_code == 409
         for user, own, other in (("placeholder-user-a", a, b), ("placeholder-user-b", b, a)):
             params = {"tenant_id": m.tenant, "user_id": user}
-            list_headers, _ = personal_headers(key, "GET", "/records", tenant=m.tenant, user=user)
+            list_headers, _ = personal_headers(key, "GET", "/records", tenant=m.tenant, user=user, params=params)
             rows = (await client.get("/records", params=params, headers=list_headers)).json()["memories"]
             ids = {row["id"] for row in rows}
             assert {own["id"], shared["id"]} <= ids
@@ -79,11 +80,11 @@ async def test_real_app_ownership_on_every_operation(memory, monkeypatch):
             assert found.status_code == 200
             assert {row["id"] for row in found.json()["memories"]} == ids
             for identity in (other["id"], foreign["id"]):
-                gh, _ = personal_headers(key, "GET", f"/records/{identity}", tenant=m.tenant, user=user)
+                gh, _ = personal_headers(key, "GET", f"/records/{identity}", tenant=m.tenant, user=user, params=params)
                 assert (await client.get("/records/" + identity, params=params, headers=gh)).status_code == 404
-                dh, _ = personal_headers(key, "DELETE", f"/memories/{identity}", tenant=m.tenant, user=user)
+                dh, _ = personal_headers(key, "DELETE", f"/memories/{identity}", tenant=m.tenant, user=user, params=params)
                 assert (await client.delete("/memories/" + identity, params=params, headers=dh)).status_code == 404
-            oh, _ = personal_headers(key, "GET", f"/records/{own['id']}", tenant=m.tenant, user=user)
+            oh, _ = personal_headers(key, "GET", f"/records/{own['id']}", tenant=m.tenant, user=user, params=params)
             assert (await client.get("/records/" + own["id"], params=params, headers=oh)).status_code == 200
         # Missing identity never broadens a personal read or deletion.
         unscoped = {"tenant_id": m.tenant}
@@ -120,7 +121,7 @@ async def test_real_app_ownership_on_every_operation(memory, monkeypatch):
         published = await founder_publish(a["id"])
         assert published.status_code == 200
         # User A's bulk forget leaves B's personal rows intact.
-        th, _ = personal_headers(key, "DELETE", "/tenants/" + m.tenant, tenant=m.tenant, user="placeholder-user-a")
+        th, _ = personal_headers(key, "DELETE", "/tenants/" + m.tenant, tenant=m.tenant, user="placeholder-user-a", params={"user_id": "placeholder-user-a"})
         deleted = await client.delete("/tenants/" + m.tenant, headers=th, params={"user_id": "placeholder-user-a"})
         assert deleted.status_code == 200
         assert await m.records.get(m.agent, m.tenant, b["id"]) is not None
@@ -173,5 +174,5 @@ async def test_chassis_sends_verified_owner_on_all_personal_calls():
         assert req.headers["X-Tank-Key"] == "placeholder-key"
         assert req.headers["X-Tervory-User"] == user
         assert req.headers["X-Tervory-Tenant"] == tenant
-        assert req.headers["X-Lifecycle-Timestamp"]
-        assert req.headers["X-Lifecycle-Signature"]
+        assert req.headers["X-Tervory-User-Assertion"]
+        assert "X-Lifecycle-Signature" not in req.headers

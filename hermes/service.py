@@ -146,21 +146,13 @@ def create_app(
         tenant,
         user,
     ) -> tuple[str, str] | None:
-        """Personal ops require lifecycle-bound tenant+user; tenant-wide (no user) skips."""
+        """Personal ops require nonce-protected signed tenant+user; tenant-wide (no user) skips."""
         if user is None or not str(user).strip():
             return None
         from hermes.signed_identity import verify_personal_identity
-        return verify_personal_identity(
-            key=key,
-            method=method,
-            path=path,
-            timestamp=request.headers.get("X-Lifecycle-Timestamp", ""),
-            signature=request.headers.get("X-Lifecycle-Signature", ""),
-            tenant_header=request.headers.get("X-Tervory-Tenant", ""),
-            user_header=request.headers.get("X-Tervory-User", ""),
-            body=await request.body(),
-            body_tenant=str(tenant) if tenant is not None else None,
-            body_user=str(user).strip(),
+        return await verify_personal_identity(
+            request=request, records=holder['records'], key=key,
+            body_tenant=str(tenant) if tenant is not None else None, body_user=str(user).strip(),
         )
 
     @app.get("/health")
@@ -221,7 +213,7 @@ def create_app(
             body.meta = write_meta(agent, body.kind, body.meta, body.user_id)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
-        # Personal rows: lifecycle-bound identity required. Declared tenant-wide
+        # Personal rows: nonce-protected signed identity required. Declared tenant-wide
         # kinds with no user keep agent-key-only background writes.
         await enforce_personal(
             request,

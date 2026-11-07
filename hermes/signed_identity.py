@@ -1,115 +1,33 @@
-"""Bind verified tenant+user into the existing lifecycle HMAC for personal memory.
-
-Reuses the Tank/Ghost lifecycle form (tank/ghost_routes.lifecycle_message,
-agents/ghost/enforce_api.verify_lifecycle): timestamp\\nmethod\\npath\\n + optional
-tenant\\nuser\\n + body, signed with the agent key already used as X-Tank-Key.
-
-Agent key alone is not end-user proof. Personal Hermes operations require the
-bound five-line form so body/query user_id cannot substitute a missing or
-mismatched assertion. Declared tenant-wide kinds with no user keep the
-historical three-line / unsigned agent-key path.
-"""
-from __future__ import annotations
-
-import hashlib
-import hmac
-import time
-import uuid
-
-from fastapi import HTTPException
+"""Hermes uses the existing v1 signed-user protocol and durable nonce store."""
+from fastapi import HTTPException, Request
+from hermes.records import Records
+from hermes.user_assertion import HEADER, PostgresNonces, verify_assertion
 
 
-def lifecycle_message(
-    timestamp: str,
-    method: str,
-    path: str,
-    body: bytes,
-    *,
-    tenant: str = "",
-    user: str = "",
-) -> bytes:
-    """Same dual-form contract as tank/ghost_routes.lifecycle_message."""
-    if tenant and user:
-        return f"{timestamp}\n{method}\n{path}\n{tenant}\n{user}\n".encode() + body
-    return f"{timestamp}\n{method}\n{path}\n".encode() + body
-
-
-def verify_personal_identity(
-    *,
-    key: str,
-    method: str,
-    path: str,
-    timestamp: str,
-    signature: str,
-    tenant_header: str,
-    user_header: str,
-    body: bytes,
-    body_tenant: str | None,
-    body_user: str | None,
-) -> tuple[str, str]:
-    """Require lifecycle-bound tenant+user for personal memory; match body/query.
-
-    Returns normalized (tenant, user). Raises 401 on missing/bad signature,
-    403 on tenant/user mismatch with the request payload.
-    """
-    if not key or not (timestamp or "").strip() or not (signature or "").strip():
-        raise HTTPException(401, "signed identity required")
+async def verify_personal_identity(*, request: Request, records: Records | None, key: str,
+                                   body_tenant: str | None, body_user: str | None) -> tuple[str, str]:
+    if records is None or not records.agents:
+        raise HTTPException(503, "memory store unreachable")
+    # Production always provisions agent_tank. Disposable SQL fixtures use their
+    # own isolated schema; never create a new schema or choose one from a request.
+    agent = "tank" if "tank" in records.agents else min(records.agents)
+    store = getattr(request.app.state, "hermes_nonces", None)
+    if store is None or store.pool is not records.pool:
+        store = request.app.state.hermes_nonces = PostgresNonces(records.pool, records.schema(agent).removeprefix("agent_"))
+    tenant = str(body_tenant or request.headers.get("X-Tervory-Tenant", ""))
+    target = request.scope.get("raw_path", request.url.path.encode()).decode("ascii")
+    if request.scope.get("query_string"):
+        target += "?" + request.scope["query_string"].decode("ascii")
     try:
-        fresh = abs(time.time() - int(timestamp)) <= 60
-    except (TypeError, ValueError):
-        fresh = False
-    if not fresh:
-        raise HTTPException(401, "signed identity required")
-    user = (user_header or "").strip()
-    if not user or len(user) > 200:
-        raise HTTPException(401, "signed identity required")
-    try:
-        tenant = str(uuid.UUID((tenant_header or "").strip()))
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(401, "signed identity required") from exc
-    expected = hmac.new(
-        key.encode(),
-        lifecycle_message(
-            timestamp, method.upper(), path, body, tenant=tenant, user=user
-        ),
-        hashlib.sha256,
-    ).hexdigest()
-    if not hmac.compare_digest(expected.encode(), signature.encode()):
-        raise HTTPException(401, "signed identity required")
-    if body_tenant is not None and str(body_tenant) != tenant:
-        raise HTTPException(403, "tenant does not match signed identity")
-    if body_user is not None and str(body_user).strip() != user:
+        actor = await verify_assertion(request.headers.get(HEADER, ""), key=key,
+            product="hermes", tenant_id=tenant, method=request.method, target=target,
+            body=await request.body(), consume_nonce=store.claim)
+    except PermissionError:
+        raise HTTPException(401, "Signed user required for memory") from None
+    if body_user is not None and actor.user_id != str(body_user):
         raise HTTPException(403, "user does not match signed identity")
-    return tenant, user
-
-
-def bind_personal_headers(
-    key: str,
-    method: str,
-    path: str,
-    *,
-    tenant: str,
-    user: str,
-    body: bytes = b"",
-) -> dict[str, str]:
-    """Client-side headers matching verify_personal_identity (no new secrets)."""
-    import time
-    from uuid import UUID
-
-    if not key or not user or not str(user).strip():
-        raise ValueError("personal lifecycle binding requires key and user")
-    tenant = str(UUID(str(tenant)))
-    user = str(user).strip()
-    ts = str(int(time.time()))
-    route = path.split("?", 1)[0]
-    digest = hmac.new(
-        key.encode(),
-        lifecycle_message(ts, method.upper(), route, body, tenant=tenant, user=user),
-        hashlib.sha256,
-    ).hexdigest()
-    return {
-        "X-Lifecycle-Timestamp": ts,
-        "X-Lifecycle-Signature": digest,
-        "X-Tervory-Tenant": tenant,
-        "X-Tervory-User": user,
-    }
+    if request.headers.get("X-Tervory-Tenant", actor.tenant_id) != actor.tenant_id:
+        raise HTTPException(403, "tenant does not match signed identity")
+    if request.headers.get("X-Tervory-User", actor.user_id) != actor.user_id:
+        raise HTTPException(403, "user does not match signed identity")
+    return actor.tenant_id, actor.user_id

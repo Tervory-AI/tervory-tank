@@ -68,7 +68,7 @@ async def test_id_read_authorization_exact_fields_unknown_and_collision(memory, 
             body = kwargs.get("body")
             if body is not None:
                 signed, raw = personal_headers(
-                    headers["X-Tank-Key"], method, path, tenant=str(tenant), user=actor, body=body
+                    headers["X-Tank-Key"], method, path, tenant=str(tenant), user=actor, body=body, params=kwargs.get("params")
                 )
                 response = await client.request(
                     method, path, content=raw, params=kwargs.get("params"),
@@ -76,7 +76,7 @@ async def test_id_read_authorization_exact_fields_unknown_and_collision(memory, 
                 )
             else:
                 signed, _ = personal_headers(
-                    headers["X-Tank-Key"], method, path, tenant=str(tenant), user=actor
+                    headers["X-Tank-Key"], method, path, tenant=str(tenant), user=actor, params=kwargs.get("params")
                 )
                 response = await client.request(
                     method, path, params=kwargs.get("params"),
@@ -139,8 +139,8 @@ async def test_tank_uses_existing_hermes_headers_fixed_origin_and_validation_sha
     assert request.headers["X-Tervory-Admin"] == "placeholder-founder"
     assert request.headers["X-Tervory-User"] == "placeholder-founder"
     assert request.headers["X-Tervory-Tenant"] == PLATFORM_TENANT
-    assert request.headers["X-Lifecycle-Timestamp"]
-    assert request.headers["X-Lifecycle-Signature"]
+    assert request.headers["X-Tervory-User-Assertion"]
+    assert "X-Lifecycle-Signature" not in request.headers
     status = 422
     with pytest.raises(HTTPException) as rejected:
         await memory_routes.hermes(
@@ -225,13 +225,18 @@ async def test_api_counts_encoder_subword_and_special_tokens_before_saving(memor
     if not founder:
         base.update(kind="fact", source="https://placeholder.example/proof", meta={"user_id": "placeholder-user"})
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://hermes") as client:
-        response = await client.post(path, headers=headers, json={**base, "id": str(uuid.uuid4()), field: accepted})
+        async def signed_post(payload):
+            user = headers.get("X-Tervory-Admin", "placeholder-user")
+            signed, raw = personal_headers(headers["X-Tank-Key"], "POST", path,
+                tenant=m.tenant, user=user, body=payload, extra=headers)
+            return await client.post(path, headers=signed, content=raw)
+        response = await signed_post({**base, "id": str(uuid.uuid4()), field: accepted})
         assert response.status_code == (200 if founder else 201)
         assert encoder._model is None  # Validation never loads/invokes a model.
         assert len(encoder._tokenizer.encode(accepted).ids) == 512
         assert len(encoder._tokenizer.encode(rejected).ids) == 513
         rejected_id = str(uuid.uuid4())
-        response = await client.post(path, headers=headers, json={**base, "id": rejected_id, field: rejected})
+        response = await signed_post({**base, "id": rejected_id, field: rejected})
         assert response.status_code == 422
         error = response.json()["detail"][0]
         assert error["loc"] == ["body", field] and error["type"] == "value_error"
@@ -242,7 +247,7 @@ async def test_api_counts_encoder_subword_and_special_tokens_before_saving(memor
         # Missing/wrong pin fails closed, without a whitespace-count fallback.
         (tmp_path / "revision").write_text("wrong-pin")
         m.records.encoder = semantic_encoder.LocalEncoder()
-        response = await client.post(path, headers=headers, json={**base, "id": rejected_id, field: "piece"})
+        response = await signed_post({**base, "id": rejected_id, field: "piece"})
         assert response.status_code == 503
         assert await m.records.get(m.agent, m.tenant, rejected_id) is None
 

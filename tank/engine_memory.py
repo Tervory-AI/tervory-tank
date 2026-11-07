@@ -17,7 +17,7 @@ async def send(path, body):
     user = str(body.get('user_id') or '').strip()
     tenant = body.get('tenant_id')
     if user and tenant is not None:
-        from hermes.signed_identity import bind_personal_headers
+        from command_tools._user_assertion import bind_personal_headers
         headers.update(
             bind_personal_headers(
                 key, 'POST', '/engine/' + path, tenant=str(tenant), user=user, body=raw

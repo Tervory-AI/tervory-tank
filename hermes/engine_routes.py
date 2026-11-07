@@ -45,17 +45,9 @@ def register(app, records):
         store = ready(x_tank_key)
         if body.user_id and str(body.user_id).strip():
             from hermes.signed_identity import verify_personal_identity
-            verify_personal_identity(
-                key=x_tank_key,
-                method='POST',
-                path='/engine/recall',
-                timestamp=request.headers.get('X-Lifecycle-Timestamp', ''),
-                signature=request.headers.get('X-Lifecycle-Signature', ''),
-                tenant_header=request.headers.get('X-Tervory-Tenant', ''),
-                user_header=request.headers.get('X-Tervory-User', ''),
-                body=await request.body(),
-                body_tenant=str(body.tenant_id),
-                body_user=str(body.user_id).strip(),
+            await verify_personal_identity(
+                request=request, records=store, key=x_tank_key,
+                body_tenant=str(body.tenant_id), body_user=str(body.user_id).strip(),
             )
         with embedding_cache.measure() as counter:
             rows = await store.recall('tank', str(body.tenant_id), body.query, None, 32, 'client', user_id=body.user_id)
@@ -69,17 +61,9 @@ def register(app, records):
         store = ready(x_tank_key)
         if body.user_id and str(body.user_id).strip():
             from hermes.signed_identity import verify_personal_identity
-            verify_personal_identity(
-                key=x_tank_key,
-                method='POST',
-                path='/engine/remember',
-                timestamp=request.headers.get('X-Lifecycle-Timestamp', ''),
-                signature=request.headers.get('X-Lifecycle-Signature', ''),
-                tenant_header=request.headers.get('X-Tervory-Tenant', ''),
-                user_header=request.headers.get('X-Tervory-User', ''),
-                body=await request.body(),
-                body_tenant=str(body.tenant_id),
-                body_user=str(body.user_id).strip(),
+            await verify_personal_identity(
+                request=request, records=store, key=x_tank_key,
+                body_tenant=str(body.tenant_id), body_user=str(body.user_id).strip(),
             )
         # The caller supplies no claim or authority. Re-read the completed,
         # masked transcript and keep both sides of the join tenant sealed.

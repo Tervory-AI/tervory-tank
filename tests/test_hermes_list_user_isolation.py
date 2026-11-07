@@ -33,7 +33,7 @@ async def _get_records(client, tenant, user=None, **params):
     q = {"tenant_id": tenant, **params}
     if user is not None:
         q["user_id"] = user
-        headers, _ = personal_headers(KEY, "GET", "/records", tenant=tenant, user=user)
+        headers, _ = personal_headers(KEY, "GET", "/records", tenant=tenant, user=user, params=q)
     else:
         headers = {"X-Tank-Key": KEY}
     return await client.get("/records", headers=headers, params=q)
@@ -104,7 +104,6 @@ async def test_fake_memory_records_matches_recall_isolation_not_tenant_dump():
     await mem.remember("t1", "shared map", "opli.repo_map", "s")
 
     scoped = await mem.records("t1", user_id="user-a")
-    ids = {r["id"] for r in scoped}
     assert any(r.get("meta", {}).get("user_id") == "user-a" for r in scoped)
     assert not any(r.get("meta", {}).get("user_id") == "user-b" for r in scoped)
     assert any(r["kind"] == "opli.repo_map" for r in scoped)

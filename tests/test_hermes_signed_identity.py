@@ -1,14 +1,10 @@
-"""Hermes verifies lifecycle-bound tenant+user for personal memory ops.
+"""Hermes verifies nonce-protected signed tenant+user for personal memory ops.
 
 Closes: agent-key + forged body user_id without matching signed identity.
 Tenant-wide declared kinds remain agent-key-only (no user).
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
-import json
-import time
 
 import httpx
 import pytest
@@ -45,7 +41,7 @@ async def test_direct_agent_key_forged_user_denied_valid_signed_succeeds(memory,
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=hermes), base_url="http://hermes"
     ) as hc:
-        # Bypass: agent key + forged user_id, no lifecycle → denied.
+        # Bypass: agent key + forged user_id, no assertion → denied.
         denied = await hc.post(
             "/memories", headers={"X-Tank-Key": KEY}, json=forged_body
         )
@@ -55,7 +51,7 @@ async def test_direct_agent_key_forged_user_denied_valid_signed_succeeds(memory,
         headers, raw = personal_headers(
             KEY, "POST", "/memories", tenant=m.tenant, user=ATTACKER, body=forged_body
         )
-        headers["X-Lifecycle-Signature"] = "0" * 64
+        headers["X-Tervory-User-Assertion"] = "placeholder-invalid-assertion"
         assert (await hc.post("/memories", headers=headers, content=raw)).status_code == 401
 
         # Header user vs body user mismatch → 403.
@@ -69,7 +65,7 @@ async def test_direct_agent_key_forged_user_denied_valid_signed_succeeds(memory,
         mismatched = await hc.post("/memories", headers=headers, content=raw)
         assert mismatched.status_code == 403, mismatched.text
 
-        # Missing lifecycle with personal user on recall → 401.
+        # Missing assertion with personal user on recall → 401.
         recall_body = {
             "tenant_id": m.tenant,
             "query": "forged",
@@ -141,7 +137,7 @@ async def test_direct_agent_key_forged_user_denied_valid_signed_succeeds(memory,
 
 
 @pytest.mark.asyncio
-async def test_founder_publish_requires_lifecycle_before_lookup(memory, monkeypatch):
+async def test_founder_publish_requires_assertion_before_lookup(memory, monkeypatch):
     from hermes.publishing import Publisher
     from hermes.service import create_app
     from hermes.store import InMemoryStore
@@ -168,7 +164,7 @@ async def test_founder_publish_requires_lifecycle_before_lookup(memory, monkeypa
             m.tenant, "publish-foreign", "placeholder.personal", "urn:p", user_id=ATTACKER
         )
         body = {"tenant_id": m.tenant, "agent": m.agent, "source_row": owned["id"]}
-        # Workspace key + admin header without lifecycle → 401 before publish lookup.
+        # Workspace key + admin header without assertion → 401 before publish lookup.
         unsigned = await hc.post(
             "/founder/publish",
             headers={"X-Tank-Key": ws, "X-Tervory-Admin": admin},
@@ -239,7 +235,7 @@ async def test_get_by_id_without_user_cannot_read_personal(memory, monkeypatch):
                 params={"tenant_id": m.tenant},
             )
         ).status_code == 200
-        # user_id without lifecycle → 401
+        # user_id without assertion → 401
         assert (
             await hc.get(
                 f"/records/{personal['id']}",
@@ -247,3 +243,92 @@ async def test_get_by_id_without_user_cannot_read_personal(memory, monkeypatch):
                 params={"tenant_id": m.tenant, "user_id": USER_A},
             )
         ).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_replay_cannot_restore_forgotten_personal_memory(memory, monkeypatch):
+    from hermes.service import create_app
+    from hermes.store import InMemoryStore
+    m = memory
+    monkeypatch.setenv('TANK_KEY_' + m.agent.upper(), KEY)
+    body = {'tenant_id': m.tenant, 'user_id': USER_A, 'text': 'placeholder personal detail',
+            'kind': 'placeholder.personal', 'source': 'placeholder-review-source'}
+    headers, raw = personal_headers(KEY, 'POST', '/memories', tenant=m.tenant, user=USER_A, body=body)
+    app = create_app(InMemoryStore(), Encoder(), records=m.records)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as http:
+        first = await http.post('/memories', headers=headers, content=raw)
+        assert first.status_code == 201
+        client = MemoryClient('http://placeholder', KEY, m.agent, http)
+        await client.forget(first.json()['id'], m.tenant, user_id=USER_A)
+        assert await client.records(m.tenant, user_id=USER_A) == []
+    # A different app instance has no process-local replay state.
+    restarted = create_app(InMemoryStore(), Encoder(), records=m.records)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=restarted), base_url='http://placeholder') as http:
+        replay = await http.post('/memories', headers=headers, content=raw)
+        assert replay.status_code == 401
+        client = MemoryClient('http://placeholder', KEY, m.agent, http)
+        assert await client.records(m.tenant, user_id=USER_A) == []
+        fresh, raw = personal_headers(KEY, 'POST', '/memories', tenant=m.tenant, user=USER_A, body=body)
+        assert (await http.post('/memories', headers=fresh, content=raw)).status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_nonce_claim_is_atomic_between_hermes_workers(memory, monkeypatch):
+    import asyncio
+    from hermes.service import create_app
+    from hermes.store import InMemoryStore
+    m = memory
+    monkeypatch.setenv('TANK_KEY_' + m.agent.upper(), KEY)
+    body = {'tenant_id': m.tenant, 'user_id': USER_A, 'text': 'placeholder concurrent write',
+            'kind': 'placeholder.personal', 'source': 'placeholder-source'}
+    headers, raw = personal_headers(KEY, 'POST', '/memories', tenant=m.tenant, user=USER_A, body=body)
+    async def post():
+        app = create_app(InMemoryStore(), Encoder(), records=m.records)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as http:
+            return (await http.post('/memories', headers=headers, content=raw)).status_code
+    assert sorted(await asyncio.gather(post(), post())) == [201, 401]
+    assert len(await m.records.list(m.agent, m.tenant, user_id=USER_A)) == 1
+
+
+@pytest.mark.asyncio
+async def test_nonce_store_outage_refuses_personal_write(memory, monkeypatch):
+    from hermes.service import create_app
+    from hermes.store import InMemoryStore
+    from hermes.user_assertion import PostgresNonces
+    m = memory
+    monkeypatch.setenv('TANK_KEY_' + m.agent.upper(), KEY)
+    async def unavailable(*args):
+        raise RuntimeError('placeholder nonce store unavailable')
+    monkeypatch.setattr(PostgresNonces, 'claim', unavailable)
+    app = create_app(InMemoryStore(), Encoder(), records=m.records)
+    body = {'tenant_id': m.tenant, 'user_id': USER_A, 'text': 'placeholder refused write',
+            'kind': 'placeholder.personal', 'source': 'placeholder-source'}
+    headers, raw = personal_headers(KEY, 'POST', '/memories', tenant=m.tenant, user=USER_A, body=body)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as http:
+        response = await http.post('/memories', headers=headers, content=raw)
+    assert response.status_code == 401
+    assert 'placeholder nonce store' not in response.text
+    assert await m.records.list(m.agent, m.tenant, user_id=USER_A) == []
+
+
+@pytest.mark.asyncio
+async def test_query_tampering_and_expired_or_future_assertions_fail(memory, monkeypatch):
+    import time
+    from chassis.user_assertion import HEADER, SignedUser, sign_assertion
+    from hermes.service import create_app
+    from hermes.store import InMemoryStore
+    m = memory
+    monkeypatch.setenv('TANK_KEY_' + m.agent.upper(), KEY)
+    await m.records.save(m.agent, m.tenant, 'placeholder private detail', [], meta={'user_id': USER_A})
+    app = create_app(InMemoryStore(), Encoder(), records=m.records)
+    params = {'tenant_id': m.tenant, 'user_id': USER_A, 'limit': 1}
+    headers, _ = personal_headers(KEY, 'GET', '/records', tenant=m.tenant, user=USER_A, params=params)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as http:
+        assert (await http.get('/records', params={**params, 'limit': 50}, headers=headers)).status_code == 401
+        assert (await http.get('/records', params=params, headers=headers)).status_code == 200
+        target = httpx.URL('http://placeholder/records', params=params).raw_path.decode('ascii')
+        for delta in (-60, 10):
+            assertion = sign_assertion('hermes', SignedUser(m.tenant, USER_A, 'member'), 'GET', target,
+                b'', key=KEY, now=int(time.time()) + delta)
+            response = await http.get('/records', params=params, headers={**headers, HEADER: assertion})
+            assert response.status_code == 401

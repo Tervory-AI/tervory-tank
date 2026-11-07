@@ -31,7 +31,7 @@ async def hermes(
     key = os.environ.get("TANK_API_KEY", "")
     if not key:
         raise HTTPException(503, "memory store unreachable")
-    from hermes.signed_identity import bind_personal_headers
+    from command_tools._user_assertion import bind_personal_headers
 
     raw = b""
     if body is not None:
@@ -43,11 +43,14 @@ async def hermes(
         tenant_id = str(params["tenant_id"])
     if not tenant_id:
         raise HTTPException(422, "tenant required for memory")
+    target = httpx.URL("http://hermes:8000" + path)
+    if params:
+        target = target.copy_merge_params(params)
     headers = {
         "X-Tank-Key": key,
         "X-Tervory-Admin": actor,
         **bind_personal_headers(
-            key, method, path, tenant=tenant_id, user=actor, body=raw
+            key, method, target.raw_path.decode("ascii"), tenant=tenant_id, user=actor, body=raw
         ),
     }
     if body is not None:

@@ -2,12 +2,7 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-import base64
-import hashlib
-import hmac
-import json
 import os
-import time
 import uuid
 from urllib.parse import urlsplit
 
@@ -59,15 +54,8 @@ def key_setting(product: str) -> str:
 
 def sign(product: str, user: User, method: str, target: str, body: bytes, *, key: str,
          now: int | None = None, nonce: str | None = None) -> str:
-    if not key:
-        raise ValueError("Product key unavailable")
-    payload = {"v": 1, "aud": product, "tenant_id": str(uuid.UUID(user.tenant_id)),
-               "user_id": user.user_id, "role": user.role, "iat": int(time.time()) if now is None else now,
-               "nonce": nonce or uuid.uuid4().hex, "method": method.upper(), "target": target,
-               "body_sha256": hashlib.sha256(body).hexdigest()}
-    encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()).rstrip(b"=")
-    digest = hmac.new(key.encode(), DOMAIN + encoded, hashlib.sha256).hexdigest()
-    return encoded.decode() + "." + digest
+    from command_tools._user_assertion import sign_assertion
+    return sign_assertion(product, user, method, target, body, key=key, now=now, nonce=nonce)
 
 
 def product_for_url(url) -> str | None:

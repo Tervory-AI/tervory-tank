@@ -82,9 +82,9 @@ async def test_personal_recall_list_get_forget_and_tenant_isolation(product):
             assert own['id'] in ids
             assert other['id'] not in ids and foreign['id'] not in ids
         params = {'tenant_id': p.tenant, 'user_id': user}
-        oh, _ = personal_headers(p.key, 'GET', '/records/' + own['id'], tenant=p.tenant, user=user)
+        oh, _ = personal_headers(p.key, 'GET', '/records/' + own['id'], tenant=p.tenant, user=user, params=params)
         assert (await p.http.get('/records/' + own['id'], params=params, headers=oh)).status_code == 200
-        xh, _ = personal_headers(p.key, 'GET', '/records/' + other['id'], tenant=p.tenant, user=user)
+        xh, _ = personal_headers(p.key, 'GET', '/records/' + other['id'], tenant=p.tenant, user=user, params=params)
         assert (await p.http.get('/records/' + other['id'], params=params, headers=xh)).status_code == 404
         with pytest.raises(RuntimeError, match='hermes answered 404'):
             await p.client.forget(other['id'], p.tenant, user_id=user)
@@ -162,7 +162,6 @@ async def test_explicit_edit_checks_sql_owner_and_preserves_create_conflicts(pro
     body = dict(tenant_id=p.tenant, user_id=owner, text='placeholder changed',
                 kind=p.name + '.receipt', source='placeholder-source')
     path = '/memories/' + row['id']
-    bare = {'X-Tank-Key': p.key}
 
     async def patch_signed(payload, *, path=path, key=p.key):
         # Unsigned personal patch is refused; sign only when a user_id is present.

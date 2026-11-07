@@ -552,16 +552,16 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
             assert response.status_code == 404
 
         async def transport(method, path, actor, *, body=None, params=None, tenant=None):
-            # Production memory_routes.hermes now binds lifecycle; mirror that here.
+            # Production memory_routes.hermes now binds a one-use assertion; mirror that here.
             from hermes_lifecycle import personal_headers as _ph
             tenant_id = tenant or (body or {}).get("tenant_id") or (params or {}).get("tenant_id") or m.tenant
             raw = None
             if body is not None:
                 import json as _json
                 raw = _json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
-                signed, _ = _ph(headers["X-Tank-Key"], method, path, tenant=str(tenant_id), user=actor, body=body)
+                signed, _ = _ph(headers["X-Tank-Key"], method, path, tenant=str(tenant_id), user=actor, body=body, params=params)
             else:
-                signed, _ = _ph(headers["X-Tank-Key"], method, path, tenant=str(tenant_id), user=actor)
+                signed, _ = _ph(headers["X-Tank-Key"], method, path, tenant=str(tenant_id), user=actor, params=params)
             response = await http.request(
                 method,
                 path,
@@ -633,6 +633,7 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
         list_headers, _ = personal_headers(
             headers["X-Tank-Key"], "GET", "/founder/records",
             tenant=m.tenant, user=headers["X-Tervory-Admin"],
+            params={"tenant_id": m.tenant, "agent": m.agent},
         )
         list_headers["X-Tervory-Admin"] = headers["X-Tervory-Admin"]
         listing = await http.get(

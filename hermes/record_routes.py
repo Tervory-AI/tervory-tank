@@ -82,17 +82,9 @@ def register_record_routes(app, records, resolve_agent):
     ) -> None:
         """Founder personal ops: workspace key is not end-user proof; bind admin actor."""
         from hermes.signed_identity import verify_personal_identity
-        verify_personal_identity(
-            key=key,
-            method=method,
-            path=path,
-            timestamp=request.headers.get("X-Lifecycle-Timestamp", ""),
-            signature=request.headers.get("X-Lifecycle-Signature", ""),
-            tenant_header=request.headers.get("X-Tervory-Tenant", ""),
-            user_header=request.headers.get("X-Tervory-User", ""),
-            body=await request.body(),
-            body_tenant=str(tenant) if tenant is not None else None,
-            body_user=str(user).strip(),
+        await verify_personal_identity(
+            request=request, records=records(), key=key,
+            body_tenant=str(tenant) if tenant is not None else None, body_user=str(user).strip(),
         )
 
     def ready(agent: str):
@@ -117,17 +109,9 @@ def register_record_routes(app, records, resolve_agent):
         selected = resolve_agent(identify(x_tank_key), agent, write=False)
         if user_id is not None and str(user_id).strip():
             from hermes.signed_identity import verify_personal_identity
-            verify_personal_identity(
-                key=x_tank_key,
-                method="GET",
-                path="/records",
-                timestamp=request.headers.get("X-Lifecycle-Timestamp", ""),
-                signature=request.headers.get("X-Lifecycle-Signature", ""),
-                tenant_header=request.headers.get("X-Tervory-Tenant", ""),
-                user_header=request.headers.get("X-Tervory-User", ""),
-                body=b"",
-                body_tenant=str(tenant_id),
-                body_user=str(user_id).strip(),
+            await verify_personal_identity(
+                request=request, records=records(), key=x_tank_key,
+                body_tenant=str(tenant_id), body_user=str(user_id).strip(),
             )
         return {"memories": await ready(selected).list(selected, str(tenant_id), tier, limit, offset, user_id=user_id)}
 
@@ -143,17 +127,9 @@ def register_record_routes(app, records, resolve_agent):
         selected = resolve_agent(identify(x_tank_key), agent, write=False)
         if user_id is not None and str(user_id).strip():
             from hermes.signed_identity import verify_personal_identity
-            verify_personal_identity(
-                key=x_tank_key,
-                method="GET",
-                path=f"/records/{id}",
-                timestamp=request.headers.get("X-Lifecycle-Timestamp", ""),
-                signature=request.headers.get("X-Lifecycle-Signature", ""),
-                tenant_header=request.headers.get("X-Tervory-Tenant", ""),
-                user_header=request.headers.get("X-Tervory-User", ""),
-                body=b"",
-                body_tenant=str(tenant_id),
-                body_user=str(user_id).strip(),
+            await verify_personal_identity(
+                request=request, records=records(), key=x_tank_key,
+                body_tenant=str(tenant_id), body_user=str(user_id).strip(),
             )
         row = await ready(selected).get(selected, str(tenant_id), str(id), user_id=user_id)
         if row is None:

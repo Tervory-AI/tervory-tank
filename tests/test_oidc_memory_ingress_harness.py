@@ -8,9 +8,9 @@ Proof boundary (honest):
 - Local RSA OIDC issuer: tests/trigger_signin_fakes.Provider (not a cloud IdP).
 - Thin ASGI mount only wires those production calls; it does NOT invent ownership
   checks. Edit/forget foreign ids rely on gates_memory.require_owned_record + Hermes.
-- Hermes verifies lifecycle-bound tenant+user for personal ops (same HMAC form as
-  Tank/Ghost lifecycle). Agent-key alone cannot assert a personal user_id.
-- OIDC itself is verified at Tank ingress; Hermes verifies the forwarded lifecycle binding.
+- Hermes verifies the existing v1 tenant+user assertion and durably consumes its nonce.
+  Agent-key alone cannot assert a personal user_id.
+- OIDC itself is verified at Tank ingress; Hermes verifies the forwarded assertion.
 """
 from __future__ import annotations
 
@@ -396,7 +396,7 @@ async def test_oidc_ingress_to_hermes_full_personal_crud_list_publish(memory, mo
             )
             assert refused.status_code == 401
 
-        # Direct Hermes: agent-key + forged user_id without lifecycle → 401 (closed).
+        # Direct Hermes: agent-key + forged user_id without assertion → 401 (closed).
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=hermes), base_url="http://hermes"
         ) as hc:
