@@ -1,0 +1,134 @@
+{
+  "product": "skala",
+  "source_sha": "92329217955e98f9abbebda86567455586cbaedb",
+  "entrypoints": [
+    "POST /v1/skala/tier0.summarize/run -> make_ctx -> SkillContext.model -> Tank run_route",
+    "POST /v1/skala/tier0.classify/run -> make_ctx -> SkillContext.model -> Tank run_route",
+    "GET /v1/skala/memory; POST /v1/skala/memory/{edit,forget,off}",
+    "TriggerSigninMiddleware -> local signed issuer; chassis.user_assertion -> real Hermes/PostgreSQL/Qdrant"
+  ],
+  "legacy_tests": [
+    "tests/test_skala_gates_7_8.py::test_product_request_tank_route_receipt_then_memory",
+    "tests/test_skala_gates_7_8.py::test_correction_applies_next_time_with_no_paid_call",
+    "tests/test_skala_gates_7_8.py::test_second_user_and_second_tenant_see_nothing",
+    "tests/test_skala_gates_7_8.py::test_same_task_twice_reports_cost_and_tokens_each_run",
+    "tests/test_skala_gates_7_8.py::test_code_free_before_paid_tank_agent",
+    "tests/test_skala_gates_7_8.py::test_apply_corrections_and_secret_refusal",
+    "tests/test_skala_gates_7_8.py::test_denial_matrix_four_controls_cross_scope",
+    "tests/test_skala_gates_7_8.py::test_missing_identity_roomkey_only_and_forged_headers_refuse",
+    "tests/test_skala_gates_7_8.py::test_valid_owner_view_edit_forget_and_off",
+    "tests/test_skala_gates_7_8.py::test_memory_outage_answers_without_memory_never_serves_repeat",
+    "tests/test_skala_gates_7_8.py::test_scope_error_fail_closed_missing_user",
+    "tests/test_skala_gates_7_8.py::test_t51_fake_memory_two_users_personal_and_tenantwide",
+    "tests/test_skala_gates_7_8.py::test_brain_switch_defaults_off_nothing_enabled",
+    "tests/test_skala_gates_7_8.py::test_production_memory_client_requires_tank_key_skala_not_shared",
+    "tests/test_skala_gates_7_8.py::test_live_wire_wrap_paid_model_uses_verified_actor_not_body",
+    "tests/test_skala_gates_7_8.py::test_enumerate_live_paid_model_endpoints_and_wire_boundary",
+    "tests/test_skala_gates_7_8.py::test_remembered_fields_not_hardcoded_empty",
+    "tests/test_skala_gates_7_8_hermes_contract.py::test_characterize_current_chassis_lacks_user_id_kwarg",
+    "tests/test_skala_gates_7_8_hermes_contract.py::test_characterize_product_client_targets_hermes_not_tank_v1_memory",
+    "tests/test_skala_gates_7_8_hermes_contract.py::test_characterize_pinned_vendor_source_reported",
+    "tests/test_skala_gates_7_8_hermes_contract.py::test_acceptance_write_recall_forget_own_agent_key",
+    "tests/test_skala_gates_7_8_hermes_contract.py::test_acceptance_t51_personal_user_isolation_via_client_user_id",
+    "tests/test_skala_gates_7_8_hermes_contract.py::test_acceptance_workspace_shared_key_cannot_write",
+    "tests/test_skala_gates_7_8_hermes_contract.py::test_acceptance_other_agent_key_cannot_write_skala_collection",
+    "tests/test_skala_gates_7_8_hermes_contract.py::test_acceptance_own_key_factory_refuses_shared_tank_key_fallback"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_skala.py::test_owner_crud"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_skala.py::test_negative_controls_preserve_state",
+      "tests/gates78/products/test_skala.py::test_no_foreign_content_in_responses_receipts_logs"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_skala.py::test_negative_controls_preserve_state"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_skala.py::test_no_declared_tenant_wide_kind"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_skala.py::test_no_declared_tenant_wide_kind",
+      "tests/gates78/products/test_skala.py::test_signin_body_impersonation_and_plain_tasks"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_skala.py::test_signin_body_impersonation_and_plain_tasks",
+      "tests/gates78/products/test_skala.py::test_signed_product_control_consumes_durable_nonce",
+      "tests/gates78/products/test_skala.py::test_invalid_real_issuer_signature_refuses_all_work"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_skala.py::test_assertion_rejection_on_shipped_client",
+      "tests/gates78/products/test_skala.py::test_signed_product_control_consumes_durable_nonce"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_skala.py::test_nonce_replay_restart_cannot_restore_forgotten_record",
+      "tests/gates78/products/test_skala.py::test_signed_product_control_consumes_durable_nonce"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_skala.py::test_sql_scope_precedes_vector_limit"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_skala.py::test_restricted_hermes_role"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_skala.py::test_owner_crud",
+      "tests/gates78/products/test_skala.py::test_negative_controls_preserve_state",
+      "tests/gates78/products/test_skala.py::test_signin_body_impersonation_and_plain_tasks"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_skala.py::test_no_foreign_content_in_responses_receipts_logs"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_skala.py::test_runtime_contract"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_skala.py::test_defaults_off_no_new_memory_or_brain"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_skala.py::test_task_path_recall_receipt_remember"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_skala.py::test_free_skill_precedes_model_and_memory"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_skala.py::test_first_repeat_changed_costs"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_skala.py::test_nonidentical_and_ineligible_miss"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_skala.py::test_correction_then_forget_invalidates_repeat"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_skala.py::test_correction_then_forget_invalidates_repeat",
+      "tests/gates78/products/test_skala.py::test_nonce_replay_restart_cannot_restore_forgotten_record"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_skala.py::test_off_is_per_user_and_disables_reuse"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_skala.py::test_outage_and_post_payment_retry"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_skala.py::test_auth_failure_is_not_outage_or_cached_answer"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_skala.py::test_first_repeat_changed_costs",
+      "tests/gates78/products/test_skala.py::test_task_path_recall_receipt_remember"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_skala.py::test_same_run_concurrency_and_retry",
+      "tests/gates78/products/test_skala.py::test_outage_and_post_payment_retry"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_skala.py::test_runtime_contract",
+      "tests/gates78/products/test_skala.py::test_task_path_recall_receipt_remember",
+      "tests/gates78/products/test_skala.py::test_owner_crud",
+      "tests/gates78/products/test_skala.py::test_correction_then_forget_invalidates_repeat",
+      "tests/gates78/products/test_skala.py::test_first_repeat_changed_costs",
+      "tests/gates78/products/test_skala.py::test_negative_controls_preserve_state",
+      "tests/gates78/products/test_skala.py::test_outage_and_post_payment_retry"
+    ]
+  }
+}
