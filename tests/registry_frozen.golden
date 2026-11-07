@@ -9621,7 +9621,7 @@
         "methods": [
           "POST"
         ],
-        "name": "code_turn"
+        "name": "code_turn_http"
       },
       {
         "path": "/v1/command/threads/{thread_id}/code-stream",

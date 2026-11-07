@@ -2416,6 +2416,11 @@ async def route_code(actor: Actor, messages: list[dict], model: str, task_id: uu
 
 
 @router.post('/threads/{thread_id}/code-turn')
+async def code_turn_http(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends(identity)) -> dict:
+    # Resolve the installed product dispatcher when a request arrives.
+    return await code_turn(thread_id, body, actor)
+
+
 async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends(identity)) -> dict:
     roster = await code_sessions.visible_models(actor)
     permitted = {row['name'] for row in roster}

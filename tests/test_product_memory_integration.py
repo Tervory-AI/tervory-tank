@@ -16,8 +16,10 @@ from hermes.service import create_app
 from hermes.store import InMemoryStore
 from hermes.user_scope import wide_kinds
 from test_agent_memory_records import memory as database_fixture, Encoder
+from test_command import runtime as command_runtime_fixture
 
 memory = database_fixture
+command_runtime = command_runtime_fixture
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -195,7 +197,7 @@ def test_shipped_clients_and_namespaces_match_product_sources():
 
 
 @pytest.mark.asyncio
-async def test_default_off_keeps_plain_opli_task_without_memory(monkeypatch):
+async def test_default_off_keeps_plain_opli_task_without_memory(monkeypatch, command_runtime):
     from fastapi import APIRouter, FastAPI
     from unittest.mock import AsyncMock
     from integrations.tank import opli_memory

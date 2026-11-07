@@ -9,7 +9,9 @@ from fastapi import HTTPException
 
 import command
 from test_command import api, command_pool, runtime, TENANT, OTHER  # noqa: F401
-from test_command_streaming import streaming  # noqa: F401
+from test_command_streaming import streaming as streaming_fixture
+
+streaming = streaming_fixture
 
 
 @pytest.mark.asyncio
@@ -245,3 +247,17 @@ def test_code_multifile_edit_schema_and_utf8_limit():
     assert request.arguments['path'] is None and request.arguments['diff'] == diff
     with pytest.raises(ValueError):
         command.CodeEditArgs(diff='é' * 100001)
+
+
+@pytest.mark.asyncio
+async def test_registered_cli_code_turn_uses_installed_product_dispatcher(streaming, monkeypatch):
+    dispatched = AsyncMock(return_value={'answer':'placeholder dispatched'})
+    # Install after the real app registered its routes, like the product registry.
+    monkeypatch.setattr(command, 'code_turn', dispatched)
+    thread = uuid.uuid4()
+    response = await streaming.api.post('/v1/command/threads/'+str(thread)+'/code-turn', json={'text':'placeholder task'})
+    assert response.status_code == 200 and response.json() == {'answer':'placeholder dispatched'}
+    assert dispatched.await_count == 1
+    assert dispatched.await_args.args[0] == thread
+    actor = dispatched.await_args.args[2]
+    assert actor.tenant_id == TENANT and actor.user_id == 'founder'
