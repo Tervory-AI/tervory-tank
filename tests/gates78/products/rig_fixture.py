@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[3]
 USER_A = 'placeholder-rig-owner'
 USER_B = 'placeholder-rig-peer'
 USER_C = 'placeholder-rig-other-tenant'
-WORKSPACE_KEY = 'placeholder-gate78-workspace-key'
+PLACEHOLDER_WORKSPACE_KEY = 'placeholder-gate78-workspace-key'
 RUNTIME_FILES = (
     'agents/rig/gates_memory.py', 'agents/rig/memory_api.py',
     'agents/rig/actor_context.py', 'agents/rig/rig_brain_client.py',
@@ -53,7 +53,7 @@ class RigWire:
         self.worker_open = False
 
     def headers(self, user=USER_A, tenant=None):
-        return {'X-Tank-Key': WORKSPACE_KEY, **self.provider.workspace_headers(
+        return {'X-Tank-Key': PLACEHOLDER_WORKSPACE_KEY, **self.provider.workspace_headers(
             user, tenant or self.stack.tenant)}
 
     async def request(self, method, path, *, user=USER_A, tenant=None, body=None, headers=None):
@@ -124,7 +124,7 @@ async def rig_wire(gate78_memory, monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, spec.name, module)
     monkeypatch.setenv('TANK_KEY', stack.key)
     monkeypatch.setenv('TANK_KEY_RIG', stack.key)
-    monkeypatch.setenv('TANK_API_KEY', WORKSPACE_KEY)
+    monkeypatch.setenv('TANK_API_KEY', PLACEHOLDER_WORKSPACE_KEY)
     monkeypatch.setenv('RIG_ROOM_TENANT', stack.tenant)
     monkeypatch.setenv('DATA_DIR', str(tmp_path))
     monkeypatch.setenv('RIG_MEMORY_ENABLED', 'true')
@@ -165,11 +165,11 @@ async def rig_wire(gate78_memory, monkeypatch, tmp_path):
 
     async with paid_http.Client(transport=httpx.MockTransport(room),
                                 event_hooks={'request': [observe]}, follow_redirects=False) as relay:
-        runtime = SimpleNamespace(_http=relay, TANK_API_KEY=WORKSPACE_KEY, box_region=lambda: 'us-east')
+        runtime = SimpleNamespace(_http=relay, TANK_API_KEY=PLACEHOLDER_WORKSPACE_KEY, box_region=lambda: 'us-east')
         monkeypatch.setattr(ghost_routes, 'runtime', lambda: runtime)
         # Only the existing OIDC middleware's configuration read is supplied here.
         import main
-        monkeypatch.setattr(main, 'TANK_API_KEY', WORKSPACE_KEY)
+        monkeypatch.setattr(main, 'TANK_API_KEY', PLACEHOLDER_WORKSPACE_KEY)
 
         async def handoff(scope, receive, send):
             request = Request(scope, receive)
