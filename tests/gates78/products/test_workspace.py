@@ -459,3 +459,25 @@ async def test_capture_first_repeat_changed_actual_entry_metrics(workspace_entry
     assert all(row['http_status'] == 200 for row in measurements), 'BLOCKED: no successful paid-path fixture measurement'
     assert measurements[0]['provider_calls'] == measurements[2]['provider_calls'] == 1
     assert measurements[1]['provider_calls'] == measurements[1]['tokens_in'] == measurements[1]['tokens_out'] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('foreign', ['user', 'tenant'])
+@pytest.mark.parametrize('operation', ['memory.view', 'memory.edit', 'memory.forget'])
+async def test_denied_control_keeps_memory_settings_and_receipts_unchanged(workspace_entry, foreign, operation):
+    e = workspace_entry
+    row = await e.seed()
+    assert (await e.request('memory.control', {'control': 'edit'})).status_code == 200
+    scope = {'user': USER_B} if foreign == 'user' else {'tenant': e.stack.other_tenant}
+    before = await e.snapshot()
+    tenants = [UUID(e.stack.tenant), UUID(e.stack.other_tenant)]
+    query = 'SELECT id,tenant_id,cost_usd,tokens_in,tokens_out,outcome FROM tank.ledger WHERE tenant_id=ANY($1::uuid[]) ORDER BY id'
+    receipts = await e.pool.fetch(query, tenants)
+    body = {'memory_id': row['id']}
+    if operation == 'memory.edit':
+        body['text'] = 'placeholder refused edit'
+    response = await e.request(operation, body, **scope)
+    assert response.status_code in {403, 404}, response.text
+    assert await e.snapshot() == before
+    assert await e.pool.fetch(query, tenants) == receipts, 'Denied controls must not mutate the receipt snapshot'
+    assert not e.provider_calls

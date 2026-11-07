@@ -60,11 +60,13 @@
     ],
     "G7.same_tenant": [
       "tests/gates78/products/test_workspace.py::test_foreign_reads_mutations_and_receipt_leaks",
-      "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls"
+      "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls",
+      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged"
     ],
     "G7.other_tenant": [
       "tests/gates78/products/test_workspace.py::test_foreign_reads_mutations_and_receipt_leaks",
-      "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls"
+      "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls",
+      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged"
     ],
     "G7.tenant_wide": [
       "tests/gates78/products/test_workspace.py::test_declared_tenant_wide_and_personal_owner"
@@ -91,7 +93,8 @@
     "G7.controls": [
       "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls",
       "tests/gates78/products/test_workspace.py::test_real_signin_rejects_header_body_and_missing_identity",
-      "tests/gates78/products/test_workspace.py::test_memory_off_is_per_user_and_does_not_recall_or_remember"
+      "tests/gates78/products/test_workspace.py::test_memory_off_is_per_user_and_does_not_recall_or_remember",
+      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged"
     ],
     "G7.no_content_leak": [
       "tests/gates78/products/test_workspace.py::test_foreign_reads_mutations_and_receipt_leaks",
