@@ -283,7 +283,7 @@ async def test_task_path_receipts_exact_repeat_and_misses(tiger_system):
     events = s.events
     recall = next(i for i, e in enumerate(events) if e == ('POST', 'hermes', '/recall'))
     brain = next(i for i, e in enumerate(events) if e[1:] == ('tiger-brain', '/tasks'))
-    tank = next(i for i, e in enumerate(events) if e[2] == '/v1/agents/tiger/chat/completions')
+    tank = next(i for i, e in enumerate(events) if e[2] == s.chat_path)
     provider = next(i for i, e in enumerate(events) if e[1] == 'placeholder-model')
     remember = next(i for i, e in enumerate(events) if e == ('POST', 'hermes', '/memories'))
     assert recall < brain < tank < provider < remember

@@ -5,7 +5,7 @@
     "tank.tiger_watch_commands.build_router: /v1/command/tiger/watches/brain/tasks and /memory controls",
     "agents/tiger/app.py: signed /brain/tasks and /memory controls",
     "agents/tiger/gates_brain_service.py: POST /tasks",
-    "tank.agent_skills.build_router: /v1/agents/tiger/chat/completions",
+    "tank.agent_skills.build_router: chat(room=tiger)",
     "chassis.memory.MemoryClient -> hermes.service.create_app"
   ],
   "legacy_tests": [

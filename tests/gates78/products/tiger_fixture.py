@@ -6,6 +6,7 @@ is an explicit failure, never an import fallback to a proposal or private core.
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
@@ -90,9 +91,9 @@ async def tiger_system(gate78_memory, gate78_database, monkeypatch):
                         'LITELLM_MASTER_KEY': 'placeholder-model-key', 'TANK_REGION': 'us-east',
                         'TANK_KEY_TIGER': KEY, 'TANK_KEY': KEY, 'TIGER_BRAIN_ENABLED': 'true',
                         'TANK_URL': 'http://placeholder-tank', 'HERMES_URL': 'http://hermes',
-                        'TIGER_AGENT_URL': 'http://agent-tiger:8000',
-                        'TIGER_BRAIN_URL': 'http://tiger-brain:8001'}.items():
+                        'TIGER_AGENT_URL': 'http://agent-tiger:8000'}.items():
         monkeypatch.setenv(name, value)
+    monkeypatch.delenv('TIGER_BRAIN_URL', raising=False)
     import main
     import paid_http
     import paid_steps
@@ -148,7 +149,8 @@ async def tiger_system(gate78_memory, gate78_database, monkeypatch):
         tank.include_router(agent_skills.build_router(main))
         observed, sends, assertions = [], [], []
         system = TigerSystem(memory=memory, room=room, brain=brain, pool=pool, issuer=issuer,
-                             events=observed, sends=sends, assertions=assertions, outage=None)
+                             events=observed, sends=sends, assertions=assertions, outage=None,
+                             chat_path=str(tank.url_path_for('chat', room='tiger')))
         original_client = httpx.AsyncClient
 
         class Network(httpx.AsyncBaseTransport):
@@ -158,7 +160,8 @@ async def tiger_system(gate78_memory, gate78_database, monkeypatch):
                 if host == urlsplit(issuer.issuer).hostname:
                     return issuer(request)
                 if host == 'placeholder-model':
-                    assert request.url.path == '/v1/chat/completions'
+                    assert request.method == 'POST'
+                    assert json.loads(request.content)['model'] == MODEL
                     sends.append(request)
                     return httpx.Response(200, headers={'x-litellm-response-cost': '0.01',
                         'x-litellm-model-group': MODEL}, json={
