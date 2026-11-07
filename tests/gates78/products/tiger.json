@@ -1,0 +1,113 @@
+{
+  "product": "tiger",
+  "source_sha": "b4e5efc622ceb3cbc1657c3a6491bed8431d9d71",
+  "entrypoints": [
+    "tank.tiger_watch_commands.build_router: /v1/command/tiger/watches/brain/tasks and /memory controls",
+    "agents/tiger/app.py: signed /brain/tasks and /memory controls",
+    "agents/tiger/gates_brain_service.py: POST /tasks",
+    "tank.agent_skills.build_router: /v1/agents/tiger/chat/completions",
+    "chassis.memory.MemoryClient -> hermes.service.create_app"
+  ],
+  "legacy_tests": [
+    "tests/tiger_brain/test_tg3.py::test_optional_services_reuse_pinned_runtime_and_sandbox_without_caller",
+    "tests/tiger_brain/test_tg3.py::test_actual_compose_profile_model_excludes_optional_services_by_default",
+    "tests/tiger_brain/test_tg3.py::test_standby_health_has_no_task_api_or_model_path",
+    "tests/tiger_brain/test_tg3.py::test_tiger_owning_key_keeps_policy_guard_and_durable_ledger",
+    "tests/tiger_brain/test_tg3.py::test_foreign_and_workspace_keys_cannot_use_tiger_brain_route",
+    "tests/tiger_brain/test_tg3.py::test_pause_and_model_refusal_prevent_any_gateway_send",
+    "tests/tiger_brain/test_tg3.py::test_tiger_export_uses_own_room_and_candidate_submission_stays_base_only",
+    "tests/tiger_brain/test_tg3.py::test_isolation_checker_passes_own_topology_and_uses_supplied_sandbox",
+    "tests/tiger_brain/test_tg3.py::test_isolation_checker_refuses_keys_or_foreign_executor",
+    "tests/tiger_brain/test_tg3.py::test_seal_accepts_optional_pair",
+    "tests/tiger_brain/test_tg3.py::test_extra_networks_cannot_weaken_tiger_brain_seal",
+    "tests/tiger_brain/test_tg3.py::test_partial_optional_pair_cannot_claim_sealed",
+    "tests/tiger_brain/test_tg3.py::test_optional_sandbox_attachment_must_exist_and_stay_internal",
+    "tests/tiger_brain/test_gates78_contract.py::test_independent_hermes_contract",
+    "tests/tiger_brain/test_gates78_contract.py::test_paid_brain_uses_existing_tank_room_route"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_tiger.py::test_foreign_owner_read_mutate_publish"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_tiger.py::test_foreign_owner_read_mutate_publish"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_tiger.py::test_declared_heartbeat_only_and_personal_owner"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_tiger.py::test_signed_actor_and_body_impersonation",
+      "tests/gates78/products/test_tiger.py::test_default_off_and_unauthenticated_plain_free_path"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_tiger.py::test_signed_actor_and_body_impersonation"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_tiger.py::test_assertion_rejection"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_tiger.py::test_nonce_replay_concurrent_restart_and_forget"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_tiger.py::test_sql_candidates_before_vector_and_limit"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_tiger.py::test_restricted_database_role_and_nonce_rls"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_tiger.py::test_retry_concurrency_and_no_content_leak"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_tiger.py::test_runtime_contract"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_tiger.py::test_default_off_and_unauthenticated_plain_free_path"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_tiger.py::test_code_first_and_ineligible_task_reuse",
+      "tests/gates78/products/test_tiger.py::test_original_reader_ocr_and_brain_regressions"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses",
+      "tests/gates78/products/test_tiger.py::test_code_first_and_ineligible_task_reuse"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_tiger.py::test_correction_and_forget_invalidate_derived_answers"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_tiger.py::test_correction_and_forget_invalidate_derived_answers"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_tiger.py::test_memory_off_is_per_owner"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_tiger.py::test_outage_truth_and_no_repayment"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_tiger.py::test_scope_errors_never_become_outage"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses",
+      "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_tiger.py::test_retry_concurrency_and_no_content_leak"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_tiger.py::test_original_reader_ocr_and_brain_regressions",
+      "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields"
+    ]
+  }
+}
