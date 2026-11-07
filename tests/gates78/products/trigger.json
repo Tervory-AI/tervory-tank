@@ -57,7 +57,8 @@
     "G7.owner_crud": [
       "tests/gates78/products/test_trigger.py::test_owner_controls_use_real_hermes",
       "tests/gates78/products/test_trigger.py::test_owner_get_single_record_and_foreign_guessed_ids",
-      "tests/gates78/products/test_trigger.py::test_shared_fixture_preserves_product_agent_for_owner_recall"
+      "tests/gates78/products/test_trigger.py::test_shared_fixture_preserves_product_agent_for_owner_recall",
+      "tests/gates78/products/test_trigger.py::test_edit_roundtrip_reads_the_authored_current_version"
     ],
     "G7.same_tenant": [
       "tests/gates78/products/test_trigger.py::test_foreign_users_cannot_read_or_mutate_personal_records[user]",
@@ -83,7 +84,8 @@
     ],
     "G7.replay": [
       "tests/gates78/products/test_trigger.py::test_concurrent_and_restarted_product_workers_reject_replay",
-      "tests/gates78/products/test_trigger.py::test_forget_invalidates_reusable_outcome_and_replay_cannot_restore"
+      "tests/gates78/products/test_trigger.py::test_forget_invalidates_reusable_outcome_and_replay_cannot_restore",
+      "tests/gates78/products/test_trigger.py::test_replayed_create_cannot_restore_a_forgotten_personal_record"
     ],
     "G7.sql_before_vector": [
       "tests/gates78/products/test_trigger.py::test_sql_owner_candidates_precede_vector_search_and_limit"
@@ -134,7 +136,8 @@
     ],
     "G8.forget": [
       "tests/gates78/products/test_trigger.py::test_forget_invalidates_reusable_outcome_and_replay_cannot_restore",
-      "tests/gates78/products/test_trigger.py::test_forgetting_original_invalidates_any_derived_repeat"
+      "tests/gates78/products/test_trigger.py::test_forgetting_original_invalidates_any_derived_repeat",
+      "tests/gates78/products/test_trigger.py::test_superseding_an_approved_source_invalidates_cached_derivatives"
     ],
     "G8.memory_off": [
       "tests/gates78/products/test_trigger.py::test_memory_switch_is_per_owner_and_reenable_deletes_only_own_switch"

@@ -293,8 +293,11 @@ async def test_memory_switch_is_per_owner_and_reenable_deletes_only_own_switch(t
     disabled = await control(b, 'switch', body={'enabled': False})
     assert disabled.status_code == 200
     before = len(await rows(b))
+    start = len(b.net.calls)
     result = (await write(b))['result']
-    assert result['memory_receipt']['memory_enabled'] is False and len(await rows(b)) == before
+    assert result['cost_usd'] == COST and len(await rows(b)) == before
+    assert not [call for call in b.net.calls[start:] if call[0] == 'hermes' and call[1] == 'POST']
+    assert (await control(b)).json()['memory_enabled'] is False
     other = (await write(b, user=USER_B))['result']
     assert other['memory_receipt']['memory_enabled'] is True
     response = await control(b, 'switch', body={'enabled': True})
@@ -350,7 +353,7 @@ async def test_free_check_and_voice_and_language_paths_make_no_provider_calls(tr
 @pytest.mark.asyncio
 async def test_foreign_content_and_secrets_do_not_enter_receipts_or_logs(trigger_stack, caplog):
     b = trigger_stack
-    private = 'placeholder foreign secret content'
+    private = 'placeholder private foreign content'
     response = await control(b, 'edit', user=USER_B, body={'kind': 'trigger.tone', 'text': private, 'source': 'urn:placeholder:private'})
     assert response.status_code == 200
     own = (await write(b))['result']
@@ -498,3 +501,49 @@ async def test_other_products_valid_kind_is_refused_by_trigger(trigger_stack):
     b = trigger_stack
     response = await control(b, 'edit', body={'kind': 'base.receipt', 'text': 'placeholder cross-kind refusal', 'source': 'urn:placeholder:kind'})
     assert response.status_code == 422 and not await rows(b)
+
+
+@pytest.mark.asyncio
+async def test_edit_roundtrip_reads_the_authored_current_version(trigger_stack):
+    b = trigger_stack
+    original = await control(b, 'edit', body={'kind': 'trigger.tone', 'text': 'placeholder original tone', 'source': 'urn:placeholder:edit'})
+    assert original.status_code == 200
+    edited = await control(b, 'edit', body={'memory_id': original.json()['memory']['id'],
+        'kind': 'trigger.tone', 'text': 'placeholder revised tone', 'source': 'urn:placeholder:edit'})
+    assert edited.status_code == 200
+    ident = edited.json()['memory']['id']
+    request = await signed_request(b, 'GET', '/memory/records/' + ident + '?tenant_id=' + b.tenant)
+    result = await b.http.send(request)
+    assert result.status_code == 200
+    selected = result.json()['memory']
+    assert selected['id'] == ident and selected['claim'] == 'placeholder revised tone'
+    assert selected['meta']['user_id'] == USER_A
+
+
+@pytest.mark.asyncio
+async def test_replayed_create_cannot_restore_a_forgotten_personal_record(trigger_stack):
+    from chassis.user_assertion import PostgresNonces
+    b = trigger_stack
+    body = {'tenant_id': b.tenant, 'kind': 'trigger.tone', 'text': 'placeholder forgotten claim', 'source': 'urn:placeholder:forgotten'}
+    request = await signed_request(b, 'POST', '/memory/edit', body=body)
+    saved_request = {'method': request.method, 'url': str(request.url), 'headers': dict(request.headers), 'content': request.content}
+    created = await b.http.send(request)
+    assert created.status_code == 200
+    forgotten = await control(b, 'forget', body={'memory_id': created.json()['memory']['id']})
+    assert forgotten.status_code == 200 and not await rows(b)
+    b.room.app.state.product_nonce_stores = {'trigger': PostgresNonces(b.pool, 'trigger')}
+    replay = await b.http.request(**saved_request)
+    assert replay.status_code == 401 and not await rows(b) and not b.net.providers
+
+
+@pytest.mark.asyncio
+async def test_superseding_an_approved_source_invalidates_cached_derivatives(trigger_stack):
+    b = trigger_stack
+    original = (await write(b))['result']
+    source_id = next(step['memory_id'] for step in original['memory_receipt']['steps'] if step['action'] == 'remember')
+    assert (await write(b))['result']['cost_usd'] == 0 and len(b.net.providers) == 1
+    edited = await control(b, 'edit', body={'memory_id': source_id, 'kind': 'trigger.receipt',
+        'text': 'placeholder explicitly superseded receipt', 'source': 'urn:placeholder:superseded'})
+    assert edited.status_code == 200
+    fresh = (await write(b))['result']
+    assert fresh['cost_usd'] == COST and len(b.net.providers) == 2
