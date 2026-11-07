@@ -167,6 +167,9 @@ async def test_no_new_setting_keeps_gateway_cache_inactive(monkeypatch, setting)
     req = SimpleNamespace(tenant_id='placeholder-tenant', task_type='placeholder-task', case_ref=None)
     set_user(monkeypatch, req.tenant_id)
     assert await exact_cache.gateway_options(object(), req, {'cache_scope':'tenant'}, ('a','b',''), 'placeholder-model') == {}
+    answer = object()
+    assert await exact_cache.record(object(), req, {'cache_scope':'tenant'}, answer) is answer
+    assert await exact_cache.status(object(), req.tenant_id) == {}
     spec = importlib.util.spec_from_file_location('c1_gateway_config_default', Path('litellm/engine_config.py'))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

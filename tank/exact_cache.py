@@ -63,6 +63,8 @@ async def gateway_options(rt, req, policy, identity, model, **kwargs):
 
 async def record(rt, req, policy, answer):
     """Keep cache receipts for every task, including policies outside engine auto-routing."""
+    if not engine_runtime.exact_cache_enabled():
+        return answer
     if not isinstance(answer, rt.RouteResponse):
         return answer
     # Include the existing service-scoped SQL fast path in the denominator too.
@@ -91,6 +93,8 @@ async def record(rt, req, policy, answer):
 
 
 async def status(rt, tenant_id):
+    if not engine_runtime.exact_cache_enabled():
+        return {}
     async with rt.pool().acquire() as conn:
         rows = await conn.fetch('''SELECT task_type,
             coalesce(sum((detail->'cache_layers'->'C1'->>'attempts')::integer),0) AS attempts,
