@@ -1276,7 +1276,6 @@ async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tupl
 
 
 @tenant_path("req")
-@__import__('embedding_cache').measured_route
 async def run_route(req: RouteRequest, task_id=None, caller=None, **kwargs):
     import paid_steps
     await _check_route_task(req, task_id)

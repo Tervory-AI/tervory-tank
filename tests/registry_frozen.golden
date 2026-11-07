@@ -8239,13 +8239,6 @@
         "name": "preview"
       },
       {
-        "path": "/v1/engine/codebase/search",
-        "methods": [
-          "POST"
-        ],
-        "name": "search_codebase"
-      },
-      {
         "path": "/v1/engine/status",
         "methods": [
           "GET"

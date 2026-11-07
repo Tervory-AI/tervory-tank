@@ -82,9 +82,7 @@ async def record(rt, req, policy, answer):
     async with rt.pool().acquire() as conn:
         await conn.execute('''INSERT INTO tank.engine_receipts(tenant_id,region,task_type,ledger_id,detail)
             VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(tenant_id,ledger_id)
-            DO UPDATE SET detail=(tank.engine_receipts.detail || EXCLUDED.detail)
-              || jsonb_build_object('cache_layers', coalesce(tank.engine_receipts.detail->'cache_layers','{}'::jsonb)
-                || (EXCLUDED.detail->'cache_layers'))''',
+            DO UPDATE SET detail=tank.engine_receipts.detail || EXCLUDED.detail''',
             req.tenant_id, rt.box_region(), req.task_type, answer.ledger_id, json.dumps(detail))
     return answer.model_copy(update={'engine': {**(answer.engine or {}), **detail}})
 

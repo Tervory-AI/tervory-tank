@@ -157,7 +157,6 @@ async def test_unset_langfuse_host_is_noop_for_tank_and_litellm(monkeypatch, tmp
     stub = ModuleType('litellm.integrations.custom_logger')
     stub.CustomLogger = object
     monkeypatch.setitem(sys.modules, 'litellm.integrations.custom_logger', stub)
-    monkeypatch.syspath_prepend(str(ROOT / 'litellm'))
     adapter = load('offline_trace_adapter', 'litellm/tenant_traces.py')
     monkeypatch.setattr(adapter.callback.sink, 'before', forbidden)
     monkeypatch.setattr(adapter.callback.sink, 'after', forbidden)
@@ -187,6 +186,6 @@ def test_gateway_entrypoint_loads_optional_config_and_preserves_callback_imports
     assert command == args[0] == 'litellm' and args[-2:] == ['--port', '4000']
     config = yaml.safe_load(Path(args[args.index('--config') + 1]).read_text())
     assert not set(engine_runtime.LOCAL) & {r['model_name'] for r in config['model_list']}
-    assert config['litellm_settings']['callbacks'] == ['tenant_traces.callback']
+    assert config['litellm_settings']['callbacks'] == ['tenant_traces.callback', 'response_cache.callback']
     assert module.os.environ['PYTHONPATH'] == str(ROOT / 'litellm')
     assert capsys.readouterr().out.strip() == 'local rung offline'

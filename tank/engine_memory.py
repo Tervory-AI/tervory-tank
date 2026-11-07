@@ -28,7 +28,6 @@ async def recall(rt, req):
         if not query:
             return req, {'hits': 0, 'status': 'empty'}
         result = await send('recall', {'tenant_id': str(req.tenant_id), 'task_type': req.task_type, 'query': query, **user_scope(req)})
-        __import__('embedding_cache').merge(result.get('embedding_cache'))
         rows = [row for row in result['memories'] if row.get('tenant_id') == str(req.tenant_id)]
         # Only factual data enters context. Stable content (not read timestamps
         # or similarity scores) invalidates the cache when a correction arrives.
