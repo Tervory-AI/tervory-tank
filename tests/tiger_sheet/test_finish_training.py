@@ -42,7 +42,7 @@ def hub(tmp_path, monkeypatch):
         target = tmp_path/path.replace('/', '-')
         target.write_text(''.join(json.dumps(item) + '\n' for item in files[path]))
         return str(target)
-    api = SimpleNamespace(dataset_info=lambda repo: SimpleNamespace(private=True, sha='placeholder-revision'))
+    api = SimpleNamespace(upload_file=lambda **kwargs: None, dataset_info=lambda repo: SimpleNamespace(private=True, sha='placeholder-revision'))
     package, errors = ModuleType('huggingface_hub'), ModuleType('huggingface_hub.errors')
     package.hf_hub_download, package.HfApi = download, lambda **kwargs: api
     errors.EntryNotFoundError = Missing

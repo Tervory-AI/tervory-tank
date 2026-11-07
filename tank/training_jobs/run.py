@@ -227,11 +227,12 @@ async def run(args):
             api.create_repo(repo_id=repo, private=True, repo_type='model')
             if api.model_info(repo).private is not True:
                 raise ValueError('Output repository must be private')
+            api.upload_file(repo_id=repo, path_in_repo='training-config.json',
+                path_or_fileobj=json.dumps({'base_model': os.environ['HF_TRAIN_BASE_MODEL'],
+                    'base_revision': os.environ['HF_TRAIN_BASE_REVISION']}).encode())
             job = api.run_uv_job(str(Path(__file__).with_name('train.py')), namespace=org,
                                 flavor=flavor, timeout=args.minutes * 60,
                                 env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo,
-                                     'HF_TRAIN_BASE_MODEL': os.environ['HF_TRAIN_BASE_MODEL'],
-                                     'HF_TRAIN_BASE_REVISION': os.environ['HF_TRAIN_BASE_REVISION'],
                                      'TRAIN_AGENT': agent, 'TIGER_DATASET_REVISION': tiger_revision if agent == 'tiger' else ''},
                                 secrets={'HF_TOKEN': os.environ['HF_TOKEN']})
             await conn.execute('UPDATE tank.training_jobs SET id=$1 WHERE id=$2 AND tenant_id=$3', job.id, pending, PLATFORM)

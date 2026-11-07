@@ -33,6 +33,11 @@ async def test_existing_gpu_launcher_reserves_before_hf_and_sends_no_database_cr
         def model_info(self, repo):
             return SimpleNamespace(private=True)
 
+        def upload_file(self, **kwargs):
+            import json
+            assert kwargs['path_in_repo'] == 'training-config.json'
+            assert json.loads(kwargs['path_or_fileobj']) == {'base_model': 'fixture/training-base', 'base_revision': 'a' * 40}
+
         def run_uv_job(self, script, **kwargs):
             assert 'reservation' in events
             events.append('hf')
@@ -50,7 +55,7 @@ async def test_existing_gpu_launcher_reserves_before_hf_and_sends_no_database_cr
     result = await gpu.run(SimpleNamespace(agent='zenas', receipt=None, job_id='', minutes=120, submit=True, day='2026-11-06'))
     assert result['status'] == 'running' and result['cost_usd'] == Decimal('2.4')
     assert submitted == {'namespace': 'placeholder-org', 'flavor': 'a10g-small', 'timeout': 7200,
-                         'env': {'HF_TRAIN_BASE_MODEL': 'fixture/training-base', 'HF_TRAIN_BASE_REVISION': 'a' * 40, 'HF_ORG': 'placeholder-org', 'TRAIN_DAY': '2026-11-06',
+                         'env': {'HF_ORG': 'placeholder-org', 'TRAIN_DAY': '2026-11-06',
                                  'OUTPUT_REPO': 'placeholder-org/tervory-own-zenas-za', 'TRAIN_AGENT': 'zenas', 'TIGER_DATASET_REVISION': ''},
                          'secrets': {'HF_TOKEN': 'placeholder'}}
     assert events.index('reservation') < events.index('hf')

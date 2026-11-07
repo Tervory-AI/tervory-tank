@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["trl==0.29.1", "peft==0.18.1", "transformers==5.3.0", "datasets==4.5.0", "torch==2.10.0", "huggingface-hub==1.7.2", "sentencepiece==0.2.1"]
+# dependencies = ["trl==0.29.1", "peft==0.18.1", "transformers==5.10.1", "datasets==5.1.0", "torch==2.10.0", "huggingface-hub==1.31.0", "sentencepiece==0.2.1", "fsspec==2026.7.0"]
 # ///
 """Explicitly configured LoRA. Evaluation loss is not a gold holdout score."""
 import hashlib
@@ -302,6 +302,25 @@ def fit(base, revision, train, validation, *, output_dir='/tmp/lora', max_length
     return trainer, metrics
 
 
+def load_job_configuration():
+    """The founder's explicit nonsecret config travels as a private job artifact."""
+    if not all(os.environ.get(key, '').strip() for key in ('HF_TOKEN', 'OUTPUT_REPO')):
+        return
+    from huggingface_hub import HfApi, hf_hub_download
+    api = HfApi(token=os.environ['HF_TOKEN'])
+    info = api.model_info(os.environ['OUTPUT_REPO'])
+    if info.private is not True:
+        raise ValueError('Training configuration must be private')
+    path = Path(hf_hub_download(os.environ['OUTPUT_REPO'], 'training-config.json', revision=info.sha))
+    if path.stat().st_size > 4096:
+        raise ValueError('Training configuration is too large')
+    config = json.loads(path.read_text())
+    if set(config) != {'base_model', 'base_revision'} or any(not isinstance(value, str) for value in config.values()):
+        raise ValueError('Invalid training configuration')
+    os.environ['HF_TRAIN_BASE_MODEL'] = config['base_model']
+    os.environ['HF_TRAIN_BASE_REVISION'] = config['base_revision']
+
+
 def main() -> dict | None:
     missing = [name for name in ('HF_TOKEN', 'HF_ORG', 'OUTPUT_REPO', 'TRAIN_DAY')
                if not os.environ.get(name, '').strip()]
@@ -381,6 +400,7 @@ def main() -> dict | None:
 
 if __name__ == '__main__':
     try:
+        load_job_configuration()
         main()
     except Exception:
         raise SystemExit('Training failed; dataset, model and credential details are withheld.') from None

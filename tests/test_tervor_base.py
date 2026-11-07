@@ -37,3 +37,28 @@ def test_moving_revision_or_invalid_base_cannot_construct_trainer(monkeypatch, b
             train.main()
     else:
         assert train.main()['settings'] == ['HF_TRAIN_BASE_REVISION']
+
+
+@pytest.mark.parametrize('private', [False, True])
+def test_job_reads_only_private_pinned_configuration(monkeypatch, tmp_path, private):
+    import json
+    import sys
+    path = tmp_path / 'training-config.json'
+    path.write_text(json.dumps({'base_model': 'founder/chosen-base', 'base_revision': 'b' * 40}))
+    calls = []
+    def download(repo, name, **kwargs):
+        calls.append((repo, name, kwargs))
+        return path
+    api = SimpleNamespace(model_info=lambda repo: SimpleNamespace(private=private, sha='c' * 40))
+    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **kwargs: api, hf_hub_download=download))
+    monkeypatch.setenv('HF_TOKEN', 'fixture')
+    monkeypatch.setenv('OUTPUT_REPO', 'fixture/output')
+    if private:
+        train.load_job_configuration()
+        assert train.os.environ['HF_TRAIN_BASE_MODEL'] == 'founder/chosen-base'
+        assert train.os.environ['HF_TRAIN_BASE_REVISION'] == 'b' * 40
+        assert calls == [('fixture/output', 'training-config.json', {'revision': 'c' * 40})]
+    else:
+        with pytest.raises(ValueError, match='must be private'):
+            train.load_job_configuration()
+        assert calls == []
