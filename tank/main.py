@@ -1564,6 +1564,11 @@ async def _run_route(
             exc._paid_unspent = True
             raise
         generation = {**generation, "disable_fallbacks": True}
+    if not _offpeak_dispatch and not _defer_paid and _paid_limit is None and _on_token is None:
+        scheduled = await priority_queue.automatic_request(
+            __import__('sys').modules[__name__], req, policy, messages, generation)
+        if scheduled is not req:
+            req, priority = scheduled, 'offpeak'
     paid_authorization = await __import__("paid_steps").model_admission(req.tenant_id, req.task_type, model, agent=req.agent)
     if priority == "offpeak" and not _offpeak_dispatch:
         item = _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,

@@ -168,11 +168,11 @@ def test_run_route_keeps_reviewed_hooks_and_code_streaming_body():
     for caller, callee in [('run_route', '_paid_route'), ('_paid_route', '_run_route')]:
         assert any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == callee
                    for n in ast.walk(functions[caller]))
-    # Engine cache adds isolated C1 transport options, C5 stable prefixes and usage.
+    # Engine cache adds isolated C1 options, C5 prefix/usage and I8 automatic scheduling.
     # Engine adds deterministic local generation, coalesced memory/system
     # messages, free-model batch handling and scalar-only trace metadata. Paid admission and streaming
     # remain in this body; protect all bytes outside the two RouteLLM hooks.
-    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '7f643e3144b0a5a734a9baf33fe52153311eb8f87db13c25fe3f50cba96b95fb'
+    assert hashlib.sha256(''.join(old).encode()).hexdigest() == 'ea10aa1dc5f470c068cfd83f328684bc0bf5a12afa52c75dad47af9de3fdc198'
 
 
 @pytest.mark.asyncio

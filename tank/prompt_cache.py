@@ -131,7 +131,9 @@ async def receipt(rt, req, answer):
     import priority_queue
     try:
         prices = await rt._batch_price(answer.model)
-    except HTTPException:
+    except (HTTPException, KeyError):
+        # Accounting metadata can be partial; it must not invalidate a paid
+        # answer or bypass its approval. Missing rates stay unpriced.
         prices = {}
     multiplier = 1.
     if req.priority == 'offpeak' and prices:
