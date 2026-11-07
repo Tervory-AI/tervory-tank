@@ -68,11 +68,12 @@ async def record(rt, req, policy, answer):
     hit = answer.cache_layer == 'C1'
     if not attempted and not hit:
         return answer
-    prices = next((r for r in await rt.list_models() if r['name'] == answer.model), {})
-    a, b = prices.get('input_usd_per_m'), prices.get('output_usd_per_m')
+    row = next((r for r in await rt._roster_models() if r['model_name'] == answer.model), {})
+    prices = row.get('model_info', {})
+    a, b = prices.get('input_cost_per_token'), prices.get('output_cost_per_token')
     tokens_in = answer.tokens_in or max(1, sum(len(m.content) for m in req.messages) // 4)
     tokens_out = answer.tokens_out or max(1, len(answer.content) // 4)
-    would = (tokens_in * a + tokens_out * b) / 1e6 if a is not None and b is not None else None
+    would = (tokens_in * a + tokens_out * b) if a is not None and b is not None else None
     metrics = {'attempts': max(attempted, int(hit)), 'hits': int(hit),
                'saved_usd': would if hit else 0., 'estimated': True}
     detail = {'cache_layer': answer.cache_layer, 'cache_backend': answer.cache_backend,
