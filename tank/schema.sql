@@ -3467,6 +3467,37 @@ END;
 $$;
 -- END opli
 
+-- BEGIN tervor
+CREATE TABLE IF NOT EXISTS tank.tervor_models (
+    tenant_id uuid NOT NULL,
+    id text NOT NULL,
+    product text NOT NULL,
+    version text NOT NULL,
+    manifest jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id),
+    UNIQUE (tenant_id,product,version)
+);
+DO $$
+BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.tervor_models ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.tervor_models FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.tervor_models'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.tervor_models FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.tervor_models'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.tervor_models AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END;
+$$;
+-- END tervor
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
