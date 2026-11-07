@@ -12,6 +12,8 @@ from anyio import CapacityLimiter, to_thread
 SETTING = 'ENGINE_CODE_TOOL_LIMITS_ENABLED'
 LIMITER = CapacityLimiter(1)
 LOCAL_SECONDS = 10
+BINARY_CONTROL = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
+ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
 
 
 class PreparationError(HTTPException):
@@ -66,6 +68,8 @@ def excerpt(encoding, tokens, keep):
 def render(results, limit, encoding):
     if type(limit) is not int or limit < 1:
         raise HTTPException(422, 'This task needs a positive tool-output token limit.')
+    if any(BINARY_CONTROL.search(result.output) for result in results):
+        raise HTTPException(422,'Request text diagnostics instead of binary tool output.')
     rows = [{'name': result.name, 'output': result.output} for result in results]
     original = json.dumps(rows, ensure_ascii=False)
     before = len(encoding.encode(original))
@@ -88,7 +92,7 @@ def prepare(results, limit):
     from agent_skills import input_encoding
     from code_sessions import code_text
     from types import SimpleNamespace
-    cleaned = [SimpleNamespace(name=result.name, output=code_text(result.output)) for result in results]
+    cleaned = [SimpleNamespace(name=result.name, output=ANSI.sub('',code_text(result.output))) for result in results]
     return render(cleaned,limit,input_encoding())
 
 

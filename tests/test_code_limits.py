@@ -267,3 +267,19 @@ async def test_policy_lookup_shares_the_preparation_deadline(runtime,monkeypatch
     with pytest.raises(code_limits.PreparationError):
         await code_limits.context(existing.TENANT,'command.code',recorded())
     worker.assert_not_awaited()
+
+
+@pytest.mark.parametrize('value',['\x00','\x01','\x1f'])
+def test_binary_controls_are_refused_before_tokenization(value):
+    encoding=SimpleNamespace(encode=lambda text:pytest.fail('binary output must not be tokenized'))
+    with pytest.raises(HTTPException) as failure:
+        code_limits.render([SimpleNamespace(name='read_file',output=value*100)],512,encoding)
+    assert failure.value.status_code==422
+
+
+@pytest.mark.asyncio
+async def test_console_colors_are_removed_without_changing_diagnostics(runtime):
+    runtime.load_policy=AsyncMock(return_value={'max_tokens_out':512})
+    value,_=await code_limits.context(existing.TENANT,'command.code',[
+        SimpleNamespace(name='read_file',output='\x1b[31mTypeError: expected number\x1b[0m')])
+    assert json.loads(value)[0]['output']=='TypeError: expected number'
