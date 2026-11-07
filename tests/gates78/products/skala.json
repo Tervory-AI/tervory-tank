@@ -1,6 +1,6 @@
 {
   "product": "skala",
-  "source_sha": "025018ba21635855e053007026bc3a532caef60e",
+  "source_sha": "8d3d86e82e3ab65782237e94da3bae925b30da6e",
   "entrypoints": [
     "POST /v1/skala/tier0.summarize/run -> make_ctx -> SkillContext.model -> Tank run_route",
     "POST /v1/skala/tier0.classify/run -> make_ctx -> SkillContext.model -> Tank run_route",
