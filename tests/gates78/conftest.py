@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+import sys
 from urllib.parse import urlsplit
 
 import httpx
@@ -18,6 +20,13 @@ from hermes.records import Records
 from hermes.service import create_app
 from hermes.store import InMemoryStore
 from test_agent_memory_records import memory as sql_memory_fixture
+
+# Existing contributions import their uniquely named fixture helpers directly.
+# Packaging the tests avoids collisions with tests/test_<product>.py without a
+# repository-wide pytest import-mode change or requiring owner file renames.
+for helper_path in (Path(__file__).parent, Path(__file__).parent / "products"):
+    if str(helper_path) not in sys.path:
+        sys.path.insert(0, str(helper_path))
 
 from gate78_contract import PRODUCTS
 
