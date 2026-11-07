@@ -1,6 +1,6 @@
 {
   "product": "autumbra",
-  "source_sha": "1a68723fd7d0df24b3371380d3f52611408a6119",
+  "source_sha": "da82c0b1e79e405fffc936825f27a6a363af4934",
   "entrypoints": [
     "TriggerSigninMiddleware -> paid_http.Client/product_identity.attach -> Watch",
     "POST /brain/tasks -> ghost.brain.Brain.run -> ghost.brain_service POST /tasks -> Tank POST /v1/route",
