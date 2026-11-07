@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from tervor_training_fixtures import configured_base as configured_base
 from tank.training_jobs import run as gpu
 from tank.training_jobs import train
 
@@ -31,6 +32,11 @@ async def test_existing_gpu_launcher_reserves_before_hf_and_sends_no_database_cr
 
         def model_info(self, repo):
             return SimpleNamespace(private=True)
+
+        def upload_file(self, **kwargs):
+            import json
+            assert kwargs['path_in_repo'] == 'training-config.json'
+            assert json.loads(kwargs['path_or_fileobj']) == {'base_model': 'fixture/training-base', 'base_revision': 'a' * 40}
 
         def run_uv_job(self, script, **kwargs):
             assert 'reservation' in events
