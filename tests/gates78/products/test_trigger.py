@@ -98,7 +98,7 @@ async def test_signin_verification_refuses_body_and_header_impersonation(trigger
     assert (await b.front.get('/v1/command/tools', headers=good)).status_code == 200
     assert b.provider.calls
     for updates in ({'X-Tervory-User': USER_B}, {'X-Tervory-Tenant': b.other},
-                    {'x-trigger-signin-token': 'placeholder-invalid-token'}):
+                    {'x-trigger-signin-token': 'placeholder-invalid-token'}, {'X-Tervory-Role': 'founder'}):
         response = await b.front.get('/v1/command/tools', headers={**good, **updates})
         assert response.status_code in {401, 403}
     assert not b.net.forwarded and not b.net.providers and not await rows(b)
@@ -246,6 +246,11 @@ async def test_paid_write_recall_execute_receipt_remember_order_and_meaningful_f
     receipt = await b.pool.fetchrow('SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2', UUID(result['ledger_id']), UUID(b.tenant))
     assert receipt['cost_usd'] == Decimal(str(COST)) and (receipt['tokens_in'], receipt['tokens_out']) == TOKENS
     assert b.net.forwarded and b.net.forwarded[0].headers.get('X-Tervory-User-Assertion')
+    import base64
+    encoded = b.net.forwarded[0].headers['X-Tervory-User-Assertion'].split('.')[0]
+    bound = json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+    assert (bound['aud'], bound['tenant_id'], bound['user_id'], bound['role'], bound['method'], bound['target']) == (
+        'trigger', b.tenant, USER_A, 'founder', 'POST', '/write')
 
 
 @pytest.mark.asyncio
