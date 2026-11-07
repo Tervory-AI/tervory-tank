@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS tank.policy (
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS candidate_model text;
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS shadow_rate numeric(4,3) NOT NULL DEFAULT 0;   -- 0..1 of calls shadowed
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS previous_model text;
+-- DECISION task-specific C1 expiry; zero disables reuse without changing routing.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS cache_ttl_s integer NOT NULL DEFAULT 3600 CHECK (cache_ttl_s BETWEEN 0 AND 2592000);
 
 -- One shadow comparison per sampled call. agreement 0..1: how close the candidate came to the primary.
 CREATE TABLE IF NOT EXISTS tank.shadow (

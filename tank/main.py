@@ -728,6 +728,8 @@ class RouteResponse(BaseModel):
     # Provider prompt-cache tokens included in tokens_in (0 when none were reported).
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    cache_layer: str | None = None
+    cache_backend: str | None = None
 
 
 class PolicyRow(BaseModel):
@@ -739,6 +741,7 @@ class PolicyRow(BaseModel):
     priority: str = "standard"
     batch_eligible: bool = False
     cache_scope: str = "none"
+    cache_ttl_s: int = Field(default=3600, ge=0, le=2592000)
     max_tokens_out: int = 1024
     system_prompt: str | None = None
     eval_threshold: float = graduate.DEFAULT_THRESHOLD
@@ -980,17 +983,17 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
             """
             INSERT INTO tank.policy
               (task_type, tenant_id, rung, model, priority, batch_eligible, cache_scope,
-               max_tokens_out, system_prompt, eval_threshold, escalation_model,confidence_floor,acceptance_window_s,semantic_cache,matter_matching,max_cost_usd,fallbacks,updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now())
+               max_tokens_out, system_prompt, eval_threshold, escalation_model,confidence_floor,acceptance_window_s,semantic_cache,matter_matching,max_cost_usd,fallbacks,cache_ttl_s,updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, now())
             ON CONFLICT (task_type, COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
             DO UPDATE SET rung=$3, model=$4, priority=$5, batch_eligible=$6, cache_scope=$7,
                           max_tokens_out=$8, system_prompt=$9, eval_threshold=$10, escalation_model=$11,confidence_floor=$12,
-                          acceptance_window_s=$13,semantic_cache=$14,matter_matching=$15,max_cost_usd=$16,fallbacks=$17,updated_at=now()
+                          acceptance_window_s=$13,semantic_cache=$14,matter_matching=$15,max_cost_usd=$16,fallbacks=$17,cache_ttl_s=$18,updated_at=now()
             """,
             body.task_type, body.tenant_id, body.rung, body.model, body.priority,
             body.batch_eligible, body.cache_scope, body.max_tokens_out, body.system_prompt,
             body.eval_threshold, body.escalation_model, body.confidence_floor, body.acceptance_window_s,
-            body.semantic_cache, body.matter_matching, body.max_cost_usd, body.fallbacks,
+            body.semantic_cache, body.matter_matching, body.max_cost_usd, body.fallbacks, body.cache_ttl_s,
             )
             held = await conn.fetchval(
                 "SELECT held_swap_id IS NOT NULL FROM tank.policy WHERE task_type=$1 AND tenant_id IS NOT DISTINCT FROM $2",
@@ -1188,7 +1191,7 @@ async def _record_local(req: RouteRequest, policy: dict[str, Any], *, model: str
                         content: str, task_id: uuid.UUID | None = None, outcome: str = "delivered",
                         escalation: list[dict[str, Any]] | None = None, latency_ms: int = 0,
                         error: str | None = None, route_seat: str | None = None,
-                        masked_messages: Any = None) -> RouteResponse:
+                        masked_messages: Any = None, cache_layer: str | None = None) -> RouteResponse:
     ledger_id = uuid.uuid4()
     # Retain an example even for code/cache runs, but never raw identifiers/HTML.
     clean = masked_messages if masked_messages is not None else _storage_mask(_plain_messages([m.model_dump() for m in req.messages]))
@@ -1209,7 +1212,8 @@ async def _record_local(req: RouteRequest, policy: dict[str, Any], *, model: str
                 ledger_id, req.tenant_id, req.task_type, json.dumps(clean), output[:20000],
             )
     return RouteResponse(ledger_id=ledger_id, model=model, rung=rung, content=content, tokens_in=0,
-                         tokens_out=0, cost_usd=0, latency_ms=latency_ms, escalation=escalation or [])
+                         tokens_out=0, cost_usd=0, latency_ms=latency_ms, escalation=escalation or [],
+                         cache_layer=cache_layer, cache_backend='tank-sql' if cache_layer else None)
 
 
 def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]],
@@ -1217,6 +1221,7 @@ def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[di
     # Whole policy revision, pinned skill, system messages, matter and generation
     # limits participate. Even legacy platform/region scopes stay tenant-local.
     context = [policy, req.skill, req.case_ref, route_seat, max_tokens, box_region(),
+               __import__('exact_cache').user_scope(req),
                [m for m in messages if m["role"] != "user"]]
     context_hash = hashlib.sha256(json.dumps(context, sort_keys=True, default=str).encode()).hexdigest()
     exact = hashlib.sha256(json.dumps(messages, sort_keys=True).encode()).hexdigest()
@@ -1226,6 +1231,7 @@ def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[di
 @tenant_path("req")
 async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str]) -> str | None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
+            or int(policy.get('cache_ttl_s', CACHE_TTL_S)) <= 0
             or (policy.get("matter_matching") and not req.case_ref)):
         return None
     context, exact, form = identity
@@ -1245,15 +1251,16 @@ async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple
         return None
     row = dict(rows[0])
     if row["input_hash"] == exact:
-        return row["content"]
+        return __import__('exact_cache').CachedAnswer(row["content"], 'C1')
     row["vector"] = json.loads(row["vector"]) if isinstance(row["vector"], str) else row["vector"]
     hit = graduate.semantic_lookup(graduate.semantic_vector(form), [row], tenant_id=str(req.tenant_id), scope="tenant")
-    return hit["content"] if hit else None
+    return __import__('exact_cache').CachedAnswer(hit["content"], 'C2') if hit else None
 
 
 @tenant_path("req")
 async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str], ledger_id: uuid.UUID) -> None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
+            or int(policy.get('cache_ttl_s', CACHE_TTL_S)) <= 0
             or (policy.get("matter_matching") and not req.case_ref)):
         return
     context, exact, form = identity
@@ -1264,7 +1271,7 @@ async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tupl
             ON CONFLICT(tenant_id,region,task_type,context_hash,input_hash) DO UPDATE
             SET ledger_id=EXCLUDED.ledger_id,vector=EXCLUDED.vector,semantic_form=EXCLUDED.semantic_form,expires_at=EXCLUDED.expires_at""",
             req.tenant_id, box_region(), req.task_type, context, exact, form,
-            json.dumps(graduate.semantic_vector(form)), ledger_id, CACHE_TTL_S,
+            json.dumps(graduate.semantic_vector(form)), ledger_id, int(policy.get('cache_ttl_s', CACHE_TTL_S)),
         )
 
 
@@ -1326,7 +1333,8 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
                                              policy["model"], kwargs.get("model_override"), bool(kwargs.get("_offpeak_dispatch")), bool(kwargs.get("_defer_paid"))]), invoke)
         if "error" not in value:
             answer = (priority_queue.QueuedResponse if value["queued"] else RouteResponse).model_validate(value["answer"])
-            return await __import__('engine_ladder').receipt(engine_rt, req, policy, answer)
+            answer = await __import__('engine_ladder').receipt(engine_rt, req, policy, answer)
+            return await __import__('exact_cache').record(engine_rt, req, policy, answer)
         attempted.add(policy["model"])
         if policy["model"].startswith("skill:") and policy.get("escalation_model"):
             attempted.add(policy["escalation_model"])
@@ -1481,7 +1489,8 @@ async def _run_route(
         hit = await _cache_read(req, exact_policy, identity)
         if hit is not None:
             await _check_route_task(req, task_id)
-            return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat)
+            return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat,
+                                       cache_layer=getattr(hit, 'layer', 'C1'))
     if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
         cache_probe = await semantic_cache.lookup(__import__("sys").modules[__name__], req, cache_policy, identity, messages)
         if await semantic_cache.may_serve(__import__("sys").modules[__name__], req, cache_policy, cache_probe):
@@ -1582,6 +1591,9 @@ async def _run_route(
     )
     dispatched_settings.update(await __import__('engine_tracing').metadata(
         __import__('sys').modules[__name__], req.tenant_id, req.task_type, model, policy))
+    dispatched_settings.update(await __import__('exact_cache').gateway_options(
+        __import__('sys').modules[__name__], req, policy, identity, model, safe=not holds_identifier,
+        streaming=_on_token is not None))
     try:
         if _on_token is not None and req.task_type in {"command.turn", "command.code"}:
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
@@ -1655,6 +1667,8 @@ async def _run_route(
     cache_read, cache_write = prompt_cache.cache_tokens(usage)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
+    c1_hit = (dispatched_settings['cache'].get('use-cache') is True
+              and r.headers.get('x-tervory-cache-layer') == 'C1' and outcome == 'delivered')
     cost_status = "set"
     if priority == "offpeak":
         cost = (priority_queue.usage_cost(price_info, usage, sent_at) if price_info.get("offpeak") else
@@ -1666,6 +1680,8 @@ async def _run_route(
     if priority == "offpeak" and answered != model:
         # A gateway violating disable_fallbacks is not evidence for our booked rate.
         cost_usd, cost_status = 0.0, "not_set"
+    if c1_hit:
+        cost_usd, cost_status = 0., 'set'
     content = ""
     finish_reason = ""
     if outcome == "delivered":
@@ -1679,10 +1695,10 @@ async def _run_route(
               (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
                tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after,sent_at,offpeak_job_id,cost_status,
                cache_read_tokens,cache_write_tokens)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19),$20,$21,$22,$23,$24)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$25,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19),$20,$21,$22,$23,$24)
             ON CONFLICT(id) DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,
               tokens_in=EXCLUDED.tokens_in,tokens_out=EXCLUDED.tokens_out,cost_usd=EXCLUDED.cost_usd,
-              cache_read_tokens=EXCLUDED.cache_read_tokens,cache_write_tokens=EXCLUDED.cache_write_tokens,
+              cache_read_tokens=EXCLUDED.cache_read_tokens,cache_write_tokens=EXCLUDED.cache_write_tokens,cache_hit=EXCLUDED.cache_hit,
               latency_ms=EXCLUDED.latency_ms,outcome=EXCLUDED.outcome,error=EXCLUDED.error,
               route_seat=EXCLUDED.route_seat,escalation=EXCLUDED.escalation,accept_after=EXCLUDED.accept_after,
               sent_at=EXCLUDED.sent_at,cost_status=EXCLUDED.cost_status,
@@ -1696,7 +1712,7 @@ async def _run_route(
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
             req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
             latency_ms, outcome, task_id, error, route_seat, json.dumps(escalation), int(policy.get("acceptance_window_s", 86400)),
-            sent_at, _receipt_id, cost_status, cache_read, cache_write,
+            sent_at, _receipt_id, cost_status, cache_read, cache_write, c1_hit,
         )
 
     # BEGIN ROUTELLM SERVING RECEIPT
@@ -1747,6 +1763,7 @@ async def _run_route(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd if cost_status == "set" else None, latency_ms=latency_ms,
         finish_reason=finish_reason, escalation=escalation, cache_read_tokens=cache_read, cache_write_tokens=cache_write,
+        cache_layer='C1' if c1_hit else None, cache_backend='litellm-redis' if c1_hit else None,
         execution=execution_receipt.capture(ledger_id=str(ledger_id), tenant_id=str(req.tenant_id), task_type=req.task_type,
             requested_model=model, answered_model=answered, dispatched=dispatched_settings,
             headers=r.headers, response=data, delivered=outcome == "delivered"),
