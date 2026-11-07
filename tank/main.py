@@ -728,7 +728,6 @@ class RouteResponse(BaseModel):
     # Provider prompt-cache tokens included in tokens_in (0 when none were reported).
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
-    cache_hit_rate: float = 0.
     cache_layer: str | None = None
     cache_backend: str | None = None
 
@@ -1336,8 +1335,7 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
         if "error" not in value:
             answer = (priority_queue.QueuedResponse if value["queued"] else RouteResponse).model_validate(value["answer"])
             answer = await __import__('engine_ladder').receipt(engine_rt, req, policy, answer)
-            answer = await __import__('exact_cache').record(engine_rt, req, policy, answer)
-            return await prompt_cache.receipt(engine_rt, req, answer)
+            return await __import__('exact_cache').record(engine_rt, req, policy, answer)
         attempted.add(policy["model"])
         if policy["model"].startswith("skill:") and policy.get("escalation_model"):
             attempted.add(policy["escalation_model"])
@@ -1431,6 +1429,14 @@ async def _run_route(
     messages = [m.model_dump() for m in req.messages]
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
+    if policy.get('_engine') or model in {'local', 'local-large'}:
+        # GGUF chat templates may consume only the first system message. Keep
+        # the policy and recalled data in that one message, in their original order.
+        count = 0
+        while count < len(messages) and messages[count]['role'] == 'system':
+            count += 1
+        if count > 1:
+            messages = [{'role': 'system', 'content': '\n\n'.join(m['content'] for m in messages[:count])}, *messages[count:]]
     if req.task_type == "zenas.case_facts" and any(str(message.get("content", "")).startswith(_CONVERT_HEAD) for message in messages):
         # Fixed text first, so the provider prompt cache sees one stable prefix:
         # the policy prompt, then this fixed instruction, then the judgment.
@@ -1439,14 +1445,6 @@ async def _run_route(
             "Each pointer is {\"paragraphs\":[1,2]} or {\"first\":\"first eight words\",\"last\":\"last eight words\"}. "
             "Select at least 200 characters of facts. Return question, holding, elements and citations as JSON."
         )})
-    messages = prompt_cache.ordered(messages)
-    if policy.get('_engine', {}).get('free') or model in {'local', 'local-large'}:
-        # GGUF templates consume one system message; preserve prefix order inside it.
-        count = 0
-        while count < len(messages) and messages[count]['role'] == 'system':
-            count += 1
-        if count > 1:
-            messages = [{'role': 'system', 'content': '\n\n'.join(m['content'] for m in messages[:count])}, *messages[count:]]
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
     generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
     if model_override is not None:
@@ -1594,19 +1592,19 @@ async def _run_route(
     )
     dispatched_settings.update(await __import__('engine_tracing').metadata(
         __import__('sys').modules[__name__], req.tenant_id, req.task_type, model, policy))
-    cache_options = await __import__('exact_cache').gateway_options(
+    dispatched_settings.update(await __import__('exact_cache').gateway_options(
         __import__('sys').modules[__name__], req, policy, identity, model, safe=not holds_identifier,
-        streaming=_on_token is not None)
+        streaming=_on_token is not None))
     try:
         if _on_token is not None and req.task_type in {"command.turn", "command.code"}:
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
-                                        {"model": model, "messages": messages, **dispatched_settings, **cache_options, **routing}, _on_token)
+                                        {"model": model, "messages": messages, **dispatched_settings, **routing}, _on_token)
         else:
             async with httpx.AsyncClient(timeout=120) as client:
                 r = await client.post(
                     f"{LITELLM_URL}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                    json={"model": model, "messages": messages, **dispatched_settings, **cache_options, **routing},
+                    json={"model": model, "messages": messages, **dispatched_settings, **routing},
                 )
         answered_group = r.headers.get("x-litellm-model-group")
         if answered_group in routing.aliases:
@@ -1662,7 +1660,7 @@ async def _run_route(
         error = f"{r.status_code}: {' '.join(str(msg).split())[:300]}"
         if holds_identifier:
             error = "provider error omitted; the prompt contained a personal identifier"
-    usage = prompt_cache.normalized_usage(data.get('usage') or data.get('usageMetadata') or {})
+    usage = data.get("usage") or {}
     tokens_in = int(usage.get("prompt_tokens") or 0)
     tokens_out = int(usage.get("completion_tokens") or 0)
     # Provider prompt-cache tokens, part of tokens_in. LiteLLM prices them with the
@@ -1670,7 +1668,7 @@ async def _run_route(
     cache_read, cache_write = prompt_cache.cache_tokens(usage)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
-    c1_hit = (cache_options['cache'].get('use-cache') is True
+    c1_hit = (dispatched_settings['cache'].get('use-cache') is True
               and r.headers.get('x-tervory-cache-layer') == 'C1' and outcome == 'delivered')
     cost_status = "set"
     if priority == "offpeak":
@@ -1767,7 +1765,6 @@ async def _run_route(
         ledger_id=ledger_id, model=answered, rung=4 if c1_hit else policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd if cost_status == "set" else None, latency_ms=latency_ms,
         finish_reason=finish_reason, escalation=escalation, cache_read_tokens=cache_read, cache_write_tokens=cache_write,
-        cache_hit_rate=cache_read / tokens_in if tokens_in else 0.,
         cache_layer='C1' if c1_hit else None, cache_backend='litellm' if c1_hit else None,
         execution=None if c1_hit else execution_receipt.capture(ledger_id=str(ledger_id), tenant_id=str(req.tenant_id), task_type=req.task_type,
             requested_model=model, answered_model=answered, dispatched=dispatched_settings,
@@ -3134,19 +3131,14 @@ async def batch_status(batch_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, A
             """SELECT i.item_id,i.position,i.status,i.error,l.id AS ledger_id,l.model,l.rung,
             CASE WHEN l.cost_status='not_set' THEN NULL ELSE l.cost_usd END AS cost_usd,
             coalesce(l.batch_baseline_cost_usd,l.baseline_cost_usd) AS baseline_cost_usd,
-            l.tokens_in,l.tokens_out,l.latency_ms,l.batch,l.escalation,t.content,
-            l.cache_read_tokens,l.cache_write_tokens,
-            CASE WHEN l.tokens_in>0 THEN l.cache_read_tokens::float/l.tokens_in ELSE 0 END AS cache_hit_rate,
-            r.detail AS engine
+            l.tokens_in,l.tokens_out,l.latency_ms,l.batch,l.escalation,t.content
             FROM tank.batch_items i LEFT JOIN tank.ledger l ON l.id=i.ledger_id AND l.tenant_id=i.tenant_id
             LEFT JOIN tank.transcripts t ON t.ledger_id=l.id AND t.tenant_id=i.tenant_id
-            LEFT JOIN tank.engine_receipts r ON r.ledger_id=l.id AND r.tenant_id=i.tenant_id AND r.region=l.region
             WHERE i.batch_id=$1 AND i.tenant_id=$2 ORDER BY i.position""", batch_id, tenant_id,
         )
     results = []
     for item in items:
         value = dict(item)
-        value['engine'] = _batch_obj(value.get('engine'))
         baseline, actual = value.get("baseline_cost_usd"), value.get("cost_usd")
         value["discount_usd"] = float(baseline - actual) if baseline is not None and actual is not None else None
         results.append(value)
@@ -3209,7 +3201,7 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
         await __import__('engine_tracing').batch_trace(__import__('sys').modules[__name__], batch, item, data, failed=True)
         await _batch_fallback(conn, batch, item)
         return
-    usage = prompt_cache.normalized_usage(data.get('usage') or data.get('usageMetadata') or {})
+    usage = data.get("usage") or {}
     tokens_in, tokens_out = int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
     cache_read, cache_write = prompt_cache.cache_tokens(usage)
     prices, snapshot = _batch_obj(item["prices"]), _batch_obj(item["policy"])
@@ -3259,12 +3251,6 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
         with paid_steps.run_scope(paid_steps.Run(req.tenant_id,uuid.UUID(authorization["run_id"]),authorization["request_hash"])):
             await paid_steps.attach_receipt(ledger_id,authorization)
     semantic_cache.schedule_batch(__import__("sys").modules[__name__], req, snapshot, ledger_id, content, float(actual))
-    cached = RouteResponse(ledger_id=ledger_id, model=batch['model'], rung=snapshot['routing']['rung'],
-        content=content, tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=float(actual), latency_ms=0,
-        batch=True, cache_read_tokens=cache_read, cache_write_tokens=cache_write,
-        cache_hit_rate=cache_read / tokens_in if tokens_in else 0.)
-    await __import__('cache_metrics').record(__import__('sys').modules[__name__], req, cached, 'C5',
-        prompt_cache.statistics(prices, tokens_in, cache_read, cache_write, multiplier=prices['discount']), conn=conn)
 
 
 async def _process_batch(conn: Any, batch: Any) -> None:
