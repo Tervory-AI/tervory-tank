@@ -84,6 +84,7 @@ Public project/client IDs, native founder subjects and organisation links are pr
 6. GitHub repository secrets (not Coolify): CLI_RELEASE_SIGNING_KEY, CLI_RELEASE_SIGNING_PUBLIC_KEY. Only needed to sign CLI releases.
 
 7. Radix deploy gate in GitHub (not Coolify): repository variable RADIX_DEPLOY_TENANT_ID is the founder workspace id; repository secret TANK_API_KEY reuses the existing Tank service key. No new key is created.
+8. Diff gate in GitHub (not Coolify): add **diff-gate** as a required status check on main, beside ci-ok. To approve a protected change on a PR, apply the label **founder-unlock** yourself; a label applied by anyone else is ignored. Optional repository variable FOUNDER_LOGIN (default zenascapetown-code).
 
 ## D. Wording only you can write (legal text)
 
