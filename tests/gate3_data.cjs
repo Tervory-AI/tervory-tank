@@ -30,7 +30,22 @@ const server = http.createServer(async (req, res) => {
       return json({tenant_id:identity.tenantId,home_region:'us-east'});
     }
     assert.equal(req.headers['x-tervory-home-region'], 'us-east');
-    assert.equal(body?.tenant_id ?? url.searchParams.get('tenant_id'), identity.tenantId);
+    if (!url.pathname.startsWith('/v1/command/workspace/')) {
+      assert.equal(body?.tenant_id ?? url.searchParams.get('tenant_id'), identity.tenantId);
+    } else {
+      assert.equal(req.headers['x-tervory-tenant'], identity.tenantId);
+    }
+    if (url.pathname === '/v1/command/workspace/task.create' && req.method === 'POST') {
+      assert.equal(req.headers['x-tervory-user'], identity.userId);
+      assert.equal(req.headers['x-tervory-tenant'], identity.tenantId);
+      taskPosts++;
+      task = {id:jobId,title:body.title,task_type:body.task_type,status:'queued',result:null,error:null,ledger_id:null,created_at:'2026-11-06T00:00:00Z',memory_bracket:{paid_calls:1,steps:['recall','tank_agent','remember']}};
+      return json(task,202);
+    }
+    if (url.pathname === '/v1/command/workspace/chat' && req.method === 'POST') {
+      assert.equal(req.headers['x-tervory-user'], identity.userId);
+      return json({content:'offline-chat',cost_usd:0,memory_bracket:{paid_calls:1}},200);
+    }
     if (url.pathname === '/v1/tasks' && req.method === 'POST') {
       assert.equal(body.created_by, identity.userId);taskPosts++;
       task = {id:jobId,title:body.title,task_type:body.task_type,status:'queued',result:null,error:null,ledger_id:null,created_at:'2026-11-06T00:00:00Z'};

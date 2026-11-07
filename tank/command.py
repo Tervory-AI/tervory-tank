@@ -48,6 +48,7 @@ FOUNDER_ONLY_TOOLS = build_set("FOUNDER_ONLY_TOOLS")
 # rig.quote.confirm_payment, tiger.match* and radix.repo.scan.
 REQUEST_BODY_TOOLS = build_set("REQUEST_BODY_TOOLS")
 CONFIRMED = build_set("CONFIRMED")
+TENANT_TOOLS = build_set("TENANT_TOOLS")
 
 FOUNDER_TOOLS = build_founder_tools()
 
@@ -114,7 +115,7 @@ def allowed_tools(actor: Actor) -> list[str]:
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     voice_tools = TENANT_ADMIN_TOOLS if actor.tenant_admin and not actor.founder else []
-    client_tools = []  # Product tenant-admin declarations already include these tools.
+    client_tools = list(TENANT_TOOLS)  # Shared tenant tools still require authenticated actor scope.
     if actor.tenant_admin or actor.founder:
         client_tools = [*client_tools, "paid_steps.approve"]
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
@@ -241,7 +242,7 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
         "baseline_cost_usd": float(baseline) if baseline is not None else None,
         "saved_usd": float(baseline) - cost if not pending and cost is not None else None,
         "cost_status": "price not set" if ledger.get("cost_status") == "not_set" else "pending" if cost is None else "recorded",
-        "baseline_status": "baseline pending" if pending else "recorded",
+        "baseline_status": "baseline pending" if pending else "estimated" if ledger.get("baseline_status") == "estimated" else "recorded",
         **({"paid_step_id": ledger["paid_step_id"], "paid_step_mode": ledger.get("paid_step_mode"),
             "paid_step_approval_id": str(ledger["paid_step_approval_id"])} if ledger.get("paid_step_approval_id") else {}),
     }
@@ -2415,6 +2416,11 @@ async def route_code(actor: Actor, messages: list[dict], model: str, task_id: uu
 
 
 @router.post('/threads/{thread_id}/code-turn')
+async def code_turn_http(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends(identity)) -> dict:
+    # Resolve the installed product dispatcher when a request arrives.
+    return await code_turn(thread_id, body, actor)
+
+
 async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends(identity)) -> dict:
     roster = await code_sessions.visible_models(actor)
     permitted = {row['name'] for row in roster}

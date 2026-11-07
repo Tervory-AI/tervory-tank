@@ -146,6 +146,28 @@ def create_app(
             raise HTTPException(status_code=503, detail="memory store unreachable")
         return {"ok": True}
 
+    @app.patch("/memories/{memory_id}")
+    async def edit_memory(memory_id: uuid.UUID, body: MemoryIn, x_tank_key: str = Header(default="")):
+        _json_meta(body.meta)
+        agent = resolve_agent(caller_agent(x_tank_key), body.agent, write=True)
+        if not body.user_id or (body.id is not None and body.id != memory_id) or not body.index:
+            raise HTTPException(422, "Personal edit requires user_id, matching id and indexing")
+        try:
+            meta = write_meta(agent, body.kind, body.meta, body.user_id)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        if holder['records'] is None:
+            raise HTTPException(503, "memory store unreachable")
+        try:
+            saved = await holder['records'].edit(agent, str(body.tenant_id), str(memory_id), body.text,
+                list(dict.fromkeys([body.source, *body.evidence])), user_id=body.user_id,
+                kind=body.kind, meta=meta, confidence=body.confidence, last_verified=body.last_verified)
+        except ClaimTooLong as exc:
+            raise claim_validation_error("text", exc) from None
+        if saved is None:
+            raise HTTPException(404, "not found")
+        return saved
+
     @app.post("/memories")
     async def remember(body: MemoryIn, x_tank_key: str = Header(default="")) -> JSONResponse:
         _json_meta(body.meta)
