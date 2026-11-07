@@ -124,6 +124,68 @@ async def test_shared_wrong_keys_and_invalid_kind_are_refused(product):
     assert await p.client.records(p.tenant, user_id='placeholder-user') == []
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('product', ['opli', 'workspace'], indirect=True)
+async def test_product_controls_edit_and_forget_only_owned_records(product, monkeypatch):
+    from importlib import import_module
+    p = product
+    module = import_module('agents.opli.gates_memory' if p.name == 'opli' else 'integrations.workspace.gates_memory')
+    monkeypatch.setenv(p.name.upper() + '_MEMORY_ENABLED', 'true')
+    a, b = 'placeholder-owner', 'placeholder-other-user'
+    own = await p.client.remember(p.tenant, 'placeholder original', p.name + '.receipt', 'placeholder-source', user_id=a, meta={'reusable_result':{'answer':'placeholder stale'}})
+    other = await p.client.remember(p.tenant, 'placeholder other', p.name + '.receipt', 'placeholder-source', user_id=b)
+    args = dict(tenant_id=p.tenant, user_id=a)
+    with pytest.raises(module.MemoryScopeError):
+        await module.apply_memory_edit(p.client, memory_id=other['id'], text='placeholder forbidden', memory_control='edit', **args)
+    with pytest.raises(module.MemoryScopeError):
+        await module.apply_memory_forget(p.client, memory_id=other['id'], **args)
+    await module.apply_memory_edit(p.client, memory_id=own['id'], text='placeholder corrected', memory_control='edit', **args)
+    rows = await p.client.records(p.tenant, user_id=a)
+    assert len(rows) == 1 and rows[0]['id'] == own['id'] and rows[0]['claim'] == 'placeholder corrected'
+    assert rows[0]['meta']['invalidated'] and rows[0]['meta']['reusable_result'] is None
+    await module.apply_memory_forget(p.client, memory_id=own['id'], **args)
+    assert await p.client.records(p.tenant, user_id=a) == []
+    assert {row['id'] for row in await p.client.records(p.tenant, user_id=b)} == {other['id']}
+
+
+@pytest.mark.asyncio
+async def test_explicit_edit_checks_sql_owner_and_preserves_create_conflicts(product, monkeypatch):
+    p = product
+    owner = 'placeholder-owner'
+    row = await p.client.remember(p.tenant, 'placeholder original', p.name + '.receipt', 'placeholder-source', user_id=owner)
+    body = dict(tenant_id=p.tenant, user_id=owner, text='placeholder changed',
+                kind=p.name + '.receipt', source='placeholder-source')
+    headers = {'X-Tank-Key': p.key}
+    path = '/memories/' + row['id']
+    for change, code in [({'user_id':'placeholder-other'},404), ({'tenant_id':p.other},404),
+                         ({'user_id':None},422), ({'meta':{'user_id':'placeholder-other'}},422),
+                         ({'kind':p.name+'.task'},404), ({'id':str(uuid4())},422)]:
+        assert (await p.http.patch(path, json={**body, **change}, headers=headers)).status_code == code
+    assert (await p.http.patch('/memories/'+str(uuid4()), json=body, headers=headers)).status_code == 404
+    assert (await p.http.patch(path, json=body, headers={'X-Tank-Key':'placeholder-shared-key'})).status_code == 403
+    assert (await p.http.post('/memories', json={**body,'id':row['id']}, headers=headers)).status_code == 409
+    rows = await p.client.records(p.tenant, user_id=owner)
+    assert len(rows) == 1 and rows[0]['claim'] == 'placeholder original'
+    result = await p.http.patch(path, json=body, headers=headers)
+    assert result.status_code == 200 and result.json()['id'] == row['id']
+    assert result.json()['updated'] and not result.json()['index_pending']
+    recalled = await p.client.recall(p.tenant, 'placeholder changed', user_id=owner)
+    assert len(recalled) == 1 and recalled[0]['text'] == 'placeholder changed'
+    embed = p.encoder.embed
+    def unavailable(text):
+        if text == 'placeholder pending correction':
+            raise RuntimeError('placeholder embedding unavailable')
+        return embed(text)
+    monkeypatch.setattr(p.encoder, 'embed', unavailable)
+    pending = await p.http.patch(path, json={**body, 'text':'placeholder pending correction'}, headers=headers)
+    assert pending.status_code == 200 and pending.json()['index_pending']
+    assert await p.client.recall(p.tenant, 'placeholder changed', user_id=owner) == []
+    assert (await p.client.records(p.tenant, user_id=owner))[0]['claim'] == 'placeholder pending correction'
+    monkeypatch.setattr(p.encoder, 'embed', embed)
+    repaired = await p.http.patch(path, json=body, headers=headers)
+    assert repaired.status_code == 200 and not repaired.json()['index_pending']
+
+
 def test_shipped_clients_and_namespaces_match_product_sources():
     assert (ROOT/'tank/command_tools/_shared_memory.py').read_bytes() == (ROOT/'agents/_chassis/chassis/memory.py').read_bytes()
     for src, dst, old, new in [('agents/opli','tank/command_tools/_opli','agents.opli','command_tools._opli'),

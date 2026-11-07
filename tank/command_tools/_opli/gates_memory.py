@@ -402,13 +402,13 @@ async def require_owned_record(
         rows = list(memory.rows)
     elif hasattr(memory, "records"):
         try:
-            rows = list(await memory.records(tenant))
+            rows = list(await memory.records(tenant, user_id=user))
         except Exception:
             # Legacy Hermes (InMemoryStore) may not expose /records; fall back to recall.
             rows = []
             if hasattr(memory, "recall"):
                 try:
-                    rows = list(await memory.recall(tenant, str(memory_id), kind=None, limit=50))
+                    rows = list(await memory.recall(tenant, str(memory_id), user_id=user, kind=None, limit=50))
                 except Exception:
                     rows = []
     match = None
@@ -502,8 +502,9 @@ async def apply_memory_edit(
         memory, tenant, text.strip(), str(row.get("kind") or "opli.task"),
         str(row.get("source") or f"opli:edit:{memory_id}"),
         user_id=user,
-        meta={**(row.get("meta") or {}), "user_id": user, "edited": True},
-        record_id=str(memory_id),
+        meta={**(row.get("meta") or {}), "user_id": user, "edited": True,
+              **({"invalidated": True, "reusable_result": None} if row.get("kind") == "opli.receipt" else {})},
+        record_id=str(memory_id), replace=True,
     )
 
 
@@ -520,7 +521,7 @@ async def apply_memory_forget(
     await require_owned_record(
         memory, memory_id=memory_id, tenant_id=tenant, user_id=user
     )
-    await memory.forget(memory_id, tenant)
+    await memory.forget(memory_id, tenant, user_id=user)
 
 
 def _invalidate_receipts_for_task(
@@ -626,16 +627,16 @@ class FakeMemory:
             matches = matches[:limit]
         return deepcopy(matches)
 
-    async def forget(self, memory_id: str, tenant_id: str) -> None:
+    async def forget(self, memory_id: str, tenant_id: str, *, user_id: str | None = None) -> None:
         tenant = str(tenant_id)
         before = len(self.rows)
-        self.rows = [row for row in self.rows if not (row["id"] == memory_id and row["tenant_id"] == tenant)]
+        self.rows = [row for row in self.rows if not (row["id"] == memory_id and row["tenant_id"] == tenant and (user_id is None or row["meta"].get("user_id") == user_id))]
         if len(self.rows) < before:
             self.forgets += 1
 
-    async def records(self, tenant_id: str, *, tier: str = "client") -> list[dict[str, Any]]:
+    async def records(self, tenant_id: str, *, user_id: str | None = None, tier: str = "client") -> list[dict[str, Any]]:
         del tier
-        return deepcopy([row for row in self.rows if row["tenant_id"] == str(tenant_id)])
+        return deepcopy([row for row in self.rows if row["tenant_id"] == str(tenant_id) and (user_id is None or row["meta"].get("user_id") == user_id)])
 
 
 async def run_with_memory(

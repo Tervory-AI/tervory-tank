@@ -748,7 +748,7 @@ async def apply_memory_edit(
         str(row.get("source") or f"workspace:edit:{memory_id}"),
         user_id=user,
         meta=meta,
-        record_id=str(memory_id),
+        record_id=str(memory_id), replace=True,
     )
     return {"id": str(memory_id), "updated": True, "saved": saved, "memory_control": control}
 
@@ -809,7 +809,7 @@ async def persist_invalidate_identical_receipts(
             str(row.get("source") or f"workspace:task:{key}"),
             user_id=owner,
             meta=new_meta,
-            record_id=str(memory_id),
+            record_id=str(memory_id), replace=True,
         )
         meta["invalidated"] = True
         meta["reusable_result"] = None

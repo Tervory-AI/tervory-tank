@@ -37,11 +37,13 @@ class HermesEdge:
         from urllib.parse import parse_qs, urlparse
 
         path = url.split("http://hermes:8000", 1)[-1]
-        if method == "POST" and path.endswith("/memories"):
+        if (method == "POST" and path.endswith("/memories")) or (method == "PATCH" and "/memories/" in path):
             body = dict(json or {})
             row_id = body.get("id") or str(uuid.uuid4())
             for row in self.rows:
                 if row["id"] == row_id and row["tenant_id"] == str(body["tenant_id"]):
+                    assert method == "PATCH"
+                    assert row["meta"]["user_id"] == body["user_id"]
                     row.update({
                         "text": body["text"],
                         "kind": body["kind"],
@@ -49,6 +51,7 @@ class HermesEdge:
                         "meta": body.get("meta") or {},
                     })
                     return FakeResp({"id": row_id})
+            assert method == "POST"
             row = {
                 "id": row_id,
                 "tenant_id": str(body["tenant_id"]),

@@ -36,7 +36,7 @@ class MemoryClient:
                        evidence: list[str] | None = None, confidence: float = .5,
                        record_id: str | None = None, row_id: str | None = None,
                        last_verified: str | None = None, meta: dict | None = None,
-                       index: bool = True, tenant_wide: bool | None = None) -> dict[str, Any]:
+                       index: bool = True, tenant_wide: bool | None = None, replace: bool = False) -> dict[str, Any]:
         """Write memory. Personal rows always stamp meta.user_id; tenant-wide omit it.
 
         user_id must come from the verified signed-in actor, never a request body.
@@ -74,7 +74,12 @@ class MemoryClient:
         }
         if user_id and not tenant_wide:
             body["user_id"] = str(user_id).strip()
-        data = await self._send("POST", "/memories", body)
+        # Edits are explicit; deterministic record_id/row_id writes retain
+        # their existing idempotent-create/replay contract.
+        if replace and not record_id:
+            raise ValueError("record_id required for edit")
+        method, path = ("PATCH", "/memories/" + str(UUID(record_id))) if replace else ("POST", "/memories")
+        data = await self._send(method, path, body)
         if not isinstance(data, dict):
             raise RuntimeError("hermes answer was not an object")
         return data

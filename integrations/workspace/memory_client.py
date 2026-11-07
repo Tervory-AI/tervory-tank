@@ -4,10 +4,7 @@ Never calls Tank /v1/memory. Never authenticates writes with the shared
 TANK_API_KEY. User identity is the verified signed-in actor only — passed
 through to chassis.MemoryClient / Hermes. This module does not filter by user.
 
-Lifecycle HMAC (Tank ghost_routes / enforce_api) binds tenant+user on every
-Hermes call so a shared key alone cannot assert identity. Signing lives here
-as a MemoryClient subclass until tank-patches/hermes-signed-identity.patch
-lands in chassis; vendor files are never edited.
+Uses the merged chassis client and centrally enforced SQL user ownership.
 """
 from __future__ import annotations
 
