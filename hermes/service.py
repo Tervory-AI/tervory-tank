@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from hermes.auth import agent_key_hashes, identify
 from hermes.embeddings import Embedder
 from hermes.records import ClaimTooLong
+from hermes.user_scope import write_meta, wide_kinds
 from hermes.record_routes import claim_validation_error
 from hermes.store import Hit, Memory, MemoryStore, collection_for, copy_memory
 
@@ -44,6 +45,7 @@ class MemoryIn(BaseModel):
     last_verified: datetime | None = None
     id: uuid.UUID | None = None
     index: bool = True
+    user_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class RecallIn(BaseModel):
@@ -54,6 +56,7 @@ class RecallIn(BaseModel):
     limit: int = Field(default=8, ge=1, le=50)
     agent: str | None = Field(default=None, max_length=61)
     tier: Literal['client', 'platform'] = 'client'
+    user_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 def create_app(
@@ -148,6 +151,10 @@ def create_app(
         _json_meta(body.meta)
         caller = caller_agent(x_tank_key)
         agent = resolve_agent(caller, body.agent, write=True)
+        try:
+            body.meta = write_meta(agent, body.kind, body.meta, body.user_id)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
         if holder['records'] is not None:
             try:
                 saved = await holder['records'].save(agent,str(body.tenant_id),body.text,
@@ -162,7 +169,7 @@ def create_app(
             except Exception:
                 log.warning('record write failed')
                 raise HTTPException(503,'memory store unreachable') from None
-        if not body.index:
+        if body.meta.get("user_id") or not body.index:
             raise HTTPException(503, "memory store unreachable")
         name = collection(agent)
         ready, model = current()
@@ -193,8 +200,8 @@ def create_app(
         agent = resolve_agent(caller, body.agent, write=False)
         if holder['records'] is not None:
             try:
-                new_hits = await holder['records'].recall(agent,str(body.tenant_id),body.query,body.kind,body.limit,body.tier)
-                if body.tier == 'platform':
+                new_hits = await holder['records'].recall(agent,str(body.tenant_id),body.query,body.kind,body.limit,body.tier,user_id=body.user_id)
+                if body.tier == 'platform' or body.user_id is not None:
                     return {'memories':new_hits}
                 # Legacy vectors remain in place and readable; never imported or rewritten.
                 ready, model = current()
@@ -203,6 +210,8 @@ def create_app(
             except Exception:
                 log.warning('record recall failed')
                 raise HTTPException(503,'memory store unreachable') from None
+        if body.user_id is not None:
+            return {"memories": []}
         name = collection(agent)
         ready, model = current()
         try:
@@ -224,22 +233,22 @@ def create_app(
         return {"memories": [_hit(hit) for hit in hits]}
 
     @app.delete("/memories/{memory_id}")
-    async def forget(memory_id: uuid.UUID, tenant_id: uuid.UUID | None = None, x_tank_key: str = Header(default="")) -> dict[str, bool]:
+    async def forget(memory_id: uuid.UUID, tenant_id: uuid.UUID | None = None, user_id: str | None = None, x_tank_key: str = Header(default="")) -> dict[str, bool]:
         caller = caller_agent(x_tank_key)
         agent = resolve_agent(caller, None, write=True)
+        if tenant_id is None:
+            raise HTTPException(422, 'A tenant UUID is required')
         if holder['records'] is not None:
-            if tenant_id is None:
-                raise HTTPException(422,'A tenant UUID is required')
-            removed = await holder['records'].forget(agent,str(tenant_id),str(memory_id))
+            removed = await holder['records'].forget(agent,str(tenant_id),str(memory_id),user_id=user_id)
             if not removed:
                 ready, _ = current()
-                removed = await asyncio.to_thread(ready.delete,collection(agent),str(memory_id),str(tenant_id))
+                removed = False if user_id is not None else await asyncio.to_thread(ready.delete,collection(agent),str(memory_id),str(tenant_id),wide_kinds=wide_kinds(agent))
                 if not removed:
                     raise HTTPException(404,'no such memory')
             return {'deleted':True}
         ready, _model = current()
         try:
-            removed = await asyncio.to_thread(ready.delete, collection(agent), str(memory_id))
+            removed = False if user_id is not None else await asyncio.to_thread(ready.delete, collection(agent), str(memory_id), str(tenant_id) if tenant_id else None, wide_kinds=wide_kinds(agent))
         except HTTPException:
             raise
         except Exception:
@@ -251,17 +260,17 @@ def create_app(
         return {"deleted": True}
 
     @app.delete("/tenants/{tenant_id}")
-    async def forget_tenant(tenant_id: uuid.UUID, x_tank_key: str = Header(default="")) -> dict[str, int]:
+    async def forget_tenant(tenant_id: uuid.UUID, user_id: str | None = None, x_tank_key: str = Header(default="")) -> dict[str, int]:
         caller = caller_agent(x_tank_key)
         agent = resolve_agent(caller, None, write=True)
         if holder['records'] is not None:
-            removed = await holder['records'].forget(agent,str(tenant_id))
+            removed = await holder['records'].forget(agent,str(tenant_id),user_id=user_id)
             ready,_ = current()
-            removed += await asyncio.to_thread(ready.delete_tenant,collection(agent),str(tenant_id))
+            removed += (0 if user_id is not None else await asyncio.to_thread(ready.delete_tenant,collection(agent),str(tenant_id),wide_kinds=wide_kinds(agent)))
             return {'deleted':removed}
         ready, _model = current()
         try:
-            deleted = await asyncio.to_thread(ready.delete_tenant, collection(agent), str(tenant_id))
+            deleted = (0 if user_id is not None else await asyncio.to_thread(ready.delete_tenant, collection(agent), str(tenant_id),wide_kinds=wide_kinds(agent)))
         except HTTPException:
             raise
         except Exception:
@@ -301,7 +310,7 @@ def _remember(
     meta: dict[str, Any],
 ) -> dict[str, Any]:
     vector = embedder.embed(text)
-    nearest = store.search(name, vector, tenant_id=tenant_id, kind=None, limit=1)
+    nearest = store.search(name, vector, tenant_id=tenant_id, kind=kind, limit=1, wide_kinds=wide_kinds(name.removeprefix("mem_")))
     if nearest and nearest[0].score >= DEDUPE_SCORE:
         current = nearest[0].memory
         sources = list(current.sources)
@@ -349,7 +358,7 @@ def _recall(
     limit: int,
 ) -> list[Hit]:
     vector = embedder.embed(query)
-    return store.search(name, vector, tenant_id=tenant_id, kind=kind, limit=limit)
+    return store.search(name, vector, tenant_id=tenant_id, kind=kind, limit=limit, wide_kinds=wide_kinds(name.removeprefix("mem_")))
 
 
 def _hit(hit: Hit) -> dict[str, Any]:

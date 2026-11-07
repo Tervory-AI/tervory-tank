@@ -55,6 +55,9 @@ class StubEmbedder:
 
 
 def _keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hermes.user_scope import TENANT_WIDE_KINDS
+    for agent in ("template", "tiger"):
+        monkeypatch.setitem(TENANT_WIDE_KINDS, agent, frozenset({"fact", "note", "heartbeat"}))
     for name in list(os.environ):
         if name.startswith("TANK_KEY_"):
             monkeypatch.delenv(name, raising=False)
@@ -274,8 +277,8 @@ def _prove(store: object, monkeypatch: pytest.MonkeyPatch) -> None:
 
         assert client.delete(f"/memories/{memory_id}", headers=_headers(WORKSPACE)).status_code == 403
         assert client.delete(f"/tenants/{TENANT_X}", headers=_headers(WORKSPACE)).status_code == 403
-        assert client.delete(f"/memories/{memory_id}", headers=_headers(TIGER)).status_code == 404
-        assert client.delete(f"/memories/{tiger_id}", headers=_headers(TEMPLATE)).status_code == 404
+        assert client.delete(f"/memories/{memory_id}", headers=_headers(TIGER), params={"tenant_id": TENANT_X}).status_code == 404
+        assert client.delete(f"/memories/{tiger_id}", headers=_headers(TEMPLATE), params={"tenant_id": TENANT_X}).status_code == 404
 
         wiped = client.delete(f"/tenants/{TENANT_X}", headers=_headers(TEMPLATE))
         assert wiped.status_code == 200
@@ -313,8 +316,8 @@ def _prove(store: object, monkeypatch: pytest.MonkeyPatch) -> None:
                     agent="template",
                     http=http,
                 )
-                await first.remember(heartbeat_tenant, "heartbeat", "heartbeat", "schedule")
-                await first.remember(heartbeat_tenant, "heartbeat", "heartbeat", "schedule")
+                await first.remember(heartbeat_tenant, "heartbeat", "heartbeat", "schedule", tenant_wide=True)
+                await first.remember(heartbeat_tenant, "heartbeat", "heartbeat", "schedule", tenant_wide=True)
                 second = MemoryClient(
                     base_url="http://hermes",
                     api_key=TEMPLATE,
@@ -386,7 +389,7 @@ def test_memory_client_refuses_to_call_without_a_key() -> None:
         client = MemoryClient(base_url="http://hermes", api_key="", agent="template")
         assert repr(client) == "MemoryClient(agent='template')"
         with pytest.raises(RuntimeError, match="tank key is not set"):
-            await client.remember(TENANT_X, "alpha", "fact", "human")
+            await client.remember(TENANT_X, "alpha", "fact", "human", user_id="placeholder-user")
 
     asyncio.run(check())
 

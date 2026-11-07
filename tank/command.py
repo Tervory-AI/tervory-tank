@@ -488,6 +488,7 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@__import__("product_identity").bind_actor
 async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
                      priority: str | None = None) -> Any:
@@ -1787,6 +1788,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     return adapter.method, path, scope, {**args, **scope}
 
 
+@__import__("product_identity").bind_actor
 async def dispatch_action(action: PlannedAction, actor: Actor, *, paid_run_id=None) -> tuple[int, Any]:
     """In-process HTTP to Tank: existing route auth/validation remains in force.
 

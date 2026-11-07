@@ -84,12 +84,23 @@ def register_record_routes(app, records, resolve_agent):
         tenant_id: uuid.UUID,
         agent: str | None = None,
         tier: Literal["client", "platform"] = "client",
+        user_id: str | None = Query(default=None, min_length=1, max_length=200),
         x_tank_key: str = Header(default=""),
         limit: int = Query(default=50, ge=1, le=200),
         offset: int = Query(default=0, ge=0),
     ):
         selected = resolve_agent(identify(x_tank_key), agent, write=False)
-        return {"memories": await ready(selected).list(selected, str(tenant_id), tier, limit, offset)}
+        return {"memories": await ready(selected).list(selected, str(tenant_id), tier, limit, offset, user_id=user_id)}
+
+    @app.get("/records/{id}")
+    async def get_record(id: uuid.UUID, tenant_id: uuid.UUID, agent: str | None = None,
+                         user_id: str | None = Query(default=None, min_length=1, max_length=200),
+                         x_tank_key: str = Header(default="")):
+        selected = resolve_agent(identify(x_tank_key), agent, write=False)
+        row = await ready(selected).get(selected, str(tenant_id), str(id), user_id=user_id)
+        if row is None:
+            raise HTTPException(404, "not found")
+        return row
 
     @app.get("/reference-corpora")
     async def references(
@@ -112,7 +123,7 @@ def register_record_routes(app, records, resolve_agent):
         x_tervory_admin: str = Header(default=""),
     ):
         founder(x_tank_key, x_tervory_admin)
-        return {"memories": await ready(agent).list(agent, str(tenant_id), tier)}
+        return {"memories": await ready(agent).list(agent, str(tenant_id), tier, user_id=x_tervory_admin)}
 
     @app.get("/founder/records/{id}")
     async def founder_record(
@@ -125,7 +136,7 @@ def register_record_routes(app, records, resolve_agent):
         if r is None:
             raise HTTPException(503, "memory store unreachable")
         try:
-            row = await r.founder_get(id)
+            row = await r.founder_get(id, user_id=x_tervory_admin)
         except ValueError:
             raise HTTPException(409, "Memory record conflict") from None
         if row is None:
@@ -148,6 +159,7 @@ def register_record_routes(app, records, resolve_agent):
                 confidence=body.confidence,
                 last_verified=body.last_verified,
                 row_id=str(body.id),
+                meta={"user_id": x_tervory_admin},
             )
         except ClaimTooLong as exc:
             raise claim_validation_error("claim", exc) from None

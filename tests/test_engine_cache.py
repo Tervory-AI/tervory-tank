@@ -1,5 +1,8 @@
 """Default semantic equivalence remains tenant and context sealed."""
+from contextvars import ContextVar
 import os
+
+import product_identity
 
 import pytest
 
@@ -13,6 +16,8 @@ from test_engine_ladder import setup_engine, local_gateway
 async def test_near_repeat_cache_with_real_memory_and_local_model(remembered, monkeypatch):  # noqa: F811
     b = remembered
     req = await setup_engine(b, monkeypatch)
+    actor = product_identity.User(str(req.tenant_id), "placeholder-cache-user", "member")
+    monkeypatch.setattr(product_identity, "current", ContextVar("placeholder_cache_user", default=actor))
     calls = local_gateway(b, monkeypatch)
     first = await b.tank.run_route(req)
     assert first.content.strip().lower() == 'billing'

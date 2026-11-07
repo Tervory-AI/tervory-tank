@@ -67,7 +67,7 @@ async def test_each_build_has_one_private_measured_record(monkeypatch, outcome):
         return httpx.Response(201, json={'id': record_id})
     async with httpx.AsyncClient(transport=httpx.MockTransport(hermes)) as http:
         ctx = SimpleNamespace(input=brief(), tenant_id=str(TENANT), job_id=str(uuid.uuid4()), tank=None,
-            memory=MemoryClient(base_url='http://placeholder-hermes', api_key='placeholder-room', agent='tisan', http=http))
+            memory=MemoryClient(base_url='http://placeholder-hermes', api_key='placeholder-room', agent='tisan', http=http, user_id='placeholder-user'))
         if outcome == 'exception':
             with pytest.raises(RuntimeError, match='placeholder private error'):
                 await b.handle(ctx)

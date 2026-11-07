@@ -18,9 +18,9 @@ memory = memory_fixture
 
 def credentials(monkeypatch, agent):
     monkeypatch.setenv("TANK_API_KEY", "offline-workspace")
-    set_founders(monkeypatch, "offline-founder")
+    set_founders(monkeypatch, "placeholder-founder")
     monkeypatch.setenv("TANK_KEY_" + agent.upper(), "offline-room")
-    return {"X-Tank-Key": "offline-workspace", "X-Tervory-Admin": "offline-founder"}
+    return {"X-Tank-Key": "offline-workspace", "X-Tervory-Admin": "placeholder-founder"}
 
 
 @pytest.mark.asyncio
@@ -29,7 +29,7 @@ async def test_id_read_authorization_exact_fields_unknown_and_collision(memory, 
 
     m = memory
     headers = credentials(monkeypatch, m.agent)
-    rows = [await m.records.save(m.agent, tenant, "private offline claim", [])
+    rows = [await m.records.save(m.agent, tenant, "private offline claim", [], meta={"user_id": "placeholder-founder"})
             for tenant in (m.tenant, m.other)]
     app = create_app(InMemoryStore(), Encoder(), records=m.records)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://hermes") as client:
@@ -58,7 +58,7 @@ async def test_id_read_authorization_exact_fields_unknown_and_collision(memory, 
         tank = FastAPI()
         tank.include_router(memory_routes.router)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tank), base_url="http://tank") as t:
-            trusted = {"X-Tank-Key": "offline-workspace", "X-Tervory-User": "offline-founder",
+            trusted = {"X-Tank-Key": "offline-workspace", "X-Tervory-User": "placeholder-founder",
                        "X-Tervory-Tenant": PLATFORM_TENANT}
             for row in rows:
                 path = "/v1/memory/records/" + row["id"]
@@ -73,7 +73,7 @@ async def test_id_read_authorization_exact_fields_unknown_and_collision(memory, 
             assert (await t.get(unknown.replace("/founder", "/v1/memory"), headers=trusted)).status_code == 404
             # Moving auth off the router must not open the existing admin corridor.
             assert (await t.get("/v1/memory/records", headers=trusted)).status_code == 404
-        await m.records.save(m.peer, m.other, "different row", [], row_id=rows[0]["id"])
+        await m.records.save(m.peer, m.other, "different row", [], row_id=rows[0]["id"], meta={"user_id": "placeholder-founder"})
         assert (await client.get("/founder/records/" + rows[0]["id"], headers=headers)).status_code == 409
 
 
@@ -97,15 +97,15 @@ async def test_tank_uses_existing_hermes_headers_fixed_origin_and_validation_sha
         return original(transport=httpx.MockTransport(respond), **kwargs)
 
     monkeypatch.setattr(memory_routes.httpx, "AsyncClient", client)
-    assert await memory_routes.hermes("GET", "/founder/records/offline-id", "offline-founder") == {"id": "offline-id"}
+    assert await memory_routes.hermes("GET", "/founder/records/offline-id", "placeholder-founder") == {"id": "offline-id"}
     request = calls[0]
     assert str(request.url) == "http://hermes:8000/founder/records/offline-id"
     assert request.method == "GET"
     assert request.headers["X-Tank-Key"] == "offline-workspace"
-    assert request.headers["X-Tervory-Admin"] == "offline-founder"
+    assert request.headers["X-Tervory-Admin"] == "placeholder-founder"
     status = 422
     with pytest.raises(HTTPException) as rejected:
-        await memory_routes.hermes("POST", "/founder/memories", "offline-founder", body={})
+        await memory_routes.hermes("POST", "/founder/memories", "placeholder-founder", body={})
     assert rejected.value.status_code == 422 and rejected.value.detail == validation
 
 
@@ -118,8 +118,8 @@ async def test_empty_or_unreviewed_inventory_stays_off_and_legacy_policy_refuses
     identifiers["reviewed"] = reviewed
     publisher = Publisher(m.records)
     row = await m.records.save(m.agent, m.tenant, "Alice approves weekly deliveries.", [])
-    await publisher.set_policy(m.agent, m.tenant, "offline-founder", True, inventory())
-    await publisher.set_policy(m.agent, m.other, "offline-founder", True, inventory())
+    await publisher.set_policy(m.agent, m.tenant, "placeholder-founder", True, inventory())
+    await publisher.set_policy(m.agent, m.other, "placeholder-founder", True, inventory())
     s = m.records.schema(m.agent)
     app = create_app(InMemoryStore(), Encoder(), records=m.records)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://hermes") as client:
@@ -172,7 +172,7 @@ async def test_api_counts_encoder_subword_and_special_tokens_before_saving(memor
         headers = {"X-Tank-Key": "offline-room"}
     base = {"tenant_id": m.tenant, "agent": m.agent}
     if not founder:
-        base.update(kind="fact", source="https://offline.example/proof")
+        base.update(kind="fact", source="https://placeholder.example/proof", meta={"user_id": "placeholder-user"})
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://hermes") as client:
         response = await client.post(path, headers=headers, json={**base, "id": str(uuid.uuid4()), field: accepted})
         assert response.status_code == (200 if founder else 201)

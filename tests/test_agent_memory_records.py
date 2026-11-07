@@ -393,7 +393,7 @@ async def test_publish_off_refuses_and_logs_without_platform_data(memory):
     m = memory
     row = await m.records.save(m.agent, m.tenant, "private fixture", [])
     publisher = Publisher(m.records)
-    assert (await publisher.publish(m.agent, m.tenant, row["id"], "founder-fixture"))[
+    assert (await publisher.publish(m.agent, m.tenant, row["id"], "placeholder-founder"))[
         "result"
     ] == "disabled"
     assert await m.records.list(m.agent, m.tenant, "platform") == []
@@ -401,7 +401,7 @@ async def test_publish_off_refuses_and_logs_without_platform_data(memory):
         f"SELECT * FROM {m.records.schema(m.agent)}.memory_publish_log WHERE tenant_id=$1",
         uuid.UUID(m.tenant),
     )
-    assert log["actor"] == "founder-fixture" and log["happened_at"]
+    assert log["actor"] == "placeholder-founder" and log["happened_at"]
     assert str(log["source_row"]) == row["id"] and log["result"] == "disabled"
     assert log["published_row"] is None
 
@@ -481,17 +481,17 @@ async def test_explicit_publish_scrubs_and_optin_is_per_client_agent(memory):
         f"weekly deliveries; alice rowan; {m.tenant}; +27 21 555 0199; 42 harbour road, unit 8; https://client.example/x",
         ["https://client.example/private", "https://public.example/source"],
         confidence=0.75,
-        meta={"private": "alice@client.example"},
+        meta={"private": "alice@client.example", "user_id": "placeholder-founder"},
     )
     publisher = Publisher(m.records)
-    await publisher.set_policy(m.agent, m.tenant, "founder-fixture", True, inventory())
-    assert (await publisher.publish(m.peer, m.tenant, row["id"], "founder-fixture"))[
+    await publisher.set_policy(m.agent, m.tenant, "placeholder-founder", True, inventory())
+    assert (await publisher.publish(m.peer, m.tenant, row["id"], "placeholder-founder"))[
         "result"
     ] == "disabled"
-    assert (await publisher.publish(m.agent, m.other, row["id"], "founder-fixture"))[
+    assert (await publisher.publish(m.agent, m.other, row["id"], "placeholder-founder"))[
         "result"
     ] == "disabled"
-    result = await publisher.publish(m.agent, m.tenant, row["id"], "founder-fixture")
+    result = await publisher.publish(m.agent, m.tenant, row["id"], "placeholder-founder")
     assert result["result"] == "published"
     published = await m.records.get(
         m.agent, m.tenant, result["published_row"], "platform"
@@ -501,7 +501,7 @@ async def test_explicit_publish_scrubs_and_optin_is_per_client_agent(memory):
     assert published["meta"] == {} and published["confidence"] == 0.75
     leaks = _publish_leaks(published, m.tenant, row["id"])
     assert not leaks, (leaks, published)
-    assert (await publisher.publish(m.agent, m.tenant, row["id"], "founder-fixture"))[
+    assert (await publisher.publish(m.agent, m.tenant, row["id"], "placeholder-founder"))[
         "result"
     ] == "already_published"
     assert len(await m.records.list(m.agent, m.tenant, "platform")) == 1
@@ -512,8 +512,8 @@ async def test_explicit_publish_scrubs_and_optin_is_per_client_agent(memory):
         )
         == 2
     )
-    await publisher.set_policy(m.agent, m.tenant, "founder-fixture", False, {})
-    assert (await publisher.publish(m.agent, m.tenant, row["id"], "founder-fixture"))[
+    await publisher.set_policy(m.agent, m.tenant, "placeholder-founder", False, {})
+    assert (await publisher.publish(m.agent, m.tenant, row["id"], "placeholder-founder"))[
         "result"
     ] == "disabled"
 
@@ -526,7 +526,7 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
 
     m = memory
     monkeypatch.setenv("TANK_API_KEY", "memory-workspace-fixture")
-    set_founders(monkeypatch, "founder-fixture")
+    set_founders(monkeypatch, "placeholder-founder")
     monkeypatch.setenv("TANK_KEY_" + m.agent.upper(), "memory-agent-fixture")
     app = create_app(InMemoryStore(), Encoder(), records=m.records)
     async with httpx.AsyncClient(
@@ -534,13 +534,13 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
     ) as http:
         headers = {
             "X-Tank-Key": "memory-workspace-fixture",
-            "X-Tervory-Admin": "founder-fixture",
+            "X-Tervory-Admin": "placeholder-founder",
         }
         for denied in (
             {"X-Tank-Key": "memory-workspace-fixture"},
             {
                 "X-Tank-Key": "memory-agent-fixture",
-                "X-Tervory-Admin": "founder-fixture",
+                "X-Tervory-Admin": "placeholder-founder",
             },
         ):
             response = await http.post(
@@ -599,7 +599,7 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
             ),
         )
         turn = uuid.UUID("33333333-3333-4333-8333-333333333333")
-        actor = command.Actor(uuid.UUID(m.tenant), "founder-fixture", False)
+        actor = command.Actor(uuid.UUID(m.tenant), "placeholder-founder", False)
         reply = await command.route_turn(
             actor,
             [
@@ -642,7 +642,7 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
             inspected = await tank_http.get(
                 "/v1/memory/records/" + memory_id,
                 headers={"X-Tank-Key": "memory-workspace-fixture",
-                         "X-Tervory-User": "founder-fixture",
+                         "X-Tervory-User": "placeholder-founder",
                          "X-Tervory-Tenant": PLATFORM_TENANT},
             )
         assert inspected.status_code == 200
@@ -682,8 +682,10 @@ async def test_new_write_works_during_vector_outage_and_legacy_delete_is_scoped(
     memory, monkeypatch
 ):
     from hermes.store import Memory
+    from hermes.user_scope import TENANT_WIDE_KINDS
 
     m = memory
+    monkeypatch.setitem(TENANT_WIDE_KINDS, m.agent, frozenset({"fact"}))
     monkeypatch.setenv("TANK_KEY_" + m.agent.upper(), "agent-fixture")
     legacy = InMemoryStore()
     ident = str(uuid.uuid4())

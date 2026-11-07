@@ -40,6 +40,8 @@ def test_each_pattern_remains_parseable_after_existing_publication_scrubber(conf
 async def test_private_save_fake_encoder_founder_only_publish_and_other_tenant_sql_reads(memory, monkeypatch):
     import memory_routes
     m = memory
+    from hermes.user_scope import TENANT_WIDE_KINDS
+    monkeypatch.setitem(TENANT_WIDE_KINDS, m.agent, TENANT_WIDE_KINDS["market_lab"])
     gateway_calls = []
     async def no_model(*args, **kwargs):
         gateway_calls.append(args)

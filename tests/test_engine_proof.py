@@ -1,4 +1,5 @@
 """Twenty requests through real CPU models, Hermes and Tank; paid HTTP is fake."""
+from contextvars import ContextVar
 import json
 import os
 import uuid
@@ -6,6 +7,8 @@ import uuid
 import pytest
 
 import engine_memory
+import product_identity
+from trigger_signin_fakes import set_founders
 from test_engine_memory import remembered  # noqa: F401
 from test_tank_tenant_boundaries import boundary  # noqa: F401
 from test_engine_ladder import setup_engine, local_gateway
@@ -16,13 +19,16 @@ from test_engine_ladder import setup_engine, local_gateway
 async def test_twenty_real_local_requests_with_receipts_and_tenant_isolation(remembered, monkeypatch):  # noqa: F811
     b = remembered
     req = await setup_engine(b, monkeypatch)
+    set_founders(monkeypatch, "placeholder-founder")
+    actor = product_identity.User(str(req.tenant_id), "placeholder-founder", "founder")
+    monkeypatch.setattr(product_identity, "current", ContextVar("placeholder_proof_user", default=actor))
     async with b.pool.acquire() as conn:
         await conn.execute("""UPDATE tank.policy SET task_type='engine.answer', system_prompt=
             'Answer using the newest tenant fact. Output only the office city. If no office city is known, output UNKNOWN.'
             WHERE task_type='engine.classify'""")
     req = req.model_copy(update={'task_type': 'engine.answer', 'messages': [b.tank.Message(role='user', content='What is our office city?')]})
     calls = local_gateway(b, monkeypatch)
-    result = await b.memory_client.post('/founder/memories', headers={'X-Tervory-Admin': 'founder-fixture'},
+    result = await b.memory_client.post('/founder/memories', headers={'X-Tervory-Admin': 'placeholder-founder'},
         json={'id': str(uuid.uuid4()), 'tenant_id': str(req.tenant_id), 'agent': 'tank', 'claim': 'Our office city is Paris.'})
     assert result.status_code == 200, result.text
     recalled, _ = await engine_memory.recall(b.tank, req)
@@ -41,7 +47,7 @@ async def test_twenty_real_local_requests_with_receipts_and_tenant_isolation(rem
     assert len({a.ledger_id for a in answers}) == 20
     async with b.pool.acquire() as conn:
         assert await conn.fetchval('SELECT count(*) FROM tank.engine_receipts WHERE tenant_id=$1', req.tenant_id) == 20
-    headers = b.native_headers('founder-fixture', 'org_admin')
+    headers = b.native_headers('placeholder-founder', 'org_admin')
     async def status(tenant):
         response = await b.client.get('/v1/engine/status', params={'tenant_id': str(tenant)}, headers=headers)
         assert response.status_code == 200

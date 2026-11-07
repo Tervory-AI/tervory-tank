@@ -451,17 +451,25 @@ async def test_catalogue_uses_one_deadline_for_all_stale_connections(runtime, mo
              'mcp_discovered_at': None, 'allowed_tools': {'issues': 'read'}} for _ in range(3)]
     conn = SimpleNamespace(fetch=AsyncMock(return_value=rows))
 
+    loop = asyncio.get_running_loop()
+    clock = [loop.time()]
+    monkeypatch.setattr(loop, 'time', lambda: clock[0])
+
     async def slow(*args, **kwargs):
         assert kwargs['force'] is False
         next(calls)
-        await asyncio.sleep(0.04)
+        # Advance the actual asyncio deadline clock without depending on how
+        # quickly a loaded CI worker gets scheduled after a millisecond sleep.
+        clock[0] += 0.04
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
         return []
 
     monkeypatch.setattr(connections, 'discover', slow)
     monkeypatch.setattr(connections, 'DISCOVERY_TIMEOUT', 0.06)
-    before = time.monotonic()
+    before = loop.time()
     assert await connections.catalogue(runtime.actor, conn) == {}
-    assert time.monotonic() - before < 0.15 and next(calls) == 2
+    assert loop.time() - before == pytest.approx(0.08) and next(calls) == 2
 
 
 @pytest.mark.asyncio
