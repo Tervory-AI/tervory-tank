@@ -68,19 +68,25 @@ class PostgresNonces:
 
     async def setup(self):
         async with self.pool.acquire() as conn, conn.transaction():
-            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", self.schema + ":user-assertions")
-            await conn.execute("""CREATE TABLE IF NOT EXISTS {schema}.user_assertion_nonces (
+            # Parameterize the validated product schema, keeping all SQL static.
+            # SET LOCAL restores the connection's search path at transaction end.
+            # Put temporary relations last so they cannot shadow the nonce table.
+            await conn.execute("SELECT set_config('search_path',quote_ident($1)||',pg_temp',true)", self.schema)
+            if await conn.fetchval("SELECT current_schema()") != self.schema:
+                raise ValueError("Product schema unavailable")
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1 || ':user-assertions',0))", self.schema)
+            await conn.execute("""CREATE TABLE IF NOT EXISTS user_assertion_nonces (
                 tenant_id uuid NOT NULL, nonce_hash text NOT NULL, expires_at timestamptz NOT NULL,
-                PRIMARY KEY(nonce_hash))""".format(schema=self.schema))
+                PRIMARY KEY(nonce_hash))""")
             # Match the existing staged tenant-RLS rollout, never enable it early.
-            guarded = await conn.fetchval("SELECT relrowsecurity FROM pg_class WHERE oid=to_regclass($1)", self.schema + ".jobs")
+            guarded = await conn.fetchval("SELECT relrowsecurity FROM pg_class WHERE oid=to_regclass(quote_ident($1) || '.jobs')", self.schema)
             if guarded:
-                await conn.execute("ALTER TABLE {schema}.user_assertion_nonces ENABLE ROW LEVEL SECURITY".format(schema=self.schema))
+                await conn.execute("ALTER TABLE user_assertion_nonces ENABLE ROW LEVEL SECURITY")
                 policy = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname=$1 AND tablename='user_assertion_nonces' AND policyname='user_assertion_tenant')", self.schema)
                 if not policy:
-                    await conn.execute("""CREATE POLICY user_assertion_tenant ON {schema}.user_assertion_nonces
+                    await conn.execute("""CREATE POLICY user_assertion_tenant ON user_assertion_nonces
                         USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
-                        WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)""".format(schema=self.schema))
+                        WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)""")
         self.ready = True
 
     async def claim(self, tenant: str, nonce: str, expires: int) -> bool:
@@ -89,10 +95,10 @@ class PostgresNonces:
         # Store only a nonce hash. Cleanup cannot evict any still-valid assertion.
         digest = hashlib.sha256(nonce.encode()).hexdigest()
         async with self.pool.acquire() as conn, conn.transaction():
-            await conn.execute("SELECT set_config('app.tenant_id',$1,true)", tenant)
-            await conn.execute("DELETE FROM {schema}.user_assertion_nonces WHERE tenant_id=$1 AND expires_at<=now()".format(schema=self.schema), uuid.UUID(tenant))
-            claimed = await conn.fetchval("""INSERT INTO {schema}.user_assertion_nonces(tenant_id,nonce_hash,expires_at)
-                VALUES($1,$2,to_timestamp($3)) ON CONFLICT DO NOTHING RETURNING true""".format(schema=self.schema), uuid.UUID(tenant), digest, float(expires))
+            await conn.execute("SELECT set_config('app.tenant_id',$1,true), set_config('search_path',quote_ident($2)||',pg_temp',true)", tenant, self.schema)
+            await conn.execute("DELETE FROM user_assertion_nonces WHERE tenant_id=$1 AND expires_at<=now()", uuid.UUID(tenant))
+            claimed = await conn.fetchval("""INSERT INTO user_assertion_nonces(tenant_id,nonce_hash,expires_at)
+                VALUES($1,$2,to_timestamp($3)) ON CONFLICT DO NOTHING RETURNING true""", uuid.UUID(tenant), digest, float(expires))
         return claimed is True
 
 

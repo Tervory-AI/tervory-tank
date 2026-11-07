@@ -57,6 +57,7 @@ async def test_signature_rejects_wrong_key_expiry_tenant_product_body_and_replay
 @pytest.mark.asyncio
 async def test_two_workers_share_atomic_nonce_wall_after_restart(memory):
     m = memory
+    before = await m.pool.fetchval("SHOW search_path")
     first, second = PostgresNonces(m.pool, m.agent), PostgresNonces(m.pool, m.agent)
     await first.setup()
     await second.setup()
@@ -67,6 +68,8 @@ async def test_two_workers_share_atomic_nonce_wall_after_restart(memory):
     restarted = PostgresNonces(m.pool, m.agent)
     assert not await restarted.claim(m.tenant, "placeholder-shared-nonce", expiry)
     assert not await restarted.claim(m.other, "placeholder-shared-nonce", expiry)
+    assert await m.pool.fetchval("SHOW search_path") == before
+    assert await m.pool.fetchval("SELECT to_regclass(quote_ident($1) || '.user_assertion_nonces') IS NOT NULL", first.schema)
 
 
 @pytest.mark.asyncio
