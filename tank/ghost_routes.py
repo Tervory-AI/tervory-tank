@@ -220,8 +220,10 @@ async def enforce_create(body: EnforceTenant, request: Request):
     tool = "autumbra.enforce.create"
     require_tool(actor, tool)
     confirmation(actor, tool, body.model_dump(mode="json"))
+    tenant, user = __import__("command").verified_memory_actor(actor)
     response = await call_room("POST", "ghost", "/ghost/autumbra/enforce/plan-create",
-                               body={"tenant_id": str(body.tenant_id), "execute": True}, timeout=150)
+                               body={"tenant_id": str(body.tenant_id), "execute": True},
+                               tenant=tenant, user=user, timeout=150)
     return await enforce_write_result(response, actor, tool)
 
 
@@ -233,8 +235,10 @@ async def enforce_destroy(body: EnforceTenant, request: Request):
     tool = "autumbra.enforce.destroy"
     require_tool(actor, tool)
     confirmation(actor, tool, body.model_dump(mode="json"))
+    tenant, user = __import__("command").verified_memory_actor(actor)
     response = await call_room("POST", "ghost", "/ghost/autumbra/enforce/plan-destroy",
-                               body={"tenant_id": str(body.tenant_id), "execute": True}, timeout=90)
+                               body={"tenant_id": str(body.tenant_id), "execute": True},
+                               tenant=tenant, user=user, timeout=90)
     return await enforce_write_result(response, actor, tool)
 
 

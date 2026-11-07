@@ -398,19 +398,20 @@ async def require_owned_record(
     if not str(memory_id).strip():
         raise MemoryScopeError("memory_id required for scoped memory control")
     rows: list = []
-    if hasattr(memory, "rows") and getattr(memory, "rows", None) is not None:
-        rows = list(memory.rows)
-    elif hasattr(memory, "records"):
+    # Never read FakeMemory.rows wholesale — that discloses other users' personal rows.
+    if hasattr(memory, "records"):
         try:
             rows = list(await memory.records(tenant, user_id=user))
-        except Exception:
-            # Legacy Hermes (InMemoryStore) may not expose /records; fall back to recall.
+        except TypeError:
+            # Legacy records() without user_id kw: do not call unscoped; fall back.
             rows = []
-            if hasattr(memory, "recall"):
-                try:
-                    rows = list(await memory.recall(tenant, str(memory_id), user_id=user, kind=None, limit=50))
-                except Exception:
-                    rows = []
+        except Exception:
+            rows = []
+    if not rows and hasattr(memory, "recall"):
+        try:
+            rows = list(await memory.recall(tenant, str(memory_id), user_id=user, kind=None, limit=50))
+        except Exception:
+            rows = []
     match = None
     for row in rows or []:
         if str(row.get("id")) != str(memory_id):
@@ -635,8 +636,32 @@ class FakeMemory:
             self.forgets += 1
 
     async def records(self, tenant_id: str, *, user_id: str | None = None, tier: str = "client") -> list[dict[str, Any]]:
+        """List must match recall user isolation (t51). Omitted user_id is fail-closed.
+
+        Personal rows only for the verified user. Declared tenant-wide kinds are
+        visible to every signed-in user. Without a user_id, only unowned
+        tenant-wide kinds are returned — never another user's personal rows.
+        """
         del tier
-        return deepcopy([row for row in self.rows if row["tenant_id"] == str(tenant_id) and (user_id is None or row["meta"].get("user_id") == user_id)])
+        tenant = str(tenant_id)
+        requester = str(user_id).strip() if user_id is not None and str(user_id).strip() else None
+        matches = []
+        for row in self.rows:
+            if row["tenant_id"] != tenant:
+                continue
+            meta = row.get("meta") or {}
+            row_uid = str(meta.get("user_id") or "") if isinstance(meta, dict) else ""
+            if requester is None:
+                if row["kind"] in TENANT_WIDE_KINDS and not row_uid:
+                    matches.append(row)
+                continue
+            if row["kind"] in TENANT_WIDE_KINDS:
+                if row_uid and row_uid != requester:
+                    continue
+            elif row_uid != requester:
+                continue
+            matches.append(row)
+        return deepcopy(matches)
 
 
 async def run_with_memory(
