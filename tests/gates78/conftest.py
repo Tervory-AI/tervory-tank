@@ -26,7 +26,10 @@ from test_agent_memory_records import memory as sql_memory_fixture
 # repository-wide pytest import-mode change or requiring owner file renames.
 for helper_path in (Path(__file__).parent, Path(__file__).parent / "products"):
     if str(helper_path) not in sys.path:
-        sys.path.insert(0, str(helper_path))
+        # Append: legacy acceptance modules import flat test_<product> helpers.
+        # Putting the products directory first could redirect those imports to
+        # the new suite even though pytest itself uses qualified module names.
+        sys.path.append(str(helper_path))
 
 from gate78_contract import PRODUCTS
 
