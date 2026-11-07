@@ -59,6 +59,10 @@ async def test_interactive_or_opt_out_is_answered_now(ladder, monkeypatch, updat
     b = ladder
     stub, body = await batch_setup(b, monkeypatch, 'openai', count=1)
     req = body.requests[0].model_copy(update={'interactive': True, **update})
+    if update.get('priority') == 'standard' and not req.interactive:
+        # I8: background standard jobs opt out through policy eligibility.
+        async with b.pool.acquire() as conn:
+            await conn.execute('UPDATE tank.policy SET batch_eligible=false WHERE tenant_id=$1', req.tenant_id)
     result = await b.tank.route(req, caller=None)
     assert isinstance(result, b.tank.RouteResponse) and result.content
     assert len(b.sent) == 1 and not stub.calls
@@ -67,11 +71,13 @@ async def test_interactive_or_opt_out_is_answered_now(ladder, monkeypatch, updat
 
 @pytest.mark.asyncio
 async def test_internal_run_route_is_unchanged_without_opt_in(ladder, monkeypatch):  # noqa: F811
-    # Tasks, skills and the public batch endpoint call run_route directly; only
-    # the public /v1/route entry may turn priority=batch into a queued job.
+    # Internal callers without policy eligibility still get an immediate answer.
+    # Eligible background calls now queue automatically through either entry.
     b = ladder
     stub, body = await batch_setup(b, monkeypatch, 'openai', count=1)
     req = body.requests[0].model_copy(update={'priority': 'batch', 'interactive': False})
+    async with b.pool.acquire() as conn:
+        await conn.execute('UPDATE tank.policy SET batch_eligible=false WHERE tenant_id=$1', req.tenant_id)
     result = await b.tank.run_route(req)
     assert isinstance(result, b.tank.RouteResponse) and len(b.sent) == 1
     assert await _jobs(b, req.tenant_id) == 0
