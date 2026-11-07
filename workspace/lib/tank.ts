@@ -251,21 +251,13 @@ export async function personalCommandRequest(request: Request, path: string[],
   } catch { stop.abort(); return refused(502); }
 }
 
-/** Founder memory inspection via Hermes founder routes — never Tank /v1/memory.
- *
- * Shared TANK_API_KEY may READ founder records on Hermes; agent writes use
- * TANK_KEY_WORKSPACE through MemoryClient instead. Identity comes from goldIdentity.
- */
+/** Founder memory inspection; identity comes from the server's goldIdentity check. */
 export function memoryRecord(identity: { tenantId: string; userId: string; role: string }, id: string): Promise<Response> {
-  const hermes = (process.env.HERMES_URL ?? "http://hermes:8000").replace(/\/$/, "");
-  return fetch(`${hermes}/founder/records/${encodeURIComponent(id)}`, {
+  return tenantFetch(identity.tenantId, new URL(`/v1/memory/records/${encodeURIComponent(id)}`, TANK_URL), {
     method: "GET", cache: "no-store", redirect: "error",
     headers: {
-      "X-Tank-Key": TANK_API_KEY,
-      "X-Tervory-Admin": identity.userId,
-      "X-Tervory-User": identity.userId,
-      "X-Tervory-Tenant": identity.tenantId,
-      "X-Tervory-Role": identity.role,
+      "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId,
+      "X-Tervory-Tenant": identity.tenantId, "X-Tervory-Role": identity.role,
     },
   });
 }
