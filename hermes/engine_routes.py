@@ -3,7 +3,7 @@ import hashlib
 import json
 import uuid
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from hermes.auth import identify
@@ -41,8 +41,22 @@ def register(app, records):
         return store
 
     @app.post('/engine/recall')
-    async def recall(body: Recall, x_tank_key: str = Header(default='')):
+    async def recall(request: Request, body: Recall, x_tank_key: str = Header(default='')):
         store = ready(x_tank_key)
+        if body.user_id and str(body.user_id).strip():
+            from hermes.signed_identity import verify_personal_identity
+            verify_personal_identity(
+                key=x_tank_key,
+                method='POST',
+                path='/engine/recall',
+                timestamp=request.headers.get('X-Lifecycle-Timestamp', ''),
+                signature=request.headers.get('X-Lifecycle-Signature', ''),
+                tenant_header=request.headers.get('X-Tervory-Tenant', ''),
+                user_header=request.headers.get('X-Tervory-User', ''),
+                body=await request.body(),
+                body_tenant=str(body.tenant_id),
+                body_user=str(body.user_id).strip(),
+            )
         with embedding_cache.measure() as counter:
             rows = await store.recall('tank', str(body.tenant_id), body.query, None, 32, 'client', user_id=body.user_id)
         rows = [row for row in rows if row.get('tenant_id') == str(body.tenant_id)
@@ -51,8 +65,22 @@ def register(app, records):
         return {'memories': rows[:8], **({'embedding_cache': counter.values} if embedding_cache.enabled() else {})}
 
     @app.post('/engine/remember')
-    async def remember(body: Outcome, x_tank_key: str = Header(default='')):
+    async def remember(request: Request, body: Outcome, x_tank_key: str = Header(default='')):
         store = ready(x_tank_key)
+        if body.user_id and str(body.user_id).strip():
+            from hermes.signed_identity import verify_personal_identity
+            verify_personal_identity(
+                key=x_tank_key,
+                method='POST',
+                path='/engine/remember',
+                timestamp=request.headers.get('X-Lifecycle-Timestamp', ''),
+                signature=request.headers.get('X-Lifecycle-Signature', ''),
+                tenant_header=request.headers.get('X-Tervory-Tenant', ''),
+                user_header=request.headers.get('X-Tervory-User', ''),
+                body=await request.body(),
+                body_tenant=str(body.tenant_id),
+                body_user=str(body.user_id).strip(),
+            )
         # The caller supplies no claim or authority. Re-read the completed,
         # masked transcript and keep both sides of the join tenant sealed.
         row = await store.pool.fetchrow("""SELECT l.task_type,t.messages,t.content FROM tank.ledger l

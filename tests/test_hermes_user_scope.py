@@ -91,16 +91,33 @@ async def test_real_app_ownership_on_every_operation(memory, monkeypatch):
         assert [row["id"] for row in rows] == [shared["id"]]
         assert (await client.delete("/memories/" + b["id"], headers=bare, params=unscoped)).status_code == 404
         await Publisher(m.records).set_policy(m.agent, m.tenant, "placeholder-user-a", True, inventory())
-        founder_headers = {"X-Tank-Key": "placeholder-workspace-key", "X-Tervory-Admin": "placeholder-user-a"}
+        ws = "placeholder-workspace-key"
+        admin = "placeholder-user-a"
+
+        async def founder_publish(source_row):
+            body = {"tenant_id": m.tenant, "agent": m.agent, "source_row": source_row}
+            headers, raw = personal_headers(ws, "POST", "/founder/publish", tenant=m.tenant, user=admin, body=body)
+            headers["X-Tervory-Admin"] = admin
+            return await client.post("/founder/publish", headers=headers, content=raw)
+
+        async def founder_get(row_id):
+            headers, _ = personal_headers(ws, "GET", "/founder/records/" + row_id, tenant=m.tenant, user=admin)
+            headers["X-Tervory-Admin"] = admin
+            return await client.get("/founder/records/" + row_id, headers=headers)
+
         for row in (b, private_shared, foreign):
-            denied = await client.post("/founder/publish", headers=founder_headers,
-                json={"tenant_id": m.tenant, "agent": m.agent, "source_row": row["id"]})
+            denied = await founder_publish(row["id"])
             assert denied.status_code == 409
             assert denied.json()["detail"]["result"] == "missing"
             if row != foreign:
-                assert (await client.get("/founder/records/" + row["id"], headers=founder_headers)).status_code == 404
-        published = await client.post("/founder/publish", headers=founder_headers,
-            json={"tenant_id": m.tenant, "agent": m.agent, "source_row": a["id"]})
+                assert (await founder_get(row["id"])).status_code == 404
+        # Unsigned founder publish refused before ownership lookup.
+        assert (await client.post(
+            "/founder/publish",
+            headers={"X-Tank-Key": ws, "X-Tervory-Admin": admin},
+            json={"tenant_id": m.tenant, "agent": m.agent, "source_row": a["id"]},
+        )).status_code == 401
+        published = await founder_publish(a["id"])
         assert published.status_code == 200
         # User A's bulk forget leaves B's personal rows intact.
         th, _ = personal_headers(key, "DELETE", "/tenants/" + m.tenant, tenant=m.tenant, user="placeholder-user-a")

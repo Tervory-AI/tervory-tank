@@ -81,3 +81,35 @@ def verify_personal_identity(
     if body_user is not None and str(body_user).strip() != user:
         raise HTTPException(403, "user does not match signed identity")
     return tenant, user
+
+
+def bind_personal_headers(
+    key: str,
+    method: str,
+    path: str,
+    *,
+    tenant: str,
+    user: str,
+    body: bytes = b"",
+) -> dict[str, str]:
+    """Client-side headers matching verify_personal_identity (no new secrets)."""
+    import time
+    from uuid import UUID
+
+    if not key or not user or not str(user).strip():
+        raise ValueError("personal lifecycle binding requires key and user")
+    tenant = str(UUID(str(tenant)))
+    user = str(user).strip()
+    ts = str(int(time.time()))
+    route = path.split("?", 1)[0]
+    digest = hmac.new(
+        key.encode(),
+        lifecycle_message(ts, method.upper(), route, body, tenant=tenant, user=user),
+        hashlib.sha256,
+    ).hexdigest()
+    return {
+        "X-Lifecycle-Timestamp": ts,
+        "X-Lifecycle-Signature": digest,
+        "X-Tervory-Tenant": tenant,
+        "X-Tervory-User": user,
+    }

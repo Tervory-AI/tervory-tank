@@ -71,6 +71,30 @@ def founder(key: str, user: str) -> str:
 
 
 def register_record_routes(app, records, resolve_agent):
+    async def enforce_founder_personal(
+        request: Request,
+        *,
+        method: str,
+        path: str,
+        key: str,
+        tenant,
+        user: str,
+    ) -> None:
+        """Founder personal ops: workspace key is not end-user proof; bind admin actor."""
+        from hermes.signed_identity import verify_personal_identity
+        verify_personal_identity(
+            key=key,
+            method=method,
+            path=path,
+            timestamp=request.headers.get("X-Lifecycle-Timestamp", ""),
+            signature=request.headers.get("X-Lifecycle-Signature", ""),
+            tenant_header=request.headers.get("X-Tervory-Tenant", ""),
+            user_header=request.headers.get("X-Tervory-User", ""),
+            body=await request.body(),
+            body_tenant=str(tenant) if tenant is not None else None,
+            body_user=str(user).strip(),
+        )
+
     def ready(agent: str):
         r = records()
         if r is None:
@@ -150,27 +174,38 @@ def register_record_routes(app, records, resolve_agent):
 
     @app.get("/founder/records")
     async def founder_records(
+        request: Request,
         tenant_id: uuid.UUID,
         agent: str,
         tier: Literal["client", "platform"] = "client",
         x_tank_key: str = Header(default=""),
         x_tervory_admin: str = Header(default=""),
     ):
-        founder(x_tank_key, x_tervory_admin)
-        return {"memories": await ready(agent).list(agent, str(tenant_id), tier, user_id=x_tervory_admin)}
+        actor = founder(x_tank_key, x_tervory_admin)
+        await enforce_founder_personal(
+            request, method="GET", path="/founder/records", key=x_tank_key,
+            tenant=tenant_id, user=actor,
+        )
+        return {"memories": await ready(agent).list(agent, str(tenant_id), tier, user_id=actor)}
 
     @app.get("/founder/records/{id}")
     async def founder_record(
+        request: Request,
         id: uuid.UUID,
         x_tank_key: str = Header(default=""),
         x_tervory_admin: str = Header(default=""),
     ):
-        founder(x_tank_key, x_tervory_admin)
+        actor = founder(x_tank_key, x_tervory_admin)
+        # founder_get scopes by actor; bind before lookup. Tenant comes from signed header.
+        await enforce_founder_personal(
+            request, method="GET", path=f"/founder/records/{id}", key=x_tank_key,
+            tenant=request.headers.get("X-Tervory-Tenant") or None, user=actor,
+        )
         r = records()
         if r is None:
             raise HTTPException(503, "memory store unreachable")
         try:
-            row = await r.founder_get(id, user_id=x_tervory_admin)
+            row = await r.founder_get(id, user_id=actor)
         except ValueError:
             raise HTTPException(409, "Memory record conflict") from None
         if row is None:
@@ -179,11 +214,16 @@ def register_record_routes(app, records, resolve_agent):
 
     @app.post("/founder/memories")
     async def remember(
+        request: Request,
         body: FounderMemory,
         x_tank_key: str = Header(default=""),
         x_tervory_admin: str = Header(default=""),
     ):
-        founder(x_tank_key, x_tervory_admin)
+        actor = founder(x_tank_key, x_tervory_admin)
+        await enforce_founder_personal(
+            request, method="POST", path="/founder/memories", key=x_tank_key,
+            tenant=body.tenant_id, user=actor,
+        )
         try:
             return await ready(body.agent).save(
                 body.agent,
@@ -193,7 +233,7 @@ def register_record_routes(app, records, resolve_agent):
                 confidence=body.confidence,
                 last_verified=body.last_verified,
                 row_id=str(body.id),
-                meta={"user_id": x_tervory_admin},
+                meta={"user_id": actor},
             )
         except ClaimTooLong as exc:
             raise claim_validation_error("claim", exc) from None
@@ -204,11 +244,16 @@ def register_record_routes(app, records, resolve_agent):
 
     @app.post("/founder/records/{id}/withdraw")
     async def withdraw(
+        request: Request,
         id: uuid.UUID, body: Scoped,
         x_tank_key: str = Header(default=""),
         x_tervory_admin: str = Header(default=""),
     ):
         actor = founder(x_tank_key, x_tervory_admin)
+        await enforce_founder_personal(
+            request, method="POST", path=f"/founder/records/{id}/withdraw", key=x_tank_key,
+            tenant=body.tenant_id, user=actor,
+        )
         try:
             return await Publisher(ready(body.agent)).withdraw(body.agent, str(body.tenant_id), str(id), actor)
         except ValueError:
@@ -216,11 +261,16 @@ def register_record_routes(app, records, resolve_agent):
 
     @app.post("/founder/publish-policy")
     async def policy(
+        request: Request,
         body: Policy,
         x_tank_key: str = Header(default=""),
         x_tervory_admin: str = Header(default=""),
     ):
         actor = founder(x_tank_key, x_tervory_admin)
+        await enforce_founder_personal(
+            request, method="POST", path="/founder/publish-policy", key=x_tank_key,
+            tenant=body.tenant_id, user=actor,
+        )
         try:
             return await Publisher(ready(body.agent)).set_policy(
                 body.agent,
@@ -234,11 +284,17 @@ def register_record_routes(app, records, resolve_agent):
 
     @app.post("/founder/publish")
     async def publish(
+        request: Request,
         body: Publication,
         x_tank_key: str = Header(default=""),
         x_tervory_admin: str = Header(default=""),
     ):
         actor = founder(x_tank_key, x_tervory_admin)
+        # Bind before ownership lookup/state change — admin header alone is not enough.
+        await enforce_founder_personal(
+            request, method="POST", path="/founder/publish", key=x_tank_key,
+            tenant=body.tenant_id, user=actor,
+        )
         result = await Publisher(ready(body.agent)).publish(
             body.agent, str(body.tenant_id), str(body.source_row), actor
         )

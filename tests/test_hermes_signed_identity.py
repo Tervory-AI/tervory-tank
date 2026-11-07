@@ -138,3 +138,112 @@ async def test_direct_agent_key_forged_user_denied_valid_signed_succeeds(memory,
         )
         assert bare.status_code == 200, bare.text
         assert shared.json()["id"] in {r["id"] for r in bare.json()["memories"]}
+
+
+@pytest.mark.asyncio
+async def test_founder_publish_requires_lifecycle_before_lookup(memory, monkeypatch):
+    from hermes.publishing import Publisher
+    from hermes.service import create_app
+    from hermes.store import InMemoryStore
+    from hermes.user_scope import TENANT_WIDE_KINDS
+    from test_agent_memory_records import inventory
+
+    m = memory
+    ws, admin = "placeholder-workspace-key", USER_A
+    monkeypatch.setenv("TANK_KEY_" + m.agent.upper(), KEY)
+    monkeypatch.setenv("TANK_API_KEY", ws)
+    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", admin)
+    monkeypatch.setitem(TENANT_WIDE_KINDS, m.agent, frozenset({"placeholder.shared"}))
+    hermes = create_app(InMemoryStore(), Encoder(), records=m.records)
+    await Publisher(m.records).set_policy(m.agent, m.tenant, admin, True, inventory())
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=hermes), base_url="http://hermes"
+    ) as hc:
+        client = MemoryClient("http://hermes", KEY, m.agent, hc, user_id=admin)
+        owned = await client.remember(
+            m.tenant, "publish-owned", "placeholder.personal", "urn:p", user_id=admin
+        )
+        foreign = await client.remember(
+            m.tenant, "publish-foreign", "placeholder.personal", "urn:p", user_id=ATTACKER
+        )
+        body = {"tenant_id": m.tenant, "agent": m.agent, "source_row": owned["id"]}
+        # Workspace key + admin header without lifecycle → 401 before publish lookup.
+        unsigned = await hc.post(
+            "/founder/publish",
+            headers={"X-Tank-Key": ws, "X-Tervory-Admin": admin},
+            json=body,
+        )
+        assert unsigned.status_code == 401, unsigned.text
+        # Signed publish of owned row succeeds.
+        headers, raw = personal_headers(
+            ws, "POST", "/founder/publish", tenant=m.tenant, user=admin, body=body
+        )
+        headers["X-Tervory-Admin"] = admin
+        ok = await hc.post("/founder/publish", headers=headers, content=raw)
+        assert ok.status_code == 200, ok.text
+        assert ok.json()["result"] in ("published", "already_published")
+        # Signed publish of other user's row → missing (ownership), not unsigned bypass.
+        other = {"tenant_id": m.tenant, "agent": m.agent, "source_row": foreign["id"]}
+        oh, oraw = personal_headers(
+            ws, "POST", "/founder/publish", tenant=m.tenant, user=admin, body=other
+        )
+        oh["X-Tervory-Admin"] = admin
+        denied = await hc.post("/founder/publish", headers=oh, content=oraw)
+        assert denied.status_code == 409
+        assert denied.json()["detail"]["result"] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_get_by_id_without_user_cannot_read_personal(memory, monkeypatch):
+    """Unsigned get without user_id must not return personal rows (tenant-wide only)."""
+    from hermes.service import create_app
+    from hermes.store import InMemoryStore
+    from hermes.user_scope import TENANT_WIDE_KINDS
+
+    m = memory
+    monkeypatch.setenv("TANK_KEY_" + m.agent.upper(), KEY)
+    monkeypatch.setitem(TENANT_WIDE_KINDS, m.agent, frozenset({"placeholder.shared"}))
+    hermes = create_app(InMemoryStore(), Encoder(), records=m.records)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=hermes), base_url="http://hermes"
+    ) as hc:
+        client = MemoryClient("http://hermes", KEY, m.agent, hc, user_id=USER_A)
+        personal = await client.remember(
+            m.tenant, "personal-get", "placeholder.personal", "urn:g", user_id=USER_A
+        )
+        shared = await hc.post(
+            "/memories",
+            headers={"X-Tank-Key": KEY},
+            json={
+                "tenant_id": m.tenant,
+                "text": "shared-get",
+                "kind": "placeholder.shared",
+                "source": "urn:g",
+            },
+        )
+        assert shared.status_code == 201
+        shared_id = shared.json()["id"]
+        # No user_id: personal id not found; shared ok.
+        assert (
+            await hc.get(
+                f"/records/{personal['id']}",
+                headers={"X-Tank-Key": KEY},
+                params={"tenant_id": m.tenant},
+            )
+        ).status_code == 404
+        assert (
+            await hc.get(
+                f"/records/{shared_id}",
+                headers={"X-Tank-Key": KEY},
+                params={"tenant_id": m.tenant},
+            )
+        ).status_code == 200
+        # user_id without lifecycle → 401
+        assert (
+            await hc.get(
+                f"/records/{personal['id']}",
+                headers={"X-Tank-Key": KEY},
+                params={"tenant_id": m.tenant, "user_id": USER_A},
+            )
+        ).status_code == 401
