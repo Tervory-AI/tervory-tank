@@ -4,6 +4,8 @@ The only network substitutes are the signed test issuer, Hermes ASGI transport,
 and the paid provider's HTTP response. No replacement auth, route or memory.
 """
 import json
+import os
+import asyncpg
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,9 +34,9 @@ class SkalaEntry:
     def headers(self, user=USER_A, tenant=None):
         return {'X-Tank-Key': WORKSPACE_KEY, **self.issuer.workspace_headers(user, tenant or self.stack.tenant)}
 
-    async def run(self, text=TEXT, *, user=USER_A, tenant=None, headers=None, run_id=None, skill=SKILL, version=VERSION, extra=None):
+    async def run(self, text=TEXT, *, user=USER_A, tenant=None, headers=None, run_id=None, skill=SKILL, version=VERSION, extra=None, preview=False):
         body={'tenant_id':tenant or self.stack.tenant,'paid_run_id':str(run_id or uuid.uuid4()),
-              'version':version,'input':{'text':text, **(extra or {})}}
+              'version':version,'preview':preview,'input':{'text':text, **(extra or {})}}
         return await self.client.post('/v1/skala/'+skill+'/run',json=body,
                                       headers=self.headers(user,tenant) if headers is None else headers)
 
@@ -68,7 +70,7 @@ async def skala_entry(gate78_memory, monkeypatch):
     pool=stack.records.pool
     async with pool.acquire() as conn:
         await conn.execute((Path(__file__).resolve().parents[3]/'tank/schema.sql').read_text())
-        for tenant in (stack.tenant,stack.other_tenant):
+        for tenant in (stack.tenant,stack.other_tenant,str(skala.PLATFORM_TENANT)):
             await conn.execute("INSERT INTO tank.tenants(tenant_id,home_region,onboarded_by) VALUES($1,'us-east','placeholder-fixture') ON CONFLICT DO NOTHING",uuid.UUID(tenant))
             for task in ('tier0.answer','tier0.summarize','route.request'):
                 await conn.execute("""INSERT INTO tank.policy(task_type,tenant_id,model,rung,priority,cache_scope)
@@ -83,7 +85,6 @@ async def skala_entry(gate78_memory, monkeypatch):
             pkg=packages[ident,version]
             await conn.execute("""INSERT INTO tank.skills(id,version,agent,state,approved_at)
                 VALUES($1,$2,$3,'approved',now()) ON CONFLICT(id,version) DO UPDATE SET state='approved'""",ident,version,pkg.agent)
-    monkeypatch.setattr(main,'_pool',pool)
     monkeypatch.setattr(main,'_packages',packages)
     monkeypatch.setattr(main,'TANK_API_KEY',WORKSPACE_KEY)
     monkeypatch.setattr(main,'LITELLM_URL','http://placeholder-litellm')
@@ -131,7 +132,10 @@ async def skala_entry(gate78_memory, monkeypatch):
         original_init(self,*args,**kwargs)
     monkeypatch.setattr(httpx.AsyncClient,'__init__',init_http)
     from paid_http import Client
-    async with Client(transport=httpx.MockTransport(edge)) as outbound:
+    # Evaluation serialization holds one connection while its route needs another.
+    async with asyncpg.create_pool(os.environ['MEMORY_TEST_DATABASE_URL'],min_size=1,max_size=4,
+                                   statement_cache_size=0,ssl=False) as runtime_pool, Client(transport=httpx.MockTransport(edge)) as outbound:
+        monkeypatch.setattr(main,'_pool',runtime_pool)
         monkeypatch.setattr(main,'_http',outbound)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app),base_url='http://placeholder-tank') as client:
             entry=SkalaEntry(stack,main,issuer,client,calls,events)

@@ -1,11 +1,12 @@
 {
   "product": "skala",
-  "source_sha": "92329217955e98f9abbebda86567455586cbaedb",
+  "source_sha": "025018ba21635855e053007026bc3a532caef60e",
   "entrypoints": [
     "POST /v1/skala/tier0.summarize/run -> make_ctx -> SkillContext.model -> Tank run_route",
     "POST /v1/skala/tier0.classify/run -> make_ctx -> SkillContext.model -> Tank run_route",
     "GET /v1/skala/memory; POST /v1/skala/memory/{edit,forget,off}",
-    "TriggerSigninMiddleware -> local signed issuer; chassis.user_assertion -> real Hermes/PostgreSQL/Qdrant"
+    "TriggerSigninMiddleware -> local signed issuer; chassis.user_assertion -> real Hermes/PostgreSQL/Qdrant",
+    "POST /v1/skala/tier0.summarize/run (preview); POST /v1/skala/tier0.summarize/1.0.1/evals (platform-owned live evaluation)"
   ],
   "legacy_tests": [
     "tests/test_skala_gates_7_8.py::test_product_request_tank_route_receipt_then_memory",
@@ -86,7 +87,9 @@
       "tests/gates78/products/test_skala.py::test_defaults_off_no_new_memory_or_brain"
     ],
     "G8.task_path": [
-      "tests/gates78/products/test_skala.py::test_task_path_recall_receipt_remember"
+      "tests/gates78/products/test_skala.py::test_task_path_recall_receipt_remember",
+      "tests/gates78/products/test_skala.py::test_preview_uses_same_verified_model_bracket",
+      "tests/gates78/products/test_skala.py::test_approval_evals_use_platform_receipts_without_personal_reuse"
     ],
     "G8.free_first": [
       "tests/gates78/products/test_skala.py::test_free_skill_precedes_model_and_memory"
@@ -115,7 +118,9 @@
     ],
     "G8.receipts": [
       "tests/gates78/products/test_skala.py::test_first_repeat_changed_costs",
-      "tests/gates78/products/test_skala.py::test_task_path_recall_receipt_remember"
+      "tests/gates78/products/test_skala.py::test_task_path_recall_receipt_remember",
+      "tests/gates78/products/test_skala.py::test_preview_uses_same_verified_model_bracket",
+      "tests/gates78/products/test_skala.py::test_approval_evals_use_platform_receipts_without_personal_reuse"
     ],
     "G8.retry_concurrency": [
       "tests/gates78/products/test_skala.py::test_same_run_concurrency_and_retry",
@@ -128,7 +133,9 @@
       "tests/gates78/products/test_skala.py::test_correction_then_forget_invalidates_repeat",
       "tests/gates78/products/test_skala.py::test_first_repeat_changed_costs",
       "tests/gates78/products/test_skala.py::test_negative_controls_preserve_state",
-      "tests/gates78/products/test_skala.py::test_outage_and_post_payment_retry"
+      "tests/gates78/products/test_skala.py::test_outage_and_post_payment_retry",
+      "tests/gates78/products/test_skala.py::test_preview_uses_same_verified_model_bracket",
+      "tests/gates78/products/test_skala.py::test_approval_evals_use_platform_receipts_without_personal_reuse"
     ]
   }
 }

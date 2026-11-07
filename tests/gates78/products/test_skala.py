@@ -432,3 +432,29 @@ async def test_invalid_real_issuer_signature_refuses_all_work(skala_entry):
     assert result.status_code in (401,403),result.text
     assert await entry.rows()==[]
     assert entry.provider_calls==[]
+
+
+async def test_preview_uses_same_verified_model_bracket(skala_entry):
+    entry=skala_entry
+    result=receipt(await entry.run(preview=True))
+    assert result['user_id']==USER_A and result['tenant_id']==entry.stack.tenant
+    assert result['paid_calls']==len(entry.provider_calls)==1
+    assert result['brain_enabled'] is False
+    assert any(request[0:2]==('POST','/memories') for request in entry.network.captured)
+
+
+async def test_approval_evals_use_platform_receipts_without_personal_reuse(skala_entry):
+    entry=skala_entry
+    path=f'/v1/skala/{SKILL}/{VERSION}/evals'
+    # This is the actual manual approval handler and its committed eval cases.
+    # It must execute model-backed cases, even when personal memory is enabled.
+    result=ok(await entry.client.post(path,json={'by':'placeholder-reviewer'},headers=entry.headers()))
+    assert result['total'] > 0
+    assert entry.provider_calls
+    rows=await entry.ledger(str(entry.runtime.PLATFORM_TENANT))
+    assert sum(float(row['cost_usd']) for row in rows)==pytest.approx(.05*len(entry.provider_calls))
+    assert sum(row['tokens_in'] for row in rows)==10*len(entry.provider_calls)
+    assert sum(row['tokens_out'] for row in rows)==3*len(entry.provider_calls)
+    assert await entry.ledger()==[]
+    assert await entry.rows()==[]
+    assert entry.network.captured==[]
