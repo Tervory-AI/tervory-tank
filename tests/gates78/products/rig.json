@@ -1,0 +1,129 @@
+{
+  "product": "rig",
+  "source_sha": "dba3290db72d3dbf4f7e004f3823fc8bea8ffc34",
+  "entrypoints": [
+    "agents/rig/app.py::_room_read /v1/rig/search and /v1/rig/ask",
+    "agents/rig/memory_api.py::attach_memory_routes /memory/records /memory/edit /memory/forget /memory/switch",
+    "agents/rig/rig_brain/service.py::start /tasks and poll /tasks/{task_id}",
+    "agents/rig/rigbox/three_d/command.py::main --dry-run",
+    "tank/ghost_routes.py::call_room + paid_http.Client + TriggerSigninMiddleware",
+    "tank/rig_savings.py receipt router"
+  ],
+  "legacy_tests": [
+    "tests/test_rig_gates_7_8.py::test_product_request_brain_route_receipt_then_memory",
+    "tests/test_rig_gates_7_8.py::test_correction_applies_next_time_with_no_paid_call",
+    "tests/test_rig_gates_7_8.py::test_second_user_and_second_tenant_see_nothing",
+    "tests/test_rig_gates_7_8.py::test_uncorrected_identical_task_paid_calls_one_then_zero",
+    "tests/test_rig_gates_7_8.py::test_per_user_memory_off_and_forget",
+    "tests/test_rig_gates_7_8.py::test_brain_switch_defaults_and_url",
+    "tests/test_rig_gates_7_8.py::test_fingerprint_and_secrets",
+    "tests/test_rig_gates_7_8.py::test_memory_enabled_env",
+    "tests/test_rig_gates_7_8.py::test_memory_controls_refuse_foreign_scope_unchanged",
+    "tests/test_rig_gates_7_8.py::test_memory_controls_refuse_forged_or_missing_identity",
+    "tests/test_rig_gates_7_8.py::test_memory_controls_signed_own_identity_succeeds",
+    "tests/test_rig_gates_7_8.py::test_owned_memory_row_helper",
+    "tests/test_rig_gates_7_8.py::test_brain_actually_called_when_enabled",
+    "tests/test_rig_gates_7_8.py::test_brain_not_called_when_disabled",
+    "tests/test_rig_gates_7_8.py::test_memory_outage_answers_without_memory_never_repeat",
+    "tests/test_rig_gates_7_8.py::test_missing_tenant_or_user_refused",
+    "tests/test_rig_gates_7_8.py::test_compose_brain_profile_opt_in",
+    "tests/test_rig_memory_hermes_contract.py::test_production_client_urls_and_key_field_names_only",
+    "tests/test_rig_memory_hermes_contract.py::test_ban_tank_v1_memory_all_methods",
+    "tests/test_rig_memory_hermes_contract.py::test_t51_chassis_remember_and_recall_accept_user_id",
+    "tests/test_rig_memory_hermes_contract.py::test_hermes_contract_write_recall_forget_with_agent_key",
+    "tests/test_rig_memory_hermes_contract.py::test_hermes_contract_refuses_workspace_shared_key_for_write",
+    "tests/test_rig_memory_hermes_contract.py::test_hermes_contract_kind_format_and_tenant_scope",
+    "tests/test_rig_memory_hermes_contract.py::test_t51_two_users_personal_isolation_via_hermes_not_product",
+    "tests/test_rig_memory_hermes_contract.py::test_t51_tenant_wide_visible_to_both_users",
+    "tests/test_rig_memory_hermes_contract.py::test_t51_personal_kind_missing_user_id_refused",
+    "tests/test_rig_memory_hermes_contract.py::test_hermes_contract_missing_key_refused",
+    "tests/test_rig_offline_box_journey.py::test_shopper_journey_passes_with_network_off",
+    "tests/test_rig_offline_box_journey.py::test_sync_queue_flushes_when_online"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_rig.py::test_owner_crud_persists_and_forget_removes_vector"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_rig.py::test_foreign_ids_never_read_or_mutate"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_rig.py::test_foreign_ids_never_read_or_mutate"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_rig.py::test_declared_store_preference_shared_but_owned_preference_private"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_rig.py::test_required_owner_body_and_header_impersonation"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_rig.py::test_owner_crud_persists_and_forget_removes_vector",
+      "tests/gates78/products/test_rig.py::test_required_owner_body_and_header_impersonation"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_rig.py::test_product_assertion_rejects_each_binding"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_rig.py::test_nonce_concurrency_restart_and_forgotten_write_replay"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_rig.py::test_sql_scope_before_vector_and_limit"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_rig.py::test_controls_under_restricted_database_role_and_rls"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_rig.py::test_controls_off_is_per_user_and_plain_shopper_without_identity_runs"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_rig.py::test_no_foreign_content_or_secret_in_responses_receipts_or_logs"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_rig.py::test_runtime_packaging_and_default_off_profiles",
+      "tests/gates78/products/test_rig.py::test_owner_crud_persists_and_forget_removes_vector"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_rig.py::test_runtime_packaging_and_default_off_profiles",
+      "tests/gates78/products/test_rig.py::test_unset_settings_add_no_memory_work_or_rescheduling"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_rig.py::test_build_task_recall_execution_receipt_remember_and_exact_repeat"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_rig.py::test_controls_off_is_per_user_and_plain_shopper_without_identity_runs",
+      "tests/gates78/products/test_rig.py::test_unset_settings_add_no_memory_work_or_rescheduling"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_rig.py::test_build_task_recall_execution_receipt_remember_and_exact_repeat"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_rig.py::test_changed_owner_tenant_and_ineligible_action_never_reuses"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_rig.py::test_correction_and_forget_invalidate_derived_repeats"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_rig.py::test_owner_crud_persists_and_forget_removes_vector",
+      "tests/gates78/products/test_rig.py::test_correction_and_forget_invalidate_derived_repeats"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_rig.py::test_controls_off_is_per_user_and_plain_shopper_without_identity_runs"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_rig.py::test_memory_network_outages_are_truthful_and_do_not_pay_twice"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_rig.py::test_auth_errors_never_return_private_cached_answers"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_rig.py::test_build_task_recall_execution_receipt_remember_and_exact_repeat"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_rig.py::test_concurrent_task_identity_preserves_one_payment_and_receipt"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_rig.py::test_forge_one_command_offline_no_database_and_cli_contract",
+      "tests/gates78/products/test_rig.py::test_build_task_recall_execution_receipt_remember_and_exact_repeat"
+    ]
+  }
+}
