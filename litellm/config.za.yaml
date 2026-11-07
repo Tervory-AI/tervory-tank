@@ -869,7 +869,7 @@ model_list:
 litellm_settings:
   callbacks: [tenant_traces.callback]
   # DECISION reuse regional Redis, opt in only with Tank's user-scoped C1 key.
-  cache: true
+  cache: false
   cache_params:
     type: redis
     host: redis

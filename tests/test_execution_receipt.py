@@ -79,7 +79,7 @@ async def test_actual_route_receipt_after_escalation_and_cache_remain_distinct(l
     assert execution["task_type"] == "base.normalize" and result.model == execution["model"] == "actual-group"
     assert execution["upstream_model"] == "native-version" and result.settings_hash is None
     # Cache transport controls are not model generation settings.
-    assert sent[0]["cache"]["use-cache"] is False
+    assert "cache" not in sent[0]  # C1 is off without its explicit setting.
     expected = receipt(requested_model=sent[0]["model"], dispatched={k: v for k, v in sent[0].items() if k not in ("model", "messages", "cache", "fallbacks", "context_window_fallbacks", "content_policy_fallbacks")})
     assert execution["dispatched_settings_hash"] == expected["dispatched_settings_hash"]
     cached = await b.tank.run_route(request(b, tenant, text="Public independent material"))

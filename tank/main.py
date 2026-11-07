@@ -742,7 +742,7 @@ class PolicyRow(BaseModel):
     priority: str = "standard"
     batch_eligible: bool = False
     cache_scope: str = "none"
-    cache_ttl_s: int = Field(default=604800, ge=0, le=2592000)
+    cache_ttl_s: int = Field(default=0, ge=0, le=2592000)
     max_tokens_out: int = 1024
     system_prompt: str | None = None
     eval_threshold: float = graduate.DEFAULT_THRESHOLD
@@ -1221,9 +1221,12 @@ def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[di
                     max_tokens: int, route_seat: str | None) -> tuple[str, str, str]:
     # Whole policy revision, pinned skill, system messages, matter and generation
     # limits participate. Even legacy platform/region scopes stay tenant-local.
-    context = [policy, req.skill, req.case_ref, route_seat, max_tokens, box_region(),
-               __import__('exact_cache').user_scope(req),
-               [m for m in messages if m["role"] != "user"]]
+    c1 = __import__('exact_cache')
+    identity_policy = policy if c1.enabled() else {k: v for k, v in policy.items() if k != 'cache_ttl_s'}
+    context = [identity_policy, req.skill, req.case_ref, route_seat, max_tokens, box_region()]
+    if c1.enabled():
+        context.append(c1.user_scope(req))
+    context.append([m for m in messages if m["role"] != "user"])
     context_hash = hashlib.sha256(json.dumps(context, sort_keys=True, default=str).encode()).hexdigest()
     exact = hashlib.sha256(json.dumps(messages, sort_keys=True).encode()).hexdigest()
     return context_hash, exact, graduate.semantic_form(messages)
@@ -1232,7 +1235,7 @@ def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[di
 @tenant_path("req")
 async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str]) -> str | None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
-            or int(policy.get('cache_ttl_s', CACHE_TTL_S)) <= 0
+            or __import__('exact_cache').sql_ttl(policy, CACHE_TTL_S) <= 0
             or (policy.get("matter_matching") and not req.case_ref)):
         return None
     context, exact, form = identity
@@ -1252,16 +1255,20 @@ async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple
         return None
     row = dict(rows[0])
     if row["input_hash"] == exact:
-        return __import__('exact_cache').CachedAnswer(row["content"], 'C1')
+        return (__import__('exact_cache').CachedAnswer(row["content"], 'C1')
+                if __import__('exact_cache').enabled() else row["content"])
     row["vector"] = json.loads(row["vector"]) if isinstance(row["vector"], str) else row["vector"]
     hit = graduate.semantic_lookup(graduate.semantic_vector(form), [row], tenant_id=str(req.tenant_id), scope="tenant")
-    return __import__('exact_cache').CachedAnswer(hit["content"], 'C2') if hit else None
+    if hit is None:
+        return None
+    return (__import__('exact_cache').CachedAnswer(hit["content"], 'C2')
+            if __import__('exact_cache').enabled() else hit["content"])
 
 
 @tenant_path("req")
 async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str], ledger_id: uuid.UUID) -> None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
-            or int(policy.get('cache_ttl_s', CACHE_TTL_S)) <= 0
+            or __import__('exact_cache').sql_ttl(policy, CACHE_TTL_S) <= 0
             or (policy.get("matter_matching") and not req.case_ref)):
         return
     context, exact, form = identity
@@ -1272,7 +1279,7 @@ async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tupl
             ON CONFLICT(tenant_id,region,task_type,context_hash,input_hash) DO UPDATE
             SET ledger_id=EXCLUDED.ledger_id,vector=EXCLUDED.vector,semantic_form=EXCLUDED.semantic_form,expires_at=EXCLUDED.expires_at""",
             req.tenant_id, box_region(), req.task_type, context, exact, form,
-            json.dumps(graduate.semantic_vector(form)), ledger_id, int(policy.get('cache_ttl_s', CACHE_TTL_S)),
+            json.dumps(graduate.semantic_vector(form)), ledger_id, __import__('exact_cache').sql_ttl(policy, CACHE_TTL_S),
         )
 
 
@@ -1493,7 +1500,7 @@ async def _run_route(
         if hit is not None:
             await _check_route_task(req, task_id)
             return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat,
-                                       cache_layer=getattr(hit, 'layer', 'C1'))
+                                       cache_layer=getattr(hit, 'layer', None))
     if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
         cache_probe = await semantic_cache.lookup(__import__("sys").modules[__name__], req, cache_policy, identity, messages)
         if await semantic_cache.may_serve(__import__("sys").modules[__name__], req, cache_policy, cache_probe):
@@ -1675,7 +1682,7 @@ async def _run_route(
     cache_read, cache_write = prompt_cache.cache_tokens(usage)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
-    c1_hit = (cache_options['cache'].get('use-cache') is True
+    c1_hit = (cache_options.get('cache', {}).get('use-cache') is True
               and r.headers.get('x-tervory-cache-layer') == 'C1' and outcome == 'delivered')
     cost_status = "set"
     if priority == "offpeak":

@@ -3350,8 +3350,9 @@ ALTER TABLE tank.paid_step_approvals ADD COLUMN IF NOT EXISTS delivery_thread_id
 ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS task_type text;
 ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS model text;
 -- END PAID LADDER STEPS
--- DECISION preserve the existing seven-day default; per-task zero disables C1.
-ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS cache_ttl_s integer NOT NULL DEFAULT 604800 CHECK (cache_ttl_s BETWEEN 0 AND 2592000);
+-- DECISION C1 is default-off; enabling it also requires a positive per-task TTL.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS cache_ttl_s integer NOT NULL DEFAULT 0 CHECK (cache_ttl_s BETWEEN 0 AND 2592000);
+ALTER TABLE tank.policy ALTER COLUMN cache_ttl_s SET DEFAULT 0;
 -- END platform
 
 -- BEGIN mobile

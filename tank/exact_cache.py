@@ -1,8 +1,18 @@
 """C1 eligibility and identities shared by Tank's fast path and LiteLLM cache."""
 import hashlib
 import json
+import os
 
 import product_identity
+
+
+def enabled():
+    return os.environ.get('ENGINE_C1_ENABLED') == '1'
+
+
+def sql_ttl(policy, legacy):
+    # DECISION the off path retains main's SQL cache; only C1 uses task TTLs.
+    return int(policy.get('cache_ttl_s', 0)) if enabled() else legacy
 
 
 class CachedAnswer(str):
@@ -21,7 +31,7 @@ def user_scope(req):
 
 def policy_eligible(req, policy):
     return (policy.get('cache_scope') in {'tenant', 'platform', 'region'}
-            and int(policy.get('cache_ttl_s', 604800)) > 0
+            and int(policy.get('cache_ttl_s', 0)) > 0
             and (not policy.get('matter_matching') or bool(req.case_ref)))
 
 
@@ -30,20 +40,22 @@ def eligible(req, policy):
 
 
 def request_options(req, policy, identity, model, *, safe=True, streaming=False):
+    if not enabled():
+        return {}
     # DECISION reuse the regional Redis; response caching is opt-in and user-scoped.
     # A service call without a verified actor cannot opt into a personal answer cache.
     if not safe or streaming or not eligible(req, policy):
         return {'cache': {'no-cache': True, 'no-store': True, 'use-cache': False}}
     scope = [str(req.tenant_id), user_scope(req), req.task_type, *identity[:2], model]
     digest = hashlib.sha256(json.dumps(scope, separators=(',', ':')).encode()).hexdigest()
-    ttl = int(policy.get('cache_ttl_s', 604800))
+    ttl = int(policy.get('cache_ttl_s', 0))
     return {'cache': {'use-cache': True, 'ttl': ttl, 's-maxage': ttl,
                       'namespace': 'tank:C1:v1:' + digest}}
 
 
 async def gateway_options(rt, req, policy, identity, model, **kwargs):
     options = request_options(req, policy, identity, model, **kwargs)
-    if options['cache'].get('use-cache'):
+    if options.get('cache', {}).get('use-cache'):
         async with rt.pool().acquire() as conn:
             rejected = await conn.fetchval('''SELECT l.feedback='rejected'
                 FROM tank.route_cache c JOIN tank.ledger l
@@ -60,7 +72,7 @@ async def gateway_options(rt, req, policy, identity, model, **kwargs):
 
 async def record(rt, req, policy, answer):
     """Keep cache receipts for every task, including policies outside engine auto-routing."""
-    if not isinstance(answer, rt.RouteResponse):
+    if not enabled() or not isinstance(answer, rt.RouteResponse):
         return answer
     # Include the existing service-scoped SQL fast path in the denominator too.
     # Unsigned calls still cannot opt into LiteLLM's personal response cache.

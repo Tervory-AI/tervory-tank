@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager, contextmanager, nullcontext
 import json
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -104,6 +105,8 @@ def usage_cost(info: dict, usage: dict, at: datetime) -> float | None:
 
 async def automatic_request(tank, req, policy, messages, generation):
     """I8 uses only published discounts for work that may finish asynchronously."""
+    if os.environ.get('ENGINE_I8_ENABLED') != '1':
+        return req
     priority = req.priority or policy['priority']
     # Internal evaluations and seats must answer their controller immediately;
     # a parent's background eligibility is not permission to defer its grading.
@@ -185,7 +188,7 @@ async def enqueue(tank, item, *, caller=None, task_id=None, model_override=None)
                 'semantic_cache': item.cache_snapshot, 'schedule': schedule}
     import product_identity
     actor = product_identity.current.get()
-    if actor is not None:
+    if actor is not None and (os.environ.get('ENGINE_C1_ENABLED') == '1' or os.environ.get('ENGINE_I8_ENABLED') == '1'):
         if actor.tenant_id != str(req.tenant_id):
             raise HTTPException(403, 'Deferred actor does not match its tenant')
         snapshot['actor'] = vars(actor)
@@ -330,7 +333,8 @@ async def _process(tank, conn, job):
             # This server-owned snapshot preserves the original Command fingerprint.
             # Fresh admission still checks the current controls and existing grant.
             scope = paid_steps.run_scope(run)
-        with scope, job_actor(snapshot, req.tenant_id):
+        restore_actor = os.environ.get('ENGINE_C1_ENABLED') == '1' or os.environ.get('ENGINE_I8_ENABLED') == '1'
+        with scope, job_actor(snapshot, req.tenant_id) if restore_actor else nullcontext():
             work = tank.run_route(req, caller=job['caller'], task_id=job['task_id'],
                 model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
                 _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot=snapshot)

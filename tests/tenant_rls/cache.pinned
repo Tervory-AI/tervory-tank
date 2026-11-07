@@ -1,6 +1,6 @@
 async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str]) -> str | None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
-            or int(policy.get('cache_ttl_s', CACHE_TTL_S)) <= 0
+            or __import__('exact_cache').sql_ttl(policy, CACHE_TTL_S) <= 0
             or (policy.get("matter_matching") and not req.case_ref)):
         return None
     context, exact, form = identity
@@ -20,14 +20,18 @@ async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple
         return None
     row = dict(rows[0])
     if row["input_hash"] == exact:
-        return __import__('exact_cache').CachedAnswer(row["content"], 'C1')
+        return (__import__('exact_cache').CachedAnswer(row["content"], 'C1')
+                if __import__('exact_cache').enabled() else row["content"])
     row["vector"] = json.loads(row["vector"]) if isinstance(row["vector"], str) else row["vector"]
     hit = graduate.semantic_lookup(graduate.semantic_vector(form), [row], tenant_id=str(req.tenant_id), scope="tenant")
-    return __import__('exact_cache').CachedAnswer(hit["content"], 'C2') if hit else None
+    if hit is None:
+        return None
+    return (__import__('exact_cache').CachedAnswer(hit["content"], 'C2')
+            if __import__('exact_cache').enabled() else hit["content"])
 
 async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str], ledger_id: uuid.UUID) -> None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
-            or int(policy.get('cache_ttl_s', CACHE_TTL_S)) <= 0
+            or __import__('exact_cache').sql_ttl(policy, CACHE_TTL_S) <= 0
             or (policy.get("matter_matching") and not req.case_ref)):
         return
     context, exact, form = identity
@@ -38,5 +42,5 @@ async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tupl
             ON CONFLICT(tenant_id,region,task_type,context_hash,input_hash) DO UPDATE
             SET ledger_id=EXCLUDED.ledger_id,vector=EXCLUDED.vector,semantic_form=EXCLUDED.semantic_form,expires_at=EXCLUDED.expires_at""",
             req.tenant_id, box_region(), req.task_type, context, exact, form,
-            json.dumps(graduate.semantic_vector(form)), ledger_id, int(policy.get('cache_ttl_s', CACHE_TTL_S)),
+            json.dumps(graduate.semantic_vector(form)), ledger_id, __import__('exact_cache').sql_ttl(policy, CACHE_TTL_S),
         )

@@ -18,6 +18,11 @@ from test_tank_ladder import ladder as ladder_fixture, policy, request, selected
 boundary = boundary_fixture
 ladder = ladder_fixture
 
+@pytest.fixture(autouse=True)
+def enable_requested_layers(monkeypatch):
+    monkeypatch.setenv('ENGINE_C1_ENABLED', '1')
+
+
 
 def set_user(monkeypatch, tenant, user='placeholder-user-a'):
     actor = product_identity.User(str(tenant), user, 'member') if user else None
@@ -172,7 +177,7 @@ async def test_gateway_callback_and_both_rosters_default_off(monkeypatch):
         assert headers == ({'x-tervory-cache-layer': 'C1', 'x-litellm-response-cost': '0'} if hit and enabled else {})
     for name in ('config.yaml', 'config.za.yaml'):
         config = yaml.safe_load((Path('litellm') / name).read_text())['litellm_settings']
-        assert config['cache'] and config['cache_params']['type'] == 'redis'
+        assert config['cache'] is False and config['cache_params']['type'] == 'redis'
         assert config['cache_params']['mode'] == 'default_off'
         assert config['callbacks'] == ['tenant_traces.callback']
         assert config['cache_params']['supported_call_types'] == ['acompletion']

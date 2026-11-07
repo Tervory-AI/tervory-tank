@@ -17,6 +17,12 @@ from test_tank_batch_providers import setup as batch_setup
 boundary = boundary_fixture
 ladder = ladder_fixture
 
+@pytest.fixture(autouse=True)
+def enable_requested_layers(monkeypatch):
+    monkeypatch.setenv('ENGINE_C1_ENABLED', '1')
+    monkeypatch.setenv('ENGINE_I8_ENABLED', '1')
+
+
 
 async def eligible(b, value=True):
     async with b.pool.acquire() as conn:
@@ -29,7 +35,7 @@ async def test_automatic_job_waits_for_cheaper_window_and_preserves_user(ladder,
     clock, _ = await prepare(b, monkeypatch)
     await eligible(b)
     async with b.pool.acquire() as conn:
-        await conn.execute("UPDATE tank.policy SET cache_scope='tenant' WHERE tenant_id=$1", b.tenants[0])
+        await conn.execute("UPDATE tank.policy SET cache_scope='tenant', cache_ttl_s=60 WHERE tenant_id=$1", b.tenants[0])
     actor = product_identity.User(str(b.tenants[0]), 'placeholder-user-a', 'member')
     monkeypatch.setattr(product_identity, 'current', ContextVar('placeholder-scheduled-user', default=actor))
     req = request(b, b.tenants[0], text='placeholder scheduled request', interactive=False, priority='standard')

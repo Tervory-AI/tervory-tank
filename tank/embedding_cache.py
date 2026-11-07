@@ -19,6 +19,10 @@ _cache = None
 _init_lock = Lock()
 
 
+def enabled():
+    return os.environ.get('ENGINE_C4_ENABLED') == '1'
+
+
 class Measurement:
     def __init__(self):
         self.lock = Lock()
@@ -93,6 +97,8 @@ class VectorCache:
                 and all(isinstance(v, (float, int)) and math.isfinite(v) for v in vector))
 
     def embed(self, model, text, dimensions, compute):
+        if not enabled():
+            return compute()
         key = hashlib.sha256((model + '\0' + text).encode()).hexdigest()
         with self.stripes[int(key[:8], 16) % len(self.stripes)]:
             with self.lock:
@@ -136,6 +142,8 @@ class VectorCache:
 
 
 def embed(model, text, dimensions, compute):
+    if not enabled():
+        return compute()
     global _cache
     with _init_lock:
         if _cache is None:
@@ -146,6 +154,8 @@ def embed(model, text, dimensions, compute):
 def measured_route(function):
     @wraps(function)
     async def wrapped(req, *args, **kwargs):
+        if not enabled():
+            return await function(req, *args, **kwargs)
         with measure() as counter:
             answer = await function(req, *args, **kwargs)
         rt = sys.modules[function.__module__]

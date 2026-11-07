@@ -45,6 +45,8 @@ class LocalEncoder:
             from . import embedding_cache
         except ImportError:
             import embedding_cache
+        if not embedding_cache.enabled():
+            return self._embed(text)
         self.validate(text)
         return embedding_cache.embed(EMBED_MODEL_ID, text, DIMENSIONS, lambda: self._embed(text))
 

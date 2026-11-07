@@ -48,7 +48,7 @@ def register(app, records):
         rows = [row for row in rows if row.get('tenant_id') == str(body.tenant_id)
                 and (row.get('kind') != 'engine.outcome' or row.get('meta', {}).get('task_type') == body.task_type)]
         rows.sort(key=lambda row: (row.get('kind') != 'engine.outcome', row.get('updated_at', row.get('created_at', ''))), reverse=True)
-        return {'memories': rows[:8], 'embedding_cache': counter.values}
+        return {'memories': rows[:8], **({'embedding_cache': counter.values} if embedding_cache.enabled() else {})}
 
     @app.post('/engine/remember')
     async def remember(body: Outcome, x_tank_key: str = Header(default='')):

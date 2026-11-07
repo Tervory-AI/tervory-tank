@@ -49,6 +49,8 @@ class FastEmbedder:
             from hermes import embedding_cache
         except ImportError:
             from tank import embedding_cache
+        if not embedding_cache.enabled():
+            return self._embed_many(texts)
         model = MODEL['repository'] + '@' + MODEL['revision']
         return [embedding_cache.embed(model, text, self.dim, lambda: self._embed_many([text])[0]) for text in texts]
 

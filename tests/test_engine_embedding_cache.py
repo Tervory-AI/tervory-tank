@@ -14,6 +14,11 @@ from test_tank_tenant_boundaries import boundary as boundary_fixture
 
 boundary = boundary_fixture
 
+@pytest.fixture(autouse=True)
+def enable_requested_layers(monkeypatch):
+    monkeypatch.setenv('ENGINE_C4_ENABLED', '1')
+
+
 
 @pytest.fixture
 def shared(monkeypatch):
