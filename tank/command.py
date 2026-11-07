@@ -2338,6 +2338,10 @@ class CodeTurn(Body):
 
     @model_validator(mode='after')
     def result_limit(self):
+        if 'progress' in self.model_fields_set:
+            import code_gate
+            if not code_gate.enabled() or not code_progress.enabled():
+                raise ValueError('Progress evidence is not enabled on this host')
         self.text = code_sessions.code_text(self.text)
         for attachment in self.attachments:
             if isinstance(attachment, Attachment):

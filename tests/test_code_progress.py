@@ -137,3 +137,18 @@ async def test_http_missing_checks_and_invalid_progress_never_reach_a_model(api,
     bad=await client.post(f'/v1/command/threads/{thread}/code-turn',json={'text':'Fix',
         'progress':{**progress(1).model_dump(),'tests_passed':True}})
     assert bad.status_code==422 and route.await_count==0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('evidence',[None,progress(1).model_dump()])
+async def test_disabled_host_keeps_the_old_rejection_for_new_fields(api,monkeypatch,evidence):
+    monkeypatch.delenv(code_gate.SETTING,raising=False)
+    monkeypatch.delenv(code_progress.SETTING,raising=False)
+    client,pool=api
+    model=AsyncMock(side_effect=AssertionError('disabled metadata must not start paid work'))
+    monkeypatch.setattr(command,'route_code',model)
+    thread=(await client.post('/v1/command/threads',json={})).json()['thread_id']
+    response=await client.post(f'/v1/command/threads/{thread}/code-turn',json={'text':'Fix','progress':evidence})
+    assert response.status_code==422
+    model.assert_not_awaited()
+    assert await pool.fetchval('SELECT count(*) FROM tank.tasks')==0

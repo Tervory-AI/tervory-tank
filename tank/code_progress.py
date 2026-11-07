@@ -10,6 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 SETTING = 'ENGINE_CODE_PROGRESS_ENABLED'
 
 
+def enabled():
+    return os.environ.get(SETTING, '').strip() == 'true'
+
+
 class Progress(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     tree: str = Field(pattern=r'^[a-f0-9]{64}$')
@@ -22,7 +26,7 @@ def stopped(reason, message):
 
 
 def advance(gate, evidence, results, continuation):
-    if os.environ.get(SETTING, '').strip() != 'true':
+    if not enabled():
         return None
     if evidence is None:
         if continuation:
