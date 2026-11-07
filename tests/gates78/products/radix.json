@@ -1,0 +1,125 @@
+{
+  "product": "radix",
+  "source_sha": "2d2c7094a83656829e45866e4900b959bbd4d83e",
+  "entrypoints": [
+    "Tank main.app + TriggerSigninMiddleware -> /v1/radix/memory GET and POST /control,/edit,/forget (fixed-core corridor dependency)",
+    "agents/radix/app.py app -> memory_api.attach_memory_routes -> chassis.user_assertion.signed_user -> chassis.MemoryClient -> Hermes create_app/Records/PostgreSQL/Qdrant",
+    "agents/radix/app.py scan and agents/radix/verify/routes.py attach (Gate 8 task wiring BLOCKED)"
+  ],
+  "legacy_tests": [
+    "tests/test_radix_gates_7_8.py::test_product_request_brain_route_receipt_then_memory",
+    "tests/test_radix_gates_7_8.py::test_correction_applies_next_time_with_no_paid_call",
+    "tests/test_radix_gates_7_8.py::test_second_user_and_second_tenant_see_nothing",
+    "tests/test_radix_gates_7_8.py::test_same_task_twice_reports_cost_and_tokens_each_run",
+    "tests/test_radix_gates_7_8.py::test_memory_off_for_one_user_does_not_affect_other",
+    "tests/test_radix_gates_7_8.py::test_memory_controls_view_edit_forget",
+    "tests/test_radix_gates_7_8.py::test_code_skill_free_step_before_paid",
+    "tests/test_radix_gates_7_8.py::test_remembered_fields_refuse_empty_and_secrets",
+    "tests/test_radix_gates_7_8.py::test_brain_switch_defaults_and_url",
+    "tests/test_radix_gates_7_8.py::test_memory_outage_answers_without_memory_never_serves_repeat",
+    "tests/test_radix_gates_7_8.py::test_missing_invalid_scope_refused_offline",
+    "tests/test_radix_gates_7_8_controls.py::test_owner_view_edit_forget_and_off",
+    "tests/test_radix_gates_7_8_controls.py::test_live_memory_control_refuses_foreign_tenant_or_user",
+    "tests/test_radix_gates_7_8_controls.py::test_missing_and_forged_identity_fail_closed",
+    "tests/test_radix_gates_7_8_controls.py::test_shared_workspace_key_refused_and_missing_key",
+    "tests/test_radix_gates_7_8_t51_scope.py::test_two_users_personal_recall_isolated_under_proposed_scope",
+    "tests/test_radix_gates_7_8_t51_scope.py::test_tenant_wide_reaches_both_when_declared",
+    "tests/test_radix_gates_7_8_t51_scope.py::test_missing_user_on_personal_kind_refused",
+    "tests/test_radix_gates_7_8_t51_scope.py::test_tenant_walls_still_hold",
+    "tests/test_radix_gates_7_8_t51_scope.py::test_product_does_not_declare_filtering_helpers_as_tenant_wide_default",
+    "tests/test_radix_memory_contract.py::test_CURRENT_write_recall_forget_own_key",
+    "tests/test_radix_memory_contract.py::test_CURRENT_own_key_only_wrong_agent_and_workspace_refused",
+    "tests/test_radix_memory_contract.py::test_CURRENT_bad_kind_and_tenant_scope",
+    "tests/test_radix_memory_contract.py::test_CURRENT_user_id_not_centrally_filtered",
+    "tests/test_radix_memory_contract.py::test_UNAPPLIED_two_users_personal_isolation_and_tenant_wide",
+    "tests/test_radix_memory_contract.py::test_UNAPPLIED_wrong_key_refused_and_bad_kind",
+    "tests/test_radix_memory_contract.py::test_pinned_source_sha_reported",
+    "tests/test_radix_memory_contract.py::test_product_never_calls_tank_v1_memory_any_method",
+    "tests/test_radix_memory_contract.py::test_unapplied_patch_exists_and_mentions_existing_signing"
+  ],
+  "cases": {
+    "G8.default_off": [
+      "tests/gates78/products/test_radix.py::test_brain_deployment_remains_opt_in",
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.default_off]"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.task_path]"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.free_first]"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.exact_repeat]"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.misses]"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.correction]"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.forget]"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.memory_off]"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.outage]"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.auth_not_outage]"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.receipts]"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.retry_concurrency]"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.product_regressions]"
+    ],
+    "G7.owner_crud": [
+      "tests/gates78/products/test_radix.py::test_owner_controls_use_signed_route_and_real_hermes",
+      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G7.owner_crud-recall-list-publish]"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_radix.py::test_eight_foreign_control_denials_leave_state_unchanged"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_radix.py::test_eight_foreign_control_denials_leave_state_unchanged"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_radix.py::test_personal_kind_has_no_unowned_escape"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_radix.py::test_personal_kind_has_no_unowned_escape",
+      "tests/gates78/products/test_radix.py::test_product_assertion_rejections_do_not_mutate[missing]"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_radix.py::test_signin_body_and_header_impersonation",
+      "tests/gates78/products/test_radix.py::test_owner_controls_use_signed_route_and_real_hermes"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_radix.py::test_product_assertion_rejections_do_not_mutate"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_radix.py::test_nonce_replay_after_restart_and_forget"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_radix.py::test_sql_candidates_are_scoped_before_vector"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_radix.py::test_product_memory_path_under_restricted_database_role"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_radix.py::test_owner_controls_use_signed_route_and_real_hermes",
+      "tests/gates78/products/test_radix.py::test_owner_off_does_not_change_colleague"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_radix.py::test_eight_foreign_control_denials_leave_state_unchanged"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_radix.py::test_owner_controls_use_signed_route_and_real_hermes"
+    ]
+  }
+}
