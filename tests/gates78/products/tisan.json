@@ -1,0 +1,128 @@
+{
+  "product": "tisan",
+  "source_sha": "9918e90886dd89e2acb29bebe86f4837f771a475",
+  "entrypoints": [
+    "GET/POST/DELETE /v1/command/tisan/memory (native Tank control forwarding)",
+    "GET/POST/DELETE /memory (actual Tisan controls, shared nonce verifier)",
+    "agents.tisan.builder.execute -> remembered_plan -> brain_service/TankClient -> real Hermes records"
+  ],
+  "legacy_tests": [
+    "tests/test_tisan_gates_7_8_memory.py::test_request_routes_through_tank_records_receipt_and_remembers",
+    "tests/test_tisan_gates_7_8_memory.py::test_first_run_pays_once_and_exact_repeat_pays_nothing",
+    "tests/test_tisan_gates_7_8_memory.py::test_changed_input_misses_and_pays",
+    "tests/test_tisan_gates_7_8_memory.py::test_second_user_and_second_tenant_never_reuse",
+    "tests/test_tisan_gates_7_8_memory.py::test_correction_overrides_stale_result_without_paid_call",
+    "tests/test_tisan_gates_7_8_memory.py::test_memory_off_and_forget_are_honoured",
+    "tests/test_tisan_gates_7_8_memory.py::test_switch_off_keeps_the_previous_path",
+    "tests/test_tisan_gates_7_8_memory.py::test_remembered_list_is_defined_and_brain_is_off_by_default",
+    "tests/test_tisan_gates_7_8_memory.py::test_gate_memory_uses_the_chassis_client_not_a_second_store",
+    "tests/test_tisan_gates_7_8_memory.py::test_exact_repeat_is_answered_from_memory_with_would_have_cost",
+    "tests/test_tisan_gates_7_8_memory.py::test_memory_outage_answers_without_memory_and_never_serves_a_stored_repeat",
+    "tests/test_tisan_gates_7_8_memory.py::test_scope_and_identity_errors_refuse_and_are_not_outages",
+    "tests/test_tisan_gates_7_8_live.py::test_every_founder_endpoint_recalls_then_remembers_its_outcome",
+    "tests/test_tisan_gates_7_8_live.py::test_live_view_edit_forget_and_off_are_per_tenant_and_user",
+    "tests/test_tisan_gates_7_8_live.py::test_gold_approval_and_rejection_remember_real_section_values",
+    "tests/test_tisan_gates_7_8_live.py::test_quote_create_and_move_remember_real_history",
+    "tests/test_tisan_gates_7_8_live.py::test_brain_service_runs_free_steps_before_tank",
+    "tests/test_tisan_gates_7_8_live.py::test_pipeline_build_request_memory_brain_tank_receipt_memory",
+    "tests/test_tisan_gates_7_8_live.py::test_each_control_refuses_a_mismatched_caller_and_changes_nothing",
+    "tests/test_tisan_gates_7_8_live.py::test_admin_header_or_body_selector_is_not_a_signed_in_user",
+    "tests/test_tisan_gates_7_8_live.py::test_signed_assertion_is_bound_to_request_tenant_user_and_time",
+    "tests/test_tisan_gates_7_8_live.py::test_tank_patch_signs_the_verified_actor_and_applies_to_tank_source",
+    "tests/test_tisan_gates_7_8_live.py::test_refusal_happens_before_any_memory_request",
+    "tests/test_tisan_gates_7_8_live.py::test_unverified_identity_makes_no_memory_request",
+    "tests/test_tisan_gates_7_8_live.py::test_own_signed_control_fails_closed_until_shared_contract_exists",
+    "tests/test_tisan_t51_central_user_memory.py::test_t51_own_user_positive_write_list_recall_through_product_adapter",
+    "tests/test_tisan_t51_central_user_memory.py::test_t51_user_a_never_lists_user_b_personal_record",
+    "tests/test_tisan_t51_central_user_memory.py::test_t51_user_a_never_recalls_user_b_personal_record",
+    "tests/test_tisan_t51_central_user_memory.py::test_t51_user_a_never_publishes_user_b_personal_record",
+    "tests/test_tisan_t51_central_user_memory.py::test_t51_declared_tenant_wide_record_reaches_both_users",
+    "tests/test_tisan_t51_central_user_memory.py::test_t51_personal_record_without_user_id_is_refused_and_not_stored",
+    "tests/test_tisan_t51_central_user_memory.py::test_t51_tenant_wall_holds_for_personal_and_tenant_wide",
+    "tests/test_tisan_t51_central_user_memory.py::test_t51_product_fails_closed_without_shared_contract_and_writes_nothing",
+    "tests/test_tisan_gates_7_8_hermes_contract.py::test_adapter_write_recall_forget_on_real_hermes_with_own_agent_key",
+    "tests/test_tisan_gates_7_8_hermes_contract.py::test_shared_workspace_key_cannot_write_and_bad_kinds_are_refused",
+    "tests/test_tisan_gates_7_8_hermes_contract.py::test_product_uses_own_agent_key_fields_and_never_tank_v1_memory",
+    "tests/test_tisan_gates_7_8_hermes_contract.py::test_current_real_hermes_contract_write_recall_forget_keys_kinds_and_tenant"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_tisan.py::test_owner_task_recall_list_edit_forget"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_tisan.py::test_foreign_read_edit_forget_and_publish_leave_owner_state_unchanged"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_tisan.py::test_foreign_read_edit_forget_and_publish_leave_owner_state_unchanged"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_tisan.py::test_only_declared_brand_kind_is_shared_and_owned_brand_stays_personal"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_tisan.py::test_only_declared_brand_kind_is_shared_and_owned_brand_stays_personal"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_tisan.py::test_verified_signin_and_product_assertion_not_body_or_raw_headers"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_tisan.py::test_nonce_assertion_rejection_at_product_control"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_tisan.py::test_nonce_replay_is_atomic_across_restart_and_cannot_restore_forgotten_data"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_tisan.py::test_scope_is_filtered_before_vector_search_limit_and_empty_user_scope"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_tisan.py::test_product_controls_use_restricted_role_and_staged_rls"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_tisan.py::test_controls_view_edit_forget_off_and_unsigned_plain_task"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_tisan.py::test_no_foreign_content_in_answers_receipts_or_logs"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_tisan.py::test_real_runtime_client_and_packaging"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_tisan.py::test_default_off_keeps_profiles_and_introduces_no_memory_work"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_tisan.py::test_recall_then_actual_builder_brain_tank_receipt_then_remember"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_tisan.py::test_code_free_steps_precede_brain_and_no_provider_for_structured_plan"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_tisan.py::test_first_exact_repeat_and_changed_input_reconcile_actual_fixture_spend"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_tisan.py::test_another_user_and_tenant_miss_without_receiving_owner_cached_answer"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_tisan.py::test_correction_invalidates_old_exact_answer_without_another_provider_call"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_tisan.py::test_forget_invalidates_reusable_plan"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_tisan.py::test_controls_view_edit_forget_off_and_unsigned_plain_task"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_tisan.py::test_memory_outage_is_truthful_and_post_payment_remember_never_pays_twice"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_tisan.py::test_scope_error_is_refusal_not_a_memory_outage_or_private_cache_fallback"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_tisan.py::test_recall_then_actual_builder_brain_tank_receipt_then_remember"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_tisan.py::test_retries_and_concurrent_exact_tasks_do_not_double_pay"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_tisan.py::test_original_gate_requirements_and_browser_cli_worker_tests_remain_present"
+    ]
+  }
+}
