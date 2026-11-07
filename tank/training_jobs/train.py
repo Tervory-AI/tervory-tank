@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["trl==0.29.1", "peft==0.18.1", "transformers==5.3.0", "datasets==4.5.0", "torch==2.10.0", "huggingface-hub==1.7.2", "sentencepiece==0.2.1"]
 # ///
-"""One multi-task Qwen3-4B LoRA. Evaluation loss is not a gold holdout score."""
+"""Explicitly configured LoRA. Evaluation loss is not a gold holdout score."""
 import hashlib
 import json
 import os
@@ -281,6 +281,27 @@ def tiger_data(api, org, day, revision=None):
     return train, held
 
 
+def fit(base, revision, train, validation, *, output_dir='/tmp/lora', max_length=1024,
+        use_cpu=False, max_steps=-1, tokenizer=None):
+    from datasets import Dataset
+    from peft import LoraConfig
+    from trl import SFTConfig, SFTTrainer
+    trainer = SFTTrainer(model=base,
+        args=SFTConfig(output_dir=output_dir, num_train_epochs=1, max_length=max_length,
+                       model_init_kwargs={'revision': revision, 'trust_remote_code': False},
+                       per_device_train_batch_size=1, gradient_accumulation_steps=8,
+                       gradient_checkpointing=True, bf16=not use_cpu, use_cpu=use_cpu,
+                       max_steps=max_steps, report_to='none', logging_strategy='no',
+                       save_strategy='no', push_to_hub=False),
+        train_dataset=Dataset.from_list(train), eval_dataset=Dataset.from_list(validation),
+        peft_config=LoraConfig(r=16, lora_alpha=32, target_modules='all-linear', task_type='CAUSAL_LM'),
+        **({'processing_class': tokenizer} if tokenizer is not None else {}))
+    trainer.train()
+    metrics = trainer.evaluate()
+    trainer.save_model(output_dir)
+    return trainer, metrics
+
+
 def main() -> dict | None:
     missing = [name for name in ('HF_TOKEN', 'HF_ORG', 'OUTPUT_REPO', 'TRAIN_DAY')
                if not os.environ.get(name, '').strip()]
@@ -288,10 +309,15 @@ def main() -> dict | None:
         result = {'status': 'not_configured', 'settings': missing}
         print(json.dumps(result))
         return result
-    from datasets import Dataset
+    base, revision = os.environ.get('HF_TRAIN_BASE_MODEL', ''), os.environ.get('HF_TRAIN_BASE_REVISION', '')
+    missing = [name for name in ('HF_TRAIN_BASE_MODEL', 'HF_TRAIN_BASE_REVISION') if not os.environ.get(name, '').strip()]
+    if missing:
+        result = {'status': 'not_configured', 'settings': missing}
+        print(json.dumps(result))
+        return result
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*', base) or not re.fullmatch('[a-f0-9]{40}', revision):
+        raise ValueError('Training requires an explicit base model and immutable revision')
     from huggingface_hub import HfApi
-    from peft import LoraConfig
-    from trl import SFTConfig, SFTTrainer
     api = HfApi(token=os.environ['HF_TOKEN'])
     org, repo, day = os.environ['HF_ORG'], os.environ['OUTPUT_REPO'], os.environ['TRAIN_DAY']
     if api.model_info(repo).private is not True:
@@ -319,16 +345,7 @@ def main() -> dict | None:
         (validation if int(digest, 16) % 10 == 0 else train).append(sample)
     if not train or not validation:
         raise ValueError('Training and validation examples are required')
-    trainer = SFTTrainer(model='Qwen/Qwen3-4B',
-        args=SFTConfig(output_dir='/tmp/lora', num_train_epochs=1, max_length=max_length,
-                       per_device_train_batch_size=1, gradient_accumulation_steps=8,
-                       gradient_checkpointing=True, bf16=True, report_to='none',
-                       logging_strategy='no', save_strategy='no', push_to_hub=False),
-        train_dataset=Dataset.from_list(train), eval_dataset=Dataset.from_list(validation),
-        peft_config=LoraConfig(r=16, lora_alpha=32, target_modules='all-linear', task_type='CAUSAL_LM'))
-    trainer.train()
-    metrics = trainer.evaluate()
-    trainer.save_model('/tmp/lora')
+    trainer, metrics = fit(base, revision, train, validation, max_length=max_length)
     Path('/tmp/lora/evaluation.json').write_text(json.dumps({'validation_loss': metrics['eval_loss'],
                                                           'n': len(validation), 'gold_holdout': False}))
     if train_agent == 'tiger':

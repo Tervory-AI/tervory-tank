@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from tervor_training_fixtures import configured_base as configured_base
 
 from tiger_sheet.patch_source import module, source
 from test_tiger_competitors import database as database, postgres as postgres
@@ -190,7 +191,8 @@ def test_gpu_entrypoint_trains_only_snapshot_and_writes_separate_gold_gate(train
                         'TRAIN_DAY': '2026-11-07', 'TRAIN_AGENT': 'tiger', 'TIGER_DATASET_REVISION': 'placeholder-frozen'}.items():
         monkeypatch.setenv(name, value)
     trainer.main()
-    assert captured['trained'] and captured['model'] == 'Qwen/Qwen3-4B'
+    assert captured['trained'] and captured['model'] == 'fixture/training-base'
+    assert captured['args']['model_init_kwargs']['revision'] == 'a' * 40
     assert len(captured['train_dataset']) + len(captured['eval_dataset']) == 60
     assert all('/item/100' not in json.dumps(sample) for sample in captured['train_dataset'])
     result = json.loads((tmp_path/'lora/holdout.json').read_text())

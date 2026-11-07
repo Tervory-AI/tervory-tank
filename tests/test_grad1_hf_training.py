@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import uuid
 import pytest
+from tervor_training_fixtures import configured_base as configured_base
 from fastapi import HTTPException
 import training
 from gold import PLATFORM_TENANT

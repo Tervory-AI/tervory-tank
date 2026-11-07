@@ -1,0 +1,29 @@
+name: Tervor tiny training
+on:
+  pull_request:
+    paths: ['tank/training_jobs/**', 'tests/tervor_tiny_pipeline.py', '.github/requirements-tervor-training.*', '.github/workflows/tervor-training.yml']
+permissions:
+  contents: read
+jobs:
+  tiny-training:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Install hash-locked CPU training libraries
+        run: python -m pip install --require-hashes -r .github/requirements-tervor-training.lock
+      - name: Download pinned public test model
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: python tests/tervor_tiny_pipeline.py download "$RUNNER_TEMP/tiny-model"
+      - name: Offline LoRA training, save and reload
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: python tests/tervor_tiny_pipeline.py prove "$RUNNER_TEMP/tiny-model" --output "$RUNNER_TEMP/tiny-adapter"

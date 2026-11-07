@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from tervor_training_fixtures import configured_base as configured_base
 from tank.training_jobs import run as gpu
 from tank.training_jobs import train
 
@@ -49,7 +50,7 @@ async def test_existing_gpu_launcher_reserves_before_hf_and_sends_no_database_cr
     result = await gpu.run(SimpleNamespace(agent='zenas', receipt=None, job_id='', minutes=120, submit=True, day='2026-11-06'))
     assert result['status'] == 'running' and result['cost_usd'] == Decimal('2.4')
     assert submitted == {'namespace': 'placeholder-org', 'flavor': 'a10g-small', 'timeout': 7200,
-                         'env': {'HF_ORG': 'placeholder-org', 'TRAIN_DAY': '2026-11-06',
+                         'env': {'HF_TRAIN_BASE_MODEL': 'fixture/training-base', 'HF_TRAIN_BASE_REVISION': 'a' * 40, 'HF_ORG': 'placeholder-org', 'TRAIN_DAY': '2026-11-06',
                                  'OUTPUT_REPO': 'placeholder-org/tervory-own-zenas-za', 'TRAIN_AGENT': 'zenas', 'TIGER_DATASET_REVISION': ''},
                          'secrets': {'HF_TOKEN': 'placeholder'}}
     assert events.index('reservation') < events.index('hf')

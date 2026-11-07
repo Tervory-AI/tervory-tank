@@ -16,6 +16,7 @@ from uuid import UUID
 
 import httpx
 import pytest
+from tervor_training_fixtures import configured_base as configured_base
 from fastapi import HTTPException
 
 ROOT = Path(__file__).resolve().parents[2]
