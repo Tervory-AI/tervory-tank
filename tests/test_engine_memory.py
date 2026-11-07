@@ -58,6 +58,7 @@ async def test_memory_cannot_remember_another_tenants_receipt(remembered):
     assert response.status_code == 404
     assert await b.memories.list('tank', str(b.tenants[1]), 'client') == []
     body = {'tenant_id': str(b.tenants[0]), 'ledger_id': str(ledger)}
+    assert (await b.memory_client.post('/engine/remember', json=body)).status_code == 422
     assert (await b.memory_client.post('/engine/remember', json=body, headers={'X-Tank-Key': ''})).status_code == 401
     assert (await b.memory_client.post('/engine/remember', json={**body, 'claim': 'forged'})).status_code == 422
 
@@ -110,6 +111,8 @@ async def test_correction_changes_next_local_answer_only_for_its_tenant(remember
 async def test_engine_corridor_uses_the_same_sql_user_wall(remembered):
     b = remembered
     tenant = str(b.tenants[0])
+    # Historical automatic outcomes without an owner must remain hidden.
+    await b.memories.save('tank', tenant, 'placeholder legacy personal outcome', [], kind='engine.outcome')
     await b.memories.save('tank', tenant, 'placeholder private A', [], meta={'user_id': 'placeholder-user-a'})
     await b.memories.save('tank', tenant, 'placeholder private B', [], meta={'user_id': 'placeholder-user-b'})
     for user, expected in ((None, []), ('placeholder-user-a', ['placeholder private A']),
@@ -120,3 +123,16 @@ async def test_engine_corridor_uses_the_same_sql_user_wall(remembered):
         response = await b.memory_client.post('/engine/recall', json=body)
         assert response.status_code == 200
         assert [row['claim'] for row in response.json()['memories']] == expected
+
+
+@pytest.mark.asyncio
+async def test_unsigned_engine_never_recalls_or_creates_shared_outcomes(monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(product_identity, "current", ContextVar("placeholder_unsigned", default=None))
+    async def forbidden(*args, **kwargs):
+        pytest.fail("unsigned call must not access memory")
+    monkeypatch.setattr(engine_memory, "send", forbidden)
+    request = SimpleNamespace(tenant_id=uuid.uuid4())
+    recalled, state = await engine_memory.recall(None, request)
+    assert recalled is request and state == {"hits": 0, "status": "unsigned"}
+    assert not await engine_memory.remember(request, SimpleNamespace(ledger_id=uuid.uuid4()))

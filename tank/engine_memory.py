@@ -19,6 +19,9 @@ async def send(path, body):
 
 
 async def recall(rt, req):
+    from product_identity import current
+    if current.get() is None:
+        return req, {'hits': 0, 'status': 'unsigned'}
     query = next((m.content for m in reversed(req.messages) if m.role == 'user'), '')
     try:
         query = rt._storage_mask(query)[:1200]
@@ -49,6 +52,9 @@ async def recall(rt, req):
 
 
 async def remember(req, answer):
+    from product_identity import current
+    if current.get() is None:
+        return False
     try:
         data = await send('remember', {'tenant_id': str(req.tenant_id), 'ledger_id': str(answer.ledger_id), **user_scope(req)})
         return bool(data.get('remembered'))
@@ -61,7 +67,7 @@ def user_scope(req):
     from product_identity import current
     actor = current.get()
     if actor is None:
-        return {}
+        raise ValueError("Memory user unavailable")
     if actor.tenant_id != str(req.tenant_id):
         raise ValueError("Memory tenant mismatch")
     return {"user_id": actor.user_id}

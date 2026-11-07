@@ -7,7 +7,7 @@ TENANT_WIDE_KINDS: dict[str, frozenset[str]] = {
     "tisan": frozenset({"heartbeat", "tisan.brand"}),
     **{agent: frozenset({"heartbeat"}) for agent in ("template", "base", "tiger", "market_lab", "zenas", "radix", "rig")},
     "market_lab": frozenset({"heartbeat", "warning_pattern"}),
-    "tank": frozenset({"engine.outcome"}),
+    "tank": frozenset(),
 }
 # Internal maintenance can inspect rows without impersonating an end user.
 # HTTP routes always pass user_id explicitly, including None (shared rows only).

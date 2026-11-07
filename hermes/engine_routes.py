@@ -56,6 +56,8 @@ def register(app, records):
               AND l.feedback IS DISTINCT FROM 'rejected'""", body.tenant_id, body.ledger_id)
         if row is None:
             raise HTTPException(404, 'No delivered receipt for this tenant')
+        if not body.user_id or not body.user_id.strip():
+            raise HTTPException(422, 'Personal memory requires user_id')
         messages = json.loads(row['messages']) if isinstance(row['messages'], str) else row['messages']
         question = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
         claim = 'Request excerpt:\n' + question[:1500] + '\nOutcome excerpt:\n' + row['content'][:3000]
