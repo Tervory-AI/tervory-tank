@@ -16,7 +16,7 @@ import httpx
 import pytest
 import yaml
 
-from rig_fixture import ROOT, USER_A, USER_B, USER_C, require_runtime, rig_wire
+from products.rig_fixture import ROOT, USER_A, USER_B, USER_C, require_runtime, rig_wire
 
 __all__ = ['rig_wire']
 

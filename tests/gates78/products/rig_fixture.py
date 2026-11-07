@@ -85,7 +85,7 @@ class RigWire:
                     tenant=None, task_id=None):
         tenant = tenant or self.stack.tenant
         if not self.worker_open:
-            from rig_provider_fixture import worker_corridor
+            from products.rig_provider_fixture import worker_corridor
             await self.resources.enter_async_context(worker_corridor(self, self.monkeypatch, ROOT))
             self.worker_open = True
         identity = str(task_id or uuid4())
