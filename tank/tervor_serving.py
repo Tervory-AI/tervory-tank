@@ -22,6 +22,18 @@ def enabled():
     return os.environ.get('TERVOR_SERVING_ENABLED') == 'true'
 
 
+async def pinned_candidates(rt, rows):
+    trained = [row for row in rows if row['model'].startswith('tervor-')]
+    if not trained:
+        return rows
+    ordinary = [row for row in rows if not row['model'].startswith('tervor-')]
+    if not enabled():
+        return ordinary
+    roster = {row['model_name']: row for row in await rt._roster_models()}
+    return [*ordinary, *(row for row in trained if
+        roster.get(row['model'], {}).get('model_info', {}).get('tervor_serving', {}).get('sha256') == row['checkpoint'])]
+
+
 async def register(rt, body):
     if not enabled():
         raise HTTPException(409, 'Tervor serving is disabled; TERVOR_SERVING_ENABLED is unset')

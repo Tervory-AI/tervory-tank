@@ -29,7 +29,7 @@ async def options(rt, req, policy):
         rows = await conn.fetch('''SELECT model,checkpoint FROM tank.engine_candidates
             WHERE tenant_id=$1 AND region=$2 AND task_type=$3 ORDER BY created_at DESC''',
             req.tenant_id, rt.box_region(), req.task_type)
-    rows = [row for row in rows if not row['model'].startswith('tervor-') or tervor_serving.enabled()]
+    rows = await tervor_serving.pinned_candidates(rt, rows)
     names = info['ladder']
     earlier = names[:names.index(policy['model'])] if policy['model'] in names else []
     rows = [*rows, *({'model': name, 'checkpoint': 'runtime-b12173'} for name in earlier)]

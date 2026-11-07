@@ -98,6 +98,10 @@ async def test_trained_model_registers_shadows_graduates_and_rolls_back(boundary
     result = await graduate.engine_tick(b.tank, req, selected, limit=1)
     assert result['state'] == 'graduated' and result['samples'] == 200
     assert (await b.tank.run_route(req)).model == model['id']
+    serving['sha256'] = 'f'*64
+    assert (await engine_ladder.select(b.tank, req, policy))['model'] == 'local'
+    serving['sha256'] = 'd'*64
+    assert (await engine_ladder.select(b.tank, req, policy))['model'] == model['id']
     async with b.pool.acquire() as conn:
         stored = await tervor_serving.private_record(conn, req.tenant_id, model['id'])
         assert stored['graduations'][0]['previous_model'] == 'local'
