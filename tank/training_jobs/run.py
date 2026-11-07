@@ -146,6 +146,15 @@ def prepare_bundle(args, agent):
     return prepared, metadata
 
 
+async def check_database_holdouts(conn, prepared, agent, region):
+    if prepared is None:
+        return
+    import tervor_dataset
+    import tervor_gold
+    forbidden = await tervor_gold.forbidden_inputs(conn, PLATFORM, region)
+    tervor_dataset.build(PLATFORM, agent, prepared['training']['rows'], gold_inputs=forbidden)
+
+
 async def run(args):
     if getattr(args, 'dry_run', False) and (args.submit or args.receipt or getattr(args, 'job_id', '')):
         raise ValueError('Dry run cannot submit a job or record a receipt')
@@ -246,6 +255,7 @@ async def run(args):
         if prepared is not None:
             conn = await asyncpg.connect(os.environ['DATABASE_URL'])
             try:
+                await check_database_holdouts(conn, prepared, agent, region)
                 if await conn.fetchval('SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)', PLATFORM):
                     raise ValueError('Reconcile the previous training job before submitting another')
             finally:
@@ -257,6 +267,7 @@ async def run(args):
     try:
         await conn.execute('SELECT pg_advisory_lock(871228)')
         try:
+            await check_database_holdouts(conn, prepared, agent, region)
             if await conn.fetchval('SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)', PLATFORM):
                 raise ValueError('Reconcile the previous training job before submitting another')
             repo = f'{org}/tervory-own-zenas-za' if agent == 'zenas' else f'{org}/tervory-squad-{uuid.uuid4().hex}'
