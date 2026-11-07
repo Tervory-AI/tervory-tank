@@ -11,6 +11,11 @@ import engine_runtime
 
 def configure(config):
     config = deepcopy(config)
+    # DECISION only an explicit shared C1 setting initializes Redis caching.
+    settings = config.setdefault('litellm_settings', {})
+    settings['cache'] = os.environ.get('ENGINE_C1_ENABLED') == '1'
+    if not settings['cache']:
+        settings.pop('cache_params', None)
     rows = []
     for row in config.get('model_list', []):
         name = row['model_name']

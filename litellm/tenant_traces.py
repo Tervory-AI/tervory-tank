@@ -2,9 +2,10 @@
 import engine_runtime
 from litellm.integrations.custom_logger import CustomLogger
 from trace_sink import TraceSink
+from response_cache import ResponseCacheMixin
 
 
-class TenantLangfuseCallback(CustomLogger):
+class TenantLangfuseCallback(ResponseCacheMixin, CustomLogger):
     def __init__(self):
         super().__init__()
         self.sink = TraceSink()
