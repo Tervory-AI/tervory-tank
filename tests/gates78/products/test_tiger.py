@@ -96,6 +96,11 @@ async def test_declared_heartbeat_only_and_personal_owner(tiger_system):
     with pytest.raises(ValueError):
         await client.remember(s.memory.tenant, 'placeholder-unowned', 'tiger.product',
                               'placeholder-fixture', tenant_wide=True, user_id=USER_A)
+    response = await s.memory.http.post('/memories', headers={'X-Tank-Key': KEY}, json={
+        'tenant_id': s.memory.tenant, 'kind': 'tiger.product', 'text': 'placeholder-unowned',
+        'source': 'placeholder-fixture', 'meta': {'tenant_wide': True}})
+    assert response.status_code in (400, 401, 422)
+    assert await s.snapshot() == before
 
 
 @pytest.mark.asyncio
@@ -184,6 +189,11 @@ async def test_sql_candidates_before_vector_and_limit(tiger_system, monkeypatch)
     ok(await s.task())
     assert calls and any(mine['id'] in ids for ids in calls)
     assert 'placeholder-foreign' not in s.sends[0].content.decode()
+    searched = len(calls)
+    ok(await s.task(user='placeholder-empty-user'))
+    assert len(calls) == searched, 'An empty SQL scope must not search global vectors'
+    assert 'placeholder-foreign' not in s.sends[-1].content.decode()
+    assert 'placeholder-mine' not in s.sends[-1].content.decode()
 
 
 @pytest.mark.asyncio
