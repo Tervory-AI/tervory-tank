@@ -8,7 +8,6 @@ import json
 import os
 from pathlib import Path
 import sys
-import subprocess
 import runpy
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit
@@ -262,7 +261,7 @@ def test_migrations_are_never_in_startup():
 def test_protected_routing_bodies_remain_unchanged():
     # C1 explicitly changes expiry and cache-layer receipts. Pin that authorized
     # cache implementation; the real RLS and cross-user tests remain mandatory.
-    baseline = subprocess.check_output(["git", "show", "bf52e1886:tank/main.py"], cwd=ROOT, text=True)
+    baseline = (ROOT / 'tests/tenant_rls/cache.pinned').read_text()
     before = {n.name: n for n in ast.parse(baseline).body if isinstance(n, ast.AsyncFunctionDef)}
     after = {n.name: n for n in ast.parse((ROOT / "tank/main.py").read_text()).body if isinstance(n, ast.AsyncFunctionDef)}
     for name in ("_cache_read", "_cache_write"):
