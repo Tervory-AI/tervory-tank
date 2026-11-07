@@ -19,12 +19,14 @@ class MemoryClient:
         api_key: str | None = None,
         agent: str | None = None,
         http: httpx.AsyncClient | None = None,
+        *, user_id: str | None = None,
     ) -> None:
         configured = base_url if base_url is not None else os.environ.get("HERMES_URL", "")
         self._base = (configured or "http://hermes:8000").rstrip("/")
         self._api_key = api_key if api_key is not None else os.environ.get("TANK_KEY", "")
         self._agent = agent if agent is not None else os.environ.get("AGENT_NAME", "")
         self._http = http
+        self._user_id = user_id
 
     def __repr__(self) -> str:
         return f"MemoryClient(agent={self._agent!r})"
@@ -40,6 +42,8 @@ class MemoryClient:
         user_id must come from the verified signed-in actor, never a request body.
         """
         from uuid import UUID
+        if user_id is None and not tenant_wide:
+            user_id = self._user_id
         identity = {"id": str(UUID(record_id))} if record_id is not None else {}
         # Existing service heartbeats have no human actor. Hermes still validates
         # the agent-specific type declaration; this is not an authorization flag.
@@ -85,6 +89,7 @@ class MemoryClient:
         limit: int | None = None,
         tier: str = 'client',
     ) -> list[dict[str, Any]]:
+        user_id = self._user_id if user_id is None else user_id
         if tier not in ('client', 'platform'):
             raise ValueError('Reference corpora use their registered read-only endpoint')
         body: dict[str, Any] = {"tenant_id": str(tenant_id), "query": query}
@@ -110,6 +115,7 @@ class MemoryClient:
         """SQL listing only; never performs recall or an embedding search."""
         from uuid import UUID
         from urllib.parse import urlencode
+        user_id = self._user_id if user_id is None else user_id
         if tier not in {"client", "platform"}:
             raise ValueError("invalid memory tier")
         rows = []
@@ -129,6 +135,7 @@ class MemoryClient:
     async def forget(self, memory_id: str, tenant_id: str, *, user_id: str | None = None) -> None:
         from uuid import UUID
         from urllib.parse import urlencode
+        user_id = self._user_id if user_id is None else user_id
         params = {"tenant_id": str(UUID(tenant_id))}
         if user_id is not None:
             params["user_id"] = user_id

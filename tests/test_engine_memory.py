@@ -98,3 +98,19 @@ async def test_correction_changes_next_local_answer_only_for_its_tenant(remember
     assert foreign.engine['memory_hits'] == 0
     rows = await b.memories.list('tank', str(b.tenants[1]), 'client')
     assert 'Berlin' not in json.dumps(rows) and 'Paris' not in json.dumps(rows)
+
+
+@pytest.mark.asyncio
+async def test_engine_corridor_uses_the_same_sql_user_wall(remembered):
+    b = remembered
+    tenant = str(b.tenants[0])
+    await b.memories.save('tank', tenant, 'placeholder private A', [], meta={'user_id': 'placeholder-user-a'})
+    await b.memories.save('tank', tenant, 'placeholder private B', [], meta={'user_id': 'placeholder-user-b'})
+    for user, expected in ((None, []), ('placeholder-user-a', ['placeholder private A']),
+                           ('placeholder-user-b', ['placeholder private B'])):
+        body = {'tenant_id': tenant, 'task_type': 'engine.answer', 'query': 'placeholder query'}
+        if user:
+            body['user_id'] = user
+        response = await b.memory_client.post('/engine/recall', json=body)
+        assert response.status_code == 200
+        assert [row['claim'] for row in response.json()['memories']] == expected

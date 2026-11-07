@@ -4,8 +4,9 @@
 TENANT_WIDE_KINDS: dict[str, frozenset[str]] = {
     "opli": frozenset({"opli.repo_map", "opli.convention"}),
     "trigger": frozenset(),
-    "tisan": frozenset({"heartbeat"}),
+    "tisan": frozenset({"heartbeat", "tisan.brand"}),
     **{agent: frozenset({"heartbeat"}) for agent in ("template", "base", "tiger", "market_lab", "zenas", "radix", "rig")},
+    "market_lab": frozenset({"heartbeat", "warning_pattern"}),
     "tank": frozenset({"engine.outcome"}),
 }
 # Internal maintenance can inspect rows without impersonating an end user.

@@ -13,6 +13,7 @@ from hermes.records import ClaimTooLong
 class Recall(BaseModel):
     model_config = ConfigDict(extra='forbid')
     tenant_id: uuid.UUID
+    user_id: str | None = Field(default=None, min_length=1, max_length=200)
     task_type: str = Field(min_length=1, max_length=200)
     query: str = Field(min_length=1, max_length=2000)
 
@@ -20,6 +21,7 @@ class Recall(BaseModel):
 class Outcome(BaseModel):
     model_config = ConfigDict(extra='forbid')
     tenant_id: uuid.UUID
+    user_id: str | None = Field(default=None, min_length=1, max_length=200)
     ledger_id: uuid.UUID
 
 
@@ -37,7 +39,7 @@ def register(app, records):
     @app.post('/engine/recall')
     async def recall(body: Recall, x_tank_key: str = Header(default='')):
         store = ready(x_tank_key)
-        rows = await store.recall('tank', str(body.tenant_id), body.query, None, 32, 'client')
+        rows = await store.recall('tank', str(body.tenant_id), body.query, None, 32, 'client', user_id=body.user_id)
         rows = [row for row in rows if row.get('tenant_id') == str(body.tenant_id)
                 and (row.get('kind') != 'engine.outcome' or row.get('meta', {}).get('task_type') == body.task_type)]
         rows.sort(key=lambda row: (row.get('kind') != 'engine.outcome', row.get('updated_at', row.get('created_at', ''))), reverse=True)
@@ -57,13 +59,13 @@ def register(app, records):
         messages = json.loads(row['messages']) if isinstance(row['messages'], str) else row['messages']
         question = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
         claim = 'Request excerpt:\n' + question[:1500] + '\nOutcome excerpt:\n' + row['content'][:3000]
-        identity = uuid.uuid5(body.tenant_id, hashlib.sha256((row['task_type'] + claim).encode()).hexdigest())
+        identity = uuid.uuid5(body.tenant_id, hashlib.sha256((row['task_type'] + (body.user_id or '') + claim).encode()).hexdigest())
         existing = await store.get('tank', str(body.tenant_id), str(identity))
         if existing is not None:
             return {'id': str(identity), 'remembered': True}
         args = ('tank', str(body.tenant_id), claim, ['urn:tervory:ledger:' + str(body.ledger_id)])
         kwargs = dict(row_id=str(identity), kind='engine.outcome', confidence=.5,
-                      meta={'task_type': row['task_type'], 'automatic': True})
+                      meta={'task_type': row['task_type'], 'automatic': True, **({'user_id': body.user_id} if body.user_id else {})})
         try:
             await store.save(*args, **kwargs)
         except ClaimTooLong:
