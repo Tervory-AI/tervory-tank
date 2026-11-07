@@ -75,9 +75,8 @@ def refuse_scope_widen(actor: SignedInActor, *, body_tenant_id: UUID | None = No
 async def lifespan(app):
     app.state.pool = None
     app.state.memory = None
-    from trigger.trigger_brain import brain_enabled, brain_url
+    from trigger.trigger_brain import brain_enabled
     app.state.brain_enabled = brain_enabled()
-    app.state.brain_url = brain_url()
     app.state.missing_settings = [name for name in ("DATABASE_URL", "TANK_KEY") if not os.environ.get(name)]
     if app.state.missing_settings:
         yield
@@ -92,7 +91,7 @@ async def lifespan(app):
         resources.push_async_callback(app.state.http.aclose)
         app.state.tank = TankClient("http://tank:8000", os.environ.get("TANK_KEY", ""), "trigger", app.state.http)
         from chassis.memory import MemoryClient
-        from trigger.trigger_brain import brain_enabled, brain_url
+        from trigger.trigger_brain import brain_enabled
         # Hermes only (HERMES_URL). Never Tank /v1/memory. The room's TANK_KEY is
         # the agent key injected from TANK_KEY_TRIGGER in compose — not the
         # Workspace shared key, which Hermes refuses for writes.
@@ -106,7 +105,6 @@ async def lifespan(app):
             http=app.state.http,
         )
         app.state.brain_enabled = brain_enabled()
-        app.state.brain_url = brain_url()
         yield
 
 

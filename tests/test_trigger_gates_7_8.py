@@ -33,7 +33,7 @@ from trigger.gates_memory import (
     summarise_recall,
     task_input_fingerprint,
 )
-from trigger_brain import ask_brain_tasks, brain_enabled, brain_then_route, brain_url
+from trigger_brain import brain_enabled, brain_then_route
 
 
 FIXED_COST = {"cost_usd": 0.05, "tokens_in": 10, "tokens_out": 3}
@@ -335,9 +335,9 @@ def test_apply_corrections_and_secret_refusal():
         build_memory_text(summary="leak api_key=should-fail")
 
 
-def test_brain_switch_defaults_on_and_url():
-    assert brain_enabled() is True
-    assert brain_url().endswith(":8001") or "trigger-brain" in brain_url()
+def test_direct_brain_remains_unavailable_even_with_switch(monkeypatch):
+    monkeypatch.setenv("TRIGGER_BRAIN_ENABLED", "true")
+    assert brain_enabled() is False
 
 
 @pytest.mark.asyncio
@@ -408,73 +408,35 @@ def test_categories_from_memories_parses_markers():
 
 
 @pytest.mark.asyncio
-async def test_brain_then_route_free_first_then_tasks_then_tank():
-    calls = {"health": 0, "tasks": 0, "route": 0}
+async def test_memory_route_uses_only_tank_even_with_brain_switch(monkeypatch):
+    monkeypatch.setenv("TRIGGER_BRAIN_ENABLED", "true")
+    calls = []
+    tenant = str(uuid4())
+    messages = [{"role": "user", "content": "placeholder draft"}]
 
-    class FakeHTTP:
-        async def get(self, url, params=None):
-            calls["health"] += 1
-            class Resp:
-                status_code = 200
-                def raise_for_status(self):
-                    return None
-                def json(self):
-                    return {"ok": True, "room": "trigger"}
-            return Resp()
+    class NoDirectHTTP:
+        async def get(self, *args, **kwargs):
+            raise AssertionError("Product must not call a brain directly")
 
-        async def post(self, url, json=None):
-            calls["tasks"] += 1
-            class Resp:
-                status_code = 404  # standby: no /tasks
-                def raise_for_status(self):
-                    raise AssertionError("standby should not raise_for_status on 404 path")
-                def json(self):
-                    return {}
-            return Resp()
+        async def post(self, *args, **kwargs):
+            raise AssertionError("Product must not submit a second model task")
 
     class FakeTank:
-        async def route(self, tenant_id, task_type, messages):
-            calls["route"] += 1
-            return {
-                "content": "draft-from-tank",
-                "ledger_id": "led-1",
-                "cost_usd": 0.05,
-                "tokens_in": 10,
-                "tokens_out": 3,
-                "model": "fake",
-                "baseline_cost_usd": 0.05,
-            }
+        async def route(self, tenant_id, task_type, request_messages):
+            calls.append((tenant_id, task_type, request_messages))
+            return {"content": "draft-from-tank", "ledger_id": "placeholder-ledger",
+                    "cost_usd": 0.05, "baseline_cost_usd": 0.06}
 
     routed = await brain_then_route(
-        FakeHTTP(),
-        FakeTank(),
-        tenant_id=str(uuid4()),
-        task_type="trigger.write",
-        messages=[{"role": "user", "content": "hi"}],
+        NoDirectHTTP(), FakeTank(), tenant_id=tenant,
+        task_type="trigger.write", messages=messages,
     )
-    assert calls["health"] == 1 and calls["tasks"] == 1 and calls["route"] == 1
+    assert calls == [(tenant, "trigger.write", messages)]
     assert routed["content"] == "draft-from-tank"
-    assert routed["brain"]["free_first"] is True
-    assert routed["brain"]["code_first"] is True
-    assert routed["brain"]["tasks"]["status"] == "standby"
-    assert routed["brain"]["tasks"]["gap_filled"] is False
-
-
-@pytest.mark.asyncio
-async def test_ask_brain_tasks_standby_404():
-    class FakeHTTP:
-        async def post(self, url, json=None):
-            class Resp:
-                status_code = 404
-            return Resp()
-
-    gap = await ask_brain_tasks(
-        FakeHTTP(),
-        tenant_id=str(uuid4()),
-        task_type="trigger.write",
-        messages=[],
-    )
-    assert gap["status"] == "standby" and gap["gap_filled"] is False
+    assert routed["ledger_id"] == "placeholder-ledger"
+    assert routed["cost_usd"] == 0.05
+    assert routed["baseline_cost_usd"] == 0.06
+    assert routed["brain"] == {"enabled": False, "free_first": True, "code_first": True}
 
 
 @pytest.mark.asyncio
