@@ -162,6 +162,8 @@ def check(base: str, head: str) -> Report:
         code, path = row.split("\t", 1)
         rep.files.append(path)
         kind = code[0]
+        if path.startswith("vendor/"):
+            continue  # vendored copy of tervory-tank: checked in tervory-tank itself
         if matches(path, PROTECTED) or is_manifest(path):
             rep.unlockable.append(f"{path}: protected file {'deleted' if kind == 'D' else 'changed'}")
         if kind == "D":
