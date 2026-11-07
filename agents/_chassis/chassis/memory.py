@@ -30,29 +30,47 @@ class MemoryClient:
         return f"MemoryClient(agent={self._agent!r})"
 
     async def remember(self, tenant_id: str, text: str, kind: str, source: str, *,
+                       user_id: str | None = None,
                        evidence: list[str] | None = None, confidence: float = .5,
                        record_id: str | None = None, row_id: str | None = None,
                        last_verified: str | None = None, meta: dict | None = None,
-                       index: bool = True) -> dict[str, Any]:
+                       index: bool = True, tenant_wide: bool | None = None) -> dict[str, Any]:
+        """Write memory. Personal rows always stamp meta.user_id; tenant-wide omit it.
+
+        user_id must come from the verified signed-in actor, never a request body.
+        """
         from uuid import UUID
         identity = {"id": str(UUID(record_id))} if record_id is not None else {}
-        data = await self._send(
-            "POST",
-            "/memories",
-            {
-                **identity,
-                "tenant_id": str(tenant_id),
-                "text": text,
-                "kind": kind,
-                "source": source,
-                "evidence": evidence or [],
-                "confidence": confidence,
-                **({"id": row_id} if row_id else {}),
-                **({"last_verified": last_verified} if last_verified else {}),
-                **({"meta": meta} if meta is not None else {}),
-                **({"index": False} if not index else {}),
-            },
-        )
+        # Existing service heartbeats have no human actor. Hermes still validates
+        # the agent-specific type declaration; this is not an authorization flag.
+        if tenant_wide is None:
+            tenant_wide = kind == "heartbeat" and user_id is None
+        payload_meta = dict(meta or {})
+        if tenant_wide:
+            if user_id is not None or payload_meta.get("user_id") is not None:
+                raise ValueError("tenant-wide records carry no user_id")
+            payload_meta.pop("user_id", None)
+        else:
+            uid = (user_id or "").strip()
+            if not uid:
+                raise ValueError("user_id required for personal memory")
+            payload_meta["user_id"] = uid
+        body = {
+            **identity,
+            "tenant_id": str(tenant_id),
+            "text": text,
+            "kind": kind,
+            "source": source,
+            "evidence": evidence or [],
+            "confidence": confidence,
+            "meta": payload_meta,
+            **({"id": row_id} if row_id else {}),
+            **({"last_verified": last_verified} if last_verified else {}),
+            **({"index": False} if not index else {}),
+        }
+        if user_id and not tenant_wide:
+            body["user_id"] = str(user_id).strip()
+        data = await self._send("POST", "/memories", body)
         if not isinstance(data, dict):
             raise RuntimeError("hermes answer was not an object")
         return data
@@ -62,6 +80,7 @@ class MemoryClient:
         tenant_id: str,
         query: str,
         *,
+        user_id: str | None = None,
         kind: str | None = None,
         limit: int | None = None,
         tier: str = 'client',
@@ -75,6 +94,8 @@ class MemoryClient:
             body["kind"] = kind
         if limit is not None:
             body["limit"] = limit
+        if user_id is not None and str(user_id).strip():
+            body["user_id"] = str(user_id).strip()
         data = await self._send("POST", "/recall", body)
         if not isinstance(data, dict) or not isinstance(data.get("memories"), list):
             raise RuntimeError("hermes answer was not an object")
@@ -85,7 +106,7 @@ class MemoryClient:
             memories.append(item)
         return memories
 
-    async def records(self, tenant_id: str, *, tier: str = "client") -> list[dict[str, Any]]:
+    async def records(self, tenant_id: str, *, user_id: str | None = None, tier: str = "client") -> list[dict[str, Any]]:
         """SQL listing only; never performs recall or an embedding search."""
         from uuid import UUID
         from urllib.parse import urlencode
@@ -93,8 +114,10 @@ class MemoryClient:
             raise ValueError("invalid memory tier")
         rows = []
         for offset in range(0, 20000, 200):
-            data = await self._send("GET", "/records?" + urlencode({"tenant_id": str(UUID(tenant_id)), "tier": tier,
-                                                                    "limit": 200, "offset": offset}))
+            params = {"tenant_id": str(UUID(tenant_id)), "tier": tier, "limit": 200, "offset": offset}
+            if user_id is not None and str(user_id).strip():
+                params["user_id"] = str(user_id).strip()
+            data = await self._send("GET", "/records?" + urlencode(params))
             if not isinstance(data, dict) or not isinstance(data.get("memories"), list) or any(not isinstance(row, dict) for row in data["memories"]):
                 raise RuntimeError("hermes answer was not an object")
             page = data["memories"]
@@ -103,13 +126,19 @@ class MemoryClient:
                 return rows
         raise RuntimeError("Memory record list exceeds the limit")
 
-    async def forget(self, memory_id: str, tenant_id: str) -> None:
+    async def forget(self, memory_id: str, tenant_id: str, *, user_id: str | None = None) -> None:
         from uuid import UUID
-        await self._send("DELETE", "/memories/" + str(UUID(memory_id)) + '?tenant_id=' + str(UUID(tenant_id)))
+        from urllib.parse import urlencode
+        params = {"tenant_id": str(UUID(tenant_id))}
+        if user_id is not None:
+            params["user_id"] = user_id
+        await self._send("DELETE", "/memories/" + str(UUID(memory_id)) + "?" + urlencode(params))
 
     async def _send(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
         if not self._api_key:
             raise RuntimeError("tank key is not set")
+        if "/v1/memory" in self._base:
+            raise RuntimeError("MemoryClient must call Hermes directly; Tank /v1/memory is banned")
         headers = {"X-Tank-Key": self._api_key}
         try:
             if self._http is not None:
