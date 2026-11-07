@@ -91,11 +91,15 @@ def _load_product():
 
 
 def _actor_scope(actor) -> tuple[str, str]:
+    """Bind memory scope from the signed-in command Actor only.
+
+    identity → authorized_actor → verified_memory_actor → product require_authenticated_scope.
+    Body/header user selectors never enter this path.
+    """
+    import command as command_mod
+    tenant, user = command_mod.verified_memory_actor(actor)
     gates_memory, _ = _load_product()
-    return gates_memory.require_authenticated_scope(
-        tenant_id=getattr(actor, "tenant_id", None),
-        user_id=getattr(actor, "user_id", None),
-    )
+    return gates_memory.require_authenticated_scope(tenant_id=tenant, user_id=user)
 
 
 def _memory_client(command, actor):

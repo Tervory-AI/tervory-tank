@@ -91,8 +91,8 @@ def tool(monkeypatch, tank):
         TENANT_TOOLS=tools, FOUNDER_ONLY_TOOLS=set(), ADMIN_ONLY_TOOLS=set(),
         REQUEST_BODY_TOOLS=mod.REQUEST_BODY_TOOLS, BuildArgs=Body, dump=json.dumps,
         MAX_ACTIONS=4, Any=Any, Actor=Any, current_actor=lambda a:a, require_founder=lambda a:None)
-    functions(tank / 'command.py', ('allowed_tools', 'require_tool', 'validate_action', 'action_adapter', 'adapter_request'), globals_)
-    for name in ('allowed_tools', 'require_tool', 'validate_action', 'adapter_request'):
+    functions(tank / 'command.py', ('allowed_tools', 'require_tool', 'validate_action', 'action_adapter', 'adapter_request', 'verified_memory_actor'), globals_)
+    for name in ('allowed_tools', 'require_tool', 'validate_action', 'adapter_request', 'verified_memory_actor'):
         setattr(command, name, globals_[name])
     command.current_actor = lambda a:a
     async def identity():

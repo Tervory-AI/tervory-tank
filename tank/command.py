@@ -105,6 +105,17 @@ async def signed_in_actor(request: Request) -> Actor:
     return await authorized_actor(Actor(tenant_id, user, user in admins, tenant_admin=request.headers.get("x-tervory-role") == "org:admin"))
 
 
+def verified_memory_actor(actor: Actor) -> tuple[str, str]:
+    """Return (tenant_id, user_id) only from a signed-in Actor — never from request body.
+
+    Products bind this into MemoryClient / product assertions. Shared service keys
+    and caller-supplied body fields are not identity.
+    """
+    if actor is None or not getattr(actor, "user_id", None) or not getattr(actor, "tenant_id", None):
+        raise HTTPException(401, "Signed-in tenant and user required for memory")
+    return str(actor.tenant_id), str(actor.user_id)
+
+
 async def worker(request: Request) -> None:
     if not key_matches(request.headers.get("x-tank-key", ""), os.environ.get("TANK_KEY_WORKERS", "")):
         raise HTTPException(401, "Worker authentication required")

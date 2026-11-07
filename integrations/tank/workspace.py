@@ -314,8 +314,11 @@ async def _run_task_create_with_memory(actor, args, main_mod):
         return {**result, 'memory_bracket': _memory_unavailable_bracket(paid, reason=str(exc))}
 
     try:
+        # Signed-in Actor only; never request body/meta/header identity.
+        import command as command_mod
+        tenant, user = command_mod.verified_memory_actor(actor)
         tenant, user = gates_memory.require_authenticated_scope(
-            tenant_id=actor.tenant_id, user_id=actor.user_id)
+            tenant_id=tenant, user_id=user)
     except gates_memory.MemoryScopeError as exc:
         raise HTTPException(401, str(exc)) from exc
 
@@ -413,8 +416,11 @@ async def _run_chat_with_memory(actor, args, main_mod):
         return {**route_result, 'memory_bracket': _memory_unavailable_bracket(paid, reason=str(exc))}
 
     try:
+        # Signed-in Actor only; never request body/meta/header identity.
+        import command as command_mod
+        tenant, user = command_mod.verified_memory_actor(actor)
         tenant, user = gates_memory.require_authenticated_scope(
-            tenant_id=actor.tenant_id, user_id=actor.user_id)
+            tenant_id=tenant, user_id=user)
     except gates_memory.MemoryScopeError as exc:
         raise HTTPException(401, str(exc)) from exc
 

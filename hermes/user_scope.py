@@ -5,6 +5,8 @@ TENANT_WIDE_KINDS: dict[str, frozenset[str]] = {
     "opli": frozenset({"opli.repo_map", "opli.convention"}),
     "trigger": frozenset(),
     "workspace": frozenset({"workspace.project"}),
+    # Autumbra standing blocks are tenant-shared facts, never a personal row.
+    "ghost": frozenset({"blocked_address"}),
     "tisan": frozenset({"heartbeat", "tisan.brand"}),
     **{agent: frozenset({"heartbeat"}) for agent in ("template", "base", "tiger", "market_lab", "zenas", "radix", "rig")},
     "market_lab": frozenset({"heartbeat", "warning_pattern"}),

@@ -33,9 +33,12 @@ class HermesEdge:
     def __init__(self) -> None:
         self.rows: list[dict] = []
 
-    async def request(self, method, url, json=None, headers=None):
+    async def request(self, method, url, json=None, headers=None, content=None):
         from urllib.parse import parse_qs, urlparse
 
+        if content is not None:
+            import json as json_codec
+            json = json_codec.loads(content)
         path = url.split("http://hermes:8000", 1)[-1]
         if (method == "POST" and path.endswith("/memories")) or (method == "PATCH" and "/memories/" in path):
             body = dict(json or {})

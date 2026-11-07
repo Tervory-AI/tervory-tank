@@ -151,13 +151,44 @@ class MemoryClient:
             raise RuntimeError("tank key is not set")
         if "/v1/memory" in self._base:
             raise RuntimeError("MemoryClient must call Hermes directly; Tank /v1/memory is banned")
+        import json
+        from urllib.parse import parse_qs, urlsplit
+        try:
+            from chassis.user_assertion import bind_personal_headers
+        except ImportError:
+            from command_tools._user_assertion import bind_personal_headers
+
+        raw = json.dumps(body, separators=(",", ":"), sort_keys=True).encode() if body is not None else b""
+        tenant, user = "", ""
+        if body is not None:
+            meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
+            tenant = str(body.get("tenant_id") or "")
+            user = body.get("user_id") or meta.get("user_id") or ""
+        else:
+            query = parse_qs(urlsplit(self._base + path).query)
+            tenant = (query.get("tenant_id") or [""])[0]
+            user = (query.get("user_id") or [""])[0]
         headers = {"X-Tank-Key": self._api_key}
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        if tenant and user:
+            target = httpx.URL(self._base + path).raw_path.decode("ascii")
+            headers.update(bind_personal_headers(self._api_key, method, target,
+                tenant=tenant, user=user, body=raw))
+
+        async def _do(http: httpx.AsyncClient) -> httpx.Response:
+            if body is not None:
+                return await http.request(
+                    method, self._base + path, content=raw, headers=headers
+                )
+            return await http.request(method, self._base + path, headers=headers)
+
         try:
             if self._http is not None:
-                response = await self._http.request(method, self._base + path, json=body, headers=headers)
+                response = await _do(self._http)
             else:
                 async with httpx.AsyncClient(timeout=30) as http:
-                    response = await http.request(method, self._base + path, json=body, headers=headers)
+                    response = await _do(http)
         except httpx.HTTPError:
             raise RuntimeError("hermes unreachable") from None
         if response.status_code >= 400:
