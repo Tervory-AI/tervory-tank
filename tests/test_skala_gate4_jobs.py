@@ -8,6 +8,9 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from tervor_training_fixtures import configured_base as _configured_base
+
+configured_base = _configured_base
 
 import gold
 import storage
