@@ -197,13 +197,61 @@ async def test_too_small_limit_refuses_without_spending_or_leaving_an_active_tur
 @pytest.mark.asyncio
 async def test_local_preparation_timeout_is_bounded_and_free(runtime,monkeypatch):
     runtime.load_policy=AsyncMock(return_value={'max_tokens_out':512})
+    release=asyncio.Event()
     async def waiting(*args,**kwargs):
-        await asyncio.sleep(100)
+        await release.wait()
     monkeypatch.setattr(code_limits.to_thread,'run_sync',waiting)
     monkeypatch.setattr(code_limits,'LOCAL_SECONDS',0.01)
-    with pytest.raises(HTTPException) as failure:
-        await code_limits.context(existing.TENANT,'command.code',recorded())
-    assert failure.value.status_code==503 and 'No model call' in failure.value.detail
+    try:
+        with pytest.raises(HTTPException) as failure:
+            await code_limits.context(existing.TENANT,'command.code',recorded())
+        assert failure.value.status_code==503 and 'No model call' in failure.value.detail
+        assert code_limits.LIMITER.borrowed_tokens==1
+    finally:
+        release.set()
+        await asyncio.gather(*code_limits.WORKERS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cancel_client',[False,True])
+async def test_timed_out_or_cancelled_cpu_worker_retains_its_slot(runtime,monkeypatch,cancel_client):
+    runtime.load_policy=AsyncMock(return_value={'max_tokens_out':512})
+    release=threading.Event()
+    started=asyncio.Event()
+    loop=asyncio.get_running_loop()
+    calls=[]
+    def prepare(results,limit):
+        calls.append(1)
+        loop.call_soon_threadsafe(started.set)
+        if not release.wait(5):
+            raise RuntimeError('test worker was not released')
+        return '[]',{'limit':limit}
+    monkeypatch.setattr(code_limits,'prepare',prepare)
+    monkeypatch.setattr(code_limits,'LOCAL_SECONDS',0.05)
+    task=asyncio.create_task(code_limits.context(existing.TENANT,'command.code',[]))
+    try:
+        await asyncio.wait_for(started.wait(),2)
+        if cancel_client:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            with pytest.raises(code_limits.PreparationError):
+                await task
+        assert code_limits.LIMITER.borrowed_tokens==1
+        # Repeated request deadlines cannot release the live worker's slot or
+        # leave queued CPU jobs that would execute after the client has gone.
+        for _ in range(3):
+            with pytest.raises(code_limits.PreparationError):
+                await code_limits.context(existing.TENANT,'command.code',[])
+        assert len(calls)==1 and len(code_limits.WORKERS)==1
+    finally:
+        release.set()
+        await asyncio.gather(task,*code_limits.WORKERS,return_exceptions=True)
+    assert code_limits.LIMITER.borrowed_tokens==0
+    assert not code_limits.WORKERS
+    assert await code_limits.context(existing.TENANT,'command.code',[])==('[]',{'limit':512})
+    assert len(calls)==2
 
 
 @pytest.mark.asyncio

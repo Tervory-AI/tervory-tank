@@ -11,6 +11,7 @@ from anyio import CapacityLimiter, to_thread
 
 SETTING = 'ENGINE_CODE_TOOL_LIMITS_ENABLED'
 LIMITER = CapacityLimiter(1)
+WORKERS: set[asyncio.Task] = set()
 LOCAL_SECONDS = 10
 BINARY_CONTROL = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
 ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
@@ -103,6 +104,30 @@ async def context(tenant_id, task_type, results):
     try:
         async with asyncio.timeout(LOCAL_SECONDS):
             policy = await load_policy(task_type,tenant_id)
-            return await to_thread.run_sync(prepare,results,policy.get('max_tokens_out'),limiter=LIMITER)
+            owner = object()
+            await LIMITER.acquire_on_behalf_of(owner)
+            # The request may time out or disconnect while native tokenization
+            # continues. Only that worker may release its slot. Queued requests
+            # are cancellable before creating a worker, so they cannot pile up
+            # abandoned CPU jobs behind it.
+            worker = asyncio.create_task(run_preparation(results,policy.get('max_tokens_out'),owner,LIMITER))
+            WORKERS.add(worker)
+            worker.add_done_callback(finished)
+            return await asyncio.shield(worker)
     except TimeoutError:
         raise PreparationError() from None
+
+
+async def run_preparation(results, limit, owner, limiter):
+    try:
+        return await to_thread.run_sync(prepare,results,limit)
+    finally:
+        limiter.release_on_behalf_of(owner)
+
+
+def finished(worker):
+    WORKERS.discard(worker)
+    # If the caller already received a safe timeout, consume a later local
+    # exception without logging private source or diagnostics.
+    if not worker.cancelled():
+        worker.exception()
