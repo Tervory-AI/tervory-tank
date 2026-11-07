@@ -42,7 +42,7 @@ USER_B = "placeholder-user-b"
 ATTACKER = "placeholder-attacker"
 KIND = "opli.receipt"  # personal Opli kind
 AGENT_KEY = "placeholder-product-agent-key"
-WORKSPACE_KEY = "placeholder-workspace-key"
+PLACEHOLDER_WORKSPACE_KEY = "placeholder-workspace-key"
 
 
 def _oidc_stack(monkeypatch, tenant: str, subject: str = USER_A):
@@ -53,10 +53,10 @@ def _oidc_stack(monkeypatch, tenant: str, subject: str = USER_A):
     monkeypatch.setitem(
         sys.modules,
         "main",
-        SimpleNamespace(TANK_API_KEY=WORKSPACE_KEY, box_region=lambda: "us-east"),
+        SimpleNamespace(TANK_API_KEY=PLACEHOLDER_WORKSPACE_KEY, box_region=lambda: "us-east"),
     )
     monkeypatch.setenv("TANK_KEY_TRIGGER", AGENT_KEY)
-    monkeypatch.setenv("TANK_API_KEY", WORKSPACE_KEY)
+    monkeypatch.setenv("TANK_API_KEY", PLACEHOLDER_WORKSPACE_KEY)
     provider = Provider("us-east")
     provider.claims["sub"] = subject
     install_registry(monkeypatch, [provider], {ORG: tenant})
@@ -222,7 +222,7 @@ async def test_oidc_ingress_to_hermes_full_personal_crud_list_publish(memory, mo
             )
 
     oidc_headers = {
-        "X-Tank-Key": WORKSPACE_KEY,
+        "X-Tank-Key": PLACEHOLDER_WORKSPACE_KEY,
         "X-Trigger-Signin-Token": provider.token(),
         "X-Trigger-Signin-Org": ORG,
         "X-Tervory-User": USER_A,
@@ -257,7 +257,7 @@ async def test_oidc_ingress_to_hermes_full_personal_crud_list_publish(memory, mo
         # Service key alone → no assertion → signed_user required → 401
         bare = await client.post(
             "/v1/proxy/remember",
-            headers={"X-Tank-Key": WORKSPACE_KEY},
+            headers={"X-Tank-Key": PLACEHOLDER_WORKSPACE_KEY},
             json=good,
         )
         assert bare.status_code == 401, bare.text
