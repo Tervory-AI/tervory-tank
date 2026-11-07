@@ -65,7 +65,7 @@ def test_litellm_roster_skips_offline_models_but_preserves_fallthrough(file, mon
     chains = {k: v for chain in config['litellm_settings']['fallbacks'] for k, v in chain.items()}
     assert chains['local'] == chains['local-large'] == list(engine_ladder.OPEN)
     assert config['router_settings']['model_group_alias'] == {
-        name: {'model': 'gpt-oss-small', 'hidden': True} for name in engine_runtime.LOCAL}
+        name: {'model': 'llama-small', 'hidden': True} for name in engine_runtime.LOCAL}
     assert engine_runtime.local_status() == 'local rung offline'
     monkeypatch.setenv('ENGINE_LOCAL_URL', 'http://127.0.0.1:18089')
     monkeypatch.setenv('ENGINE_LARGE_URL', 'http://127.0.0.1:18090/v1')
@@ -100,12 +100,12 @@ async def test_tank_offline_falls_through_with_receipt_and_status(boundary, monk
     async def dispatch(request):
         data = json.loads(request.content)
         calls.append(data['model'])
-        assert data['model'] == 'gpt-oss-small'
+        assert data['model'] == 'llama-small'
         return httpx.Response(200, headers={'x-litellm-response-cost': '0.001', 'x-litellm-model-group': data['model']},
             json={'choices': [{'message': {'content': 'billing'}}], 'usage': {'prompt_tokens': 40, 'completion_tokens': 2}})
     monkeypatch.setattr(b.tank.httpx, 'AsyncClient', lambda **kw: original(transport=httpx.MockTransport(dispatch), **kw))
     answer = await b.tank.run_route(req)
-    assert calls == ['gpt-oss-small'] and answer.content == 'billing' and answer.cost_usd == .001
+    assert calls == ['llama-small'] and answer.content == 'billing' and answer.cost_usd == .001
     assert answer.engine['local_status'] == 'local rung offline'
     assert answer.engine['rung'] == 'open-weight' and answer.ledger_id
     policy = await engine_ladder.select(b.tank, req, await b.tank.load_policy(req.task_type, req.tenant_id))
@@ -115,7 +115,7 @@ async def test_tank_offline_falls_through_with_receipt_and_status(boundary, monk
     assert status.status_code == 200
     assert status.json()['local_status'] == 'local rung offline'
     row = next(t for t in status.json()['tasks'] if t['task_type'] == req.task_type)
-    assert row['model'] == 'gpt-oss-small' and row['traces_url'] is None
+    assert row['model'] == 'llama-small' and row['traces_url'] is None
     assert row['local_status'] == 'local rung offline' and row['requests'] == 1
 
 
@@ -134,14 +134,14 @@ async def test_offline_judge_and_code_escalation_never_select_local(monkeypatch)
     rt.list_models = roster
     req = SimpleNamespace(tenant_id='placeholder', task_type='base.extract')
     judge = await engine_quality.calibrated_judge(rt, req, {}, 'trained-placeholder')
-    assert judge[0] == 'gpt-oss-small'
+    assert judge[0] == 'llama-small'
     async def cases(*args): return []
     async def evaluate(*args): return None
     monkeypatch.setattr(engine_ladder, 'cases', cases)
     monkeypatch.setattr(engine_ladder, 'evaluate', evaluate)
     selected = await engine_ladder.select(SimpleNamespace(list_models=roster, get_package=lambda *args: None),
         None, {'model': 'skill:base.extract@1.0.0', 'escalation_model': 'luna'})
-    assert selected['model'].startswith('skill:') and selected['escalation_model'] == 'gpt-oss-small'
+    assert selected['model'].startswith('skill:') and selected['escalation_model'] == 'llama-small'
 
 
 @pytest.mark.asyncio
@@ -160,7 +160,7 @@ async def test_unset_langfuse_host_is_noop_for_tank_and_litellm(monkeypatch, tmp
     adapter = load('offline_trace_adapter', 'litellm/tenant_traces.py')
     monkeypatch.setattr(adapter.callback.sink, 'before', forbidden)
     monkeypatch.setattr(adapter.callback.sink, 'after', forbidden)
-    data = {'model': 'gpt-oss-small', 'messages': [{'role': 'user', 'content': 'placeholder'}]}
+    data = {'model': 'llama-small', 'messages': [{'role': 'user', 'content': 'placeholder'}]}
     assert await adapter.callback.async_pre_call_hook(None, None, data, 'completion') is data
     await adapter.callback.async_log_success_event({'metadata': {'tank_trace': {}}}, {}, None, None)
     await adapter.callback.async_log_failure_event({'metadata': {'tank_trace': {}}}, {}, None, None)

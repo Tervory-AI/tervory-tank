@@ -131,12 +131,13 @@ def test_self_hosted_services_have_private_stores_no_telemetry_and_pinned_images
              json.loads((ROOT / 'litellm/langfuse-ingress.json').read_text()))
 
 
-def test_catalog_selection_is_permissive_and_cpu_fit():
+def test_catalog_selection_records_licence_and_cpu_fit():
+    # Founder, 7 Nov 2026: counsel decides licences; every selected seat records its licence.
     rows = engine_models.validate()
     for name in engine_models.SELECTED.values():
-        assert rows[name]['licence'] in {'Apache-2.0', 'MIT'}
+        assert rows[name]['licence'].strip()
     assert all(rows[engine_models.SELECTED[name]]['runs_on_Boston_CPU'] == 'yes' for name in engine_models.LOCAL)
-    assert not any('Cohere' in name for name in rows)
+    assert all('licence' in row for row in rows.values())
 
 
 @pytest.mark.asyncio
