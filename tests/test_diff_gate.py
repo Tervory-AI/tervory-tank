@@ -100,6 +100,18 @@ def test_rls_lines_in_nested_schema_need_the_founder(repo):
     assert code == 0
 
 
+def test_policy_table_columns_pass_but_access_rules_need_the_founder(repo):
+    base = "CREATE TABLE IF NOT EXISTS tank.policy (task_type text);\n"
+    rep, code = _run(repo, {"tank/schema.sql": base},
+                     {"tank/schema.sql": base + "-- Routing policy TTL per task type.\n"
+                      "ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS cache_ttl_seconds integer;\n"})
+    assert code == 0 and not rep.unlockable
+    for line in ("ALTER TABLE tank.policy ENABLE ROW LEVEL SECURITY;", "DROP POLICY p ON tank.policy;",
+                 "  GRANT SELECT ON tank.policy TO app;", "REVOKE ALL ON tank.policy FROM app;"):
+        rep, code = _run(repo, {"tank/schema.sql": base}, {"tank/schema.sql": base + line + "\n"})
+        assert code == 1 and rep.unlockable, line
+
+
 def test_nested_compose_risks_block_but_plain_edits_pass(repo):
     rep, code = _run(repo, {"agents/zenas/docker-compose.za.yml": "services:\n  a:\n    image: x\n"},
                      {"agents/zenas/docker-compose.za.yml": "services:\n  a:\n    image: x\n    privileged: true\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n"})
