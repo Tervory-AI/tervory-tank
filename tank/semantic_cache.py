@@ -6,6 +6,7 @@ A miss never changes today's answer. Only explicit founder approval plus current
 from __future__ import annotations
 
 import asyncio
+import embedding_cache
 from dataclasses import dataclass
 import hashlib
 import json
@@ -132,7 +133,7 @@ async def lookup(rt: Any, req: Any, policy: dict, identity: tuple, messages: lis
     text, guard = guarded
     probe = Probe(guard=guard)
     try:
-        probe.vector = await asyncio.to_thread(_encoder.embed, text)
+        probe.vector = await asyncio.to_thread(embedding_cache.scoped_embed, _encoder.embed, text, req.tenant_id)
         points = await index().search(req.tenant_id, probe.vector, scope(req, rt.box_region(), identity, guard))
         for point in points:
             payload = point.payload or {}

@@ -19,6 +19,11 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+try:
+    from hermes import embedding_cache
+except ImportError:
+    from tank import embedding_cache
+
 from hermes.auth import agent_key_hashes, identify
 from hermes.embeddings import Embedder
 from hermes.records import ClaimTooLong
@@ -309,7 +314,7 @@ def _remember(
     source: str,
     meta: dict[str, Any],
 ) -> dict[str, Any]:
-    vector = embedder.embed(text)
+    vector = embedding_cache.scoped_embed(embedder.embed, text, tenant_id)
     nearest = store.search(name, vector, tenant_id=tenant_id, kind=kind, limit=1, wide_kinds=wide_kinds(name.removeprefix("mem_")))
     if nearest and nearest[0].score >= DEDUPE_SCORE:
         current = nearest[0].memory
@@ -357,7 +362,7 @@ def _recall(
     kind: str | None,
     limit: int,
 ) -> list[Hit]:
-    vector = embedder.embed(query)
+    vector = embedding_cache.scoped_embed(embedder.embed, query, tenant_id)
     return store.search(name, vector, tenant_id=tenant_id, kind=kind, limit=limit, wide_kinds=wide_kinds(name.removeprefix("mem_")))
 
 

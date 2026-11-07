@@ -74,6 +74,7 @@ services:
       TANK_REGION: za
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
+      ENGINE_C4_ENABLED: ${ENGINE_C4_ENABLED:-}
       TANK_API_KEY: ${TANK_API_KEY}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
@@ -220,6 +221,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
+      ENGINE_C4_ENABLED: ${ENGINE_C4_ENABLED:-}
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}

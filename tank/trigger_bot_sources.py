@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import embedding_cache
 import json
 import logging
 import re
@@ -108,7 +109,7 @@ class BotIndex(VectorIndex):
         from qdrant_client.models import PointStruct
         name = 'trigger_bot_' + tenant.hex
         await self.ensure(name)
-        vector = await asyncio.to_thread(_encoder.embed, text)
+        vector = await asyncio.to_thread(embedding_cache.scoped_embed, _encoder.embed, text, tenant)
         await self.client.upsert(name, points=[PointStruct(id=str(point), vector=vector, payload={
             'tenant_id': str(tenant), 'region': region, 'encoder_id': ENCODER_ID})], wait=True)
 
@@ -117,7 +118,7 @@ class BotIndex(VectorIndex):
         name = 'trigger_bot_' + tenant.hex
         if not await self.client.collection_exists(name):
             return []
-        vector = await asyncio.to_thread(_encoder.embed, text)
+        vector = await asyncio.to_thread(embedding_cache.scoped_embed, _encoder.embed, text, tenant)
         scope = {'tenant_id': str(tenant), 'region': region, 'encoder_id': ENCODER_ID}
         response = await self.client.query_points(collection_name=name, query=vector, limit=24,
             score_threshold=0.65, with_payload=True,

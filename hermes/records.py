@@ -10,6 +10,11 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+try:
+    from hermes import embedding_cache
+except ImportError:
+    from tank import embedding_cache
+
 from hermes.user_scope import INTERNAL, visible, wide_kinds
 from hermes.record_schema import PLATFORM_TENANT, schema_for, schema_sql
 
@@ -297,7 +302,7 @@ class Records:
             allowed = [str(row["id"]) for row in rows]
             if not allowed:
                 return []
-        vector = await asyncio.to_thread(self.encoder.embed, query)
+        vector = await asyncio.to_thread(embedding_cache.scoped_embed, self.encoder.embed, query, owner)
         hits = await asyncio.to_thread(
             self.index.search, agent, owner, tier, vector, self.model, kind, limit,
             **({"allowed_ids": allowed} if allowed is not None else {}),
@@ -379,7 +384,7 @@ class Records:
                             self.index.delete, agent, str(row_id), model, str(tenant)
                         )
                 elif model == self.model:
-                    vector = await asyncio.to_thread(self.encoder.embed, row["claim"])
+                    vector = await asyncio.to_thread(embedding_cache.scoped_embed, self.encoder.embed, row["claim"], tenant)
                     await asyncio.to_thread(self.index.upsert, dict(row), vector, model)
                     await conn.execute(
                         _sql(
