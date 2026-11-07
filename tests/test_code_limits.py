@@ -254,3 +254,16 @@ def test_middle_diagnostic_is_kept_before_success_noise():
     value,stats=code_limits.render([row],256,input_encoding())
     assert error in json.loads(value)[0]['output']
     assert stats['tokens_after']<=256 and stats['summarized']
+
+
+@pytest.mark.asyncio
+async def test_policy_lookup_shares_the_preparation_deadline(runtime,monkeypatch):
+    async def stalled(*args):
+        await asyncio.sleep(100)
+    runtime.load_policy=AsyncMock(side_effect=stalled)
+    worker=AsyncMock(side_effect=AssertionError('a timed-out policy cannot start preparation'))
+    monkeypatch.setattr(code_limits.to_thread,'run_sync',worker)
+    monkeypatch.setattr(code_limits,'LOCAL_SECONDS',0.01)
+    with pytest.raises(code_limits.PreparationError):
+        await code_limits.context(existing.TENANT,'command.code',recorded())
+    worker.assert_not_awaited()

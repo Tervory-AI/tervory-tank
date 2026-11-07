@@ -96,9 +96,9 @@ async def context(tenant_id, task_type, results):
     from main import load_policy
     # Reuse the existing tenant override and task policy; no model is selected.
     # Tank still enforces min(request.max_tokens, policy.max_tokens_out).
-    policy = await load_policy(task_type,tenant_id)
     try:
         async with asyncio.timeout(LOCAL_SECONDS):
+            policy = await load_policy(task_type,tenant_id)
             return await to_thread.run_sync(prepare,results,policy.get('max_tokens_out'),limiter=LIMITER)
     except TimeoutError:
         raise PreparationError() from None
