@@ -58,6 +58,11 @@ async def test_bundled_job_uses_private_identity_cap_and_exact_billing_receipt(d
     assert preview['model_id'] == f'tervor-lite-1.0-{product}-20261107'
     assert jobs == [] and uploaded == {}
     args.submit, args.dry_run = True, False
+    args.total_cap = Decimal('1')
+    with pytest.raises(ValueError, match='Cumulative'):
+        await run.run(args)
+    assert jobs == [] and uploaded == {}
+    args.total_cap = Decimal('3')
     result = await run.run(args)
     assert result['cost_usd'] == Decimal('2.000040') and len(jobs) == 1
     assert json.loads(uploaded['training-bundle.json']) == data
@@ -73,6 +78,7 @@ async def test_bundled_job_uses_private_identity_cap_and_exact_billing_receipt(d
         assert await conn.fetchval('SELECT model FROM tank.ledger') == model_id
         assert await conn.fetchval('SELECT count(*) FROM tank.ledger') == 1
         assert await conn.fetch('SELECT * FROM tank.policy ORDER BY task_type,tenant_id') == before
+    args.total_cap = Decimal('5')
     with pytest.raises(ValueError, match='already has a job'):
         await run.run(args)
     assert len(jobs) == 1

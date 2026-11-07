@@ -259,6 +259,12 @@ async def run(args):
         try:
             if await conn.fetchval('SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)', PLATFORM):
                 raise ValueError('Reconcile the previous training job before submitting another')
+            if getattr(args, 'total_cap', None) is not None:
+                total = Decimal(str(args.total_cap))
+                spent = await conn.fetchval('''SELECT coalesce(sum(coalesce(actual_usd,estimated_usd)),0)
+                    FROM tank.training_jobs WHERE tenant_id=$1''', PLATFORM)
+                if not total.is_finite() or total <= 0 or spent + amount > total:
+                    raise ValueError('Cumulative training cost exceeds the explicit total cap')
             repo = f'{org}/tervory-own-zenas-za' if agent == 'zenas' else f'{org}/tervory-squad-{uuid.uuid4().hex}'
             if agent == 'tiger':
                 repo = f'{org}/tervory-own-tiger-{uuid.uuid4().hex}'
@@ -303,6 +309,7 @@ async def run(args):
 def cli(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--minutes', type=int, default=120)
+    parser.add_argument('--total-cap', type=Decimal, help='Optional cumulative platform training cap, including all prior bills')
     parser.add_argument('--day', default='')
     parser.add_argument('--submit', action='store_true')
     parser.add_argument('--dry-run', action='store_true')
