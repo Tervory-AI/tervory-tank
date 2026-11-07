@@ -58,8 +58,8 @@ async def test_shadow_source_joins_receipts_and_transcripts_under_same_tenant(da
             receipt = await conn.fetchval('''INSERT INTO tank.ledger
                 (tenant_id,region,agent,task_type,model,priority,cost_usd,outcome)
                 VALUES ($1,'us-east','base','base.extract','teacher','batch',0,'delivered') RETURNING id''', scope)
-            await conn.execute('''INSERT INTO tank.transcripts(ledger_id,tenant_id,messages,content)
-                VALUES ($1,$2,$3::jsonb,'checked answer')''', receipt, scope,
+            await conn.execute('''INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content)
+                VALUES ($1,$2,'base.extract',$3::jsonb,'checked answer')''', receipt, scope,
                 json.dumps([{'role': 'user', 'content': 'fixture input'}]))
             await conn.execute('''INSERT INTO tank.shadow
                 (ledger_id,tenant_id,task_type,primary_model,candidate_model,primary_content,candidate_content,agreement,method)
