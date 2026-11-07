@@ -80,6 +80,17 @@ async def gate78_memory(gate78_database, sql_memory, monkeypatch):
         # Keep real agent kind/key configuration; point only its SQL namespace at
         # the unique, already-migrated schema owned and removed by sql_memory.
         records._schemas[agent] = m.records.schema(m.agent)
+        # DECISION Keep the production agent value as well as its SQL invariant.
+        # The index worker selects its collection from the stored row's agent.
+        # sql_memory created this empty table for memtest_*, so aliasing only the
+        # namespace makes every positive product recall search another collection.
+        # Both names come from validated Records schemas / the product allowlist;
+        # change the test-only default and CHECK atomically, retaining enforcement.
+        schema = records.schema(agent)
+        async with m.pool.acquire() as conn, conn.transaction():
+            await conn.execute(f"ALTER TABLE {schema}.memory_records DROP CONSTRAINT memory_records_agent_check")
+            await conn.execute(f"ALTER TABLE {schema}.memory_records ALTER COLUMN agent SET DEFAULT '{agent}'")
+            await conn.execute(f"ALTER TABLE {schema}.memory_records ADD CONSTRAINT memory_records_agent_check CHECK (agent = '{agent}')")
         key = "placeholder-gate78-product-key"
         monkeypatch.setenv("TANK_KEY_" + agent.upper(), key)
         app = create_app(InMemoryStore(), m.records.encoder, records=records)
