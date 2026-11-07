@@ -4,6 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from command import Actor, identity, require_founder
+from tervor_serving import Serving
 
 
 class Candidate(BaseModel):
@@ -12,6 +13,7 @@ class Candidate(BaseModel):
     task_type: str = Field(min_length=1, max_length=200)
     model: str = Field(min_length=1, max_length=200)
     checkpoint: str = Field(pattern=r'^[a-f0-9]{64}$')
+    serving: Serving | None = None
 
 
 def build_router(rt):
@@ -25,6 +27,9 @@ def build_router(rt):
     @router.post('/candidates')
     async def register(body: Candidate, actor: Actor = Depends(identity)):
         require_founder(actor)
+        if body.model.startswith('tervor-'):
+            import tervor_serving
+            return await tervor_serving.register(rt, body)
         roster = {row['name']: row for row in await rt.list_models()}
         if body.model not in roster or rt.is_build_only_model(body.model):
             raise HTTPException(422, 'Candidate must be on the serving roster')
