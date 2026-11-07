@@ -1,0 +1,54 @@
+# Diff gate (founder, 6 Nov 2026): blocks suppressions, eval/exec, wildcard CORS,
+# Pydantic extra="allow", risky container settings, protected-file changes and weakened
+# tests before a PR can merge. Its own workflow so applying the founder-unlock label
+# re-runs only this check, never the full suite. Make "diff-gate" a required check.
+name: diff-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: diff-gate-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  diff-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Merge queue
+        if: github.event_name == 'merge_group'
+        run: echo "Checked on the pull request; nothing to do in the queue."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+      - name: Founder unlock (only when the founder applied the label)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          FOUNDER: ${{ vars.FOUNDER_LOGIN || 'zenascapetown-code' }}
+        run: |
+          has=$(gh api "repos/$REPO/issues/$PR/labels" --jq '[.[].name] | index("founder-unlock") != null')
+          who=$(gh api --paginate "repos/$REPO/issues/$PR/events?per_page=100" \
+            --jq '.[] | select(.event == "labeled" and .label.name == "founder-unlock") | .actor.login' | tail -n1)
+          if [ "$has" = "true" ] && [ "$who" = "$FOUNDER" ]; then
+            echo "FOUNDER_UNLOCK=1" >> "$GITHUB_ENV"; echo "Unlocked by the founder."
+          elif [ "$has" = "true" ]; then
+            echo "::warning::founder-unlock was applied by '$who', not the founder; ignored."
+          fi
+      - name: Check the diff
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/scripts/diff_gate.py "$(git merge-base "$BASE" "$HEAD")" "$HEAD"
