@@ -3,7 +3,7 @@ from trigger_signin_fakes import set_founders, native_provider, ORG
 import json
 import os
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
 import httpx
@@ -11,17 +11,19 @@ import pytest
 import pytest_asyncio
 from fastapi import HTTPException
 
-os.environ.setdefault("DATABASE_URL", "postgresql://placeholder@127.0.0.1/placeholder")
-os.environ.setdefault("LITELLM_MASTER_KEY", "placeholder")
-os.environ.setdefault("TANK_API_KEY", "placeholder")
-
-import bench
-import command
-import main
-import routing_data
-import skala_revalidation
-from gold import PLATFORM_TENANT
-from test_train1 import database as database
+# Import-time fixtures must not become secrets for unrelated tests collected in
+# this worker: Zenas correctly redacts every configured secret from diagnostics.
+with patch.dict(os.environ, {name: os.environ.get(name, value) for name, value in {
+    "DATABASE_URL": "postgresql://placeholder@127.0.0.1/placeholder",
+    "LITELLM_MASTER_KEY": "placeholder", "TANK_API_KEY": "placeholder",
+}.items()}):
+    import bench
+    import command
+    import main
+    import routing_data
+    import skala_revalidation
+    from gold import PLATFORM_TENANT
+    from test_train1 import database as database
 
 TASK = "routing.placeholder"
 TENANT = UUID("00000000-0000-0000-0000-000000000081")
