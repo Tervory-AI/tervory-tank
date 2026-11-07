@@ -199,7 +199,7 @@ async def tiger_system(gate78_memory, gate78_database, monkeypatch):
             opened.append(app.state.http)
         system.restart_nonces()
         system.http = OfflineClient(base_url='http://placeholder-tank')
-        system.direct = OfflineClient(base_url='http://agent-tiger:8000')
+        system.direct = OfflineClient(base_url='http://agent-tiger:8000', headers={'X-Tank-Key': KEY})
         opened.extend([system.http, system.direct])
         yield system
     finally:
