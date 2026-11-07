@@ -120,7 +120,7 @@ async def product_api(proposed, runtime, monkeypatch):
         # Chassis MemoryClient; only Hermes HTTP is faked at the edge.
         memory = MemoryClient(
             base_url="http://hermes:8000",
-            api_key="opli-fixture-agent-key-not-real",
+            api_key="opli-placeholder-agent-key",
             agent="opli",
             http=edge,
         )

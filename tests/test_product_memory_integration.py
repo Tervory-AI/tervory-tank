@@ -156,6 +156,7 @@ async def test_default_off_keeps_plain_opli_task_without_memory(monkeypatch):
         response = await http.post('/opli/code-turn', json={'thread_id': str(uuid4()), 'text': 'placeholder task'})
     assert response.status_code == 200 and response.json() == {'answer': 'placeholder plain result'}
     assert original.await_count == 1
+    monkeypatch.syspath_prepend(str(ROOT / 'agents'))
     from trigger.trigger_brain import brain_enabled
     from trigger.gates_memory import memory_enabled
     assert not brain_enabled() and not memory_enabled()

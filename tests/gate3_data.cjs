@@ -83,7 +83,7 @@ const post = (body, route = '/api/tasks') => new Request('https://app.tervory.co
 async function main() {
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  Object.assign(process.env,{TANK_URL:origin,TANK_API_KEY:key,TANK_REGION:'us-east',WORKSPACE_SUBMISSIONS_DIR:temporary});
+  Object.assign(process.env,{TANK_URL:origin,TANK_API_KEY:'placeholder',TANK_REGION:'us-east',WORKSPACE_SUBMISSIONS_DIR:temporary});
   globalThis.fetch = (input,init) => {
     assert.equal(new URL(input instanceof Request ? input.url : input).origin,origin,'No live service is permitted');
     return nativeFetch(input,init);
