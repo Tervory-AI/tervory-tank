@@ -819,7 +819,8 @@ litellm_settings:
   # outside this roster (search APIs, data vendors) is a paid route that needs approval.
   fallbacks:
     # DECISION local and open-weight serving tiers; Tank admits evaluated seats individually.
-    # DECISION only catalog Apache/MIT seats; conditional licences await review.
+    # Licences (founder, 7 Nov 2026): the founder's counsel decides. Every seat records its
+    # licence and conditions; Tank applies no licence filter of its own.
     - local: ["local-large", "gpt-oss-small", "qwen-small", "gpt-oss"]
     - local-large: ["gpt-oss-small", "qwen-small", "gpt-oss"]
     - luna: ["haiku", "flash-lite", "grok", "flash"]
