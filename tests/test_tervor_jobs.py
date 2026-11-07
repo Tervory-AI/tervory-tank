@@ -93,3 +93,16 @@ def test_gpu_bundle_refuses_tenant_tampering_even_with_recomputed_hash(tmp_path)
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError, match='Unsafe training'):
         train.load_tervor_bundle(path, 'base')
+
+
+@pytest.mark.asyncio
+async def test_bundle_cannot_relabel_another_products_held_out_input(database):
+    import gold
+    pool, _ = database
+    data = fixture_bundle('base')
+    async with pool.acquire() as conn:
+        await gold.add_candidate(conn, tenant=run.PLATFORM, skill='tiger.extract', agent='tiger',
+            value=data['training']['rows'][0]['input'], expected='held back', source='public',
+            ref='other product gold', holdout=True)
+        with pytest.raises(ValueError, match='Gold input'):
+            await run.check_database_holdouts(conn, data, 'base', 'us-east')
