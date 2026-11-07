@@ -475,7 +475,7 @@ model_list:
   # Route: LiteLLM's OpenAI-compatible client on the Hugging Face router (model id + ':' + host).
   # LiteLLM v1.106.0's huggingface/ prefix prices every call at $0, which would zero the receipt;
   # this route reaches the same router with the same token and records the cost.
-  # Engine serving uses the catalog-approved gpt-oss-small, qwen-small and gpt-oss seats.
+  # Engine serving uses the llama-small, gpt-oss-small, qwen-small, gpt-oss and llama seats.
   # Other entries remain explicit candidates; Tank requires task evals before serving.
   # Catalogue: https://huggingface.co/api/models?inference_provider=all&pipeline_tag=text-generation&author=<org>&sort=downloads
   # Hosts and prices: https://router.huggingface.co/v1/models/<hf id> (USD per MTok), checked 2026-10-21.
@@ -829,9 +829,10 @@ litellm_settings:
   # outside this roster (search APIs, data vendors) is a paid route that needs approval.
   fallbacks:
     # DECISION local and open-weight serving tiers; Tank admits evaluated seats individually.
-    # DECISION only catalog Apache/MIT seats; conditional licences await review.
-    - local: ["local-large", "gpt-oss-small", "qwen-small", "gpt-oss"]
-    - local-large: ["gpt-oss-small", "qwen-small", "gpt-oss"]
+    # Licences (founder, 7 Nov 2026): the founder's counsel decides. Every seat records its
+    # licence and conditions; Tank applies no licence filter of its own.
+    - local: ["local-large", "llama-small", "gpt-oss-small", "qwen-small", "gpt-oss", "llama"]
+    - local-large: ["llama-small", "gpt-oss-small", "qwen-small", "gpt-oss", "llama"]
     - luna: ["haiku", "flash-lite", "grok", "flash"]
     - haiku: ["luna", "flash-lite", "grok", "flash"]
     - flash-lite: ["grok", "flash"]

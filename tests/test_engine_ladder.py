@@ -19,7 +19,7 @@ def enable_local(monkeypatch):
 def test_rung_order_and_exact_eval(monkeypatch):
     enable_local(monkeypatch)
     assert engine.order({'model': 'skill:base.extract@2.0.0', 'escalation_model': 'sol'}) == [
-        'skill:base.extract@2.0.0', 'local', 'local-large', 'gpt-oss-small', 'qwen-small', 'gpt-oss', 'sol']
+        'skill:base.extract@2.0.0', 'local', 'local-large', 'llama-small', 'gpt-oss-small', 'qwen-small', 'gpt-oss', 'llama', 'sol']
     assert engine.score('billing', 'not billing', 'exact') == 0
     assert engine.score({'label': 'billing'}, '{"label":"billing"}', 'exact') == 1
 
