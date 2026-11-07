@@ -315,10 +315,52 @@ def load_job_configuration():
     if path.stat().st_size > 4096:
         raise ValueError('Training configuration is too large')
     config = json.loads(path.read_text())
-    if set(config) != {'base_model', 'base_revision'} or any(not isinstance(value, str) for value in config.values()):
+    if (not {'base_model', 'base_revision'} <= set(config)
+            or set(config) - {'base_model', 'base_revision', 'bundle_sha256'}
+            or any(not isinstance(value, str) for value in config.values())):
         raise ValueError('Invalid training configuration')
     os.environ['HF_TRAIN_BASE_MODEL'] = config['base_model']
     os.environ['HF_TRAIN_BASE_REVISION'] = config['base_revision']
+    if 'bundle_sha256' in config:
+        bundle = Path(hf_hub_download(os.environ['OUTPUT_REPO'], 'training-bundle.json', revision=info.sha))
+        if bundle.stat().st_size > 256 * 1024 * 1024:
+            raise ValueError('Training bundle is too large')
+        if hashlib.sha256(bundle.read_bytes()).hexdigest() != config['bundle_sha256']:
+            raise ValueError('Training bundle hash mismatch')
+        os.environ['TERVOR_TRAIN_BUNDLE_PATH'] = str(bundle)
+
+
+def load_tervor_bundle(path, product):
+    """Standalone GPU copy of the sealed bundle contract; no shared DB access."""
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+    source = Path(path)
+    if source.is_symlink() or source.stat().st_size > 256 * 1024 * 1024:
+        raise ValueError('Invalid training bundle file')
+    data = json.loads(source.read_text())
+    training, gold = data['training'], data['gold']
+    if data['sha256'] != digest([training, gold]):
+        raise ValueError('Training bundle integrity check failed')
+    for part in (training, gold):
+        if part['tenant_id'] != '00000000-0000-0000-0000-000000000001' or part['product'] != product:
+            raise ValueError('Training bundle tenant or product mismatch')
+    rows, cases = training['rows'], gold['cases']
+    if (not 1 <= len(rows) <= 100000 or training['count'] != len(rows) or training['sha256'] != digest(rows)
+            or gold['count'] != len(cases) or gold['sha256'] != digest(cases) or gold['holdout'] is not True
+            or len(cases) < 200 or len({digest(case['input']) for case in cases}) != len(cases)
+            or any(case['holdout'] is not True for case in cases)):
+        raise ValueError('Invalid training or gold snapshot')
+    held = {digest(case['input']) for case in cases}
+    for row in rows:
+        if (row['tenant_id'] != training['tenant_id'] or row['product'] != product
+                or row['holdout'] is not False or not row['task_type'].startswith(product + '.')
+                or row.get('kind') not in ('shadow', 'correction', 'teacher', 'public')
+                or len(json.dumps(row).encode()) > 65536
+                or any(not isinstance(row.get(key), str) or not row[key].strip()
+                       for key in ('source', 'source_ref', 'provider', 'licence'))
+                or digest(row['input']) in held):
+            raise ValueError('Unsafe training row or gold overlap')
+    return rows, cases
 
 
 def main() -> dict | None:
@@ -343,11 +385,14 @@ def main() -> dict | None:
         raise ValueError('Model repository is not private')
     train_agent = os.environ.get('TRAIN_AGENT', '')
     max_length = context_length(train_agent)
-    if train_agent == 'tiger':
+    bundle_path = os.environ.get('TERVOR_TRAIN_BUNDLE_PATH')
+    if bundle_path:
+        rows, bundle_gold = load_tervor_bundle(bundle_path, train_agent)
+    elif train_agent == 'tiger':
         rows, tiger_holdouts = tiger_data(api, org, day, revision=os.environ.get('TIGER_DATASET_REVISION'))
     else:
         rows = load_snapshots(api, org, day)
-    holdouts = load_holdouts(api, org, day) if train_agent == 'zenas' else []
+    holdouts = load_holdouts(api, org, day) if train_agent == 'zenas' and not bundle_path else []
     held_hashes = {hashlib.sha256(json.dumps(row['input'], sort_keys=True).encode()).hexdigest()
                    for row in holdouts}
     if any(hashlib.sha256(json.dumps(row['input'], sort_keys=True).encode()).hexdigest()
@@ -367,7 +412,10 @@ def main() -> dict | None:
     trainer, metrics = fit(base, revision, train, validation, max_length=max_length)
     Path('/tmp/lora/evaluation.json').write_text(json.dumps({'validation_loss': metrics['eval_loss'],
                                                           'n': len(validation), 'gold_holdout': False}))
-    if train_agent == 'tiger':
+    if bundle_path:
+        Path('/tmp/lora/holdout.json').write_text(json.dumps({'method': 'tervor_gold_pending',
+            'gold_holdout': True, 'n': len(bundle_gold), 'eligible': False}))
+    if train_agent == 'tiger' and not bundle_path:
         answers = []
         model, tokenizer = trainer.model, trainer.processing_class
         model.eval()
@@ -380,7 +428,7 @@ def main() -> dict | None:
                 generated = model.generate(**inputs, max_new_tokens=1024, do_sample=False)
             answers.append(tokenizer.decode(generated[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True))
         Path('/tmp/lora/holdout.json').write_text(json.dumps(score_prices(tiger_holdouts, answers)))
-    if train_agent == 'zenas':
+    if train_agent == 'zenas' and not bundle_path:
         answers = []
         model, tokenizer = trainer.model, trainer.processing_class
         for row in holdouts:
@@ -393,7 +441,7 @@ def main() -> dict | None:
     if api.model_info(repo).private is not True:
         raise ValueError('Output privacy changed')
     api.upload_folder(repo_id=repo, folder_path='/tmp/lora', commit_message='Multi-task LoRA and validation loss')
-    if train_agent == 'zenas':
+    if train_agent == 'zenas' and not bundle_path:
         api.upload_file(repo_id=repo, path_or_fileobj=gguf, path_in_repo='zenas-q4_k_m.gguf',
                         commit_message='Merged Q4_K_M model')
 
