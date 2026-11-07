@@ -806,7 +806,7 @@ model_list:
       build_only: true
 
 litellm_settings:
-  callbacks: [tenant_traces.callback, response_cache.callback]
+  callbacks: [tenant_traces.callback]
   # DECISION reuse regional Redis, opt in only with Tank's user-scoped C1 key.
   cache: true
   cache_params:

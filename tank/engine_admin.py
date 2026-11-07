@@ -16,6 +16,7 @@ class Candidate(BaseModel):
 
 def build_router(rt):
     router = APIRouter(prefix='/v1/engine', tags=['engine'])
+    __import__('codebase_index').register(router, rt, identity, require_founder)
 
     @router.get('/status')
     async def status(tenant_id: uuid.UUID, actor: Actor = Depends(identity)):
@@ -45,7 +46,8 @@ async def engine_status(rt, tenant_id):
     import engine_runtime
     async with rt.pool().acquire() as conn:
         tasks = await conn.fetch('''SELECT task_type FROM tank.policy WHERE tenant_id=$1 OR tenant_id IS NULL
-            UNION SELECT task_type FROM tank.engine_state WHERE tenant_id=$1 AND region=$2''', tenant_id, rt.box_region())
+            UNION SELECT task_type FROM tank.engine_state WHERE tenant_id=$1 AND region=$2
+            UNION SELECT task_type FROM tank.engine_receipts WHERE tenant_id=$1 AND region=$2''', tenant_id, rt.box_region())
         states = await conn.fetch('''SELECT task_type,model FROM tank.engine_state
             WHERE tenant_id=$1 AND region=$2''', tenant_id, rt.box_region())
         receipts = await conn.fetch('''SELECT r.task_type,count(*) AS requests,
@@ -69,7 +71,7 @@ async def engine_status(rt, tenant_id):
     usage, spend, graduations = ({r['task_type']: dict(r) for r in rows} for rows in (receipts, costs, moves))
     result = []
     roster = {r['name']: r for r in await rt.list_models()}
-    cache_usage = await __import__('exact_cache').status(rt, tenant_id)
+    cache_usage = await __import__('cache_metrics').status(rt, tenant_id)
     for name in sorted({r['task_type'] for r in tasks}):
         model = current.get(name)
         rung = engine_ladder.rung(model) if model else 'unselected'
@@ -84,7 +86,6 @@ async def engine_status(rt, tenant_id):
             row[key] = float(row[key])
         row['saved_usd'] = max(0., row['would_have_cost_usd'] - row['cost_usd'])
         row['traces_url'] = engine_tracing.traces_url(tenant_id, name)
-        row['cache_layers'] = cache_usage.get(name, {'C1': {'attempts': 0, 'hits': 0,
-            'hit_rate': 0., 'saved_usd': 0., 'estimated': True}})
+        row['cache_layers'] = cache_usage.get(name, __import__('cache_metrics').empty())
         result.append(row)
     return {'tenant_id': str(tenant_id), 'region': rt.box_region(), 'local_status': engine_runtime.local_status(), 'tasks': result}

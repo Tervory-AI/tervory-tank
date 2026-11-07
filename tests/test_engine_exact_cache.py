@@ -174,9 +174,10 @@ async def test_gateway_callback_and_both_rosters_default_off(monkeypatch):
         config = yaml.safe_load((Path('litellm') / name).read_text())['litellm_settings']
         assert config['cache'] and config['cache_params']['type'] == 'redis'
         assert config['cache_params']['mode'] == 'default_off'
-        assert 'response_cache.callback' in config['callbacks']
+        assert config['callbacks'] == ['tenant_traces.callback']
         assert config['cache_params']['supported_call_types'] == ['acompletion']
     assert 'response_cache.py' in Path('litellm/Dockerfile').read_text()
+    assert 'TenantLangfuseCallback(ResponseCacheMixin, CustomLogger)' in Path('litellm/tenant_traces.py').read_text()
 
 
 @pytest.mark.asyncio
