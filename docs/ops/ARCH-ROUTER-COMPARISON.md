@@ -20,7 +20,7 @@ benchmark predictions or savings. Fixture adapter elapsed time measures Python
 contract overhead; real classifier latency, inference cost and route quality stay
 null under `model_comparison.status: unrun`. Unknown cost is not zero cost.
 
-## Official identity and licence gate
+## Official identity and counsel evidence
 
 The official [model card](https://huggingface.co/katanemo/Arch-Router-1.5B/blob/5b156890a91b1035a86f82faf1a651debf309009/README.md)
 names `katanemo/Arch-Router-1.5B`, based on Qwen2.5-1.5B-Instruct, and links
@@ -32,12 +32,13 @@ The repository is Apache-2.0. **The model is not covered by that licence.** Its
 [pinned LICENSE](https://huggingface.co/katanemo/Arch-Router-1.5B/blob/5b156890a91b1035a86f82faf1a651debf309009/LICENSE)
 is the Katanemo Community License Agreement dated April 2, 2026. Section 4 says
 commercial use requires a separate commercial licence. The card labels it
-`katanemo-research`. Commercial authorization has not been established here;
-no weights were downloaded and no Arch model was executed. The adapter contains
+`katanemo-research`. Commercial permission is pending counsel review, with no claim that a licence
+has been granted. The original fixture run downloaded no weights and executed
+no Arch model; the subsequent opt-in CPU harness records its own execution evidence. The adapter contains
 only our contract validation, with injected fixture responses; it does not copy
-upstream model code or provide a weight loader. Resolve commercial rights before
-any actual evaluation for this business. Attribution and naming obligations also
-need review if authorization is obtained.
+upstream model code or provide a weight loader. The founder authorized local CPU comparison; counsel decides which uses must
+be blocked. Licence review is evidence for counsel, not an automatic agent stop.
+Attribution and naming provisions are collected in the CPU handoff.
 
 ## Contracts, hardware and comparison limits
 
@@ -83,8 +84,9 @@ and reproducibility hashes, not prompts, per-example labels or user identities.
 Near-duplicate/paraphrase leakage and label validity require independent human
 review before a real benchmark; these tiny fixtures cannot prove either.
 
-Actual comparison remains **unrun** pending commercial authorization, verified
-local CPU runtimes/checkpoints for both classifiers, a reviewed and frozen
+This fixture command always leaves actual comparison **unrun**. The separate
+`scripts/compare_router_cpu.py` implements opt-in local CPU execution. Real
+benchmark conclusions still require a reviewed and frozen
 routing preference configuration, and independently reviewed non-gold
 route-development/holdout examples. Tune thresholds/descriptions only on
 development; lock their hashes before opening holdout. Report held-out route

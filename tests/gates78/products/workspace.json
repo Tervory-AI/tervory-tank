@@ -1,0 +1,201 @@
+{
+  "product": "workspace",
+  "source_sha": "02df1877f88c28948952e5c7e88f9d7a8c0b8e1a",
+  "entrypoints": [
+    "POST /v1/command/workspace/chat",
+    "POST /v1/command/workspace/task.create",
+    "GET /v1/command/workspace/memory.view",
+    "POST /v1/command/workspace/memory.control",
+    "POST /v1/command/workspace/memory.edit",
+    "POST /v1/command/workspace/memory.forget",
+    "POST /v1/command/workspace/csv.parse",
+    "workspace/app/api/chat/route.ts",
+    "workspace/app/api/tasks/route.ts",
+    "workspace/app/api/memory/route.ts",
+    "workspace/app/tasks/page.tsx",
+    "workspace/app/chats/window.tsx",
+    "POST /v1/command/threads/{id}/actions",
+    "POST /v1/command/cards/{id}",
+    "GET /v1/command/workspace/tasks",
+    "GET /v1/command/workspace/task.receipt"
+  ],
+  "legacy_tests": [
+    "tests/test_workspace_gates_7_8.py::test_product_request_tank_route_receipt_then_memory",
+    "tests/test_workspace_gates_7_8.py::test_correction_applies_next_time_with_no_paid_call",
+    "tests/test_workspace_gates_7_8.py::test_second_user_and_second_tenant_see_nothing",
+    "tests/test_workspace_gates_7_8.py::test_same_task_twice_reports_cost_and_tokens_each_run",
+    "tests/test_workspace_gates_7_8.py::test_memory_off_exact_repeat_still_pays",
+    "tests/test_workspace_gates_7_8.py::test_apply_corrections_secret_refusal_and_memory_switch",
+    "tests/test_workspace_gates_7_8.py::test_forget_and_memory_off_skip_store",
+    "tests/test_workspace_gates_7_8.py::test_auth_scope_refuses_empty_tenant_user_and_tenant_as_user",
+    "tests/test_workspace_gates_7_8.py::test_run_with_memory_refuses_missing_user_without_paid_or_remember",
+    "tests/test_workspace_gates_7_8.py::test_memory_controls_view_edit_forget_and_invalidation",
+    "tests/test_workspace_gates_7_8.py::test_correction_invalidates_prior_identical_receipt",
+    "tests/test_workspace_gates_7_8.py::test_remembered_fields_are_never_hardcoded_empty",
+    "tests/test_workspace_gates_7_8.py::test_remember_payload_fields_are_non_empty_after_paid_run",
+    "tests/test_workspace_gates_7_8.py::test_chat_and_task_request_paths_use_free_steps_then_tank_agent",
+    "tests/test_workspace_gates_7_8.py::test_workspace_gates_ts_and_routes_wire_call_chain",
+    "tests/test_workspace_gates_7_8.py::test_gate6_patch_packages_memory_bracket_modules",
+    "tests/test_workspace_gates_7_8.py::test_auth_scope_refusal_no_paid_call_and_nothing_remembered",
+    "tests/test_workspace_gates_7_8.py::test_memory_outage_answers_via_tank_marks_unavailable_no_reuse_no_remember",
+    "tests/test_workspace_gates_7_8.py::test_run_with_memory_outage_raises_and_never_reuses",
+    "tests/test_workspace_gates_7_8.py::test_workspace_gates_ts_auth_refuse_and_outage_degrade_static",
+    "tests/test_workspace_gates_7_8.py::test_authenticated_memory_edit_forget_off_and_cross_tenant_refused",
+    "tests/test_workspace_gates_7_8.py::test_durable_invalidation_survives_fresh_memory_instances",
+    "tests/test_workspace_gates_7_8.py::test_memory_control_denies_foreign_tenant_user",
+    "tests/test_workspace_gates_7_8.py::test_forged_tenant_user_header_cannot_impersonate_via_execute",
+    "tests/test_workspace_gates_7_8.py::test_scope_refusal_never_marked_memory_unavailable_or_answered_via_tank",
+    "tests/test_workspace_gates_7_8.py::test_memory_api_routes_refuse_forged_identity_static_and_helper",
+    "tests/test_workspace_gates_7_8.py::test_is_memory_service_outage_narrow_mapping",
+    "tests/test_workspace_gates_7_8.py::test_typeerror_inside_bracket_is_not_outage_and_makes_no_paid_call",
+    "tests/test_workspace_gates_7_8.py::test_typed_memory_outage_error_is_treated_as_outage",
+    "tests/test_workspace_gates_7_8.py::test_remember_failure_after_paid_returns_unavailable_receipt_no_retry",
+    "tests/test_workspace_gates_7_8.py::test_classify_workspace_command_failure_ts_unit_via_node",
+    "tests/test_workspace_gates_7_8.py::test_lifecycle_request_signing_binds_verified_actor",
+    "tests/test_workspace_hermes_memory_contract.py::test_write_recall_forget_agent_key_and_runtime_urls",
+    "tests/test_workspace_hermes_memory_contract.py::test_shared_key_write_403_read_ok_other_agent_isolated",
+    "tests/test_workspace_hermes_memory_contract.py::test_central_user_scope_personal_tenant_wide_list_publish",
+    "tests/test_workspace_hermes_memory_contract.py::test_tank_main_central_user_scope_no_cross_user_leak",
+    "tests/test_workspace_hermes_memory_contract.py::test_wrong_key_refused_and_bad_kind_refused",
+    "tests/test_workspace_hermes_memory_contract.py::test_product_has_no_tank_v1_memory_url",
+    "tests/test_workspace_hermes_memory_contract.py::test_hermes_kind_format_matches_workspace_kinds"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_workspace.py::test_foreign_reads_mutations_and_receipt_leaks",
+      "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls",
+      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_workspace.py::test_foreign_reads_mutations_and_receipt_leaks",
+      "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls",
+      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_workspace.py::test_declared_tenant_wide_and_personal_owner"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_workspace.py::test_missing_owner_and_body_metadata_cannot_widen",
+      "tests/gates78/products/test_workspace.py::test_real_signin_rejects_header_body_and_missing_identity"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_workspace.py::test_real_signin_rejects_header_body_and_missing_identity"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_workspace.py::test_assertion_binding_is_real_and_fail_closed"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_workspace.py::test_nonce_replay_concurrent_restart_and_forget",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart",
+      "tests/gates78/products/test_workspace.py::test_completed_task_remember_failure_checkpoint_survives_restart"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_workspace.py::test_sql_candidates_are_owned_before_vector_limit"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_workspace.py::test_restricted_database_role_uses_product_entry"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls",
+      "tests/gates78/products/test_workspace.py::test_real_signin_rejects_header_body_and_missing_identity",
+      "tests/gates78/products/test_workspace.py::test_memory_off_is_per_user_and_does_not_recall_or_remember",
+      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged",
+      "tests/gates78/products/test_workspace.py::test_legacy_requirements_and_product_browser_entrypoints_are_retained"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_workspace.py::test_foreign_reads_mutations_and_receipt_leaks",
+      "tests/gates78/products/test_workspace.py::test_actual_client_key_route_and_no_private_data_logs"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_workspace.py::test_actual_client_key_route_and_no_private_data_logs",
+      "tests/gates78/products/test_workspace.py::test_paid_entry_runs_real_tank_lifecycle",
+      "tests/gates78/products/test_workspace.py::test_shared_fixture_positive_owner_recall_reproducer",
+      "tests/gates78/products/test_workspace.py::test_real_engine_memory_is_available_and_personally_scoped"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_workspace.py::test_default_off_has_no_memory_or_added_work"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_workspace.py::test_paid_entry_runs_real_tank_lifecycle",
+      "tests/gates78/products/test_workspace.py::test_confirm_replay_does_not_enqueue_or_pay_twice",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_workspace.py::test_code_free_action_uses_real_receipt_before_any_provider",
+      "tests/gates78/products/test_workspace.py::test_paid_entry_runs_real_tank_lifecycle",
+      "tests/gates78/products/test_workspace.py::test_ladder_evaluates_accepted_case_and_accounts_for_both_calls"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_workspace.py::test_first_repeat_changed_input_receipts_reconcile"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_workspace.py::test_first_repeat_changed_input_receipts_reconcile",
+      "tests/gates78/products/test_workspace.py::test_identity_and_ineligible_task_are_cache_misses"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_workspace.py::test_correction_forget_and_off_invalidate_reusable_answers"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_workspace.py::test_correction_forget_and_off_invalidate_reusable_answers",
+      "tests/gates78/products/test_workspace.py::test_nonce_replay_concurrent_restart_and_forget",
+      "tests/gates78/products/test_workspace.py::test_legacy_requirements_and_product_browser_entrypoints_are_retained",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_workspace.py::test_memory_off_is_per_user_and_does_not_recall_or_remember",
+      "tests/gates78/products/test_workspace.py::test_memory_off_propagates_to_worker_and_resets_for_next_actor"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_workspace.py::test_memory_network_outage_is_truthful_and_no_double_payment",
+      "tests/gates78/products/test_workspace.py::test_post_payment_remember_failure_returns_existing_receipt_once",
+      "tests/gates78/products/test_workspace.py::test_completed_task_remember_failure_checkpoint_survives_restart"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_workspace.py::test_auth_failure_is_not_a_memory_outage",
+      "tests/gates78/products/test_workspace.py::test_post_payment_auth_refusal_preserves_model_receipt_without_retry",
+      "tests/gates78/products/test_workspace.py::test_completed_task_remember_failure_checkpoint_survives_restart"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_workspace.py::test_first_repeat_changed_input_receipts_reconcile",
+      "tests/gates78/products/test_workspace.py::test_remembered_business_fields_are_meaningful",
+      "tests/gates78/products/test_workspace.py::test_code_free_action_uses_real_receipt_before_any_provider",
+      "tests/gates78/products/test_workspace.py::test_capture_first_repeat_changed_actual_entry_metrics",
+      "tests/gates78/products/test_workspace.py::test_ladder_evaluates_accepted_case_and_accounts_for_both_calls"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_workspace.py::test_retry_and_concurrent_paid_requests_keep_accounting",
+      "tests/gates78/products/test_workspace.py::test_nonce_replay_concurrent_restart_and_forget",
+      "tests/gates78/products/test_workspace.py::test_confirm_replay_does_not_enqueue_or_pay_twice",
+      "tests/gates78/products/test_workspace.py::test_completed_task_remember_failure_checkpoint_survives_restart"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_workspace.py::test_legacy_requirements_and_product_browser_entrypoints_are_retained"
+    ]
+  },
+  "browser_source_blobs": {
+    "workspace/app/api/tasks/route.ts": "596880c74455e97c1db534ed9b4b781b1055d4a1",
+    "workspace/app/chats/assets/attention.svg": "b1109f80cfc21317d20ba69dc1719772bf12fd06",
+    "workspace/app/chats/assets/done.svg": "5d3d38d2ede0d8a1d43be3b86432dabc03b8f2ea",
+    "workspace/app/chats/assets/planned.svg": "97c6b49ebe9748ac31348e1a4c665dab582d9fcc",
+    "workspace/app/chats/contract.ts": "a994fda0506570b2ae48aaa0427cd3eed2a30678",
+    "workspace/app/chats/presentation.ts": "3c05697ea5b1f6b7fa6481322417ab5b937b14d2",
+    "workspace/app/chats/radix-card.tsx": "c386267da41fbba20446c637a48d31a21f134b45",
+    "workspace/app/chats/radix-presentation.ts": "fc0ccf09b8651c9a5f8783065d5eeedf9c57c6e6",
+    "workspace/app/chats/window.css": "2bed02893e4fbcc72defbe59e0e0549d3dc72d8b",
+    "workspace/app/chats/window.tsx": "983af72009f7c90e882c941df5c88c1505f8c773",
+    "workspace/app/feedback-buttons.tsx": "028722c4759f0ea93659ee805248b552b8494098",
+    "workspace/app/globals.css": "5a85761e55412c10476a5fa81eb569a8e1b75760",
+    "workspace/app/squad-links.tsx": "683817d2899e93c7f3aea9e3f2cf292b183c6d71",
+    "workspace/app/tasks/page.tsx": "d1b4636184704f7eefbd502639fc42095a544483",
+    "workspace/app/tasks/receipt.tsx": "28f3c6f5e500e0c5e613f1c27125dc35f947b64e",
+    "workspace/app/tasks/tasks.css": "1459fa99f2376190a5dbb335bb0392ee53c51530",
+    "workspace/lib/request.ts": "60f9497e0d9135e8661cf86329fc892e7542b432",
+    "workspace/lib/route-input.ts": "d1ffed1d60baf0e674d8510240bed50b6851972c",
+    "workspace/lib/workspace-gates.ts": "cca7c5e818f6e69f6ddaa6aac85708831f6ad25e"
+  }
+}
