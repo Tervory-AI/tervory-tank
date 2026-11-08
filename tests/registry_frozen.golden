@@ -8683,6 +8683,27 @@
         "name": "base_proxy"
       },
       {
+        "path": "/v1/zenas/savings/quote",
+        "methods": [
+          "POST"
+        ],
+        "name": "price_run"
+      },
+      {
+        "path": "/v1/zenas/law/vectors",
+        "methods": [
+          "POST"
+        ],
+        "name": "embeddings"
+      },
+      {
+        "path": "/v1/zenas/law/embeddings",
+        "methods": [
+          "POST"
+        ],
+        "name": "embeddings"
+      },
+      {
         "path": "/v1/zenas/{path:path}",
         "methods": [
           "GET",
