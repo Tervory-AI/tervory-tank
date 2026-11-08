@@ -17,6 +17,8 @@ from chassis.user_assertion import SignedUser, sign_assertion
 from hermes.service import create_app
 from hermes.store import InMemoryStore
 from hermes.user_scope import TENANT_WIDE_KINDS
+from hermes_lifecycle import personal_headers
+from trigger_signin_fakes import set_founders
 
 from opli_fixture import OWNER, OTHER_USER, ANSWER, WORKSPACE_KEY, opli as opli
 
@@ -103,6 +105,41 @@ async def test_foreign_publish_unchanged(opli, foreign):
         opli.stack.other_tenant if foreign == "tenant" else opli.stack.tenant), json={"memory_id": row["id"]})
     assert rejected.status_code == 404  # OPLI exposes no publication tool.
     assert await owned_rows(opli) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("foreign", ["user", "tenant"])
+async def test_real_founder_publish_owner_scope(opli, monkeypatch, foreign):
+    set_founders(monkeypatch, OWNER + "," + OTHER_USER)
+    _, row = await run_and_row(opli)
+
+    async def publish_request(path, body, user=OWNER):
+        headers, raw = personal_headers(WORKSPACE_KEY, "POST", path, tenant=body["tenant_id"], user=user, body=body)
+        headers["X-Tervory-Admin"] = user
+        return await opli.stack.http.post(path, headers=headers, content=raw)
+
+    for tenant in (opli.stack.tenant, opli.stack.other_tenant):
+        enabled = await publish_request("/founder/publish-policy", {
+            "tenant_id": tenant, "agent": "opli", "enabled": True,
+            "identifiers": {"reviewed": True, "names": ["placeholder inventoried person"],
+                "emails": ["placeholder@example.invalid"], "phones": ["placeholder phone"],
+                "addresses": ["placeholder inventoried address"], "client_domains": ["placeholder.invalid"]}})
+        assert enabled.status_code == 200, enabled.text
+    before = await owned_rows(opli)
+    schema = opli.stack.records.schema("opli")
+    records = opli.stack.records.pool
+    assert await records.fetchval(f"SELECT count(*) FROM {schema}.memory_records WHERE tier='platform'") == 0
+    denied = await publish_request("/founder/publish", {
+        "tenant_id": opli.stack.other_tenant if foreign == "tenant" else opli.stack.tenant,
+        "agent": "opli", "source_row": row["id"]}, OTHER_USER if foreign == "user" else OWNER)
+    assert denied.status_code == 409 and denied.json()["detail"]["result"] == "missing"
+    assert ANSWER not in denied.text and await owned_rows(opli) == before
+    assert await records.fetchval(f"SELECT count(*) FROM {schema}.memory_records WHERE tier='platform'") == 0
+    accepted = await publish_request("/founder/publish", {
+        "tenant_id": opli.stack.tenant, "agent": "opli", "source_row": row["id"]})
+    assert accepted.status_code == 200 and accepted.json()["result"] == "published", accepted.text
+    assert await records.fetchval(f"SELECT count(*) FROM {schema}.memory_records WHERE tier='platform'") == 1
+    assert await owned_rows(opli) == before  # Publication leaves the personal source intact.
 
 
 @pytest.mark.asyncio
@@ -421,6 +458,73 @@ async def test_retry_concurrency(opli):
     assert retry.status_code == 409, retry.text
     assert len(opli.gateway.calls) == 1
     assert await opli.pool.fetchval("SELECT count(*) FROM tank.tasks WHERE tenant_id=$1", uuid.UUID(opli.stack.tenant)) == 1
+
+
+@pytest.mark.asyncio
+async def test_cached_prompt_reservation_and_receipt(opli):
+    thread = await opli.thread()
+    first = await opli.turn(thread)
+    assert first.status_code == 200
+    prompt = str(uuid.uuid4())
+    replies = await asyncio.gather(opli.turn(thread, prompt_id=prompt), opli.turn(thread, prompt_id=prompt))
+    assert sorted(r.status_code for r in replies) == [200, 409]
+    cached = next(r.json() for r in replies if r.status_code == 200)
+    assert cached["answer"] == first.json()["answer"]
+    assert cached["memory_bracket"]["answered_from_memory"] is True
+    assert cached["memory_bracket"]["would_have_cost_usd"] == .0024
+    assert cached["receipt"]["totals"]["cost_usd"] == 0
+    assert len(cached["receipt"]["rows"]) == 1
+    receipt = cached["receipt"]["rows"][0]
+    assert (receipt["cost_usd"], receipt["tokens_in"], receipt["tokens_out"]) == (0, 0, 0)
+    stored = await opli.pool.fetchrow("""SELECT t.status,l.cost_usd,l.cache_hit FROM tank.tasks t
+        JOIN tank.ledger l ON l.id=t.ledger_id AND l.tenant_id=t.tenant_id
+        WHERE t.id=$1 AND t.tenant_id=$2""", uuid.UUID(receipt["step_id"]), uuid.UUID(opli.stack.tenant))
+    assert stored["status"] == "done" and stored["cache_hit"] is True and stored["cost_usd"] == 0
+    state = await opli.pool.fetchval("SELECT state::text FROM tank.command_threads WHERE thread_id=$1", uuid.UUID(thread))
+    assert json.loads(state)["code_prompt_id"] == prompt
+    assert (await opli.turn(thread, prompt_id=prompt)).status_code == 409
+    assert await opli.pool.fetchval("SELECT state::text FROM tank.command_threads WHERE thread_id=$1", uuid.UUID(thread)) == state
+    assert len(opli.gateway.calls) == 1
+    assert await opli.pool.fetchval("SELECT count(*) FROM tank.tasks WHERE tenant_id=$1", uuid.UUID(opli.stack.tenant)) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changed_owner", ["user", "tenant", "issuer"])
+async def test_cached_answer_rechecks_thread_owner(opli, changed_owner):
+    thread = await opli.thread()
+    assert (await opli.turn(thread)).status_code == 200
+    if changed_owner == "user":
+        await opli.pool.execute("UPDATE tank.command_threads SET user_id=$2 WHERE thread_id=$1", uuid.UUID(thread), OTHER_USER)
+    elif changed_owner == "tenant":
+        # Model a transferred thread without violating its dependent foreign keys.
+        # The owner's already-recorded memory must still not grant thread access.
+        await opli.pool.execute("DELETE FROM tank.command_events WHERE thread_id=$1", uuid.UUID(thread))
+        await opli.pool.execute("DELETE FROM tank.command_receipt_links WHERE thread_id=$1", uuid.UUID(thread))
+        await opli.pool.execute("UPDATE tank.command_threads SET tenant_id=$2 WHERE thread_id=$1", uuid.UUID(thread), uuid.UUID(opli.stack.other_tenant))
+    else:
+        await opli.pool.execute("UPDATE tank.command_threads SET trigger_signin_issuer=$2 WHERE thread_id=$1", uuid.UUID(thread), "https://placeholder-revoked.invalid")
+    state = await opli.pool.fetchval("SELECT state::text FROM tank.command_threads WHERE thread_id=$1", uuid.UUID(thread))
+    rejected = await opli.turn(thread)
+    assert rejected.status_code == 404 and ANSWER not in rejected.text
+    assert await opli.pool.fetchval("SELECT state::text FROM tank.command_threads WHERE thread_id=$1", uuid.UUID(thread)) == state
+    assert len(opli.gateway.calls) == 1 and await opli.pool.fetchval("SELECT count(*) FROM tank.tasks") == 1
+
+
+@pytest.mark.asyncio
+async def test_cached_request_id_replay_and_untrusted_override(opli):
+    thread = await opli.thread()
+    path = f"/v1/command/threads/{thread}/code-turn"
+    request_id = str(uuid.uuid4())
+    body = {"text": "placeholder request ID task", "request_id": request_id, "prompt_id": str(uuid.uuid4())}
+    assert (await opli.api.post(path, headers=opli.headers(), json=body)).status_code == 200
+    replay = {**body, "prompt_id": str(uuid.uuid4())}
+    assert (await opli.api.post(path, headers=opli.headers(), json=replay)).status_code == 409
+    forged = {**replay, "request_id": str(uuid.uuid4()), "_memory_answer": "placeholder forged answer"}
+    assert (await opli.api.post(path, headers=opli.headers(), json=forged)).status_code == 422
+    fresh = {**replay, "request_id": str(uuid.uuid4())}
+    accepted = await opli.api.post(path, headers=opli.headers(), json=fresh)
+    assert accepted.status_code == 200 and accepted.json()["receipt"]["totals"]["cost_usd"] == 0
+    assert len(opli.gateway.calls) == 1
 
 
 @pytest.mark.asyncio

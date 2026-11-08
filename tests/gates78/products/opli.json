@@ -1,6 +1,6 @@
 {
   "product": "opli",
-  "source_sha": "f11abfed6e4d276b0c1dcd5bf4bf5c96ffd3fd9a",
+  "source_sha": "0e2a55f28fd966b6cf93334979dddd35ee2e3e2f",
   "entrypoints": [
     "POST /v1/command/opli/code-turn",
     "GET /v1/command/opli/memory.view",
@@ -36,11 +36,13 @@
     ],
     "G7.same_tenant": [
       "tests/gates78/products/test_opli.py::test_foreign_controls_unchanged",
-      "tests/gates78/products/test_opli.py::test_foreign_publish_unchanged"
+      "tests/gates78/products/test_opli.py::test_foreign_publish_unchanged",
+      "tests/gates78/products/test_opli.py::test_real_founder_publish_owner_scope"
     ],
     "G7.other_tenant": [
       "tests/gates78/products/test_opli.py::test_foreign_controls_unchanged",
-      "tests/gates78/products/test_opli.py::test_foreign_publish_unchanged"
+      "tests/gates78/products/test_opli.py::test_foreign_publish_unchanged",
+      "tests/gates78/products/test_opli.py::test_real_founder_publish_owner_scope"
     ],
     "G7.tenant_wide": [
       "tests/gates78/products/test_opli.py::test_declared_tenant_wide"
@@ -49,7 +51,8 @@
       "tests/gates78/products/test_opli.py::test_required_owner_and_strict_input"
     ],
     "G7.signed_actor": [
-      "tests/gates78/products/test_opli.py::test_signed_actor"
+      "tests/gates78/products/test_opli.py::test_signed_actor",
+      "tests/gates78/products/test_opli.py::test_cached_answer_rechecks_thread_owner"
     ],
     "G7.assertion_rejection": [
       "tests/gates78/products/test_opli.py::test_assertion_rejection"
@@ -65,7 +68,8 @@
     ],
     "G7.controls": [
       "tests/gates78/products/test_opli.py::test_controls_need_identity_plain_task_preserved",
-      "tests/gates78/products/test_opli.py::test_foreign_controls_unchanged"
+      "tests/gates78/products/test_opli.py::test_foreign_controls_unchanged",
+      "tests/gates78/products/test_opli.py::test_cached_answer_rechecks_thread_owner"
     ],
     "G7.no_content_leak": [
       "tests/gates78/products/test_opli.py::test_no_content_leak"
@@ -84,7 +88,9 @@
       "tests/gates78/products/test_opli.py::test_existing_code_skill_before_model"
     ],
     "G8.exact_repeat": [
-      "tests/gates78/products/test_opli.py::test_exact_repeat_receipts"
+      "tests/gates78/products/test_opli.py::test_exact_repeat_receipts",
+      "tests/gates78/products/test_opli.py::test_cached_prompt_reservation_and_receipt",
+      "tests/gates78/products/test_opli.py::test_cached_request_id_replay_and_untrusted_override"
     ],
     "G8.misses": [
       "tests/gates78/products/test_opli.py::test_misses"
@@ -106,10 +112,14 @@
     ],
     "G8.receipts": [
       "tests/gates78/products/test_opli.py::test_exact_repeat_receipts",
-      "tests/gates78/products/test_opli.py::test_meaningful_remembered_fields"
+      "tests/gates78/products/test_opli.py::test_meaningful_remembered_fields",
+      "tests/gates78/products/test_opli.py::test_cached_prompt_reservation_and_receipt",
+      "tests/gates78/products/test_opli.py::test_cached_request_id_replay_and_untrusted_override"
     ],
     "G8.retry_concurrency": [
-      "tests/gates78/products/test_opli.py::test_retry_concurrency"
+      "tests/gates78/products/test_opli.py::test_retry_concurrency",
+      "tests/gates78/products/test_opli.py::test_cached_prompt_reservation_and_receipt",
+      "tests/gates78/products/test_opli.py::test_cached_request_id_replay_and_untrusted_override"
     ],
     "G8.product_regressions": [
       "tests/gates78/products/test_opli.py::test_cli_acceptance_retained",
