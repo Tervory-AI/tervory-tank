@@ -1,6 +1,6 @@
 {
   "product": "trigger",
-  "source_sha": "2eb63f0a52dd6190584c41edec7551e44abfa307",
+  "source_sha": "8b87af712b510c259eaf4dc0cbd0f6dc13ef63f4",
   "entrypoints": [
     "Tank OIDC middleware -> Command confirm -> trigger_routes.room -> POST /write",
     "GET /memory/records",
@@ -167,12 +167,13 @@
   },
   "runtime_reference": {
     "product_pr": "Tervory-AI/tervory-trigger#1",
-    "previous_product_sha": "f769d18f5da475a7c858e24fb00d5646a28a44e0",
+    "previous_product_sha": "2eb63f0a52dd6190584c41edec7551e44abfa307",
     "integrated_tank_runtime_sha": "ea9f0d0418951ae7215a165e9df1e590902002fd",
     "foundation_sha": "514a539d933faf37857097f800ad55196a84614a",
     "proposed_product_port_not_integrated": false,
     "shared_fixture_corrections_sha": "373bc179e57c6230673058fa4c41a2325ea3d71a",
-    "runtime_integration_pr": "Tervory-AI/tervory-tank#767 (merged)"
+    "runtime_integration_pr": "Tervory-AI/tervory-tank#767 (merged)",
+    "product_vendor_source_sha": "92baaca846829bc640461c44b430b173b56ba865"
   },
   "fixture_boundaries": [
     "Local signed OIDC issuer; production verifier, middleware and nonce assertions unchanged",
