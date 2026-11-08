@@ -48,7 +48,7 @@ def memory_client_for_skala(
     user_id: str | None = None,
 ) -> Any:
     """Build chassis MemoryClient with explicit Skala agent key (no TANK_KEY default)."""
-    from chassis.memory import MemoryClient
+    from command_tools._shared_memory import MemoryClient
 
     key = skala_agent_key_from_env()
     url = base_url if base_url is not None else os.environ.get("HERMES_URL", "")
