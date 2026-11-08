@@ -26,7 +26,7 @@ import workspace_fixture
 
 workspace_entry = workspace_fixture.workspace_entry
 
-SOURCE_SHA = 'd412e7e9043f4010d150f5fcb15b9c605e6c5b9b'
+SOURCE_SHA = 'f9a266f8c9b818295d8978500757c7b575b21736'
 ROOT = Path(__file__).resolve().parents[3]
 CHAT = {'messages': [{'role': 'user', 'content': 'placeholder summarize the project'}], 'task_type': 'tier0.answer'}
 
@@ -253,9 +253,16 @@ async def test_default_off_has_no_memory_or_added_work(workspace_entry, monkeypa
 async def test_paid_entry_runs_real_tank_lifecycle(workspace_entry, entry):
     e = workspace_entry
     body = CHAT if entry == 'chat' else {'title': 'placeholder project', 'request': 'placeholder summarize the project'}
-    response = await e.request(entry, body)
-    assert response.status_code == 200, response.text
-    result = response.json()
+    if entry == 'task.create':
+        direct = await e.request(entry, body)
+        assert direct.status_code == 409 and not e.provider_calls
+        result, completed = await e.confirmed_task(body)
+        assert completed['ledger_id'] and completed['call']['tokens_in'] == 10
+        assert completed['call']['tokens_out'] == 3
+    else:
+        response = await e.request(entry, body)
+        assert response.status_code == 200, response.text
+        result = response.json()
     assert len(e.provider_calls) == 1
     assert result['memory_bracket']['paid_calls'] == 1
     paid_at = next(index for index, event in enumerate(e.timeline) if event[0] == 'PAID')
@@ -479,5 +486,37 @@ async def test_denied_control_keeps_memory_settings_and_receipts_unchanged(works
     response = await e.request(operation, body, **scope)
     assert response.status_code in {403, 404}, response.text
     assert await e.snapshot() == before
-    assert await e.pool.fetch(query, tenants) == receipts, 'Denied controls must not mutate the receipt snapshot'
+    after = await e.pool.fetch(query, tenants)
+    original_ids = {row['id'] for row in receipts}
+    assert [row for row in after if row['id'] in original_ids] == receipts
+    # Existing failure auditing is retained, while every pre-existing receipt is immutable.
+    audits = [row for row in after if row['id'] not in original_ids]
+    assert len(audits) == 1
+    audit = audits[0]
+    caller_tenant = e.stack.other_tenant if foreign == 'tenant' else e.stack.tenant
+    assert str(audit['tenant_id']) == caller_tenant
+    assert audit['outcome'] == 'failed' and float(audit['cost_usd']) == 0
+    assert audit['tokens_in'] == audit['tokens_out'] == 0
+    assert response.json()['detail']['ledger_id'] == str(audit['id'])
+    assert row['id'] not in response.text and 'placeholder original answer' not in response.text
+    assert 'placeholder refused edit' not in json.dumps([dict(value) for value in audits], default=str)
     assert not e.provider_calls
+
+
+@pytest.mark.asyncio
+async def test_ladder_evaluates_accepted_case_and_accounts_for_both_calls(workspace_entry):
+    e = workspace_entry
+    await e.pool.execute("""INSERT INTO tank.evals(tenant_id,task_type,input,expected,tolerance,verdict)
+        VALUES($1,'tier0.answer',$2::jsonb,$3::jsonb,'exact','accepted')""",
+        UUID(e.stack.tenant), json.dumps({'text': 'placeholder calibration request'}),
+        json.dumps('placeholder completed answer'))
+    first = await chat(e)
+    assert len(e.provider_calls) == 2  # calibration and serving; neither hidden
+    assert all(call['model'] == 'llama-small' for call in e.provider_calls)
+    rows = await e.pool.fetch("SELECT task_type,cost_usd,tokens_in,tokens_out FROM tank.ledger WHERE tenant_id=$1 AND tokens_in>0", UUID(e.stack.tenant))
+    assert {r['task_type'] for r in rows} == {'tier0.answer', 'tier0.answer#engine-eval'}
+    assert len(rows) == 2 and sum(float(r['cost_usd']) for r in rows) == pytest.approx(.026)
+    assert sum(r['tokens_in'] for r in rows) == 20 and sum(r['tokens_out'] for r in rows) == 6
+    repeat = await chat(e)
+    assert len(e.provider_calls) == 2 and repeat['memory_bracket']['paid_calls'] == 0
+    assert first['memory_bracket']['cost_usd'] == pytest.approx(.013)

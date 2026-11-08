@@ -1,6 +1,6 @@
 {
   "product": "workspace",
-  "source_sha": "d412e7e9043f4010d150f5fcb15b9c605e6c5b9b",
+  "source_sha": "f9a266f8c9b818295d8978500757c7b575b21736",
   "entrypoints": [
     "POST /v1/command/workspace/chat",
     "POST /v1/command/workspace/task.create",
@@ -113,7 +113,8 @@
     ],
     "G8.free_first": [
       "tests/gates78/products/test_workspace.py::test_code_free_action_uses_real_receipt_before_any_provider",
-      "tests/gates78/products/test_workspace.py::test_paid_entry_runs_real_tank_lifecycle"
+      "tests/gates78/products/test_workspace.py::test_paid_entry_runs_real_tank_lifecycle",
+      "tests/gates78/products/test_workspace.py::test_ladder_evaluates_accepted_case_and_accounts_for_both_calls"
     ],
     "G8.exact_repeat": [
       "tests/gates78/products/test_workspace.py::test_first_repeat_changed_input_receipts_reconcile"
@@ -143,7 +144,8 @@
       "tests/gates78/products/test_workspace.py::test_first_repeat_changed_input_receipts_reconcile",
       "tests/gates78/products/test_workspace.py::test_remembered_business_fields_are_meaningful",
       "tests/gates78/products/test_workspace.py::test_code_free_action_uses_real_receipt_before_any_provider",
-      "tests/gates78/products/test_workspace.py::test_capture_first_repeat_changed_actual_entry_metrics"
+      "tests/gates78/products/test_workspace.py::test_capture_first_repeat_changed_actual_entry_metrics",
+      "tests/gates78/products/test_workspace.py::test_ladder_evaluates_accepted_case_and_accounts_for_both_calls"
     ],
     "G8.retry_concurrency": [
       "tests/gates78/products/test_workspace.py::test_retry_and_concurrent_paid_requests_keep_accounting",
