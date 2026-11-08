@@ -13,7 +13,7 @@ from base_fixture import USER_A, USER_B
 from base_fixture import base_entry as base_entry
 
 ROOT = Path(__file__).resolve().parents[3]
-SOURCE_SHA = 'dc3961f2ffbf33bdf91359eb6c1a7e9c38331572'
+SOURCE_SHA = '55c0e7875ae4dcae99f272c34942ac371df707c6'
 
 
 async def owner_view(e, user=USER_A, tenant=None):
@@ -108,7 +108,9 @@ async def test_body_is_not_identity_and_queued_owner_is_verified(base_entry,clai
 @pytest.mark.asyncio
 async def test_actual_proxy_allowlist_and_signed_header_contract(base_entry):
     e=base_entry
-    assert {'memory','memory/forget','memory/bracket'}<=e.main._BASE_ROUTES
+    assert {'memory','memory/forget'}<=e.main._BASE_ROUTES
+    assert 'memory/bracket' not in e.main._BASE_ROUTES
+    assert (await e.request('memory/bracket', {'user_id':USER_A,'cost_usd':1000000})).status_code==404
     await owner_view(e)
     forwarded=[r for r in e.requests if r.url.host=='agent-base' and r.url.path=='/v1/base/memory']
     assert forwarded and HEADER in forwarded[-1].headers

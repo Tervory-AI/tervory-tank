@@ -1,11 +1,10 @@
 {
   "product": "base",
-  "source_sha": "dc3961f2ffbf33bdf91359eb6c1a7e9c38331572",
+  "source_sha": "55c0e7875ae4dcae99f272c34942ac371df707c6",
   "entrypoints": [
     "POST /v1/base/run",
     "GET /v1/base/memory",
     "POST /v1/base/memory/forget",
-    "POST /v1/base/memory/bracket",
     "agents/base/room.py::base_loop",
     "agents/base/base_brain.py::run_code_first",
     "agents/base/base_brain.py::drive_batch"
@@ -47,7 +46,8 @@
     "tests/test_base_gates_7_8_entry.py::test_entry_edit_correction_override_and_explicit_forget_and_off",
     "tests/test_base_gates_7_8_entry.py::test_created_by_resolves_as_session_user_on_batch_cfg",
     "tests/test_base_gates_7_8_entry.py::test_business_hash_ignores_fresh_run_uuids",
-    "tests/test_base_gates_7_8_entry.py::test_product_entry_same_business_different_run_uuids_zero_second_paid"
+    "tests/test_base_gates_7_8_entry.py::test_product_entry_same_business_different_run_uuids_zero_second_paid",
+    "tests/test_base_gates_7_8_entry.py::test_production_memory_routes_cannot_issue_synthetic_receipts"
   ],
   "cases": {
     "G7.owner_crud": [
