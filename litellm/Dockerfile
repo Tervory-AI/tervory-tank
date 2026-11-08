@@ -7,7 +7,7 @@
 FROM ghcr.io/berriai/litellm:v1.106.4
 COPY config.yaml /app/config.yaml
 COPY config.za.yaml /app/config.za.yaml
-COPY tenant_traces.py trace_sink.py engine_runtime.py engine_config.py /app/
+COPY tenant_traces.py trace_sink.py engine_runtime.py engine_config.py response_cache.py /app/
 RUN addgroup -S -g 10001 tervory \
     && adduser -S -D -u 10001 -G tervory -h /home/tervory tervory \
     && mkdir -p /home/tervory /var/lib/litellm-chatgpt /var/lib/litellm-traces \

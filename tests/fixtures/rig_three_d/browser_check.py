@@ -1,5 +1,6 @@
 """Offline packaged-widget proof. Run against the disposable viewer fixture on :8035."""
 import json
+import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -49,7 +50,7 @@ def compare(page, name, width):
 def main():
     report = {}
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='/opt/google/chrome/chrome', args=[
+        browser = p.chromium.launch(executable_path=os.environ.get('READ1_CHROMIUM_EXECUTABLE', '/opt/google/chrome/chrome'), args=[
             '--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
         for width in (1440, 375):
             page = browser.new_page(viewport={'width': width, 'height': 852 if width == 1440 else 1212}, reduced_motion='reduce')
@@ -123,8 +124,14 @@ def main():
             page.get_by_text('Your quote request was saved. Delivery to the retailer is pending.', exact=True).wait_for()
             assert page.locator('input[name=name]').input_value() == ''
             report[f'07-saved-{width}'] = compare(page, '07-saved', width)
-            page.get_by_role('button', name='Start again', exact=True).last.click()
+            # Reset refreshes the assembly asynchronously; the old ready state is
+            # not evidence that reset finished. Wait for its response and attract state.
+            with page.expect_response(lambda response: response.url.endswith('/v1/rig/3d/assembly')) as reset_response:
+                page.get_by_role('button', name='Start again', exact=True).last.click()
+            assert reset_response.value.ok
+            reset_response.value.finished()
             page.locator('.rig-3d[data-state=ready]').wait_for()
+            page.wait_for_function('''() => document.querySelector('tervory-rig').shadowRoot.querySelector('.rig-3d-body>h2').textContent === 'Touch the product to explore a setup.' ''')
             assert page.locator('.contact').is_hidden()
             page.get_by_role('button', name='Request a quote', exact=True).click()
             assert page.locator('input[name=name]').input_value() == ''

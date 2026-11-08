@@ -381,7 +381,9 @@ async def rig_room_reads(request: Request, call_next):
         return JSONResponse({**report(), 'startup': {'ready': not names, 'missing_settings': names}},
                             headers={'Cache-Control': 'no-store'})
     missing = getattr(request.app.state, 'missing_settings', [])
-    if missing:
+    # Static terminal/default config remain useful at day zero without services.
+    # The authenticated data and mutation routes retain the startup guard.
+    if missing and not (request.method == 'GET' and request.url.path.startswith('/3d/')):
         return JSONResponse(status_code=503, content={"ok": False,
             "error": "Settings unavailable: " + ", ".join(missing), "missing_settings": missing})
     if request.url.path == "/health" and not proxy_configured():

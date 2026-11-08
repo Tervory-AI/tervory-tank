@@ -1,10 +1,10 @@
 # Radix chat presentation handoff
 
-Founder explicitly approved the Radix Figma proposal in chat on **1 November 2026 (America/Los_Angeles)**; the coordinator relayed that approval to this implementation task. Approval covers these presentation fields and states, not a production scan/deploy. The Figma board annotation now records the approval; original Window frames were preserved.
+Founder explicitly approved the Radix Figma proposal in chat on **1 November 2026 (America/Los_Angeles)**; the coordinator relayed that approval to this implementation task. Approval covers these presentation fields and states, not a production scan/deploy. The Figma board annotation now records the approval; original Opli Code frames were preserved.
 
 Source: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=205-6112
 
-Nodes: DNS proof 205:6116; desktop results 205:6129; mobile results 205:6179; pending 206:711; failed 206:715; zero findings 206:720; expired proof 206:724. Implementation used high-fidelity `get_design_context` and screenshots before editing. Existing Window fonts, colors and component styles are reused.
+Nodes: DNS proof 205:6116; desktop results 205:6129; mobile results 205:6179; pending 206:711; failed 206:715; zero findings 206:720; expired proof 206:724. Implementation used high-fidelity `get_design_context` and screenshots before editing. Existing Opli Code fonts, colors and component styles are reused.
 
 ## Delivered
 

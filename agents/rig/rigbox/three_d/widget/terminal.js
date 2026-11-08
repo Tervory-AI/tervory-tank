@@ -122,6 +122,14 @@ async function connect() {
       const response = await fetch('/3d/config', {cache: 'no-store', signal: controller.signal});
       if (!response.ok) throw Error('Configuration');
       const config = await response.json(); key = config.publishable_key;
+      if (config.configured === false && key === '') {
+        update({date: new Date().toISOString().slice(0, 10), counts: {approved: 0, today: 0, active: 0},
+          approved: [], live: null, latest: null});
+        // Recheck configuration without polling authenticated data or faking a
+        // build. The terminal picks up the first administrator save itself.
+        retryTimer = setTimeout(connect, 30000);
+        return;
+      }
       if (!/^rk_pub_[A-Za-z0-9_-]+$/.test(key || '')) throw Error('Configuration');
     }
     const response = await fetch('/v1/rig/3d/terminal/events', {headers: {'X-Rig-Key': key, Accept: 'text/event-stream'},

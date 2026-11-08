@@ -125,9 +125,10 @@ async def test_submission_contention_returns_a_bounded_conflict_without_queueing
     body = base.BaseRun(tenant_id=tenant, request_id=request, batch='A', records=[{'name': 'A'}])
     async with database.acquire() as conn, conn.transaction():
         await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', str(uuid5(tenant, str(request))))
-        with pytest.raises(Exception) as error:
-            await asyncio.wait_for(base.base_run(body), 1)
-        assert error.value.status_code == 409
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=base.app), base_url='http://local',
+                                    headers={'X-Tank-Key': 'placeholder-room-key'}) as client:
+            response = await asyncio.wait_for(client.post('/v1/base/run', json=body.model_dump(mode='json')), 1)
+        assert response.status_code == 409
         assert await conn.fetchval('SELECT count(*) FROM agent_base.tasks') == 0
 
 
