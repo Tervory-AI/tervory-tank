@@ -4386,7 +4386,6 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
 # agent and stamp the caller's tenant_id on the way. Rows for any other tenant
 # are dropped before the response leaves Tank.
 
-@app.post('/v1/tiger/savings')
 async def tiger_savings_record(request: Request, caller: str | None = Depends(require_key)):
     if caller != 'tiger':
         raise HTTPException(403, 'Tiger room credential required')
@@ -4403,7 +4402,6 @@ async def tiger_savings_record(request: Request, caller: str | None = Depends(re
             return await record(conn, body)
 
 
-@app.get('/v1/tiger/savings', dependencies=[Depends(require_key)])
 async def tiger_savings_list(request: Request):
     from tiger_savings import listed
     tenant = _tiger_tenant(request)

@@ -8194,20 +8194,6 @@
         "name": "ledger_summary"
       },
       {
-        "path": "/v1/tiger/savings",
-        "methods": [
-          "POST"
-        ],
-        "name": "tiger_savings_record"
-      },
-      {
-        "path": "/v1/tiger/savings",
-        "methods": [
-          "GET"
-        ],
-        "name": "tiger_savings_list"
-      },
-      {
         "path": "/v1/tiger/watchlist",
         "methods": [
           "GET"
@@ -9539,6 +9525,20 @@
           "POST"
         ],
         "name": "research"
+      },
+      {
+        "path": "/v1/tiger/savings",
+        "methods": [
+          "POST"
+        ],
+        "name": "tiger_savings_record"
+      },
+      {
+        "path": "/v1/tiger/savings",
+        "methods": [
+          "GET"
+        ],
+        "name": "tiger_savings_list"
       },
       {
         "path": "/v1/command/models",

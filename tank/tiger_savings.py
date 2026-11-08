@@ -4,7 +4,7 @@ import json
 import os
 from uuid import UUID
 
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -157,3 +157,12 @@ async def command_comparison(conn, receipt, tenant, step, ids):
         'baseline_model': ', '.join(saved['baseline_models']) or None,
         'baseline_status': 'baseline pending' if comparison is None else 'estimated',
         'saved_usd': None if comparison is None or receipt['cost_usd'] is None else comparison-receipt['cost_usd']}
+
+
+def build_router(tank):
+    """Register Tiger's savings API through the product route registry."""
+    router = APIRouter()
+    router.add_api_route('/v1/tiger/savings', tank.tiger_savings_record, methods=['POST'])
+    router.add_api_route('/v1/tiger/savings', tank.tiger_savings_list, methods=['GET'],
+                         dependencies=[Depends(tank.require_key)])
+    return router
