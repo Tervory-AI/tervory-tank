@@ -18,7 +18,7 @@ import pytest_asyncio
 from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 ROOT = Path(__file__).resolve().parents[3]
-SOURCE_SHA = "e102e8b5ef3443838e8f9346c0673d8f456c269b"
+SOURCE_SHA = "5ce6834f0fd278a328a1adf1ba25582da8232795"
 USER_A, USER_B, USER_C = ("placeholder-user-a", "placeholder-user-b", "placeholder-user-c")
 WORKSPACE_KEY = "placeholder-gate78-workspace-key"
 QUOTE = "A written supply agreement requires notice before cancellation and remedies for breach."

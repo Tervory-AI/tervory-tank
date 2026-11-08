@@ -1,6 +1,6 @@
 {
   "product": "zenas",
-  "source_sha": "e102e8b5ef3443838e8f9346c0673d8f456c269b",
+  "source_sha": "5ce6834f0fd278a328a1adf1ba25582da8232795",
   "entrypoints": [
     "Tank TriggerSigninMiddleware -> zenas_proxy -> POST /answers",
     "Tank TriggerSigninMiddleware -> zenas_proxy -> POST /drafts",

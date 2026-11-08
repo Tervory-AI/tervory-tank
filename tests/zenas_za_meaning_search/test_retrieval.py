@@ -55,6 +55,16 @@ def services(monkeypatch):
         pass
     monkeypatch.setattr(laws_africa_api.asyncio, "sleep", no_wait)
     qdrant, encoder, app = stack("za")
+    # Exercise the existing Tank vector adapter before the local encoder;
+    # these unit protocol tests keep authentication/billing as explicit fakes.
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    import zenas_law
+    async def identity():
+        return 'zenas'
+    monkeypatch.setattr(zenas_law, 'ledger', AsyncMock(return_value='11111111-1111-4111-8111-111111111111'))
+    tank = SimpleNamespace(require_key=identity, box_region=lambda: 'za', law_transport=httpx.ASGITransport(app=app))
+    app.include_router(zenas_law.build_router(tank))
     client = HermesLawClient(region="za", transport=httpx.ASGITransport(app=app))
     yield qdrant, encoder, client
     qdrant.close()
