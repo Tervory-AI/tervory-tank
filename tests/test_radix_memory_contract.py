@@ -23,11 +23,11 @@ USER_A = "placeholder-user-a"
 USER_B = "placeholder-user-b"
 RADIX_KEY = "placeholder-radix-agent-key"
 OTHER_AGENT_KEY = "placeholder-other-agent-key"
-WORKSPACE_KEY = "placeholder-workspace-key"
+PLACEHOLDER_WORKSPACE_KEY = "placeholder-workspace-key"
 
 HERMES_AUTH_HEADER = "X-Tank-Key"
 HERMES_AGENT_KEY_ENV_PREFIX = "TANK_KEY_"
-HERMES_WORKSPACE_KEY_ENV = "TANK_API_KEY"
+HERMES_PLACEHOLDER_WORKSPACE_KEY_ENV = "TANK_API_KEY"
 
 
 class StubEmbedder:
@@ -46,7 +46,7 @@ def _install_key_env(monkeypatch):
             monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("TANK_KEY_RADIX", RADIX_KEY)
     monkeypatch.setenv("TANK_KEY_TIGER", OTHER_AGENT_KEY)
-    monkeypatch.setenv("TANK_API_KEY", WORKSPACE_KEY)
+    monkeypatch.setenv("TANK_API_KEY", PLACEHOLDER_WORKSPACE_KEY)
     monkeypatch.setenv("HERMES_URL", "http://hermes-contract-test")
     monkeypatch.setenv("TANK_KEY", RADIX_KEY)
     monkeypatch.setenv("AGENT_NAME", "radix")
@@ -106,7 +106,7 @@ async def test_CURRENT_own_key_only_wrong_agent_and_workspace_refused(current_st
     assert cross.status_code == 403, cross.text
     shared = await http.post(
         "/memories",
-        headers={HERMES_AUTH_HEADER: WORKSPACE_KEY},
+        headers={HERMES_AUTH_HEADER: PLACEHOLDER_WORKSPACE_KEY},
         json={
             "tenant_id": TENANT_A,
             "text": "nope",
@@ -118,7 +118,7 @@ async def test_CURRENT_own_key_only_wrong_agent_and_workspace_refused(current_st
     assert shared.status_code == 403, shared.text
     workspace = MemoryClient(
         base_url="http://hermes-contract-test",
-        api_key=WORKSPACE_KEY,
+        api_key=PLACEHOLDER_WORKSPACE_KEY,
         agent="radix",
         http=http,
     )
