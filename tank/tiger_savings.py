@@ -1,6 +1,7 @@
 """Tiger comparisons are estimates, separate from billable Tank ledger entries."""
 import hashlib
 import json
+import os
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -109,7 +110,8 @@ async def cached_extract(tank, pkg, body, ctx):
     # Only the pure, deterministic reader is cached. Approval/ownership checks
     # in _run_one_skill run first on EVERY request. Never cache a fetched URL.
     ctx._tiger_cache_hit = False
-    if pkg.id != 'tiger.price_extract' or body.preview:
+    if (os.environ.get('TIGER_BRAIN_ENABLED', 'false').lower() not in {'true', '1', 'yes'}
+            or pkg.id != 'tiger.price_extract' or body.preview):
         return await tank.skala.run_skill(pkg, body.input, ctx)
     digest = hashlib.sha256(packed([pkg.ref, body.input]).encode())
     for path in sorted(pkg.path.rglob('*')):
