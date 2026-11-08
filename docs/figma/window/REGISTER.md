@@ -1,4 +1,4 @@
-# Tervory window panel — Proposed
+# Opli Code panel — Proposed
 
 Figma file: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS
 

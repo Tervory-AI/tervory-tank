@@ -22,6 +22,12 @@ from test_tank_tenant_boundaries import boundary  # noqa: F401,E402 -- shared is
 from test_tank_ladder import ladder, policy, request  # noqa: F401,E402
 
 ROOT = Path(__file__).resolve().parent.parent
+IMPLICIT_RATES = {
+    'gemini/gemini-3.5-flash-lite': 3e-8, 'gemini/gemini-3.8-flash': 7.5e-8,
+    'gemini/gemini-4-argon': 1e-7, 'gemini/gemini-3.1-flash-lite': 2.5e-8,
+    'deepseek/deepseek-flash': 6e-9, 'deepseek/deepseek-v4-pro': 4.4e-8,
+    'moonshot/kimi-k3': 3e-7, 'moonshot/kimi-k2.7-code': 1.9e-7, 'moonshot/kimi-k2.6': 1.6e-7,
+}
 CONFIGS = [ROOT / "litellm" / "config.yaml", ROOT / "litellm" / "config.za.yaml"]
 # USD per MTok (cache read, 5-minute cache write), from the provider pricing pages cited in the config.
 CACHE_RATES = {
@@ -40,6 +46,10 @@ def test_cache_breakpoints_only_on_openai_gpt6_and_anthropic_deployments(path):
     assert marked == set(CACHE_RATES)
     for m in models:
         native = m["litellm_params"]["model"]
+        if native in IMPLICIT_RATES:
+            assert m['model_info']['cache_read_input_token_cost'] == pytest.approx(IMPLICIT_RATES[native])
+            assert m['model_info']['prompt_cache_mode'] == 'implicit'
+            continue
         if native not in CACHE_RATES:
             assert "cache_read_input_token_cost" not in (m.get("model_info") or {}), m["model_name"]
             continue

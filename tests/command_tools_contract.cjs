@@ -37,7 +37,7 @@ def catalogue(module, names):
         return node.id if isinstance(node, ast.Name) else None
     declarations = [node for node in tree.body
                     if (isinstance(node, ast.Assign) and any(target(t) in names for t in node.targets))
-                    or (isinstance(node, ast.AugAssign) and target(node.target) in names)]
+                    or (isinstance(node, (ast.AnnAssign, ast.AugAssign)) and target(node.target) in names)]
     needed = {node.id for statement in declarations for node in ast.walk(statement)
               if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)}
     values = {'__builtins__': {}}
@@ -48,6 +48,8 @@ def catalogue(module, names):
                 if local in needed:
                     values[local] = catalogue(node.module, {alias.name})[alias.name]
     for node in declarations:
+        if isinstance(node, ast.AnnAssign):
+            node = ast.Assign(targets=[node.target], value=node.value)
         # Contract registries map literal tool names to Pydantic classes. Only
         # their real keys are catalogue data; their classes need no evaluation.
         if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)

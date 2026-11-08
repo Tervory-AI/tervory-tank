@@ -512,6 +512,8 @@ export type Task = {
   model?: string | null;
   rung?: number | null;
   cost_usd?: number | string | null;
+  baseline_cost_usd?: number | string | null;
+  baseline_status?: string | null;
   latency_ms?: number | null;
   feedback?: "accepted" | "rejected" | null;
 };

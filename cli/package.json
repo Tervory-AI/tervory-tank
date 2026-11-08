@@ -1,7 +1,7 @@
 {
   "name": "@tervory/cli",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "The Tervory conversation window in a terminal",
   "type": "module",
   "engines": {

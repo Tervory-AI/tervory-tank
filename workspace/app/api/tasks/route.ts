@@ -1,8 +1,9 @@
 import { jsonInput, InputError, routeFailure } from "@/lib/route-input";
 import { submitOnce } from "@/lib/submission";
 import { NextResponse } from "next/server";
-import { createTask, listTasks, type ChatMessage } from "@/lib/tank";
+import { listTasks } from "@/lib/tank";
 import { currentTenant } from "@/lib/tenant";
+import { createTaskWithMemory, listTasksWithMemory } from "@/lib/workspace-gates";
 
 export const runtime = "nodejs";
 
@@ -11,14 +12,16 @@ const ALLOWED_TASK_TYPES = new Set(["tier0.answer", "tier0.draft", "reason.brief
 // GET: the board for the signed-in tenant.
 export async function GET() {
   try {
-    const { tenantId } = await currentTenant();
-    return NextResponse.json(await listTasks(tenantId, 50));
+    const { tenantId, userId } = await currentTenant();
+    const tasks = process.env.WORKSPACE_MEMORY_ENABLED === "true"
+      ? await listTasksWithMemory(tenantId, userId) : await listTasks(tenantId, 50);
+    return NextResponse.json(tasks);
   } catch (err) {
     return routeFailure(err);
   }
 }
 
-// POST: queue a task. Tank runs it and the board picks up the result.
+// Gates 7+8: tasks POST → workspace-gates → memory free steps → Tank agent path → receipt.
 export async function POST(req: Request) {
   try {
     const body = await jsonInput(req);
@@ -28,8 +31,8 @@ export async function POST(req: Request) {
     const taskType = body.task_type ?? "tier0.answer";
     if (typeof taskType !== "string" || !ALLOWED_TASK_TYPES.has(taskType)) throw new InputError("Choose an available task kind.");
     const { tenantId, userId } = await currentTenant();
-    const messages: ChatMessage[] = [{ role: "user", content: request }];
-    const result = await submitOnce(tenantId, userId, req.headers.get("Idempotency-Key"), { title, taskType, messages }, () => createTask(tenantId, userId, title, taskType, messages));
+    if (!tenantId || !userId) throw new InputError("Signed-in tenant and user required.");
+    const result = await submitOnce(tenantId, userId, req.headers.get("Idempotency-Key"), { title, taskType, messages: [{ role: "user", content: request }] }, () => createTaskWithMemory(tenantId, userId, title, taskType, request));
     return NextResponse.json(result, { status: 202 });
   } catch (err) {
     return routeFailure(err);
