@@ -104,9 +104,13 @@ def test_argument_contract_has_no_host_repo_or_credentials_mount(tmp_path):
         assert flag in args
     assert '--bind' not in args and '--dev-bind' not in args
     assert '--cap-drop' in args and args[args.index('--cap-drop') + 1] == 'ALL'
-    assert not any('/workspace' in value or 'docker.sock' in value for value in args)
+    assert not any('docker.sock' in value for value in args)
     mounts = [args[index + 1] for index, value in enumerate(args) if value == '--ro-bind']
     assert mounts == ['/usr/bin/python3', '/usr/lib', '/usr/lib64', str(tmp_path / 'source'), str(tmp_path / 'worker.py')]
+    # precheck puts TMPDIR under its checkout; only fresh subdirectories, never
+    # the checkout itself or their parent, may be mounted.
+    assert str(behaviour.WORKER.parent.parent) not in mounts
+    assert str(tmp_path) not in mounts
 
 
 def test_infrastructure_error_never_becomes_candidate_failure_or_pass():
