@@ -2332,7 +2332,11 @@ class LocalMCPTool(Body):
     inputSchema: dict[str, Any]
 
 
+import code_progress
+
+
 class CodeTurn(Body):
+    progress: code_progress.Progress | None = None
     local_mcp: list[LocalMCPTool] = Field(default_factory=list)
     attachments: list[Attachment | UploadRef] = Field(default_factory=list, max_length=10)
     mode: Literal['ask', 'auto-edit', 'plan'] = 'ask'
@@ -2346,6 +2350,10 @@ class CodeTurn(Body):
 
     @model_validator(mode='after')
     def result_limit(self):
+        if 'progress' in self.model_fields_set:
+            import code_gate
+            if not code_gate.enabled() or not code_progress.enabled():
+                raise ValueError('Progress evidence is not enabled on this host')
         self.text = code_sessions.code_text(self.text)
         for attachment in self.attachments:
             if isinstance(attachment, Attachment):
@@ -2486,7 +2494,7 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
             # and unknown outcomes. Raising rolls back all thread/event changes.
             raise HTTPException(409, 'This request was already submitted. Reopen the session to inspect its state.')
         import code_gate
-        gate = code_gate.advance(state, str(body.prompt_id), body.tool_results)
+        gate = code_gate.advance(state, str(body.prompt_id), body.tool_results, body.progress, body.continuation)
         if gate:
             return await code_gate.stopped_response(__import__(__name__), conn, row, state, actor, turn_id, gate)
     read_tools = {'list_files', 'read_file', 'search', 'git'}

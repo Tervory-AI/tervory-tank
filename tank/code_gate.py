@@ -43,7 +43,7 @@ def command_error(output: str) -> str | None:
     return hashlib.sha256(error.encode()).hexdigest()
 
 
-def advance(state: dict[str, Any], prompt_id: str, results) -> dict | None:
+def advance(state: dict[str, Any], prompt_id: str, results, progress=None, continuation=False) -> dict | None:
     """Called once per durably reserved request, before routing even one token.
 
     Only digests/counts survive; no tool output, commands, source or diagnostics
@@ -79,6 +79,9 @@ def advance(state: dict[str, Any], prompt_id: str, results) -> dict | None:
             gate['stopped'] = {'status': 'stopped', 'reason': 'repeated_error', 'occurrences': errors[fingerprint],
                                'message': 'The same local error occurred three times. No further model call was made. Review the error and start a new task when ready.'}
             break
+    if not gate['stopped']:
+        import code_progress
+        gate['stopped'] = code_progress.advance(gate, progress, results, continuation)
     return gate['stopped']
 
 
