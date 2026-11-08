@@ -91,7 +91,7 @@ def download(specs, root, *, opener=urllib.request.urlopen):
 def run_worker(runtime, worker, input_path, output):
     if runtime not in INTERPRETERS:
         raise ValueError('CPU interpreter must be allowlisted')
-    if runtime == 'cpu' and Path(worker).resolve() != ROOT/'scripts/router_cpu_worker.py':
+    if runtime == 'cpu' and Path(worker).resolve() != ROOT/'tank/router_cpu_worker.py':
         raise ValueError('CPU worker must be the reviewed source')
     env = {**os.environ, 'HF_HUB_OFFLINE':'1', 'TRANSFORMERS_OFFLINE':'1',
            'CUDA_VISIBLE_DEVICES':'', 'OMP_NUM_THREADS':'2', 'MKL_NUM_THREADS':'2',

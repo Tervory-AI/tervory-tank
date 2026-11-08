@@ -142,7 +142,7 @@ def test_unknown_interpreter_and_cpu_worker_are_rejected(tmp_path):
 @pytest.mark.parametrize('tokens',[24,1025])
 def test_arch_batch_encoding_contract_and_token_limit(tokens):
     import importlib.util
-    source=Path('scripts/router_cpu_worker.py')
+    source=Path('tank/router_cpu_worker.py')
     spec=importlib.util.spec_from_file_location('cpu_worker_contract',source)
     module=importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

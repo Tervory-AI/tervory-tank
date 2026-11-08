@@ -45,6 +45,8 @@ timeouts and thirty-minute per-checkpoint deadline. Range resumes reuse bytes
 but never waive the full-file size/hash check. Interrupted transfers remain
 untrusted until complete verification. No remote model code is trusted.
 
+Tank owns the worker (`tank/router_cpu_worker.py`); the script is only a
+development controller, preserving the existing one-door model boundary.
 Models run sequentially, each in its own CPU-only process with two Torch threads,
 six hundred CPU seconds, ten-minute wall deadline and hard twenty-four-GiB
 address-space ceiling. A parent watchdog checks RSS every 100 ms and kills its

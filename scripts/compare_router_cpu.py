@@ -40,7 +40,7 @@ def main():
         'checkpoint_manifest_sha256':sha256(manifest_path),
         'requirements_lock_sha256':sha256(ROOT/'tools/router_cpu/requirements.lock'),
         'source_hashes':{name:sha256(ROOT/name) for name in
-            ('scripts/router_cpu_worker.py','scripts/compare_router_cpu.py','tank/router_cpu.py','tank/route_comparison.py','tank/routellm_build.py')},
+            ('tank/router_cpu_worker.py','scripts/compare_router_cpu.py','tank/router_cpu.py','tank/route_comparison.py','tank/routellm_build.py')},
         'limits':{'torch_threads':2,'rss_watchdog_gib':12,'address_space_gib':24,'wall_seconds_per_model':600,
                   'cpu_seconds_per_model':600,'download_seconds_per_model':1800,'input_tokens_arch':1024,'generated_tokens_arch':32,
                   'download_bytes_total_manifest':sum(f['bytes'] for s in specs.values() for f in s['files'])},
@@ -61,7 +61,7 @@ def main():
             request.write_text(json.dumps({'model':name,'checkpoint':str(folder), 'routes':data['routes'],
                 'examples':[{'id':r['id'],'messages':r['messages']} for r in rows]}))
             model_report['phase']='cpu'
-            actual = run_worker('cpu',ROOT/'scripts/router_cpu_worker.py',request,output)
+            actual = run_worker('cpu',ROOT/'tank/router_cpu_worker.py',request,output)
             by_id = {r['id']:r for r in actual.pop('results')}
             if set(by_id) != {r['id'] for r in rows}:
                 raise ValueError('Incomplete classifier results')
