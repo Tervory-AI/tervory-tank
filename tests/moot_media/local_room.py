@@ -90,6 +90,8 @@ def main():
                 page.goto(url);page.evaluate(initialize,seat)
             for page in pages:
                 page.wait_for_function("received.some(t=>t.kind==='video')&&received.some(t=>t.kind==='audio')",timeout=30000)
+            for page in pages:
+                page.evaluate("async()=>{for(const kind of ['videoinput','audioinput']){const devices=await peer.devices(kind);if(!devices.length)throw Error('local_device_missing');await peer.device(kind,devices[0].deviceId);}}")
             pages[0].evaluate('async()=>{await peer.camera(false);await peer.microphone(false);}')
             assert pages[0].evaluate('peer.tracks().every(t=>t.isMuted)')
             pages[0].evaluate('async()=>{await peer.camera(true);await peer.microphone(true);}')
@@ -111,7 +113,7 @@ def main():
             assert pages[1].evaluate('peer.hearing.current_issue')==1
             browser.close()
         print(json.dumps({'local_real_sfu':True,'real_browser_participants':2,
-          'camera_and_microphone_received':True,'mute_controls':True,'reconnect':True,
+          'camera_and_microphone_received':True,'mute_controls':True,'device_selection':True,'reconnect':True,
           'handover_disconnect':True,'exact_pending_question_resume':True,'epoch_signaling_gateway':True,'old_token_rejoin_denied':True,
           'actor_boundary':'fixture','mux':'not_contacted','speech':'unavailable'}))
     finally:

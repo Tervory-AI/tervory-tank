@@ -176,6 +176,7 @@ def test_mux_lifecycle_ordering_private_publication_and_asset_binding(scope,jour
     for eid,kind,created in events:
         mux.webhook(*signed({'id':eid,'type':kind,'created_at':created,
             'data':{'id':'local-stream','playback_ids':[{'id':'private-playback','policy':'signed'}]}}),now=1000)
+        if eid in ('b','c'):assert journal.resource(scope,'local-stream')['state']=='paused'
     assert journal.resource(scope,'local-stream')['state']=='ended'
     with pytest.raises(MediaError,match='playback_not_published'):
         mux.playback(scope,'local-stream',permitted=True)
@@ -188,6 +189,10 @@ def test_mux_lifecycle_ordering_private_publication_and_asset_binding(scope,jour
         'data':{'id':'local-asset','live_stream_id':'local-stream','playback_ids':[{'id':'asset-playback','policy':'signed'}]}}),now=1000)
     assert journal.resource(scope,'local-asset')['state']=='ready'
     assert journal.resource(scope,'local-asset')['published']==0
+    mux.webhook(*signed({'id':'asset-failed','type':'video.asset.errored','created_at':'2026-11-08T10:04:00Z',
+        'data':{'id':'local-asset','live_stream_id':'local-stream'}}),now=1000)
+    assert journal.resource(scope,'local-asset')['state']=='failed'
+    with pytest.raises(MediaError,match='playback_unavailable'):mux.playback(scope,'local-asset',permitted=True)
 
 
 def test_retention_prevents_early_and_path_escape(tmp_path):

@@ -14,7 +14,7 @@ def align(local_file, output, *, offset_ms=0, root):
         raise MediaError('invalid_alignment')
     # Input-side offset preserves genuine captured media; never invent word times.
     subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-n', '-protocol_whitelist', 'file,pipe',
-        '-itsoffset', str(offset_ms / 1000), '-i', str(source), '-map', '0', '-c', 'copy', str(target)],
+        '-format_whitelist', 'mov,matroska,webm,wav,ogg', '-itsoffset', str(offset_ms / 1000), '-i', str(source), '-map', '0', '-c', 'copy', str(target)],
         check=True, capture_output=True, timeout=120)
     return target
 
