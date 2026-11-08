@@ -22,10 +22,13 @@ def valid_scores(value):
         and math.isfinite(scores[k]) and 0 <= scores[k] <= 1 for k in METRICS))
 
 
-async def reports(conn, tenant, model_id):
+async def reports(conn, tenant, model_id, *, region: str):
+    if region not in ('us-east', 'za'):
+        raise ValueError('Invalid evaluation region')
     rows = await conn.fetch('''SELECT detail FROM tank.policy_log
         WHERE task_type='tervor.evaluation' AND detail->>'tenant_id'=$1 AND detail->>'model_id'=$2
-        ORDER BY created_at DESC,id DESC''', str(tenant), model_id)
+        AND detail->>'region'=$3
+        ORDER BY created_at DESC,id DESC''', str(tenant), model_id, region)
     return [json.loads(row['detail']) if isinstance(row['detail'], str) else row['detail'] for row in rows]
 
 
@@ -36,9 +39,10 @@ async def evaluate(rt, req, model_id: str, gold: dict, *, caller=None) -> dict:
     if model is None:
         raise ValueError('Model is not registered for this tenant')
     cases = tervor_gold.verify(gold, req.tenant_id, model['product'])
-    if gold.get('region') != rt.box_region():
+    region = rt.box_region()
+    if region not in ('us-east', 'za') or gold.get('region') != region:
         raise ValueError('Gold region does not match')
-    report = dict(id=str(uuid4()), tenant_id=str(req.tenant_id), model_id=model_id,
+    report = dict(id=str(uuid4()), tenant_id=str(req.tenant_id), model_id=model_id, region=region,
         version=model['version'], gold_sha256=gold['sha256'], quality_version=engine_quality.VERSION,
         count=len(cases), completed=0, eligible=False, scores={}, baselines={}, ledger_ids=[],
         cost_usd=0., status='held', reason='At least 200 gold cases are required')

@@ -54,13 +54,14 @@ async def register(rt, body):
             raise HTTPException(422, 'Model must belong to this tenant and product')
         if model['rung'] != ('local' if spec.kind == 'gguf' else 'own-trained'):
             raise HTTPException(422, 'Serving kind must match the registered rung')
-        reports = await tervor_eval.reports(conn, body.tenant_id, body.model)
+        reports = await tervor_eval.reports(conn, body.tenant_id, body.model, region=rt.box_region())
         report = reports[0] if reports else {}
         current = await conn.fetchval('''SELECT model FROM tank.engine_state
             WHERE tenant_id=$1 AND region=$2 AND task_type=$3''', body.tenant_id, rt.box_region(), body.task_type)
         if current is None:
             current = (await rt.load_policy(body.task_type, body.tenant_id))['model']
-        if (report.get('eligible') is not True or report.get('status') != 'evaluated'
+        if (report.get('region') != rt.box_region() or report.get('eligible') is not True
+                or report.get('status') != 'evaluated'
                 or report.get('completed', 0) < 200 or report.get('quality_version') != engine_quality.VERSION
                 or report.get('gold_sha256') not in model['data_hashes']
                 or report.get('artifact_sha256') != body.checkpoint
@@ -78,11 +79,11 @@ async def register(rt, body):
     return dict(state='candidate', model=body.model, checkpoint=body.checkpoint)
 
 
-async def private_record(conn, tenant, model_id):
+async def private_record(conn, tenant, model_id, *, region: str):
     model = await tervor_registry.get(conn, tenant, model_id)
     if model is None:
         return None
-    reports = await tervor_eval.reports(conn, tenant, model_id)
+    reports = await tervor_eval.reports(conn, tenant, model_id, region=region)
     moves = await conn.fetch('''SELECT task_type,previous_model,samples,agreement FROM tank.engine_graduations
-        WHERE tenant_id=$1 AND model=$2 ORDER BY created_at DESC''', tenant, model_id)
+        WHERE tenant_id=$1 AND model=$2 AND region=$3 ORDER BY created_at DESC''', tenant, model_id, region)
     return dict(manifest=model, promotion_reports=reports, graduations=[dict(row) for row in moves])
