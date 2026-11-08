@@ -21,7 +21,7 @@ services:
   livekit:
     image: livekit/livekit-server:v1.13.11@sha256:25cd902de7cacbd5f1f779f6a6ac1eae20ba8f56b0935934ce6b0ab80d1e3d20
     user: '10001:10001'
-    group_add: ['10003']
+    group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
     command: [--config, /run/moot/livekit.json]
     volumes:
       - ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/livekit.json:/run/moot/livekit.json:ro
@@ -63,7 +63,7 @@ services:
   egress:
     profiles: [recording]
     image: livekit/egress:v1.15.0@sha256:ac244a40268ce1dd1510fbff6eb529609ec68aceff1602343f79be8ca08c355b
-    group_add: ['10003']
+    group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
     environment:
       EGRESS_CONFIG_FILE: /run/moot/egress.json
     volumes:
