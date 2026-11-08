@@ -6,6 +6,7 @@ Do not load runtime from a product checkout or apply its proposed core patches.
 from __future__ import annotations
 
 import importlib
+import inspect
 import json
 import os
 from dataclasses import dataclass, field
@@ -15,9 +16,10 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 ROOT = Path(__file__).resolve().parents[3]
-SOURCE_SHA = "a72db1aab636692a676ecd38a075c3dd3f184915"
+SOURCE_SHA = "21e4a4a7314913d87505bed70a86ebd67b24fc42"
 USER_A, USER_B, USER_C = ("placeholder-user-a", "placeholder-user-b", "placeholder-user-c")
 WORKSPACE_KEY = "placeholder-gate78-workspace-key"
 QUOTE = "A written supply agreement requires notice before cancellation and remedies for breach."
@@ -52,19 +54,34 @@ class ExternalProvider:
     calls: list[dict] = field(default_factory=list)
     brain_calls: list[str] = field(default_factory=list)
     brain_reply: dict | None = None
+    brain_status: int = 404
+    brain_actors: list = field(default_factory=list)
+    brain_requests: list = field(default_factory=list)
+    nonces: object = None
 
-    def send(self, request):
+    async def send(self, request):
         body = json.loads(request.content) if request.content else {}
         path = request.url.path
         if request.url.host == "zenas-brain":
             self.brain_calls.append(path)
+            self.brain_requests.append(request)
             self.events.append(("brain", path))
             if path == "/health":
                 return httpx.Response(200, json={"ok": True, "room": "zenas"})
-            if path == "/tasks" and self.brain_reply is not None:
-                return httpx.Response(200, json=self.brain_reply)
             if path == "/tasks":
-                return httpx.Response(404, json={"detail": "placeholder standby brain"})
+                from chassis.user_assertion import HEADER, verify_assertion
+                actor = await verify_assertion(request.headers[HEADER], key=os.environ['TANK_KEY_ZENAS'],
+                    product='zenas', tenant_id=request.url.params['tenant_id'],
+                    method=request.method, target=request.url.raw_path.decode(), body=request.content,
+                    consume_nonce=self.nonces.claim)
+                assert actor.user_id == request.url.params['user_id']
+                self.brain_actors.append(actor)
+                if self.brain_reply is not None:
+                    reply = self.brain_reply(request, actor) if callable(self.brain_reply) else self.brain_reply
+                    if inspect.isawaitable(reply):
+                        reply = await reply
+                    return reply if isinstance(reply, httpx.Response) else httpx.Response(200, json=reply)
+                return httpx.Response(self.brain_status, json={"detail": "placeholder standby brain"})
             raise AssertionError("Unexpected brain path")
         assert request.url.host == "placeholder-litellm", "Unexpected external request: " + request.url.host
         if path == '/router/settings':
@@ -74,7 +91,7 @@ class ExternalProvider:
         if path == '/model/info':
             import yaml
             return httpx.Response(200, json={'data': yaml.safe_load((ROOT/'litellm/config.yaml').read_text())['model_list']})
-        assert path == '/v1/chat/completions' and request.method == 'POST'
+        assert path == COMPLETIONS_PATH and request.method == 'POST'
         text = '\n'.join(m['content'] for m in body['messages'])
         if 'Classify this request for Zenas' in text:
             result = {'area':'contracts','jurisdiction':'us'}
@@ -186,6 +203,8 @@ async def zenas(gate78_memory, monkeypatch, request):
     doc, _ = await save(pool, region=region, text=QUOTE + ' ' + salt)
     events = []
     model = ExternalProvider(events)
+    from chassis.user_assertion import PostgresNonces
+    model.nonces = PostgresNonces(pool, 'zenas')
     tank = importlib.import_module("main")
     for key, value in {'TANK_API_KEY': WORKSPACE_KEY, 'LITELLM_URL': 'http://placeholder-litellm',
                        'LITELLM_MASTER_KEY':'placeholder-provider-key'}.items():
@@ -201,7 +220,7 @@ async def zenas(gate78_memory, monkeypatch, request):
     await pool.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('llama-small','llama',0.000001,0.000004) ON CONFLICT(model) DO UPDATE SET input_usd=excluded.input_usd,output_usd=excluded.output_usd")
     await pool.execute("INSERT INTO tank.baseline_settings(task_type,override_model) VALUES('zenas.rule_card','llama-small') ON CONFLICT(task_type) DO UPDATE SET override_model=excluded.override_model")
     tasks = ('zenas.scope','zenas.rule_card','zenas.apply','zenas.draft','zenas.review_contract','zenas.plain',
-             'moot.counsel','moot.judge')
+             'moot.counsel','moot.judge','agent.zenas.think','zenas.review')
     for tenant in (stack.tenant, stack.other_tenant):
         from uuid import UUID
         for task in tasks:
@@ -221,7 +240,7 @@ async def zenas(gate78_memory, monkeypatch, request):
                 return await httpx.ASGITransport(app=tank.app).handle_async_request(req)
             if req.url.host == 'hermes':
                 return await httpx.ASGITransport(app=stack.app).handle_async_request(req)
-            return model.send(req)
+            return await model.send(req)
     class ProviderClient(base_client):
         def __init__(self, *args, **kwargs):
             if kwargs.get('transport') is None:

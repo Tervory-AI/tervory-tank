@@ -20,11 +20,13 @@ from zenas_harness import (
     FIXTURE_COST,
     FIXTURE_INPUT,
     FIXTURE_OUTPUT,
+    QUOTE,
     ROOT,
     SOURCE_SHA,
     USER_A,
     USER_B,
     USER_C,
+    WORKSPACE_KEY,
     receipt,
     require_runtime,
     zenas,
@@ -583,9 +585,202 @@ async def test_completed_code_brain_gap_never_falls_through_to_paid_provider(zen
     card={'elements':[{'id':'written','test':'The agreement is written.','citation':'Fixture section 1','quote':QUOTE}],
         'exceptions':[],'defences':[],'remedies':[],'decision_table':[
             {'element_id':'written','when':{'written':True},'finding':'met'}]}
-    zenas.model.brain_reply={'status':'done','summary':json.dumps(card),'model':'code',
-                            'cost_usd':0,'tokens_in':0,'tokens_out':0}
+    async def completed(request, actor):
+        return await private_code_reply(zenas, request, actor, json.dumps(card))
+    zenas.model.brain_reply = completed
     response=await first_answer(zenas)
     assert '/tasks' in zenas.model.brain_calls and zenas.model.calls == []
     bill=receipt(response)
     assert bill['cost']==0 and bill['tokens_in']==bill['tokens_out']==0
+
+
+async def private_code_reply(entry, request, actor, content):
+    """The external code worker uses Tank's real free-work receipt writer."""
+    from uuid import UUID
+
+    from task_contract import paid_identity
+    from tenant_db import tenant_scope
+    from trigger_routes import code_receipt
+    identity = UUID(paid_identity(actor.tenant_id, actor.user_id, json.loads(request.content)['run_id']))
+    with tenant_scope(actor.tenant_id):
+        ident = await code_receipt(UUID(actor.tenant_id), 'agent.zenas.think', task_id=identity, agent='zenas')
+        row = await entry.stack.records.pool.fetchrow('SELECT * FROM tank.ledger WHERE tenant_id=$1 AND id=$2', UUID(actor.tenant_id), ident)
+    bill = {key: row[key] for key in ('model','region','tokens_in','tokens_out','task_type')}
+    bill.update(ledger_id=str(ident), tenant_id=str(row['tenant_id']), task_id=str(row['task_id']),
+                room='zenas', cost_usd=float(row['cost_usd']))
+    return {'result': {'content': content}, 'receipt': bill}
+
+
+async def private_paid_reply(entry, request, actor):
+    from chassis.tank import TankClient
+    body = json.loads(request.content)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=entry.tank.app)) as http:
+        client = TankClient('http://tank:8000', entry.stack.key, 'zenas', http)
+        data = await client.room_task(actor, body['run_id'], body['input']['messages'])
+    return {'result': {'content': data['choices'][0]['message']['content']}, 'receipt': data['receipt']}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("zenas", ["us-east", "za"], indirect=True)
+async def test_private_brain_dispatch_preserves_real_policy_identity_and_receipts(zenas, monkeypatch):
+    monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
+    async def paid(request, actor):
+        return await private_paid_reply(zenas, request, actor)
+    zenas.model.brain_reply = paid
+    response = await first_answer(zenas)
+    assert zenas.model.brain_calls[:2] == ['/health', '/tasks']
+    assert len(zenas.model.calls) > 0
+    bill = receipt(response)
+    assert bill['cost'] == len(zenas.model.calls) * FIXTURE_COST
+    assert bill['tokens_in'] == len(zenas.model.calls) * FIXTURE_INPUT
+    assert bill['tokens_out'] == len(zenas.model.calls) * FIXTURE_OUTPUT
+    assert all(a.tenant_id == zenas.stack.tenant and a.user_id == USER_A and a.role == 'org:admin' for a in zenas.model.brain_actors)
+    assert all(r.extensions['timeout']['read'] == 5 for r in zenas.model.brain_requests)
+    assert response.json()['memory']['status'] == 'ok'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [302, 401, 403, 503, 'timeout'])
+async def test_private_brain_failures_never_redirect_or_pay_fallback(zenas, monkeypatch, status):
+    monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
+    async def failed(request, actor):
+        if status == 'timeout':
+            raise httpx.ReadTimeout('placeholder private response timeout', request=request)
+        return httpx.Response(status, headers={'location': 'https://placeholder.invalid'})
+    zenas.model.brain_reply = failed
+    response = await zenas.answer()
+    assert response.status_code == (status if status in {401,403} else 503)
+    assert not zenas.model.calls
+    assert zenas.model.brain_calls == ['/health', '/tasks']
+    assert not response.json().get('memory_hit')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('field', ['tenant_id','task_id','room','ledger_id','cost_usd','tokens_in'])
+async def test_private_brain_forged_receipts_fail_closed_without_second_payment(zenas, monkeypatch, field):
+    monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
+    async def forged(request, actor):
+        data = await private_paid_reply(zenas, request, actor)
+        data['receipt'][field] = (str(uuid4()) if field in {'tenant_id','task_id','ledger_id'} else
+                                  'placeholder-other-room' if field == 'room' else 999)
+        return data
+    zenas.model.brain_reply = forged
+    response = await zenas.answer()
+    assert response.status_code == 503
+    assert len(zenas.model.calls) == 1
+    assert zenas.model.brain_calls == ['/health', '/tasks']
+    assert not response.json().get('memory_hit')
+
+
+@pytest.mark.asyncio
+async def test_typed_room_client_keeps_paid_admission_and_person_run_replay(zenas, monkeypatch):
+    from uuid import UUID
+
+    import paid_steps
+    from chassis.tank import TankClient
+    from chassis.user_assertion import SignedUser
+    monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
+    tenant, pool = zenas.stack.tenant, zenas.stack.records.pool
+    actor = SignedUser(tenant, USER_A, 'org:admin')
+    step = paid_steps.model_step('agent.zenas.think','llama-small',agent='zenas')
+    await pool.execute("UPDATE tank.paid_step_settings SET mode='ask' WHERE tenant_id=$1 AND step_id=$2", UUID(tenant), step)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=zenas.tank.app)) as http:
+        client = TankClient('http://tank:8000', zenas.stack.key, 'zenas', http)
+        messages = [{'role':'user','content':'Review the written civil supply agreement and its notice terms.'}]
+        ident = str(uuid4())
+        with pytest.raises(httpx.HTTPStatusError) as error:
+            await client.room_task(actor, ident, messages)
+        assert error.value.response.status_code == 409 and not zenas.model.calls
+        assert error.value.response.json()['detail']['code'] == 'paid_step_approval_required'
+        await pool.execute("UPDATE tank.paid_step_settings SET mode='auto' WHERE tenant_id=$1 AND step_id=$2", UUID(tenant), step)
+        # A fresh authorized run does not reuse the earlier approval claim.
+        ident = str(uuid4())
+        first = await client.room_task(actor, ident, messages)
+        count = len(zenas.model.calls)
+        again = await client.room_task(actor, ident, messages)
+        assert again == first and len(zenas.model.calls) == count == 1
+        other = await client.room_task(SignedUser(tenant, USER_B, 'org:admin'), ident, messages)
+        assert other['receipt']['task_id'] != first['receipt']['task_id']
+        assert len(zenas.model.calls) == 2
+        monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'false')
+        with pytest.raises(httpx.HTTPStatusError) as error:
+            await client.room_task(actor, str(uuid4()), messages)
+        assert error.value.response.status_code == 409 and len(zenas.model.calls) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("zenas", ["us-east", "za"], indirect=True)
+async def test_typed_embeddings_use_real_same_region_tank_and_local_encoder(zenas, monkeypatch):
+    from uuid import UUID
+
+    from agents.zenas.core.savings import Run, current
+    from chassis.tank import TankClient
+    from zenas_za_meaning_search.test_hermes_law import stack
+
+    from agents.zenas.pool.embed import LAW_MODEL, HermesLawClient
+    region = zenas.body['home_region']
+    qdrant, encoder, app = stack(region)
+    monkeypatch.setattr(zenas.tank, 'law_transport', httpx.ASGITransport(app=app), raising=False)
+    token = current.set(Run(zenas.stack.tenant, 'placeholder embeddings'))
+    try:
+        client = HermesLawClient(region=region, transport=httpx.ASGITransport(app=zenas.tank.app))
+        vectors = await client.embed([QUOTE])
+        assert len(vectors) == 1 and QUOTE in encoder.calls and not zenas.model.calls
+        row = await zenas.stack.records.pool.fetchrow("SELECT * FROM tank.ledger WHERE tenant_id=$1 AND task_type='zenas.embeddings'", UUID(zenas.stack.tenant))
+        assert row['region'] == region and row['agent'] == 'zenas' and row['cost_usd'] == 0
+        assert row['tokens_in'] == row['tokens_out'] == 0
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=zenas.tank.app)) as http:
+            tank = TankClient('http://tank:8000', zenas.stack.key, 'zenas', http)
+            before = len(encoder.calls)
+            with pytest.raises(RuntimeError):
+                await tank.law_embeddings(zenas.stack.tenant, 'za' if region == 'us-east' else 'us-east',
+                    client.jurisdiction, LAW_MODEL, [QUOTE])
+            assert len(encoder.calls) == before
+    finally:
+        current.reset(token)
+        qdrant.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('bad', ['missing','key','user','tenant','region','room','replay'])
+async def test_tank_task_adapter_rejects_scope_and_nonce_before_private_dispatch(zenas, monkeypatch, bad):
+    from chassis.user_assertion import SignedUser, sign_assertion
+    monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
+    actor = SignedUser(zenas.stack.tenant, USER_A, 'org:admin')
+    path = '/v1/agents/base/delegate' if bad == 'room' else '/v1/agents/zenas/delegate'
+    body = {'tenant_id':actor.tenant_id, 'user_id':USER_B if bad == 'user' else USER_A,
+            'run_id':str(uuid4()), 'task_key':'zenas.rule_card', 'input':{'messages':[]}, 'recall':[]}
+    if bad == 'tenant':
+        body['tenant_id'] = zenas.stack.other_tenant
+    raw = json.dumps(body, separators=(',',':')).encode()
+    headers = {'X-Tank-Key':WORKSPACE_KEY if bad == 'key' else zenas.stack.key,
+               'X-Home-Region':('za' if zenas.body['home_region'] == 'us-east' else 'us-east') if bad == 'region' else zenas.body['home_region'],
+               'Content-Type':'application/json',
+               'X-Tervory-User-Assertion':sign_assertion('zenas',actor,'POST',path,raw,key=zenas.stack.key)}
+    if bad == 'missing':
+        headers.pop('X-Tervory-User-Assertion')
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=zenas.tank.app)) as http:
+        first = await http.post('http://tank'+path,content=raw,headers=headers)
+        if bad == 'replay':
+            assert first.status_code == 404 and zenas.model.brain_calls == ['/health','/tasks']
+            second = await http.post('http://tank'+path,content=raw,headers=headers)
+            assert second.status_code == 401 and zenas.model.brain_calls == ['/health','/tasks']
+        else:
+            assert first.status_code in {401,403}, first.text
+            assert not zenas.model.brain_calls
+    assert not zenas.model.calls
+
+
+@pytest.mark.asyncio
+async def test_completed_private_task_without_output_never_pays_fallback(zenas, monkeypatch):
+    monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
+    async def empty(request, actor):
+        data = await private_paid_reply(zenas, request, actor)
+        data['result'] = {'content': ''}
+        return data
+    zenas.model.brain_reply = empty
+    response = await zenas.answer()
+    assert response.status_code == 503 and len(zenas.model.calls) == 1
+    rows = await zenas.request('GET', '/receipts')
+    assert rows.status_code == 200
+    assert any(r['cost'] == FIXTURE_COST for r in rows.json()['receipts'])
