@@ -57,7 +57,7 @@ async def assert_replay_wall(tisan):
         tisan.runtime.app.app.state.product_nonce_stores = {}
         replay = await raw.delete(target, headers={'X-Tank-Key': KEY, HEADER: assertion})
         assert replay.status_code in (401, 403, 404)
-    assert not [r for r in await tisan.records() if r['kind'] != 'tisan.memory_setting']
+    assert not [r for r in await tisan.records() if r['kind'] != 'tisan.memory_setting' and r['meta'].get('user_id') == USER_A]
 
 
 
@@ -72,9 +72,11 @@ async def assert_owner_task(tisan):
     assert repeat['brain_receipt']['answered_from_memory'] is True
     assert repeat['brain_receipt']['paid_calls'] == 0
     assert repeat['copy_needed'] != first['copy_needed']
+    shared_before = [r for r in (await tisan.view(USER_B))['memories'] if not r['meta'].get('user_id')]
     deleted = await tisan.control('DELETE')
     assert deleted.status_code == 200 and deleted.json()['forgotten'] > 0
-    assert not [row for row in (await tisan.view())['memories'] if row['kind'] != 'tisan.memory_setting']
+    assert shared_before == [r for r in (await tisan.view(USER_B))['memories'] if not r['meta'].get('user_id')]
+    assert not [row for row in (await tisan.view())['memories'] if row['kind'] != 'tisan.memory_setting' and row['meta'].get('user_id') == USER_A]
 
 
 async def assert_fixture_spend(tisan, record_property):

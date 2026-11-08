@@ -25,11 +25,10 @@ FIXTURE_COST = 0.0025
 FIXTURE_INPUT = 1200
 FIXTURE_OUTPUT = 300
 
-
 @pytest.fixture
 def tisan_runtime():
     paths = ('agents/tisan/gates_memory.py', 'agents/tisan/memory_api.py',
-             'agents/tisan/brain_service.py')
+             'agents/tisan/brain_service.py', 'agents/tisan/plan_jobs.py')
     absent = [path for path in paths if not (ROOT / path).is_file()]
     if absent:
         pytest.fail('BLOCKED: Tank platform lacks authoritative Tisan PR #1 runtime: ' + ', '.join(absent)
@@ -42,7 +41,6 @@ def tisan_runtime():
     assert hasattr(runtime['builder'], 'remembered_plan'), 'Integrated builder must contain the actual Gate 7/8 plan path'
     return SimpleNamespace(**runtime)
 
-
 class Observe:
     """Read-only observation of actual ASGI identity verification, never a signer."""
     def __init__(self, app):
@@ -52,7 +50,6 @@ class Observe:
         await self.app(scope, receive, send)
         if scope['type'] == 'http':
             self.states.append(dict(scope.get('state', {})))
-
 
 class Tisan:
     def __init__(self, runtime, stack, provider, tank_http, room, monkeypatch, tmp_path):
@@ -81,36 +78,19 @@ class Tisan:
         return await self.stack.records.list('tisan', tenant or self.stack.tenant, user_id=user)
 
     async def plan(self, request='placeholder first brief', *, user=USER_A, tenant=None, plan=None, run_id=None):
-        """Real signed controls obtain the actor; execute the actual builder plan path."""
-        from chassis.tank import TankClient
+        """Sign in, enqueue a durable room job, claim it and run its real handler."""
+        from tisan_worker_fixture import finish_job
         tenant = tenant or self.stack.tenant
-        actor = None
-        enabled = self.runtime.gates_memory.brain_enabled()
-        if enabled:
-            await self.view(user, tenant)
-            actors = [state.get('verified_product_user') for state in self.room.states
-                      if state.get('verified_product_user') is not None]
-            assert actors, 'Real product assertion verifier must expose its verified actor'
-            actor = actors[-1]
-            assert actor.user_id == user and actor.tenant_id == tenant
-        else:
-            authorised = await self.http.get('/v1/command/tools', headers=self.headers(user, tenant))
-            assert authorised.status_code == 200, authorised.text
         payload = {'name': 'placeholder site', 'slug': 'placeholder-site', 'locale': 'en',
             'brand': {'colours': {'ink': '#001840', 'paper': '#F4F6FB', 'accent': '#E80008', 'line': '#B8BFD0'},
                       'fonts': {'heading': 'Jost', 'body': 'Inter'}}, 'request': request}
         if plan is not None:
             payload['plan'] = plan
-        # The real builder execution routine owns validation, free steps,
-        # recall/brain/Tank order, accepted-copy gating and the returned receipt.
-        # No test route or replacement planner implements any of those steps.
-        client = TankClient('http://placeholder-tank', KEY, 'tisan', self.native_tank_http)
-        result = await self.runtime.builder.execute(payload, tenant, tank=client,
-            memory=self.runtime.app.app.state.memory if enabled else None,
-            user=actor.user_id if actor else None, data_root=self.root)
-        if plan is None:
-            assert 'brain_receipt' in result, 'Actual builder execution must return its real plan receipt'
-        return result
+        self.last_brief = payload
+        response = await self.http.post('/v1/command/tisan/plan', headers=self.headers(user, tenant),
+            json={'run_id': run_id or str(uuid.uuid4()), 'brief': payload})
+        assert response.status_code == 200, (response.text, self.events)
+        return await finish_job(self, response.json()['job_id'], tenant)
 
     async def correct(self, memory_id, value, user=USER_A):
         response = await self.control('POST', '/' + memory_id, user=user, body={'value': value})
@@ -121,7 +101,6 @@ class Tisan:
         return {'provider_calls': len(self.provider_calls),
                 'cost': sum(c['cost'] for c in self.provider_calls),
                 'tokens': sum(c['input'] + c['output'] for c in self.provider_calls)}
-
 
 @pytest_asyncio.fixture
 async def tisan(tisan_runtime, gate78_memory, monkeypatch, tmp_path):
@@ -143,16 +122,21 @@ async def tisan(tisan_runtime, gate78_memory, monkeypatch, tmp_path):
 
     stack = await gate78_memory('tisan')
     provider = Provider('us-east')
-    install_registry(monkeypatch, [provider], {ORG: stack.tenant, 'placeholder-other-org': stack.other_tenant})
+    install_registry(monkeypatch, [provider], {ORG: stack.tenant, '10002': stack.other_tenant})
     set_founders(monkeypatch, USER_A + ',' + USER_B)
     monkeypatch.setattr(identity_oidc, 'http_client', lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
     identity_oidc._cache.clear()
     for name, value in {'TANK_API_KEY': WORKSPACE_KEY, 'TANK_KEY': KEY, 'TANK_KEY_TISAN': KEY,
                         'TANK_REGION': 'us-east', 'TISAN_BRAIN_ENABLED': 'true',
+                        'TERVORY_ADMIN_USER_IDS': USER_A + ',' + USER_B,
                         'DATA_DIR': str(tmp_path), 'TANK_URL': 'http://placeholder-tank',
                         'HERMES_URL': 'http://hermes'}.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(main, 'TANK_API_KEY', WORKSPACE_KEY)
+    monkeypatch.setenv('ENGINE_LOCAL_URL', '')
+    monkeypatch.setattr(main, '_roster_cache', None)
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://127.0.0.1/placeholder-fixture')
+    monkeypatch.setenv('LITELLM_MASTER_KEY', 'placeholder-fixture-gateway')
     room = Observe(tisan_runtime.app.app)
     tisan_runtime.app.app.state.pool = stack.records.pool
     tisan_runtime.app.app.state.memory = MemoryClient('http://hermes', KEY, 'tisan', stack.http)
@@ -174,21 +158,41 @@ async def tisan(tisan_runtime, gate78_memory, monkeypatch, tmp_path):
     async with core_pool.acquire() as conn:
         await conn.execute((ROOT / 'tank/schema.sql').read_text())
         await ensure_schema(conn, 'tisan')
-        await conn.execute(Path(tisan_runtime.builder.__file__).with_name('schema.sql').read_text())
+        from tisan_worker_fixture import configure_ladder
+        await configure_ladder(conn, stack)
         await apply_roles(conn, {'AGENT_DB_PASSWORD_TISAN': 'placeholder-disposable-test-password'})
+        async with conn.transaction():
+            await conn.execute('SET LOCAL ROLE agent_tisan')
+            await conn.execute(Path(tisan_runtime.builder.__file__).with_name('schema.sql').read_text())
     async def room_role(connection):
         await connection.execute('SET ROLE agent_tisan')
     raw_room_pool = await asyncpg.create_pool(target, min_size=1, max_size=4, init=room_role)
     room_pool = TenantPool(raw_room_pool)
     tisan_runtime.app.app.state.pool = room_pool
     monkeypatch.setattr(main, 'pool', lambda: core_pool)
+    monkeypatch.setattr(main, 'DATABASE_URL', target)
+    monkeypatch.setattr(main, 'LITELLM_MASTER_KEY', 'placeholder-fixture-gateway')
+    monkeypatch.setattr(main, 'LITELLM_URL', 'http://placeholder-litellm')
     harness = None
 
     async def room_edge(request):
+        if harness is not None:
+            harness.events.append((request.url.host, request.url.path))
         if request.url.host == 'agent-tisan':
-            return await product_transport.handle_async_request(request)
+            response = await product_transport.handle_async_request(request)
+            await response.aread()
+            if harness is not None:
+                harness.events.append((request.method, request.url.path, response.status_code,
+                    response.json().get('detail') if response.status_code >= 400 else None,
+                    bool(request.headers.get('x-tervory-admin'))))
+            return response
         if request.url.host == 'placeholder-tank':
-            return await native_transport.handle_async_request(request)
+            response = await native_transport.handle_async_request(request)
+            await response.aread()
+            if harness is not None:
+                harness.events.append((request.url.path, response.status_code,
+                    response.json() if response.status_code >= 400 else None))
+            return response
         if request.url.host == 'hermes':
             outage = harness.transport_outage if harness is not None else None
             if outage == 'auth':
@@ -197,11 +201,14 @@ async def tisan(tisan_runtime, gate78_memory, monkeypatch, tmp_path):
                     or (outage in {'list', 'recall'} and request.method == 'GET')):
                 return httpx.Response(503, json={'detail': 'placeholder memory unavailable'})
             return await stack.http.send(request)
+        if request.url.path == '/router/settings':
+            return httpx.Response(200, json={'current_values': {'fallbacks': []}})
         if request.url.path.endswith('/model/info'):
-            return httpx.Response(200, json={'data': [{'model_name': 'luna',
+            from engine_models import OPEN
+            return httpx.Response(200, json={'data': [{'model_name': model,
                 'litellm_params': {'model': 'openai/placeholder-fixture'},
                 'model_info': {'family': 'openai', 'input_cost_per_token': 0.000001,
-                               'output_cost_per_token': 0.000003}}]})
+                               'output_cost_per_token': 0.000003}} for model in (*OPEN, 'luna')]})
         if request.url.path.endswith('/chat/completions'):
             plan = {'nav': [{'href': '/'}], 'ui': {}, 'pages': [{'name': 'home', 'path': '/',
                 'sections': [{'id': 'placeholder-hero', 'type': 'hero', 'props': {}}]}]}
@@ -209,18 +216,27 @@ async def tisan(tisan_runtime, gate78_memory, monkeypatch, tmp_path):
             assert harness is not None
             harness.provider_calls.append(call)
             return httpx.Response(200, headers={'x-litellm-response-cost': str(FIXTURE_COST)}, json={
-                'model': 'luna', 'choices': [{'message': {'role': 'assistant', 'content': json.dumps(plan)},
+                'model': json.loads(request.content)['model'], 'choices': [{'message': {'role': 'assistant', 'content': json.dumps(plan)},
                                             'finish_reason': 'stop'}],
                 'usage': {'prompt_tokens': FIXTURE_INPUT, 'completion_tokens': FIXTURE_OUTPUT}})
         raise AssertionError('Unexpected external service: ' + request.url.host + request.url.path)
 
+    original_client = httpx.AsyncClient
+    def offline_client(*args, **kwargs):
+        kwargs.setdefault('transport', httpx.MockTransport(room_edge))
+        return original_client(*args, **kwargs)
+    monkeypatch.setattr(httpx, 'AsyncClient', offline_client)
     try:
-        async with paid_http.Client(transport=httpx.MockTransport(room_edge)) as shipping_client:
+        async with paid_http.Client(transport=httpx.MockTransport(room_edge)) as shipping_client, \
+                httpx.AsyncClient(transport=httpx.MockTransport(room_edge)) as room_client:
             monkeypatch.setattr(main, '_http', shipping_client)
-            tisan_runtime.app.app.state.memory = MemoryClient('http://hermes', KEY, 'tisan', shipping_client)
+            tisan_runtime.app.app.state.memory = MemoryClient('http://hermes', KEY, 'tisan', room_client)
             async with httpx.AsyncClient(transport=app_transport, base_url='http://placeholder-tank') as ingress:
                 harness = Tisan(tisan_runtime, stack, provider, ingress, room, monkeypatch, tmp_path)
-                harness.native_tank_http = shipping_client
+                from chassis.tank import TankClient
+                tisan_runtime.app.app.state.tank = TankClient('http://placeholder-tank', KEY, 'tisan', room_client)
+                tisan_runtime.app.app.state.files = None
+                tisan_runtime.app.app.state.browser = None
                 yield harness
     finally:
         await raw_room_pool.close()
@@ -228,8 +244,7 @@ async def tisan(tisan_runtime, gate78_memory, monkeypatch, tmp_path):
         async with stack.records.pool.acquire() as admin:
             await admin.execute('DROP DATABASE "' + database + '"')
 
-
 def corrected_plan(value):
     result = copy.deepcopy(value)
-    result['pages'][0]['sections'].append({'id': 'placeholder-contact', 'type': 'contact', 'props': {}})
+    result['pages'].append({'name': 'contact', 'path': '/contact', 'sections': []})
     return result

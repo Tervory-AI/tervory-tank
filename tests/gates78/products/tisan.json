@@ -1,10 +1,10 @@
 {
   "product": "tisan",
-  "source_sha": "9918e90886dd89e2acb29bebe86f4837f771a475",
+  "source_sha": "0ffe302bc9b69eea3cbeffd63bc02f415ceb7697",
   "entrypoints": [
-    "GET/POST/DELETE /v1/command/tisan/memory (native Tank control forwarding)",
-    "GET/POST/DELETE /memory (actual Tisan controls, shared nonce verifier)",
-    "agents.tisan.builder.execute -> remembered_plan -> brain_service/TankClient -> real Hermes records"
+    "POST /v1/command/tisan/plan -> shipped product_identity/paid_http -> POST /plan/start; same-request verified actor persisted in agent_tisan.job_actors",
+    "chassis.worker.claim_next/run_claimed -> chassis.app._context -> plan_jobs.owner -> builder.execute -> real Hermes -> TankClient and stable paid_run_id -> actual Tank paid checkpoint",
+    "GET/POST/DELETE /v1/command/tisan/memory -> real Tisan /memory controls and shared durable nonce verifier"
   ],
   "legacy_tests": [
     "tests/test_tisan_gates_7_8_memory.py::test_request_routes_through_tank_records_receipt_and_remembers",
