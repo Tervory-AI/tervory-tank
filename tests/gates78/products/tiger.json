@@ -1,6 +1,6 @@
 {
   "product": "tiger",
-  "source_sha": "29db74dcd8e6632e5aa89e1bdc1cdd9fb165fc57",
+  "source_sha": "84dbbfb64801f4d195afe5cd10931aee8770943d",
   "entrypoints": [
     "tank.tiger_watch_commands.build_router: /v1/command/tiger/watches/brain/tasks and /memory controls",
     "agents/tiger/app.py: signed /brain/tasks and /memory controls",
