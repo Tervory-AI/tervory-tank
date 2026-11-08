@@ -1,0 +1,94 @@
+{
+  "arch": {
+    "repo": "katanemo/Arch-Router-1.5B",
+    "revision": "5b156890a91b1035a86f82faf1a651debf309009",
+    "files": [
+      {
+        "name": "LICENSE",
+        "bytes": 7733,
+        "sha256": "9db8f114ce84e3eba181a98edb3034cef64ee09de8b1b2af765c7433554491c9"
+      },
+      {
+        "name": "README.md",
+        "bytes": 7135,
+        "sha256": "3b2daa5c898626e2b4d1279d57cad8cb61dcb850a4af8aabac032de2ce70a7dd"
+      },
+      {
+        "name": "config.json",
+        "bytes": 683,
+        "sha256": "7ed22a56c438dafe194cfaaa8557c6d0fc900bbd0ce7161e5cde6894f90eb7b3"
+      },
+      {
+        "name": "generation_config.json",
+        "bytes": 242,
+        "sha256": "a74797aba705d511c09cc4d12c4517653426ac5559841f0bad62aa8733e100da"
+      },
+      {
+        "name": "merges.txt",
+        "bytes": 1671853,
+        "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+      },
+      {
+        "name": "model.safetensors",
+        "bytes": 3087466808,
+        "sha256": "9395579ce8f703f1812ff56215b5fb8a421dd11040c357c0b371b55ea922e5c9"
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 11421896,
+        "sha256": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa"
+      },
+      {
+        "name": "tokenizer_config.json",
+        "bytes": 7362,
+        "sha256": "056f2c058091cdc7af49f6dc7cc43e0440f1b7d2a76d95d1daea085db11db491"
+      },
+      {
+        "name": "vocab.json",
+        "bytes": 2776833,
+        "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      }
+    ]
+  },
+  "routellm": {
+    "repo": "routellm/bert_gpt4_augmented",
+    "revision": "86237e3df400762178ea98379477b8296e66d5e4",
+    "files": [
+      {
+        "name": "LICENSE",
+        "bytes": 11356,
+        "sha256": "43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1"
+      },
+      {
+        "name": "config.json",
+        "bytes": 924,
+        "sha256": "937704625fe4fb59b9c08ec80292dfd759d5efc75788b45e35ea6e54a3181f91"
+      },
+      {
+        "name": "model.safetensors",
+        "bytes": 1112208084,
+        "sha256": "e2a92240bad1c7fb9befbf021a62fad5feb1e2a3990d53a28d160a39bb1cac7b"
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 17082832,
+        "sha256": "8373f9cd3d27591e1924426bcc1c8799bc5a9affc4fc857982c5d66668dd1f41"
+      },
+      {
+        "name": "tokenizer_config.json",
+        "bytes": 1147,
+        "sha256": "f90024142df07163e5e6c5b9a6ad7c8c68b22a9112af11e3db4559a9ff90f737"
+      },
+      {
+        "name": "special_tokens_map.json",
+        "bytes": 280,
+        "sha256": "06e405a36dfe4b9604f484f6a1e619af1a7f7d09e34a8555eb0b77b66318067f"
+      },
+      {
+        "name": "sentencepiece.bpe.model",
+        "bytes": 5069051,
+        "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865"
+      }
+    ]
+  }
+}

@@ -137,5 +137,6 @@ def dry_run(data: dict, *, tenant_id: str, split: str) -> dict:
             'model_comparison': {'status': 'unrun', 'route_quality': None, 'abstention_rate': None,
                 'escalation_rate': None, 'classifier_latency_ms': None, 'inference_cost_usd': None,
                 'cost_status': 'unknown', 'savings_usd': None,
-                'gates': ['Arch separate commercial licence', 'verified local CPU model/runtime for both classifiers',
+                'commercial_permission': 'pending-counsel-review',
+                'gates': ['verified local CPU model/runtime for both classifiers',
                           'independently reviewed development/holdout route labels']}}
