@@ -1609,7 +1609,7 @@ async def test_remember_failure_after_paid_returns_unavailable_receipt_no_retry(
         paid["n"] += 1
         return {
             "id": "tank-job",
-            "status": "queued",
+            "status": "done",
             "cost_usd": FIXED_FAKE_PER_CALL["cost_usd"],
             "tokens_in": FIXED_FAKE_PER_CALL["tokens_in"],
             "tokens_out": FIXED_FAKE_PER_CALL["tokens_out"],
@@ -1626,7 +1626,11 @@ async def test_remember_failure_after_paid_returns_unavailable_receipt_no_retry(
             },
         }
 
-    async def route(**_kwargs):
+    async def route(body, *, caller=None):
+        assert caller is None
+        assert body.tenant_id == tenant and body.agent == 'tier0'
+        assert body.task_type == 'tier0.answer'
+        assert body.messages == [{'role': 'user', 'content': 'same'}]
         paid["n"] += 1
         return {
             "content": "paid-once",
@@ -1651,6 +1655,7 @@ async def test_remember_failure_after_paid_returns_unavailable_receipt_no_retry(
         create_task=create_task,
         route=route,
         TaskCreate=lambda **kw: SimpleNamespace(**kw),
+        RouteRequest=lambda **kw: SimpleNamespace(**kw),
         Message=lambda **kw: kw,
     )
     actor = SimpleNamespace(tenant_id=tenant, user_id=user)
