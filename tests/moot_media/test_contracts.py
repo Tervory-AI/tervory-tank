@@ -284,3 +284,50 @@ def test_shared_tank_mux_account_adapter_owns_credentials(scope,journal):
     assert account.calls[0][0:2]==('POST','live-streams')
     assert mux.signed_playback('shared-playback',permitted=True,published=True).startswith('https://stream.mux.com/')
     assert not any(mux.auth)
+
+
+def test_optional_detection_missing_runtime_is_unavailable(monkeypatch):
+    import sys
+    from tank.moot.detection import load_detection
+    monkeypatch.setitem(sys.modules,'livekit.plugins',None)
+    with pytest.raises(MediaError,match='audio_detection_unavailable'):
+        load_detection()
+
+
+def test_caption_revocation_prevents_stale_event(scope,journal):
+    from tank.moot.captions import CaptionPublisher
+    async def run():
+        async def current():return 3
+        with pytest.raises(MediaError,match='seat_revoked'):
+            await CaptionPublisher(journal).emit(scope,'caption',0,seat='judge',epoch=2,
+                text='Actual supplied STT output',final=True,current=current)
+    asyncio.run(run())
+    assert journal.events(scope)==[]
+
+
+@pytest.mark.parametrize('seat',['applicant','respondent','judge'])
+def test_independent_ai_worker_seat_grants(scope,seat):
+    rooms=Rooms('http://localhost:7880','ws://localhost:7880','test-key','s'*32)
+    state=projection(scope,seat);state['seats'][seat]['kind']='ai'
+    token=rooms.worker_grant(scope,seat,state)
+    claims=jwt.decode(token,'s'*32,algorithms=['HS256'])
+    assert claims['sub']==f'ai:{seat}:2' and claims['video']['room']==scope.room
+    assert claims['video']['canPublishSources']==['microphone']
+    state['seats'][seat]['kind']='human'
+    with pytest.raises(MediaError,match='ai_seat_required'):rooms.worker_grant(scope,seat,state)
+
+
+def test_object_retention_exact_region_and_hearing(scope,journal):
+    from tank.moot.retention import Retention
+    from datetime import datetime,timezone,timedelta
+    class Store:
+        deleted=[]
+        async def delete(self,**kwargs):self.deleted.append(kwargs)
+    store=Store();retention=Retention(journal,store,{'us-east':'local-us-bucket','za':'local-za-bucket'})
+    now=datetime.now(timezone.utc)
+    retention.bind(scope,scope.room+'/audio.ogg',now+timedelta(days=1))
+    assert asyncio.run(retention.run_once(scope,now=now))==0
+    assert asyncio.run(retention.run_once(Scope(str(uuid4()),scope.region,scope.hearing),now=now+timedelta(days=2)))==0
+    assert asyncio.run(retention.run_once(scope,now=now+timedelta(days=2)))==1
+    assert asyncio.run(retention.run_once(scope,now=now+timedelta(days=2)))==0
+    assert store.deleted==[{'bucket':'local-us-bucket','key':scope.room+'/audio.ogg'}]

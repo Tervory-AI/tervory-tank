@@ -31,7 +31,6 @@ def build(*, mux_account=None):
         raise RuntimeError('invalid MOOT_REGION')
     # Internal and external HTTP clients intentionally have separate proxy policy.
     internal = httpx.AsyncClient(trust_env=False, follow_redirects=False)
-    external = httpx.AsyncClient(follow_redirects=False)
     journal = Journal(Path(os.environ['MOOT_JOURNAL_PATH']))
     rooms = Rooms(*(os.environ[name] for name in ('MOOT_LIVEKIT_URL', 'MOOT_LIVEKIT_PUBLIC_URL',
         'MOOT_LIVEKIT_API_KEY', 'MOOT_LIVEKIT_API_SECRET')))
@@ -51,7 +50,6 @@ def build(*, mux_account=None):
                 yield
             finally:
                 await internal.aclose()
-                await external.aclose()
     app.router.lifespan_context = lifespan
     @app.get('/readyz')
     async def ready():

@@ -26,3 +26,17 @@ def feedback_html(projection):
     title = html.escape(projection['problem']['title'])
     turns = ''.join('<p>' + html.escape(f"{t['seat']}: {t['text']}") + '</p>' for t in projection['transcript'])
     return f'<!doctype html><meta charset="utf-8"><title>{title}</title><h1>{title}</h1>{turns}'
+
+
+def feedback_pdf(projection):
+    try:
+        from weasyprint import HTML
+    except ImportError:
+        raise MediaError('feedback_export_unavailable') from None
+    def refuse_remote(url, *args, **kwargs):
+        # No font, CSS, attachment, media or tracking request may leave the export.
+        raise MediaError('external_export_resource_forbidden')
+    try:
+        return HTML(string=feedback_html(projection), url_fetcher=refuse_remote).write_pdf()
+    except Exception:
+        raise MediaError('feedback_export_unavailable') from None

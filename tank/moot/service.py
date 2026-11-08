@@ -102,8 +102,8 @@ def create_app(*, bridge, rooms, journal, internal_key, region, mux=None, liveki
     @app.post('/webhooks/mux')
     async def mux_webhook(request: Request,
                           mux_signature: str = Header(default='')):
-        if mux is None:
-            raise HTTPException(503, 'mux_unavailable')
+        if mux is None or not mux.webhook_secret:
+            raise HTTPException(503, 'mux_webhook_unavailable')
         chunks, size = [], 0
         async for chunk in request.stream():
             size += len(chunk)

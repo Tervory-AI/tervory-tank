@@ -526,14 +526,13 @@ idna==3.20 \
     #   httpx
     #   livekit-api
     #   yarl
-livekit==1.2.1 \
-    --hash=sha256:110518d41f242af77a6c1e1bff1c4111dc50bdd9f4d14972ef2155876758582e \
-    --hash=sha256:571d25d107b70e70b6b435e803554b0124272cc3d85a45998ea75a4eb09b5ab8 \
-    --hash=sha256:7c3a09623b059f7d93c0c487ff4ba8b5bdebdfa7f0bd424cccbe655ea70c85f3 \
-    --hash=sha256:8a3dd36574d5df73dba5baa8fbed97401e25b51ab38822fe2c4769fef994f09d \
-    --hash=sha256:9edd3d3558193c66ed4dd78d3f5874dc35e99dbbf0a0264380fbd64fcd31e2a7 \
-    --hash=sha256:a7892d9b7bd2f683c8789026519e84d6931b67dd19507450343e147dff789c2f \
-    --hash=sha256:c9a0269cc23a889e20f716405a59fbae375a0248ea3d2d043da103cfb0b71711
+livekit==1.2.0 \
+    --hash=sha256:08774b3ffe04491515e7ae3bf920051a0a1d40bf7e2f74a499cf9ef444c42e1f \
+    --hash=sha256:1dee2aa01f01951c0798b713d40331dd958e5166196d2d8d1b85e6ce900b0a23 \
+    --hash=sha256:34a44cd884badb596c01d3ba99ba2d67de3d84d253bc62a1c07b4739f6b68c32 \
+    --hash=sha256:9eae2fbf857e0af2516eb03f5285eb5edf0ea0b1aa238268291ccb1a7e11d4d4 \
+    --hash=sha256:a7ac564de20c54d532ff59ebb92d0018d088c96dc36a81d0e02be8b9efa7584c \
+    --hash=sha256:d6279a25ca7b25667908dc43fbc69374f84fa63b7fc857639483a7a3a3850070
     # via -r tank/moot/requirements.in
 livekit-api==1.2.2 \
     --hash=sha256:64f82ed90aaef2dc982dbc7f9dcda6f5dc958928ce77ef2b582459d8e2c87b6b \

@@ -80,3 +80,59 @@ class AudioParticipant:
         if self.room is not None:
             await self.room.disconnect()
         self.room = self.source = None
+
+    async def listen(self, scope, track, *, seat, epoch, current, vad, detector, on_caption):
+        if self.speech.adapter is None or vad is None or detector is None:
+            raise MediaError('audio_unavailable')
+        from livekit.agents import vad as vad_types, llm, LanguageCode
+        import base64
+        import hashlib
+        stream = vad.stream()
+        audio = rtc.AudioStream(track, sample_rate=16000, num_channels=1)
+        context = llm.ChatContext()
+        threshold = await detector.unlikely_threshold(LanguageCode("en"))
+        if threshold is None:
+            raise MediaError("audio_detection_unavailable")
+        async def feed():
+            try:
+                async for event in audio:
+                    if await current() != epoch:
+                        raise MediaError('seat_revoked')
+                    stream.push_frame(event.frame)
+            finally:
+                stream.end_input()
+        feeder = asyncio.create_task(feed())
+        try:
+            async for event in stream:
+                if event.type != vad_types.VADEventType.END_OF_SPEECH:
+                    continue
+                if await current() != epoch:
+                    raise MediaError('seat_revoked')
+                pcm = b''.join(bytes(frame.data) for frame in event.frames)
+                if not pcm or len(pcm) > 16000 * 2 * 30:
+                    raise MediaError('audio_segment_limit')
+                digest = hashlib.sha256(pcm).hexdigest()
+                # Request identity is stable across retry/reconnect of the same
+                # captured segment and epoch. PCM stays inside the Tank adapter.
+                result = await self.speech.dispatch(scope, f'stt:{seat}:{epoch}:{digest}', 'moot.stt',
+                    {'pcm_s16le': base64.b64encode(pcm).decode(), 'sample_rate': 16000, 'channels': 1},
+                    current=current, epoch=epoch)
+                if result.get('status') == 'started':
+                    raise MediaError('speech_pending_resolution')
+                text = result.get('text')
+                if not isinstance(text, str) or not 0 < len(text) <= 24000:
+                    raise MediaError('invalid_audio_response')
+                context.add_message(role='user', content=text)
+                probability = await detector.predict_end_of_turn(context, timeout=3)
+                if await current() != epoch:
+                    raise MediaError('seat_revoked')
+                # Captions are actual STT output; they never commit legal turns.
+                await on_caption(text, probability >= threshold)
+        finally:
+            feeder.cancel()
+            try:
+                await feeder
+            except (asyncio.CancelledError, Exception):
+                pass
+            await stream.aclose()
+            await audio.aclose()

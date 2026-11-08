@@ -43,3 +43,17 @@ class Rooms:
     async def stop_recording(self, egress_id):
         async with api.LiveKitAPI(self.url, self.key, self.secret) as client:
             return await client.egress.stop_egress(api.StopEgressRequest(egress_id=egress_id))
+
+    def worker_grant(self, scope, seat, projection):
+        if projection.get('id') != scope.hearing or projection.get('region') != scope.region:
+            raise MediaError('not_found')
+        controller = projection.get('seats', {}).get(seat, {})
+        if seat not in {'applicant', 'respondent', 'judge'} or controller.get('kind') != 'ai' or projection.get('phase') != 'hearing':
+            raise MediaError('ai_seat_required')
+        identity = f"ai:{seat}:{controller['epoch']}"
+        return (api.AccessToken(self.key, self.secret).with_identity(identity)
+            .with_ttl(timedelta(seconds=60)).with_grants(api.VideoGrants(
+                room_join=True, room=scope.room, can_publish=True,
+                can_subscribe=True, can_publish_data=False,
+                can_publish_sources=['microphone'], can_update_own_metadata=False,
+                agent=True)).to_jwt())
