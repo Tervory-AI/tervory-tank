@@ -13,6 +13,7 @@ import httpx
 from actor_context import reset_verified_actor, set_verified_actor
 from brain.security import tenant_dir
 from chassis.memory import MemoryClient
+from chassis.sqlite_nonces import SQLiteNonces
 from chassis.user_assertion import HEADER, signed_user
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -23,16 +24,8 @@ from rig_brain.room import Question, authorize
 
 @asynccontextmanager
 async def lifespan(app):
-    import asyncpg
-    pool = None
-    if os.environ.get("DATABASE_URL") and os.environ.get("TANK_KEY", "").strip():
-        pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=4)
-        app.state.pool = pool
-    try:
-        yield
-    finally:
-        if pool:
-            await pool.close()
+    app.state.assertion_nonces = SQLiteNonces(Path(os.environ.get("DATA_DIR", "/data")) / "assertion-nonces.sqlite3")
+    yield
 
 
 app = FastAPI(lifespan=lifespan)
@@ -43,7 +36,8 @@ jobs: dict[tuple[str, str], asyncio.Task] = {}
 @app.post("/delegate")
 async def delegate(body: Question, request: Request, x_tank_key: str = Header(default="")):
     authorize(x_tank_key, body.home_region)
-    actor = await signed_user(request, tenant_id=str(body.tenant_id), product="rig", required=True)
+    actor = await signed_user(request, tenant_id=str(body.tenant_id), product="rig", required=True,
+                              nonces=getattr(request.app.state, "assertion_nonces", None))
     await start(body, request, x_tank_key)
     job = jobs.get((str(body.tenant_id), str(body.task_id)))
     if job is not None:
@@ -197,6 +191,7 @@ async def health():
 async def start(body: Question, request: Request, x_tank_key: str = Header(default="")):
     authorize(x_tank_key, body.home_region)
     actor = await signed_user(request, tenant_id=str(body.tenant_id), product="rig",
+                              nonces=getattr(request.app.state, "assertion_nonces", None),
                               required=bool(request.headers.get(HEADER)))
     work = directory(body.tenant_id, body.task_id)
     identity = (str(body.tenant_id), str(body.task_id))
@@ -262,6 +257,7 @@ async def require_task_owner(request, tenant_id, work):
     if stored.exists():
         owner = json.loads(stored.read_text()).get("user_id")
         if owner:
-            actor = await signed_user(request, tenant_id=str(tenant_id), product="rig", required=True)
+            actor = await signed_user(request, tenant_id=str(tenant_id), product="rig", required=True,
+                                      nonces=getattr(request.app.state, "assertion_nonces", None))
             if actor.user_id != owner:
                 raise HTTPException(404, "Task not found.")

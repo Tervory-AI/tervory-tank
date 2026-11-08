@@ -94,7 +94,6 @@ services:
       TANK_REGION: ${TANK_REGION:-us-east}
       HERMES_URL: http://hermes:8000
       RIG_MEMORY_ENABLED: ${RIG_MEMORY_ENABLED:-false}
-      DATABASE_URL: postgresql://agent_rig:${AGENT_DB_PASSWORD_RIG}@postgres:5432/${POSTGRES_DB:-tervory}
       RIG_BROWSER_URL: http://rig-browser-gateway:3000
       RIG_SANDBOX_URL: http://rig-sandbox:8002
       SANDBOX_KEY: ${SANDBOX_KEY_RIG:?Set the Rig-only sandbox key}
