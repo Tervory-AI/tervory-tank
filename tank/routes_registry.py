@@ -60,6 +60,7 @@ ROUTES = (
     ('late', 'mcp_client_oauth', 'router', None, True),
     ('late', 'memory_routes', 'router', None, True),
     ('late', 'skala_revalidation', 'install', ('app', 'tank'), False),
+    ('late', 'skala_memory_wire', 'attach_skala_memory_routes', ('app',), False),
     ('early', 'tenant_regions', 'build_router', ('tank',), True),
     ('early', 'workspace_board', 'build_router', ('tank',), True),
     ('early', 'morning_report', 'build_router', ('tank',), True),
