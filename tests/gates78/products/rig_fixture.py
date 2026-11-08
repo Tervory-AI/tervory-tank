@@ -79,14 +79,27 @@ class RigWire:
         return [dict(row) for row in await self.pool.fetch(
             f'SELECT id, tenant_id, claim, meta FROM {schema}.memory_records ORDER BY id')]
 
-    async def build(self, question='placeholder build a display stand', *, user=USER_A,
-                    tenant=None, task_id=None):
-        tenant = tenant or self.stack.tenant
+    async def open_worker(self):
         async with self.worker_lock:
             if not self.worker_open:
                 from products.rig_provider_fixture import worker_corridor
                 await self.resources.enter_async_context(worker_corridor(self, self.monkeypatch, ROOT))
                 self.worker_open = True
+
+    async def delegate(self, question='placeholder build a display stand', *, user=USER_A,
+                       tenant=None, run_id=None):
+        from chassis.tank import TankClient
+        from chassis.user_assertion import SignedUser
+        await self.open_worker()
+        tenant = tenant or self.stack.tenant
+        client = TankClient('http://placeholder-tank', self.stack.key, 'rig', self.ingress)
+        return await client.delegate_task(SignedUser(tenant, user, 'member'), str(run_id or uuid4()),
+            'rig.build', {'messages': [{'role': 'user', 'content': question}]}, [])
+
+    async def build(self, question='placeholder build a display stand', *, user=USER_A,
+                    tenant=None, task_id=None):
+        tenant = tenant or self.stack.tenant
+        await self.open_worker()
         identity = str(task_id or uuid4())
         answer = await self.request('POST', '/tasks', user=user, tenant=tenant, body={
             'task_id': identity, 'home_region': 'us-east', 'question': question})
@@ -163,7 +176,7 @@ async def rig_wire(gate78_memory, gate78_database, monkeypatch, tmp_path, reques
         captured.append(request)
 
     async def room(request):
-        target = brain.app if request.url.path.startswith('/tasks') else product
+        target = brain.app if request.url.path.startswith(('/tasks', '/delegate')) else product
         return await httpx.ASGITransport(app=target).handle_async_request(request)
 
     async with paid_http.Client(transport=httpx.MockTransport(room),

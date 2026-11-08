@@ -479,3 +479,186 @@ async def test_editing_owned_result_replaces_it_and_invalidates_reuse(rig_wire):
     corrected = await wire.build()
     assert corrected['summary'] == 'placeholder corrected result'
     assert len(wire.provider_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_typed_delegate_runs_real_sdk_once_and_retains_signed_scope(rig_wire):
+    from chassis.task_contract import paid_identity
+    wire = rig_wire
+    run = str(uuid4())
+    first = await wire.delegate(run_id=run)
+    receipt = first['receipt']
+    assert receipt['status'] == 'done', receipt
+    assert receipt['user_id'] == USER_A and receipt['task_id'] == paid_identity(wire.stack.tenant, USER_A, run)
+    assert len(wire.provider_calls) == 2 and receipt['cost_usd'] == 0.1
+    assert all(row['user_id'] == USER_A for row in receipt['model_receipts'])
+    retry = await wire.delegate(run_id=run)
+    assert retry == first and len(wire.provider_calls) == 2
+    repeat = await wire.delegate()
+    assert repeat['receipt']['answered_from_memory'] and repeat['receipt']['paid_calls'] == 0
+    assert repeat['receipt']['cost_usd'] == 0 and repeat['receipt']['would_have_cost']['cost_usd'] == 0.1
+    assert repeat['receipt']['model_receipts'] == [] and len(wire.provider_calls) == 2
+    assert (await wire.rows())[0]['meta']['user_id'] == USER_A
+
+
+@pytest.mark.asyncio
+async def test_application_gap_uses_tank_typed_delegate_and_real_sdk(rig_wire):
+    from actor_context import set_verified_actor, reset_verified_actor
+    from chassis.tank import TankClient
+    from rig_brain_client import brain_then_route
+    wire = rig_wire
+    await wire.open_worker()
+    token = set_verified_actor(tenant_id=wire.stack.tenant, user_id=USER_A)
+    try:
+        tank = TankClient('http://placeholder-tank', wire.stack.key, 'rig', wire.ingress)
+        value = await brain_then_route(wire.ingress, tank, tenant_id=wire.stack.tenant,
+            task_type='rig.ask', messages=[{'role':'user','content':'placeholder application question'}])
+    finally:
+        reset_verified_actor(token)
+    assert value['content'] == 'placeholder catalogue result'
+    assert value['brain']['called'] and value['paid_calls'] == 2
+    assert value['cost_usd'] == 0.1 and len(value['ledger_ids']) == 2
+    assert len(wire.provider_calls) == 2
+    # Exercise the shipped application's model wrapper too, including its
+    # delegated Tank client and personal-memory/receipt bracket.
+    wire.product.state.rig.models.tank = tank
+    token = set_verified_actor(tenant_id=wire.stack.tenant, user_id=USER_A)
+    try:
+        content = await wire.product.state.rig.models.complete(wire.stack.tenant,
+            'rig.ask', [{'role': 'user', 'content': 'placeholder different application question'}])
+    finally:
+        reset_verified_actor(token)
+    assert content == 'placeholder catalogue result'
+    assert len(wire.provider_calls) == 4
+    assert any((row.get('meta') or {}).get('outcome') for row in await wire.rows())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('bad', ['missing_actor', 'tenant', 'user', 'region', 'run', 'room', 'disabled', 'messages', 'input', 'task_key', 'room_task'])
+async def test_typed_boundary_refuses_unbound_work_before_dispatch(rig_wire, monkeypatch, bad):
+    from chassis.user_assertion import HEADER, SignedUser, sign_assertion
+    wire = rig_wire
+    payload = {'tenant_id': wire.stack.tenant, 'user_id': USER_A, 'run_id': str(uuid4()),
+        'task_key': 'rig.build', 'input': {'messages': [{'role':'user','content':'placeholder'}]}, 'recall': []}
+    path = '/v1/agents/rig/delegate'
+    if bad == 'tenant': payload['tenant_id'] = wire.stack.other_tenant
+    if bad == 'user': payload['user_id'] = USER_B
+    if bad == 'run': payload['run_id'] = 'placeholder-invalid'
+    if bad == 'room': path = '/v1/agents/base/delegate'
+    if bad == 'messages': payload['input']['messages'] = 12
+    if bad == 'input': payload['input']['url'] = 'https://unapproved.example/'
+    if bad == 'task_key': payload['task_key'] = 'rig.payment'
+    if bad == 'room_task':
+        path = '/v1/agents/rig/tasks'
+        payload = {key: payload[key] for key in ('tenant_id', 'user_id', 'run_id')}
+        payload['messages'] = [{'role':'user','content':'placeholder'}]
+    if bad == 'disabled': monkeypatch.delenv('RIG_BRAIN_ENABLED')
+    body = json.dumps(payload).encode()
+    headers = {'X-Tank-Key': wire.stack.key, 'Content-Type': 'application/json',
+               'X-Home-Region': 'za' if bad == 'region' else 'us-east'}
+    if bad != 'missing_actor':
+        headers[HEADER] = sign_assertion('rig', SignedUser(wire.stack.tenant, USER_A, 'member'),
+            'POST', path, body, key=wire.stack.key)
+    response = await wire.ingress.post(path, content=body, headers=headers)
+    assert response.status_code in (401, 403, 409, 422), response.text
+    assert not wire.provider_calls and not wire.captured
+
+
+@pytest.mark.asyncio
+async def test_real_sdk_assertions_bind_task_and_reject_replay(rig_wire):
+    from chassis.user_assertion import HEADER, SignedUser, sign_assertion
+    wire = rig_wire
+    await wire.delegate()
+    assert len(wire.provider_calls) == 2
+    calls = [row for row in wire.sdk_calls if HEADER.lower() in row[2]]
+    assert len(calls) == 2
+    for path, query, headers, body in calls:
+        assert query.startswith('task_id=')
+        for stripped in ({k: v for k, v in headers.items() if k != HEADER.lower()},
+                         {**headers, HEADER.lower(): ''}):
+            refused = await wire.ingress.post(path + '?' + query, headers=stripped, content=body)
+            assert refused.status_code == 401
+        replay = await wire.ingress.post(path + '?' + query, headers=headers, content=body)
+        assert replay.status_code == 401
+        changed = await wire.ingress.post(path + '?task_id=' + str(uuid4()), headers=headers, content=body)
+        assert changed.status_code == 401
+        fresh = dict(headers)
+        fresh['x-task-id'] = str(uuid4())
+        fresh[HEADER.lower()] = sign_assertion('rig', SignedUser(wire.stack.tenant, USER_A, 'member'),
+            'POST', path + '?' + query, body, key=wire.stack.key)
+        rebound = await wire.ingress.post(path + '?' + query, headers=fresh, content=body)
+        assert rebound.status_code == 403
+    assert len(wire.provider_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_typed_worker_concurrency_and_receipt_validation(rig_wire):
+    from chassis.task_contract import check_receipt
+    from copy import deepcopy
+    wire = rig_wire
+    run = str(uuid4())
+    a, b = await asyncio.gather(wire.delegate(run_id=run), wire.delegate(run_id=run))
+    assert a == b and a['receipt']['status'] == 'done'
+    assert len(wire.provider_calls) == 2
+    for key, value in [('user_id', USER_B), ('task_id', str(uuid4())), ('tenant_id', wire.stack.other_tenant),
+                       ('region', 'za'), ('cost_usd', 0), ('tokens_in', 0), ('paid_calls', 0), ('model_receipts', [])]:
+        changed = deepcopy(a)
+        changed['receipt'][key] = value
+        with pytest.raises(ValueError):
+            check_receipt(changed, wire.stack.tenant, USER_A, run, 'rig')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['redirect', 'timeout', 'origin'])
+async def test_tank_private_dispatch_is_one_bounded_attempt(rig_wire, monkeypatch, failure):
+    from chassis.tank import TankClient
+    from chassis.user_assertion import HEADER, SignedUser
+    import main
+    import paid_http
+    wire = rig_wire
+    sent = []
+
+    async def transport(request):
+        assert request.url.host == 'rig-brain' and request.url.port == 8001
+        assert request.url.path == '/delegate' and HEADER in request.headers
+        assert request.extensions['timeout']['read'] == 70
+        sent.append(request)
+        if failure == 'timeout':
+            raise httpx.ReadTimeout('placeholder timeout', request=request)
+        return httpx.Response(307, headers={'Location': 'https://unapproved.example/redirect'})
+
+    if failure == 'origin':
+        monkeypatch.setenv('RIG_BRAIN_URL', 'https://unapproved.example/')
+    async with paid_http.Client(transport=httpx.MockTransport(transport)) as outbound:
+        monkeypatch.setattr(main, '_http', outbound)
+        client = TankClient('http://placeholder-tank', wire.stack.key, 'rig', wire.ingress)
+        with pytest.raises(httpx.HTTPStatusError) as error:
+            await client.delegate_task(SignedUser(wire.stack.tenant, USER_A, 'member'), str(uuid4()),
+                'rig.build', {'messages':[{'role':'user','content':'placeholder'}]}, [])
+        assert error.value.response.status_code == (503 if failure == 'origin' else 502)
+    assert len(sent) == (0 if failure == 'origin' else 1)
+    assert not wire.provider_calls
+
+
+@pytest.mark.asyncio
+async def test_application_failed_worker_retry_never_falls_through(rig_wire):
+    from actor_context import set_verified_actor, reset_verified_actor
+    from chassis.tank import TankClient
+    from rig_brain_client import brain_then_route
+    wire = rig_wire
+    await wire.open_worker()
+    wire.provider_mode = 'malformed'
+    run = str(uuid4())
+    token = set_verified_actor(tenant_id=wire.stack.tenant, user_id=USER_A)
+    try:
+        tank = TankClient('http://placeholder-tank', wire.stack.key, 'rig', wire.ingress)
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match='did not complete'):
+                await brain_then_route(wire.ingress, tank, tenant_id=wire.stack.tenant, run_id=run,
+                    task_type='rig.ask', messages=[{'role':'user','content':'placeholder failure'}])
+    finally:
+        reset_verified_actor(token)
+    assert len(wire.provider_calls) == 1 and wire.provider_calls[0]['cost_usd'] == 0.05
+    receipt = json.loads(next(wire.root.rglob('receipt.json')).read_text())
+    assert receipt['status'] == 'failed' and receipt['cost_usd'] == 0.05
+    assert not any((row.get('meta') or {}).get('outcome') for row in await wire.rows())

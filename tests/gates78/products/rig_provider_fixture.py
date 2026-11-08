@@ -13,6 +13,7 @@ import pytest
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 
 @asynccontextmanager
@@ -54,8 +55,10 @@ async def worker_corridor(wire, monkeypatch, root: Path):
                          'model_info': {'input_cost_per_token': 0.001, 'output_cost_per_token': 0.002}}
                         for name in ('llama-small', 'gpt-oss-small', 'qwen-small', 'gpt-oss', 'llama', 'placeholder-recorded', 'placeholder-baseline')]}
 
-    @fake.post('/v1/chat/completions')
+    @fake.post(COMPLETIONS_PATH)
     async def completion(request: Request):
+        assert request.url.path == '/litellm' + COMPLETIONS_PATH
+        assert request.url.hostname == '127.0.0.1'
         body = await request.json()
         assert body['model'] == 'llama-small'
         # The real Rig protocol adapter parses this JSON, then the real Hermes
@@ -77,9 +80,12 @@ async def worker_corridor(wire, monkeypatch, root: Path):
             headers={'x-litellm-response-cost': str(cost)})
 
     app = FastAPI()
+    wire.sdk_calls = []
 
     @app.middleware('http')
     async def memory_edge(request, call_next):
+        if request.url.path.startswith('/v1/agents/rig/') and request.method == 'POST':
+            wire.sdk_calls.append((request.url.path, request.url.query, dict(request.headers), await request.body()))
         # Outage injection is at HTTP, never inside Hermes/SQL/ownership code.
         if request.url.path.startswith('/hermes/') and wire.memory_failure:
             path, status = wire.memory_failure
@@ -105,6 +111,8 @@ async def worker_corridor(wire, monkeypatch, root: Path):
         if request.url.host == '127.0.0.1' and request.url.port == listener.getsockname()[1]:
             return await actual_http.handle_async_request(request)
         if request.url.host == 'rig-brain':
+            assert request.url.scheme == 'http' and request.url.port == 8001
+            assert request.url.path.startswith(('/tasks', '/delegate'))
             import rig_brain.service as brain
             return await httpx.ASGITransport(app=brain.app).handle_async_request(request)
         if request.url.host == 'agent-rig':
