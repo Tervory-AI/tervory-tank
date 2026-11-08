@@ -1,0 +1,4 @@
+# CI imports only the two media SDKs; preserve Tank's shared dependency pins.
+-c ../requirements.lock
+livekit==1.2.0
+livekit-api==1.2.2

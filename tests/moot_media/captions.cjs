@@ -1,0 +1,13 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const esbuild=require('../../tank/moot/client/node_modules/esbuild');
+const code=esbuild.transformSync(fs.readFileSync('tank/moot/client/participant.ts','utf8'),{loader:'ts',format:'cjs'}).code;
+const mod={exports:{}};
+vm.runInNewContext(code,{module:mod,exports:mod.exports,require:require("node:module").createRequire(require("node:path").resolve("tank/moot/client/package.json")),Map,Number,JSON});
+const accepted=[],captions=new mod.exports.Captions(e=>accepted.push(e));
+captions.push({seq:3,seat:'judge',text:'third',final:true});
+captions.push({seq:1,kind:'cursor'});
+assert.equal(accepted.length,0);
+captions.push({seq:2,seat:'applicant',text:'second',final:false});
+captions.push({seq:2,seat:'applicant',text:'duplicate',final:true});
+assert.deepEqual(accepted.map(e=>e.text),['second','third']);assert.equal(captions.cursor,3);
+console.log('caption ordering, duplicates and private cursor gaps passed');

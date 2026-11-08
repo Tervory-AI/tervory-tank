@@ -5,6 +5,7 @@ with stdlib unittest inside an offline container with asyncpg installed.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -77,6 +78,70 @@ class BusinessSchemaTests(unittest.IsolatedAsyncioTestCase):
             await conn.execute(SQL)
             await self.assert_repeat_preserves_rows_and_enforces_tenants(conn)
         finally:
+            await conn.close()
+
+    async def test_concurrent_findings_initialization_preserves_real_table_and_index(self):
+        conn = await self.database()
+        pool = None
+        try:
+            await conn.execute("CREATE SCHEMA agent_radix")
+            name = await conn.fetchval("SELECT current_database()")
+            pool = await asyncpg.create_pool(URL, database=name, min_size=4, max_size=4)
+
+            async def initialize():
+                async with pool.acquire() as worker:
+                    await ensure_findings(worker, "agent_radix")
+
+            await asyncio.gather(*(initialize() for _ in range(12)))
+            self.assertEqual(await conn.fetchval(
+                "SELECT count(*) FROM pg_indexes WHERE schemaname='agent_radix' "
+                "AND tablename='findings' AND indexname='findings_tenant_scan'"), 1)
+            await conn.execute(
+                "INSERT INTO agent_radix.findings(tenant_id,scan_id,tool,severity) "
+                "VALUES($1,$2,'placeholder-scanner','low')", TENANT, uuid4())
+            await initialize()
+            self.assertEqual(await conn.fetchval("SELECT count(*) FROM agent_radix.findings"), 1)
+        finally:
+            if pool is not None:
+                await pool.close()
+            await conn.close()
+
+    async def test_actor_lock_serializes_one_user_and_releases_after_failure(self):
+        from agents.radix.task_runtime import actor_lock
+        conn = await self.database()
+        pool = None
+        try:
+            name = await conn.fetchval("SELECT current_database()")
+            pool = await asyncpg.create_pool(URL, database=name, min_size=3, max_size=3)
+            started, entered = asyncio.Event(), asyncio.Event()
+            # Delimiters and SQL punctuation remain identity data, never SQL.
+            user = "placeholder-user:';SELECT 1--"
+
+            async def same_user():
+                started.set()
+                async with actor_lock(pool, TENANT, user):
+                    entered.set()
+
+            async with actor_lock(pool, TENANT, user):
+                waiter = asyncio.create_task(same_user())
+                await started.wait()
+                with self.assertRaises(TimeoutError):
+                    await asyncio.wait_for(entered.wait(), timeout=0.05)
+                async with asyncio.timeout(2):
+                    async with actor_lock(pool, OTHER, user):
+                        self.assertFalse(entered.is_set())
+                    async with actor_lock(pool, TENANT, "placeholder-other-user"):
+                        self.assertFalse(entered.is_set())
+            await asyncio.wait_for(waiter, timeout=2)
+            with self.assertRaisesRegex(RuntimeError, "placeholder failure"):
+                async with actor_lock(pool, TENANT, user):
+                    raise RuntimeError("placeholder failure")
+            async with asyncio.timeout(2):
+                async with actor_lock(pool, TENANT, user):
+                    self.assertTrue(entered.is_set())
+        finally:
+            if pool is not None:
+                await pool.close()
             await conn.close()
 
     async def test_existing_main_roles_jobs_and_findings_survive_agent_owned_migration(self):

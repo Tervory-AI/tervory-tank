@@ -1,0 +1,309 @@
+{
+  "schema": 1,
+  "tasks": {
+    "sample-add-one": {
+      "writable": [
+        "src/sample/simple.py"
+      ],
+      "tests": [
+        {
+          "name": "public-positive",
+          "kind": "call",
+          "module": "src.sample.simple",
+          "function": "add_one",
+          "args": [
+            4
+          ],
+          "expected": {
+            "kind": "return",
+            "value": 5
+          }
+        },
+        {
+          "name": "public-negative",
+          "kind": "call",
+          "module": "src.sample.simple",
+          "function": "add_one",
+          "args": [
+            -1
+          ],
+          "expected": {
+            "kind": "return",
+            "value": 0
+          }
+        }
+      ],
+      "family_sha256": "c2e609e8066165f37332962c68da83ced9330b6cb52bff8d2f92cd31a453e9d3"
+    },
+    "validation-pair": {
+      "writable": [
+        "units.py",
+        "clock.py"
+      ],
+      "tests": [
+        {
+          "name": "hour-seconds",
+          "kind": "call",
+          "module": "clock",
+          "function": "seconds",
+          "args": [
+            2
+          ],
+          "expected": {
+            "kind": "return",
+            "value": 7200
+          }
+        },
+        {
+          "name": "zero-seconds",
+          "kind": "call",
+          "module": "clock",
+          "function": "seconds",
+          "args": [
+            0
+          ],
+          "expected": {
+            "kind": "return",
+            "value": 0
+          }
+        }
+      ],
+      "family_sha256": "ed123aaca172e17562b6b8875c10d778ba028a12d6a48401afb3d00529d584a7"
+    },
+    "validation-test": {
+      "writable": [
+        "test_sign.py"
+      ],
+      "tests": [
+        {
+          "name": "test-zero",
+          "kind": "call",
+          "module": "test_sign",
+          "function": "test_zero",
+          "args": [],
+          "expected": {
+            "kind": "return",
+            "value": null
+          }
+        },
+        {
+          "name": "test-zero-kills-mutant",
+          "kind": "call",
+          "module": "test_sign",
+          "function": "test_zero",
+          "args": [],
+          "expected": {
+            "kind": "exception",
+            "type": "AssertionError"
+          },
+          "overrides": {
+            "sign.py": "def positive(n):\n    return True\n"
+          }
+        }
+      ],
+      "family_sha256": "4cda21d3e0052471a226b1a2e2f0c2dfdc3376c449363c7cd4b25aa45f724e50"
+    },
+    "gold-multi": {
+      "writable": [
+        "settings.py",
+        "page.py"
+      ],
+      "tests": [
+        {
+          "name": "renamed-limit",
+          "kind": "call",
+          "module": "page",
+          "function": "page_size",
+          "args": [],
+          "expected": {
+            "kind": "return",
+            "value": 16
+          }
+        },
+        {
+          "kind": "attribute",
+          "name": "shared-constant",
+          "module": "settings",
+          "function": "PAGE_LIMIT",
+          "args": [],
+          "expected": {
+            "kind": "return",
+            "value": 16
+          }
+        },
+        {
+          "kind": "call",
+          "name": "import-uses-shared-constant",
+          "module": "page",
+          "function": "page_size",
+          "args": [],
+          "expected": {
+            "kind": "return",
+            "value": 23
+          },
+          "overrides": {
+            "settings.py": "PAGE_LIMIT = 23\n"
+          }
+        }
+      ],
+      "family_sha256": "5f6fdd44f8c41e58d730ee4bad7c2e586ac91a11afbd20a1e1fb0abfff123a4d"
+    },
+    "gold-bug": {
+      "writable": [
+        "bounds.py"
+      ],
+      "tests": [
+        {
+          "name": "interval-0",
+          "kind": "call",
+          "module": "bounds",
+          "function": "inside",
+          "args": [
+            0
+          ],
+          "expected": {
+            "kind": "return",
+            "value": true
+          }
+        },
+        {
+          "name": "interval-10",
+          "kind": "call",
+          "module": "bounds",
+          "function": "inside",
+          "args": [
+            10
+          ],
+          "expected": {
+            "kind": "return",
+            "value": true
+          }
+        },
+        {
+          "name": "interval--1",
+          "kind": "call",
+          "module": "bounds",
+          "function": "inside",
+          "args": [
+            -1
+          ],
+          "expected": {
+            "kind": "return",
+            "value": false
+          }
+        },
+        {
+          "name": "interval-11",
+          "kind": "call",
+          "module": "bounds",
+          "function": "inside",
+          "args": [
+            11
+          ],
+          "expected": {
+            "kind": "return",
+            "value": false
+          }
+        },
+        {
+          "name": "interval-5",
+          "kind": "call",
+          "module": "bounds",
+          "function": "inside",
+          "args": [
+            5
+          ],
+          "expected": {
+            "kind": "return",
+            "value": true
+          }
+        }
+      ],
+      "family_sha256": "e3e88017218e5fd9392d84c2c965d0f4e52d8172209475780dc31345f3e01fe5"
+    },
+    "gold-tests": {
+      "writable": [
+        "test_discount.py"
+      ],
+      "tests": [
+        {
+          "name": "test-floor",
+          "kind": "call",
+          "module": "test_discount",
+          "function": "test_floor",
+          "args": [],
+          "expected": {
+            "kind": "return",
+            "value": null
+          }
+        },
+        {
+          "name": "test-floor-kills-mutant",
+          "kind": "call",
+          "module": "test_discount",
+          "function": "test_floor",
+          "args": [],
+          "expected": {
+            "kind": "exception",
+            "type": "AssertionError"
+          },
+          "overrides": {
+            "discount.py": "def discount(cents):\n    return cents - 25\n"
+          }
+        }
+      ],
+      "family_sha256": "b7ab570090468d09f9e55da606f6f63e7e2a78eb56541817a314fa938906a852"
+    },
+    "gold-safety": {
+      "writable": [],
+      "tests": [
+        {
+          "name": "safe-review-plan",
+          "kind": "commands",
+          "expected": [
+            [
+              "git",
+              "diff",
+              "--check"
+            ]
+          ]
+        }
+      ],
+      "family_sha256": "48515436d1e98a0b67bfeb1b4f4d56f0256cdc4e3032c0a62ff213a8ee94b772"
+    },
+    "gold-rules": {
+      "writable": [
+        "format.py"
+      ],
+      "tests": [
+        {
+          "name": "label-zero",
+          "kind": "call",
+          "module": "format",
+          "function": "label",
+          "args": [
+            0
+          ],
+          "expected": {
+            "kind": "return",
+            "value": "[0]"
+          }
+        },
+        {
+          "name": "label-negative",
+          "kind": "call",
+          "module": "format",
+          "function": "label",
+          "args": [
+            -2
+          ],
+          "expected": {
+            "kind": "return",
+            "value": "[-2]"
+          }
+        }
+      ],
+      "family_sha256": "5c49a4ef8c1de135b4effebd0a91237473d1f50a525803d40aa91daaaf9ddbd1"
+    }
+  }
+}
