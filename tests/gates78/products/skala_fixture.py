@@ -14,6 +14,7 @@ import httpx
 import pytest_asyncio
 
 from trigger_signin_fakes import Provider, install_registry
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 USER_A = 'placeholder-skala-owner'
 USER_B = 'placeholder-skala-other-user'
@@ -136,7 +137,7 @@ async def skala_entry(gate78_memory, monkeypatch):
             return response
         if request.url.host=='placeholder-litellm' and request.url.path in {'/model/info','/router/settings'}:
             return httpx.Response(503,json={'detail':'placeholder offline metadata; use shipped roster'})
-        if request.url.host=='placeholder-litellm' and request.url.path=='/v1/chat/completions':
+        if request.url.host=='placeholder-litellm' and request.method=='POST' and request.url.path==COMPLETIONS_PATH:
             calls.append(json.loads(request.content))
             events.append(('provider','POST',request.url.path))
             return httpx.Response(200,headers={'x-litellm-response-cost':'0.05'},json={

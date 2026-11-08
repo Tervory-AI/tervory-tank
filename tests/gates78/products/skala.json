@@ -1,6 +1,6 @@
 {
   "product": "skala",
-  "source_sha": "593ee0a313c50d5c69ffcc2bce2a2b39440940da",
+  "source_sha": "52676c2e3b3451e3be1efbb8127fb1e232359c4e",
   "entrypoints": [
     "POST /v1/skala/tier0.summarize/run -> make_ctx -> SkillContext.model -> Tank run_route",
     "POST /v1/skala/tier0.classify/run -> make_ctx -> SkillContext.model -> Tank run_route",
@@ -84,7 +84,8 @@
       "tests/gates78/products/test_skala.py::test_no_foreign_content_in_responses_receipts_logs"
     ],
     "G7.runtime_contract": [
-      "tests/gates78/products/test_skala.py::test_runtime_contract"
+      "tests/gates78/products/test_skala.py::test_runtime_contract",
+      "tests/gates78/products/test_skala.py::test_skala_client_without_source_chassis"
     ],
     "G8.default_off": [
       "tests/gates78/products/test_skala.py::test_defaults_off_no_new_memory_or_brain"
