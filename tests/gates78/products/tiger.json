@@ -5,7 +5,8 @@
     "tank.tiger_watch_commands.build_router: /v1/command/tiger/watches/brain/tasks and /memory controls",
     "agents/tiger/app.py: signed /brain/tasks and /memory controls",
     "agents/tiger/gates_brain_service.py: POST /tasks",
-    "tank.agent_skills.build_router: chat(room=tiger)",
+    "chassis.tank.TankClient.delegate_task / room_task -> tank.agent_tasks -> existing agent_skills.complete",
+    "tank.agent_tasks.install: room_task(room=tiger) -> agent_skills.complete",
     "chassis.memory.MemoryClient -> hermes.service.create_app"
   ],
   "legacy_tests": [
@@ -49,7 +50,8 @@
       "tests/gates78/products/test_tiger.py::test_assertion_rejection"
     ],
     "G7.replay": [
-      "tests/gates78/products/test_tiger.py::test_nonce_replay_concurrent_restart_and_forget"
+      "tests/gates78/products/test_tiger.py::test_nonce_replay_concurrent_restart_and_forget",
+      "tests/gates78/products/test_tiger.py::test_typed_adapter_verified_scope_run_and_replay"
     ],
     "G7.sql_before_vector": [
       "tests/gates78/products/test_tiger.py::test_sql_candidates_before_vector_and_limit"
@@ -64,10 +66,13 @@
       "tests/gates78/products/test_tiger.py::test_retry_concurrency_and_no_content_leak"
     ],
     "G7.runtime_contract": [
-      "tests/gates78/products/test_tiger.py::test_runtime_contract"
+      "tests/gates78/products/test_tiger.py::test_runtime_contract",
+      "tests/gates78/products/test_tiger.py::test_runtime_imports_restore_foreign_modules",
+      "tests/gates78/products/test_tiger.py::test_typed_adapter_verified_scope_run_and_replay"
     ],
     "G8.default_off": [
-      "tests/gates78/products/test_tiger.py::test_default_off_and_unauthenticated_plain_free_path"
+      "tests/gates78/products/test_tiger.py::test_default_off_and_unauthenticated_plain_free_path",
+      "tests/gates78/products/test_tiger.py::test_typed_adapter_origin_timeout_redirect_and_default_off"
     ],
     "G8.task_path": [
       "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses"
@@ -93,14 +98,18 @@
       "tests/gates78/products/test_tiger.py::test_memory_off_is_per_owner"
     ],
     "G8.outage": [
-      "tests/gates78/products/test_tiger.py::test_outage_truth_and_no_repayment"
+      "tests/gates78/products/test_tiger.py::test_outage_truth_and_no_repayment",
+      "tests/gates78/products/test_tiger.py::test_typed_adapter_origin_timeout_redirect_and_default_off"
     ],
     "G8.auth_not_outage": [
       "tests/gates78/products/test_tiger.py::test_scope_errors_never_become_outage"
     ],
     "G8.receipts": [
       "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses",
-      "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields"
+      "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields",
+      "tests/gates78/products/test_tiger.py::test_typed_adapter_rejects_corrupt_receipt_at_network_edge",
+      "tests/gates78/products/test_tiger.py::test_typed_adapter_verified_scope_run_and_replay",
+      "tests/gates78/products/test_tiger.py::test_worker_receipt_prerequisite_is_real_and_tenant_scoped"
     ],
     "G8.retry_concurrency": [
       "tests/gates78/products/test_tiger.py::test_retry_concurrency_and_no_content_leak"
@@ -109,5 +118,21 @@
       "tests/gates78/products/test_tiger.py::test_original_reader_ocr_and_brain_regressions",
       "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields"
     ]
+  },
+  "runtime_dependencies": {
+    "product_manifest": "tank-patches/gates78-integration.json",
+    "required_product_files": [
+      "agents/tiger/gates_api.py",
+      "agents/tiger/gates_brain.py",
+      "agents/tiger/gates_brain_service.py",
+      "agents/tiger/gates_memory.py",
+      "agents/tiger/savings.py"
+    ],
+    "required_shared_client": [
+      "agents/_chassis/chassis/task_contract.py",
+      "tank/agent_tasks.py"
+    ],
+    "existing_receipt_proposal": "tank-patches/gate6-savings.patch",
+    "registry": "Regenerate on the combined integration; no standalone snapshot."
   }
 }

@@ -401,3 +401,149 @@ def test_original_reader_ocr_and_brain_regressions(gate78_database):
     print(result.stdout)
     assert result.returncode == 0, result.stdout + result.stderr
     assert ' skipped' not in result.stdout and ' xfailed' not in result.stdout
+
+
+def test_runtime_imports_restore_foreign_modules(monkeypatch):
+    import sys
+    from types import ModuleType
+    from tiger_fixture import isolated_tiger_imports, load_room
+    runtime_dependencies()
+    names = ('gates_api', 'gates_memory', 'gates_brain', 'gates_brain_service', 'savings')
+    foreign = {name: ModuleType('placeholder_foreign_' + name) for name in names}
+    for name, module in foreign.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    for _ in range(2):
+        with isolated_tiger_imports(monkeypatch):
+            app = load_room(monkeypatch)
+            import gates_brain_service
+            import gates_brain
+            assert gates_brain_service.app is not app
+            assert gates_brain.__file__ == str(ROOT / 'agents/tiger/gates_brain.py')
+            assert all(sys.modules[name] is not foreign[name] for name in names)
+        assert all(sys.modules[name] is foreign[name] for name in names)
+
+
+@pytest.mark.asyncio
+async def test_typed_adapter_verified_scope_run_and_replay(tiger_system):
+    import httpx
+    from uuid import UUID, uuid5
+    s = tiger_system
+    run = str(uuid4())
+    first = ok(await s.task(run_id=run))
+    other = ok(await s.task(run_id=run, user=USER_B))
+    assert first['receipt']['task_id'] == str(uuid5(UUID(s.memory.tenant), USER_A + ':' + run))
+    assert other['receipt']['task_id'] == str(uuid5(UUID(s.memory.tenant), USER_B + ':' + run))
+    request = next(r for r in s.requests if r.url.path == s.chat_path)
+    before = await s.snapshot()
+    # Replay, removed signature, and changed body cannot dispatch again.
+    for headers, body in [
+        (dict(request.headers), request.content),
+        ({k: v for k, v in request.headers.items() if k.lower() != 'x-tervory-user-assertion'}, request.content),
+        (dict(request.headers), json.dumps({**json.loads(request.content), 'user_id': USER_B}).encode()),
+    ]:
+        response = await s.http.post(str(request.url), headers=headers, content=body)
+        assert response.status_code in (401, 403)
+        assert await s.snapshot() == before and len(s.sends) == 2
+    async with httpx.AsyncClient() as client:
+        from chassis.tank import TankClient
+        from chassis.user_assertion import SignedUser
+        actor = SignedUser(s.memory.tenant, USER_A, 'member')
+        for origin in ('http://placeholder-tank/path', 'http://placeholder-user@placeholder-tank',
+                       'http://placeholder-tank?next=placeholder', 'http://placeholder-tank#placeholder'):
+            with pytest.raises(ValueError):
+                await TankClient(origin, KEY, 'tiger', client).room_task(actor, run, [{'role': 'user', 'content': 'placeholder'}])
+        assert len(s.sends) == 2
+
+
+@pytest.mark.asyncio
+async def test_typed_adapter_origin_timeout_redirect_and_default_off(tiger_system, monkeypatch):
+    import httpx
+    s = tiger_system
+    # The relay accepts only its configured private service, never a caller URL.
+    monkeypatch.setenv('TIGER_BRAIN_URL', 'https://placeholder-foreign.example')
+    assert (await s.task()).status_code == 503 and not s.sends
+    monkeypatch.delenv('TIGER_BRAIN_URL')
+    calls = []
+    def redirect(request):
+        if request.url.host == 'tiger-brain':
+            calls.append(request)
+            return httpx.Response(307, headers={'location': 'https://placeholder-foreign.example'})
+    s.network_fault = redirect
+    assert (await s.task()).status_code == 502
+    assert len(calls) == 1 and not s.sends
+    assert all(r.url.host != 'placeholder-foreign.example' for r in s.requests)
+    def timeout(request):
+        if request.url.host == 'tiger-brain':
+            calls.append(request)
+            assert all(value == 70 for value in request.extensions['timeout'].values())
+            raise httpx.ReadTimeout('placeholder-private-timeout', request=request)
+    s.network_fault = timeout
+    assert (await s.task()).status_code == 502
+    assert len(calls) == 2 and not s.sends
+    s.network_fault = None
+    result = ok(await s.task())
+    request = next(r for r in s.requests if r.url.path == s.chat_path)
+    monkeypatch.delenv('TIGER_BRAIN_ENABLED')
+    # Disable centrally as well as at the room; no new receipt/model dispatch.
+    before = await s.snapshot()
+    response = await s.http.post(str(request.url), content=request.content, headers=dict(request.headers))
+    assert response.status_code == 409
+    assert await s.snapshot() == before and len(s.sends) == 1
+    assert result['receipt']['ledger_id']
+
+
+@pytest.mark.asyncio
+async def test_typed_adapter_rejects_corrupt_receipt_at_network_edge(tiger_system):
+    import httpx
+    from uuid import UUID
+    s = tiger_system
+    # Start from actual persisted Tank receipts, then corrupt only their HTTP
+    # response. No invented receipt substitutes for a successful paid run.
+    mutations = {'tenant_id': s.memory.other_tenant, 'room': 'base',
+                 'task_id': str(uuid4()), 'ledger_id': 'placeholder-not-uuid',
+                 'tokens_in': -1, 'tokens_out': 'placeholder-not-integer', 'cost_usd': -1}
+    for field, value in mutations.items():
+        def corrupt(request, response):
+            if request.url.path == s.chat_path and response.status_code == 200:
+                data = response.json()
+                data['receipt'][field] = value
+                return httpx.Response(200, json=data)
+            return response
+        s.response_filter = corrupt
+        response = await s.task({'sku': 'placeholder-corrupt-' + field})
+        assert response.status_code in (502, 503), response.text
+        assert await s.rows() == []
+    rows = await s.ledger()
+    assert len(s.sends) == len(rows) == len(mutations)
+    async with s.pool.acquire() as conn:
+        receipts = await conn.fetch('SELECT receipt FROM tank.agent_receipts WHERE tenant_id=$1',
+                                    UUID(s.memory.tenant))
+    assert len(receipts) == len(mutations)
+    assert all(json.loads(row['receipt'])['tenant_id'] == s.memory.tenant for row in receipts)
+
+
+@pytest.mark.asyncio
+async def test_worker_receipt_prerequisite_is_real_and_tenant_scoped(tiger_system):
+    from dataclasses import replace
+    from uuid import UUID
+    from chassis.jobs import JobContext
+    from chassis.tank import TankClient
+    s = tiger_system
+    ctx = JobContext('tiger', s.memory.tenant, str(uuid4()), 'ping', {}, None,
+                     TankClient('http://placeholder-tank', KEY, 'tiger', s.room.state.http),
+                     s.memory.client(USER_A), None)
+    handler = s.room.state.handlers['ping']
+    dry = await handler(replace(ctx, input={'dry_run': True}))
+    assert dry['dry_run'] and 'savings' not in dry
+    result = await handler(ctx)
+    repeated = await handler(ctx)
+    assert result['savings'] == repeated['savings']
+    assert result['savings']['tenant_id'] == s.memory.tenant
+    assert result['savings']['cost'] == result['savings']['model_tokens'] == 0
+    async with s.pool.acquire() as conn:
+        rows = await conn.fetch('SELECT tenant_id,id,receipt FROM tank.tiger_savings WHERE tenant_id=$1',
+                                UUID(s.memory.tenant))
+        assert len(rows) == 1 and str(rows[0]['id']) == ctx.job_id
+        assert await conn.fetchval('SELECT count(*) FROM tank.tiger_savings WHERE tenant_id=$1',
+                                   UUID(s.memory.other_tenant)) == 0
+    assert not s.sends

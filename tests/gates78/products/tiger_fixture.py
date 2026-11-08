@@ -6,6 +6,8 @@ is an explicit failure, never an import fallback to a proposal or private core.
 from __future__ import annotations
 
 import importlib.util
+from contextlib import contextmanager
+import sys
 import json
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -23,12 +25,31 @@ MODEL = 'placeholder-tiger-model'
 KEY = 'placeholder-gate78-product-key'
 WORKSPACE_KEY = 'placeholder-gate78-workspace-key'
 PREFIX = '/v1/command/tiger/watches'
-RUNTIME = ('gates_api.py', 'gates_brain.py', 'gates_brain_service.py', 'gates_memory.py')
+RUNTIME = ('gates_api.py', 'gates_brain.py', 'gates_brain_service.py', 'gates_memory.py', 'savings.py')
 
 
 def runtime_dependencies():
     missing = [f'agents/tiger/{name}' for name in RUNTIME if not (ROOT / 'agents/tiger' / name).is_file()]
+    missing += [name for name in ('agents/_chassis/chassis/task_contract.py', 'tank/agent_tasks.py',
+                                 'tank/tiger_savings.py') if not (ROOT / name).is_file()]
     assert not missing, 'BLOCKED: Tiger PR #3 runtime not integrated: ' + ', '.join(missing)
+
+
+@contextmanager
+def isolated_tiger_imports(monkeypatch):
+    """Keep runtime flat imports local to this fixture and restore predecessors."""
+    names = {p.stem for p in (ROOT / 'agents/tiger').glob('*.py')} - {'__init__'}
+    saved = {name: sys.modules[name] for name in names if name in sys.modules}
+    with monkeypatch.context() as context:
+        context.syspath_prepend(str(ROOT / 'agents/tiger'))
+        for name in names:
+            sys.modules.pop(name, None)
+        try:
+            yield
+        finally:
+            for name in names:
+                sys.modules.pop(name, None)
+            sys.modules.update(saved)
 
 
 def load_room(monkeypatch):
@@ -85,129 +106,143 @@ class TigerSystem:
 
 @pytest_asyncio.fixture
 async def tiger_system(gate78_memory, gate78_database, monkeypatch):
-    runtime_dependencies()
-    memory = await gate78_memory('tiger')
-    for name, value in {'DATABASE_URL': gate78_database, 'TANK_API_KEY': WORKSPACE_KEY,
-                        'LITELLM_MASTER_KEY': 'placeholder-model-key', 'TANK_REGION': 'us-east',
-                        'TANK_KEY_TIGER': KEY, 'TANK_KEY': KEY, 'TIGER_BRAIN_ENABLED': 'true',
-                        'TANK_URL': 'http://placeholder-tank', 'HERMES_URL': 'http://hermes',
-                        'TIGER_AGENT_URL': 'http://agent-tiger:8000'}.items():
-        monkeypatch.setenv(name, value)
-    monkeypatch.delenv('TIGER_BRAIN_URL', raising=False)
-    import main
-    import paid_http
-    import paid_steps
-    import controls
-    import identity_oidc
-    import agent_skills
-    import tiger_watch_commands
-    from trigger_signin_guard import TriggerSigninMiddleware
-    from trigger_signin_fakes import Provider, install_registry
-    room = load_room(monkeypatch)
-    import gates_brain_service
-    brain = gates_brain_service.app
-    command_router = tiger_watch_commands.build_router()
-    paths = {route.path for route in command_router.routes}
-    required = {PREFIX + path for path in ('/memory', '/memory/{record_id}', '/memory/setting',
-                                          '/memory/correction', '/brain/tasks')}
-    assert required <= paths, 'BLOCKED: Tiger authenticated ingress not integrated: ' + ', '.join(sorted(required - paths))
-    admin = await asyncpg.connect(gate78_database)
-    name = 'placeholder_tiger_gate78_' + uuid4().hex
-    await admin.execute(f'CREATE DATABASE "{name}"')
-    url = urlsplit(gate78_database)._replace(path='/' + name).geturl()
-    pool = await asyncpg.create_pool(url, min_size=1, max_size=5)
-    opened = []
-    try:
-        async with pool.acquire() as conn:
-            await conn.execute((ROOT / 'tank/schema.sql').read_text())
-            await paid_steps.register(conn, paid_steps.model_step('agent.tiger.think', MODEL, agent='tiger'),
-                                      'tiger', 'model', 'placeholder-policy', task='agent.tiger.think', model=MODEL)
-            for tenant in (memory.tenant, memory.other_tenant):
-                await conn.execute("INSERT INTO tank.tenant_squad(tenant_id,agent,enabled_by) VALUES($1,'tiger','placeholder-admin')", UUID(tenant))
-                await conn.execute("INSERT INTO tank.policy(task_type,tenant_id,model,rung,max_tokens_out) VALUES('agent.tiger.think',$1,$2,1,100)", UUID(tenant), MODEL)
-                await conn.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,$2,'auto',$3)",
-                                   UUID(tenant), paid_steps.model_step('agent.tiger.think', MODEL, agent='tiger'), USER_A)
-        monkeypatch.setattr(main, 'pool', lambda: pool)
-        monkeypatch.setattr(main, 'TANK_API_KEY', WORKSPACE_KEY)
-        monkeypatch.setattr(main, 'TIGER_AGENT_URL', 'http://agent-tiger:8000')
-        monkeypatch.setattr(main, 'LITELLM_URL', 'http://placeholder-model')
-        monkeypatch.setattr(main, 'LITELLM_MASTER_KEY', 'placeholder-model-key')
-        monkeypatch.setattr(paid_steps, 'db', lambda: pool)
-        monkeypatch.setattr(controls, 'db', lambda: pool)
-        # Fixture policy/roster data, not a replacement for admission or accounting.
-        async def roster():
-            return [{'model_name': MODEL, 'model_info': {'input_cost_per_token': .001,
-                    'output_cost_per_token': .002, 'family': 'placeholder-family'}}]
-        monkeypatch.setattr(main, '_roster_models', roster)
-        issuer = Provider('us-east')
-        install_registry(monkeypatch, [issuer], {'10001': memory.tenant,
-                                                '10002': memory.other_tenant})
-        identity_oidc._cache.clear()
-        tank = FastAPI()
-        tank.add_middleware(TriggerSigninMiddleware)
-        tank.include_router(command_router)
-        tank.include_router(agent_skills.build_router(main))
-        observed, sends, assertions = [], [], []
-        system = TigerSystem(memory=memory, room=room, brain=brain, pool=pool, issuer=issuer,
-                             events=observed, sends=sends, assertions=assertions, outage=None,
-                             chat_path=str(tank.url_path_for('chat', room='tiger')))
-        original_client = httpx.AsyncClient
+    with isolated_tiger_imports(monkeypatch):
+        runtime_dependencies()
+        memory = await gate78_memory('tiger')
+        for name, value in {'DATABASE_URL': gate78_database, 'TANK_API_KEY': WORKSPACE_KEY,
+                            'LITELLM_MASTER_KEY': 'placeholder-model-key', 'TANK_REGION': 'us-east',
+                            'TANK_KEY_TIGER': KEY, 'TANK_KEY': KEY, 'TIGER_BRAIN_ENABLED': 'true',
+                            'TANK_URL': 'http://placeholder-tank', 'HERMES_URL': 'http://hermes',
+                            'TIGER_AGENT_URL': 'http://agent-tiger:8000'}.items():
+            monkeypatch.setenv(name, value)
+        monkeypatch.delenv('TIGER_BRAIN_URL', raising=False)
+        import main
+        import paid_http
+        import paid_steps
+        import controls
+        import identity_oidc
+        import agent_skills
+        import tiger_watch_commands
+        from trigger_signin_guard import TriggerSigninMiddleware
+        from trigger_signin_fakes import Provider, install_registry
+        room = load_room(monkeypatch)
+        import gates_brain_service
+        brain = gates_brain_service.app
+        command_router = tiger_watch_commands.build_router()
+        paths = {route.path for route in command_router.routes}
+        required = {PREFIX + path for path in ('/memory', '/memory/{record_id}', '/memory/setting',
+                                              '/memory/correction', '/brain/tasks')}
+        assert required <= paths, 'BLOCKED: Tiger authenticated ingress not integrated: ' + ', '.join(sorted(required - paths))
+        admin = await asyncpg.connect(gate78_database)
+        name = 'placeholder_tiger_gate78_' + uuid4().hex
+        await admin.execute(f'CREATE DATABASE "{name}"')
+        url = urlsplit(gate78_database)._replace(path='/' + name).geturl()
+        pool = await asyncpg.create_pool(url, min_size=1, max_size=5)
+        opened = []
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute((ROOT / 'tank/schema.sql').read_text())
+                await paid_steps.register(conn, paid_steps.model_step('agent.tiger.think', MODEL, agent='tiger'),
+                                          'tiger', 'model', 'placeholder-policy', task='agent.tiger.think', model=MODEL)
+                for tenant in (memory.tenant, memory.other_tenant):
+                    await conn.execute("INSERT INTO tank.tenant_squad(tenant_id,agent,enabled_by) VALUES($1,'tiger','placeholder-admin')", UUID(tenant))
+                    await conn.execute("INSERT INTO tank.policy(task_type,tenant_id,model,rung,max_tokens_out) VALUES('agent.tiger.think',$1,$2,1,100)", UUID(tenant), MODEL)
+                    await conn.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,$2,'auto',$3)",
+                                       UUID(tenant), paid_steps.model_step('agent.tiger.think', MODEL, agent='tiger'), USER_A)
+            monkeypatch.setattr(main, 'pool', lambda: pool)
+            monkeypatch.setattr(main, 'TANK_API_KEY', WORKSPACE_KEY)
+            monkeypatch.setattr(main, 'TIGER_AGENT_URL', 'http://agent-tiger:8000')
+            monkeypatch.setattr(main, 'LITELLM_URL', 'http://placeholder-model')
+            monkeypatch.setattr(main, 'LITELLM_MASTER_KEY', 'placeholder-model-key')
+            monkeypatch.setattr(paid_steps, 'db', lambda: pool)
+            monkeypatch.setattr(controls, 'db', lambda: pool)
+            # Fixture policy/roster data, not a replacement for admission or accounting.
+            async def roster():
+                return [{'model_name': MODEL, 'model_info': {'input_cost_per_token': .001,
+                        'output_cost_per_token': .002, 'family': 'placeholder-family'}}]
+            monkeypatch.setattr(main, '_roster_models', roster)
+            issuer = Provider('us-east')
+            install_registry(monkeypatch, [issuer], {'10001': memory.tenant,
+                                                    '10002': memory.other_tenant})
+            identity_oidc._cache.clear()
+            tank = FastAPI()
+            tank.add_middleware(TriggerSigninMiddleware)
+            tank.include_router(command_router)
+            tank.include_router(agent_skills.build_router(main))
+            # Reuse the real registered Gate 6 receipt routes and dependencies.
+            tank.router.routes.extend(route for route in main.app.routes
+                                      if getattr(route, 'path', None) == '/v1/tiger/savings')
+            observed, sends, assertions = [], [], []
+            system = TigerSystem(memory=memory, room=room, brain=brain, tank=tank, pool=pool, issuer=issuer,
+                                 events=observed, sends=sends, assertions=assertions, outage=None,
+                                 requests=[], network_fault=None, response_filter=None,
+                                 chat_path=str(tank.url_path_for('room_task', room='tiger')))
+            original_client = httpx.AsyncClient
 
-        class Network(httpx.AsyncBaseTransport):
-            async def handle_async_request(self, request):
-                observed.append((request.method, request.url.host, request.url.path))
-                host = request.url.host
-                if host == urlsplit(issuer.issuer).hostname:
-                    return issuer(request)
-                if host == 'placeholder-model':
-                    assert request.method == 'POST'
-                    assert json.loads(request.content)['model'] == MODEL
-                    sends.append(request)
-                    return httpx.Response(200, headers={'x-litellm-response-cost': '0.01',
-                        'x-litellm-model-group': MODEL}, json={
-                        'choices': [{'index': 0, 'message': {'role': 'assistant',
-                        'content': '{"supplier":"placeholder-supplier-result"}'}, 'finish_reason': 'stop'}],
-                        'usage': {'prompt_tokens': 10, 'completion_tokens': 5}})
-                if host == 'hermes':
-                    memory.calls.append((request.method, request.url.path))
-                    if system.outage:
-                        refusal = system.outage(request)
-                        if refusal:
-                            return httpx.Response(refusal, json={'detail': 'placeholder-unavailable'})
-                    app = memory.app
-                elif host == 'agent-tiger':
-                    assertions.append(request)
-                    app = room
-                elif host == 'tiger-brain':
-                    app = brain
-                elif host == 'placeholder-tank':
-                    app = tank
-                else:
-                    raise AssertionError('Unexpected external boundary: ' + host)
-                return await httpx.ASGITransport(app=app).handle_async_request(request)
+            class Network(httpx.AsyncBaseTransport):
+                async def handle_async_request(self, request):
+                    observed.append((request.method, request.url.host, request.url.path))
+                    system.requests.append(request)
+                    if system.network_fault:
+                        failure = system.network_fault(request)
+                        if failure is not None:
+                            return failure
+                    host = request.url.host
+                    if host == urlsplit(issuer.issuer).hostname:
+                        return issuer(request)
+                    if host == 'placeholder-model':
+                        assert request.method == 'POST'
+                        assert json.loads(request.content)['model'] == MODEL
+                        sends.append(request)
+                        return httpx.Response(200, headers={'x-litellm-response-cost': '0.01',
+                            'x-litellm-model-group': MODEL}, json={
+                            'choices': [{'index': 0, 'message': {'role': 'assistant',
+                            'content': '{"supplier":"placeholder-supplier-result"}'}, 'finish_reason': 'stop'}],
+                            'usage': {'prompt_tokens': 10, 'completion_tokens': 5}})
+                    if host == 'hermes':
+                        memory.calls.append((request.method, request.url.path))
+                        if system.outage:
+                            refusal = system.outage(request)
+                            if refusal:
+                                return httpx.Response(refusal, json={'detail': 'placeholder-unavailable'})
+                        app = memory.app
+                    elif host == 'agent-tiger':
+                        assertions.append(request)
+                        app = room
+                    elif host == 'tiger-brain':
+                        app = brain
+                    elif host == 'placeholder-tank':
+                        app = tank
+                    else:
+                        raise AssertionError('Unexpected external boundary: ' + host)
+                    response = await httpx.ASGITransport(app=app).handle_async_request(request)
+                    if system.response_filter:
+                        await response.aread()
+                        response = system.response_filter(request, response)
+                    return response
 
-        class OfflineClient(original_client):
-            def __init__(self, *args, **kwargs):
-                kwargs.setdefault('transport', Network())
-                super().__init__(*args, **kwargs)
-        # All HTTP still uses the shipped client; only socket routing changes.
-        monkeypatch.setattr(httpx, 'AsyncClient', OfflineClient)
-        monkeypatch.setattr(identity_oidc, 'http_client', OfflineClient)
-        outbound = paid_http.Client(transport=Network())
-        opened.append(outbound)
-        monkeypatch.setattr(main, '_http', outbound)
-        for app in (room, brain):
-            app.state.pool = memory.records.pool
-            app.state.http = OfflineClient()
-            opened.append(app.state.http)
-        system.restart_nonces()
-        system.http = OfflineClient(base_url='http://placeholder-tank')
-        system.direct = OfflineClient(base_url='http://agent-tiger:8000', headers={'X-Tank-Key': KEY})
-        opened.extend([system.http, system.direct])
-        yield system
-    finally:
-        for client in opened:
-            await client.aclose()
-        await pool.close()
-        await admin.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
-        await admin.close()
+            class OfflineClient(original_client):
+                def __init__(self, *args, **kwargs):
+                    kwargs.setdefault('transport', Network())
+                    super().__init__(*args, **kwargs)
+            # All HTTP still uses the shipped client; only socket routing changes.
+            monkeypatch.setattr(httpx, 'AsyncClient', OfflineClient)
+            monkeypatch.setattr(identity_oidc, 'http_client', OfflineClient)
+            outbound = paid_http.Client(transport=Network())
+            opened.append(outbound)
+            monkeypatch.setattr(main, '_http', outbound)
+            for app in (room, brain):
+                app.state.pool = memory.records.pool
+                app.state.http = OfflineClient()
+                opened.append(app.state.http)
+            system.restart_nonces()
+            system.http = OfflineClient(base_url='http://placeholder-tank')
+            system.direct = OfflineClient(base_url='http://agent-tiger:8000', headers={'X-Tank-Key': KEY})
+            opened.extend([system.http, system.direct])
+            yield system
+        finally:
+            for client in opened:
+                await client.aclose()
+            await pool.close()
+            await admin.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+            await admin.close()
