@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -263,6 +264,11 @@ async def test_default_off_and_code_steps_before_added_work(market_runtime, monk
     assert (await r.ask(question="")).status_code == 422
     assert len(r.calls) == calls
     assert not r.product.app.state.market_lab_brain_enabled
+    import yaml
+    compose=yaml.safe_load(Path(r.product.__file__).with_name('docker-compose.yml').read_text())
+    assert compose['services']['agent-market-lab']['environment']['MARKET_LAB_BRAIN_ENABLED'].endswith(':-false}')
+    for name in ('market-lab-brain','market-lab-sandbox','market-lab-browser','market-lab-browser-gateway'):
+        assert 'brain' in compose['services'][name]['profiles']
 
 
 async def test_http_exact_repeat_changed_input_and_user_tenant_misses(market_runtime):

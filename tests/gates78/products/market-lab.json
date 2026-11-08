@@ -1,6 +1,6 @@
 {
   "product": "market-lab",
-  "source_sha": "52fb9e460315e208687eb3a00cd8c8f39772dc1d",
+  "source_sha": "30ebf40f6915f36defea7d15ae2a86e84eea4090",
   "entrypoints": [
     "POST /market/ask",
     "POST /jobs -> chassis.app._context -> app.state.handlers[research]",
