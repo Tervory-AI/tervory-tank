@@ -6,7 +6,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SUITES = (
@@ -27,22 +26,23 @@ def main():
     with tempfile.TemporaryDirectory(prefix='cache-readiness-') as folder:
         server = pgserver.get_server(Path(folder) / 'postgres', cleanup_mode='delete')
         try:
-            report = Path(folder) / 'results.xml'
+            report = Path(folder) / 'results.json'
             env = {**os.environ, 'POOL_SCHEMA_DATABASE_URL': server.get_uri(),
                    'ENGINE_C1_ENABLED': '0', 'ENGINE_C4_ENABLED': '0', 'ENGINE_I8_ENABLED': '0',
-                   'PYTHONDONTWRITEBYTECODE': '1', 'PYTEST_ADDOPTS': ''}
+                   'PYTHONDONTWRITEBYTECODE': '1', 'PYTEST_ADDOPTS': '',
+                   'PYTHONPATH': str(ROOT / 'tests/gates78')}
+            env.pop('PYTEST_PLUGINS', None)
             result = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
                 '--disable-socket', '--allow-unix-socket', '--allow-hosts=127.0.0.1,localhost,::1',
-                '--timeout=60', f'--junitxml={report}', *SUITES],
+                '--timeout=60', '-p', 'gate78_result', '--gate78-result', str(report), *SUITES],
                 cwd=ROOT, env=env, timeout=600, check=False)
-            suites = ET.parse(report).getroot().iter('testsuite') if report.exists() else []
-            counts = {key: 0 for key in ('tests', 'failures', 'errors', 'skipped')}
-            for suite in suites:
-                for key in counts:
-                    counts[key] += int(suite.get(key, 0))
-            passed = result.returncode == 0 and counts['tests'] > 0 and not any(
-                counts[key] for key in ('failures', 'errors', 'skipped'))
-            print(json.dumps({'ready': passed, 'scope': 'offline-fixtures-only', **counts}))
+            evidence = json.loads(report.read_text()) if report.exists() else {}
+            cases = evidence.get('cases', {})
+            failed = sum(status != 'PASS' for status in cases.values())
+            passed = (result.returncode == 0 and evidence.get('exit_code') == 0
+                      and bool(cases) and failed == 0 and not evidence.get('collection_errors'))
+            print(json.dumps({'ready': passed, 'scope': 'offline-fixtures-only',
+                              'tests': len(cases), 'failed_cases': failed}))
             return 0 if passed else 1
         finally:
             server.cleanup()
