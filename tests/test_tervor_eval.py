@@ -56,6 +56,7 @@ async def test_gold_compares_adapter_against_current_rung_and_records_version(da
     pool, _ = database
     rt, req, model, calls = await setup(pool, monkeypatch, candidate_score=candidate, baseline_score=baseline)
     report = await tervor_eval.evaluate(rt, req, model, gold_set(req.tenant_id))
+    assert report['region'] == 'us-east'
     assert report['eligible'] is eligible
     assert report['completed'] == 200 and report['status'] == 'evaluated'
     assert report['model_id'] == model and report['version'] == 'tervor-lite-1.0'
@@ -63,8 +64,8 @@ async def test_gold_compares_adapter_against_current_rung_and_records_version(da
     assert len(report['ledger_ids']) == 800
     assert calls == ['current-fixture-rung', model] * 200
     async with pool.acquire() as conn:
-        assert await tervor_eval.reports(conn, req.tenant_id, model) == [report]
-        assert await tervor_eval.reports(conn, uuid4(), model) == []
+        assert await tervor_eval.reports(conn, req.tenant_id, model, region='us-east') == [report]
+        assert await tervor_eval.reports(conn, uuid4(), model, region='us-east') == []
         assert await conn.fetchval("SELECT count(*) FROM tank.policy WHERE model=$1", model) == 0
         stored = json.loads(await conn.fetchval("SELECT detail FROM tank.policy_log WHERE action='report'"))
         assert 'checked' not in json.dumps(stored)
@@ -92,3 +93,28 @@ async def test_insufficient_gold_and_other_tenant_cannot_call_models(database, m
     with pytest.raises(ValueError, match='registered for this tenant'):
         await tervor_eval.evaluate(rt, Request(tenant_id=uuid4()), model, gold_set(req.tenant_id))
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_regional_reports_exclude_foreign_and_legacy_evidence(database, monkeypatch):
+    pool, _ = database
+    rt, req, model, calls = await setup(pool, monkeypatch)
+    us = await tervor_eval.evaluate(rt, req, model, gold_set(req.tenant_id))
+    rt.box_region = lambda: 'za'
+    za_gold = gold_set(req.tenant_id)
+    za_gold['region'] = 'za'
+    za = await tervor_eval.evaluate(rt, req, model, za_gold)
+    assert us['eligible'] and za['eligible'] and za['region'] == 'za'
+    legacy = {k: v for k, v in us.items() if k != 'region'}
+    async with pool.acquire() as conn:
+        await conn.execute("""INSERT INTO tank.policy_log(task_type,action,by_user,detail)
+            VALUES('tervor.evaluation','report','tank',$1::jsonb)""", json.dumps(legacy))
+        assert await tervor_eval.reports(conn, req.tenant_id, model, region='us-east') == [us]
+        assert await tervor_eval.reports(conn, req.tenant_id, model, region='za') == [za]
+        with pytest.raises(ValueError, match='region'):
+            await tervor_eval.reports(conn, req.tenant_id, model, region='')
+        assert await conn.fetchval('SELECT count(*) FROM tank.engine_candidates') == 0
+    count = len(calls)
+    with pytest.raises(ValueError, match='Gold region'):
+        await tervor_eval.evaluate(rt, req, model, gold_set(req.tenant_id))
+    assert len(calls) == count
