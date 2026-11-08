@@ -119,3 +119,13 @@ def test_server_ignoring_range_overwrites_prefix(tmp_path,disk):
     (folder/'config.json.part').write_bytes(b'wrong cached prefix')
     cpu.download(spec(body),tmp_path,opener=lambda *args,**kwargs:io.BytesIO(body))
     assert (folder/'config.json').read_bytes()==body
+
+
+def test_worker_preserves_virtual_environment_identity(tmp_path):
+    import subprocess
+    environment=tmp_path/'venv'
+    subprocess.run([sys.executable,'-m','venv','--without-pip',str(environment)],check=True,timeout=30)
+    worker=tmp_path/'worker.py'
+    worker.write_text('import json,sys\nfrom pathlib import Path\nPath(sys.argv[2]).write_text(json.dumps({"prefix":sys.prefix}))\n')
+    result=cpu.run_worker(environment/'bin/python',worker,tmp_path/'request.json',tmp_path/'output.json')
+    assert Path(result['prefix'])==environment

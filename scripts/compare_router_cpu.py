@@ -59,7 +59,7 @@ def main():
             request.write_text(json.dumps({'model':name,'checkpoint':str(folder), 'routes':data['routes'],
                 'examples':[{'id':r['id'],'messages':r['messages']} for r in rows]}))
             model_report['phase']='cpu'
-            actual = run_worker(args.python.resolve(),ROOT/'scripts/router_cpu_worker.py',request,output)
+            actual = run_worker(args.python.absolute(),ROOT/'scripts/router_cpu_worker.py',request,output)
             by_id = {r['id']:r for r in actual.pop('results')}
             if set(by_id) != {r['id'] for r in rows}:
                 raise ValueError('Incomplete classifier results')
