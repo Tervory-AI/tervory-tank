@@ -55,3 +55,67 @@ def test_default_client_never_disables_peer_verification():
     rooms=Rooms('https://livekit-tls:8443','wss://moot.example.test','placeholder-api-key','placeholder-secret')
     assert rooms.tls_context.check_hostname is True
     assert rooms.tls_context.verify_mode==ssl.CERT_REQUIRED
+
+
+@pytest.mark.parametrize('endpoint',[
+    'http://livekit:7880', 'https://livekit-tls:8443/other',
+    'https://placeholder-user@livekit-tls:8443', 'https://livekit-tls:8443?target=other',
+])
+def test_gateway_refuses_nonsecure_or_ambiguous_upstream(endpoint):
+    from tank.moot.gateway import SignalingGate
+    from tank.moot.contracts import MediaError
+    rooms=Rooms(endpoint,'wss://moot.example.test','placeholder-api-key','placeholder-secret')
+    gate=SignalingGate(None,rooms,None,'us-east')
+    with pytest.raises(MediaError,match='secure_signaling_required'):
+        gate.upstream_url('/rtc/v1')
+
+
+def test_gateway_refuses_context_without_client_verification():
+    from tank.moot.gateway import SignalingGate
+    from tank.moot.contracts import MediaError
+    # A server context cannot satisfy the client's peer-verification contract.
+    rooms=Rooms('https://livekit-tls:8443','wss://moot.example.test',
+        'placeholder-api-key','placeholder-secret',tls_context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER))
+    with pytest.raises(MediaError,match='tls_verification_required'):
+        SignalingGate(None,rooms,None,'us-east').upstream_url('/rtc')
+
+
+@pytest.mark.asyncio
+async def test_gateway_wss_trust_hostname_and_refusal(tmp_path):
+    import aiohttp
+    from aiohttp import web
+    from tank.moot.gateway import SignalingGate
+    cert,key,ca=certificates(tmp_path)
+    server_tls=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    server_tls.load_cert_chain(cert,key)
+    trusted=ssl.create_default_context(cafile=str(ca))
+    accepted=[]
+    async def signal(request):
+        socket=web.WebSocketResponse()
+        await socket.prepare(request)
+        accepted.append(True)
+        await socket.send_str('local-tls-handshake')
+        await socket.close()
+        return socket
+    app=web.Application();app.router.add_get('/rtc',signal)
+    runner=web.AppRunner(app);await runner.setup()
+    site=web.TCPSite(runner,'127.0.0.1',0,ssl_context=server_tls)
+    await site.start()
+    try:
+        port=site._server.sockets[0].getsockname()[1]
+        for host,context,valid in [('localhost',trusted,True),
+            ('localhost',ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT),False),('127.0.0.1',trusted,False)]:
+            rooms=Rooms(f'https://{host}:{port}','wss://moot.example.test',
+                'placeholder-api-key','placeholder-secret',tls_context=context)
+            endpoint=SignalingGate(None,rooms,None,'us-east').upstream_url('/rtc')
+            assert endpoint.startswith('wss://')
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=context),trust_env=False) as client:
+                if valid:
+                    async with client.ws_connect(endpoint) as socket:
+                        assert (await socket.receive()).data=='local-tls-handshake'
+                else:
+                    with pytest.raises(aiohttp.ClientConnectorCertificateError):
+                        await client.ws_connect(endpoint)
+        assert len(accepted)==1
+    finally:
+        await runner.cleanup()

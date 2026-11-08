@@ -5,6 +5,8 @@ public signaling MUST terminate here; the SFU HTTP port stays internal/loopback.
 RTC packets still go directly to the regional SFU over configured media ports.
 """
 import asyncio
+import ssl
+from urllib.parse import urlsplit
 from contextlib import suppress
 import aiohttp
 import jwt
@@ -40,12 +42,28 @@ class SignalingGate:
         if seat not in state.get('my_seats', []) or controller.get('kind') != 'human' or controller.get('epoch') != epoch:
             raise MediaError('seat_revoked')
 
+    def upstream_url(self, path):
+        endpoint = urlsplit(self.rooms.url)
+        if (endpoint.scheme != 'https' or not endpoint.hostname or endpoint.username
+            or endpoint.password or endpoint.query or endpoint.fragment
+            or endpoint.path not in ('', '/') or path not in ('/rtc', '/rtc/v1')):
+            raise MediaError('secure_signaling_required')
+        context = self.rooms.tls_context
+        if not context.check_hostname or context.verify_mode != ssl.CERT_REQUIRED:
+            raise MediaError('tls_verification_required')
+        # #784 terminates verified WSS at livekit-tls:8443. There is no
+        # plaintext signaling fallback, including for a misconfigured caller.
+        return f'wss://{endpoint.netloc}{path}'
+
     def install(self, app):
         @app.get('/rtc/v1/validate')
         @app.get('/rtc/validate')
         async def validate(request: Request):
             try:
-                await self.authorize(request.query_params.get('access_token', ''))
+                tokens = request.query_params.getlist('access_token')
+                if len(tokens) != 1:
+                    raise MediaError('seat_revoked')
+                await self.authorize(tokens[0])
             except MediaError:
                 return JSONResponse({'error': 'seat_revoked'}, status_code=403)
             return JSONResponse({})
@@ -54,18 +72,21 @@ class SignalingGate:
         @app.websocket('/rtc')
         async def signaling(websocket: WebSocket):
             try:
-                lease = await self.authorize(websocket.query_params.get('access_token', ''))
+                tokens = websocket.query_params.getlist('access_token')
+                if len(tokens) != 1:
+                    raise MediaError('seat_revoked')
+                lease = await self.authorize(tokens[0])
             except MediaError:
                 await websocket.close(code=4403)
                 return
             tasks = []
             try:
-                endpoint = self.rooms.url.replace('https://', 'wss://', 1).replace('http://', 'ws://', 1)
+                endpoint = self.upstream_url(websocket.url.path)
                 # Only this fixed internal SFU URL is reachable. No client target,
                 # redirect, arbitrary WebSocket service or browser cookie is forwarded.
                 async with aiohttp.ClientSession(trust_env=False,
                     connector=aiohttp.TCPConnector(ssl=self.rooms.tls_context)) as client:
-                    async with client.ws_connect(endpoint.rstrip('/') + websocket.url.path,
+                    async with client.ws_connect(endpoint,
                         params=list(websocket.query_params.multi_items()), max_msg_size=1024*1024,
                         timeout=aiohttp.ClientWSTimeout(ws_close=2)) as upstream:
                         await websocket.accept()

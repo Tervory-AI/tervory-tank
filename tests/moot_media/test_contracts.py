@@ -359,3 +359,22 @@ def test_self_hosted_old_jwt_cannot_rejoin_after_epoch_handover(scope,journal):
         asyncio.run(gate.authorize(token['token']))
     # Old token remains cryptographically valid, so token expiry alone would fail.
     jwt.decode(token['token'],'s'*32,algorithms=['HS256'])
+
+
+def test_signaling_rejects_duplicate_tokens_before_upstream(scope,journal):
+    from urllib.parse import urlencode
+    from starlette.websockets import WebSocketDisconnect
+    class Bridge:
+        async def projection(self,scope,user,seat):return projection(scope,seat)
+    rooms=Rooms('https://livekit-tls:8443','wss://moot.example.test','local-key','s'*32)
+    grant=rooms.grant(scope,'member','applicant',projection(scope))
+    journal.save_lease(scope,'member','applicant',2,grant['identity'])
+    app=create_app(bridge=Bridge(),rooms=rooms,journal=journal,internal_key='placeholder-internal-key',region=scope.region)
+    query=[('access_token','placeholder-other-token'),('access_token',grant['token'])]
+    with TestClient(app) as client:
+        assert client.get('/rtc/v1/validate',params={'access_token':grant['token']}).status_code==200
+        assert client.get('/rtc/v1/validate',params=query).status_code==403
+        with pytest.raises(WebSocketDisconnect) as rejected:
+            with client.websocket_connect('/rtc/v1?'+urlencode(query)):
+                pass
+        assert rejected.value.code==4403

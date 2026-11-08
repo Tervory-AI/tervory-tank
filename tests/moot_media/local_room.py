@@ -27,7 +27,7 @@ def main():
     config=json.loads(Path(os.environ['MOOT_LOCAL_CONFIG']).read_text())
     key,secret=next(iter(config['keys'].items()))
     scope=Scope(str(uuid4()),'us-east',str(uuid4()))
-    endpoint=os.environ.get('MOOT_LOCAL_LIVEKIT_URL','http://127.0.0.1:7880')
+    endpoint=os.environ.get('MOOT_LOCAL_LIVEKIT_URL','https://livekit-tls:8443')
     tls=ssl.create_default_context()
     if os.environ.get('MOOT_LOCAL_TLS_CA_FILE'):
         tls.load_verify_locations(cafile=os.environ['MOOT_LOCAL_TLS_CA_FILE'])
