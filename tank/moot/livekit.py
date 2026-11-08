@@ -1,16 +1,28 @@
 """Pinned LiveKit API. Browser grants cannot administer, record, or send data."""
 from datetime import timedelta
+from contextlib import asynccontextmanager
+import ssl
+import aiohttp
 import json
 from livekit import api
 from .contracts import authorize_projection, MediaError
 
 
 class Rooms:
-    def __init__(self, url, public_url, key, secret):
+    def __init__(self, url, public_url, key, secret, *, tls_context=None):
         self.url, self.public_url, self.key, self.secret = url, public_url, key, secret
+        self.tls_context = tls_context or ssl.create_default_context()
+
+    @asynccontextmanager
+    async def client(self):
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=self.tls_context), trust_env=False
+        ) as session:
+            async with api.LiveKitAPI(self.url, self.key, self.secret, session=session) as client:
+                yield client
 
     async def create(self, scope):
-        async with api.LiveKitAPI(self.url, self.key, self.secret) as client:
+        async with self.client() as client:
             return await client.room.create_room(api.CreateRoomRequest(
                 name=scope.room, empty_timeout=120, max_participants=8))
 
@@ -28,7 +40,7 @@ class Rooms:
     async def revoke(self, scope, identity):
         # OSS removal closes the current connection; it does not revoke its JWT.
         # The signaling gateway checks epoch/membership on every reconnect.
-        async with api.LiveKitAPI(self.url, self.key, self.secret) as client:
+        async with self.client() as client:
             await client.room.remove_participant(api.RoomParticipantIdentity(
                 room=scope.room, identity=identity))
 
@@ -37,11 +49,11 @@ class Rooms:
             raise MediaError('recording_consent_required')
         if request.room_name != scope.room:
             raise MediaError('not_found')
-        async with api.LiveKitAPI(self.url, self.key, self.secret) as client:
+        async with self.client() as client:
             return await client.egress.start_room_composite_egress(request)
 
     async def stop_recording(self, egress_id):
-        async with api.LiveKitAPI(self.url, self.key, self.secret) as client:
+        async with self.client() as client:
             return await client.egress.stop_egress(api.StopEgressRequest(egress_id=egress_id))
 
     def worker_grant(self, scope, seat, projection):

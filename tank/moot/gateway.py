@@ -63,7 +63,8 @@ class SignalingGate:
                 endpoint = self.rooms.url.replace('https://', 'wss://', 1).replace('http://', 'ws://', 1)
                 # Only this fixed internal SFU URL is reachable. No client target,
                 # redirect, arbitrary WebSocket service or browser cookie is forwarded.
-                async with aiohttp.ClientSession(trust_env=False) as client:
+                async with aiohttp.ClientSession(trust_env=False,
+                    connector=aiohttp.TCPConnector(ssl=self.rooms.tls_context)) as client:
                     async with client.ws_connect(endpoint.rstrip('/') + websocket.url.path,
                         params=list(websocket.query_params.multi_items()), max_msg_size=1024*1024,
                         timeout=aiohttp.ClientWSTimeout(ws_close=2)) as upstream:

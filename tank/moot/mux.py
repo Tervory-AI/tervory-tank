@@ -1,42 +1,26 @@
 """Mux Video API adapter. Only explicit operator actions may incur media costs.
 
-No network call occurs at import/startup. HTTP clients are injected. Credentials,
+No network call occurs at import/startup. Shared Tank operations are injected. Credentials,
 stream keys, raw response bodies and upstream exception text never leave here.
 """
-import base64
 import hashlib
 import hmac
 import json
 import time
-import jwt
 from .contracts import MediaError
 
 
 class Mux:
-    def __init__(self, client, journal, token_id='', token_secret='', webhook_secret='',
-                 signing_id='', signing_private_key='', account=None):
-        self.client, self.journal, self.account = client, journal, account
-        self.auth = (token_id, token_secret)
+    def __init__(self, journal, *, webhook_secret='', account=None):
+        self.journal, self.account = journal, account
         self.webhook_secret = webhook_secret
-        self.signing_id, self.signing_private_key = signing_id, signing_private_key
 
     async def _request(self, method, path, **kwargs):
-        if self.account is not None:
-            try:
-                return await self.account.request(method, path, **kwargs)
-            except Exception:
-                raise MediaError('mux_request_failed') from None
-        if not all(self.auth):
+        if self.account is None:
             raise MediaError('mux_unavailable')
         try:
-            response = await self.client.request(method, 'https://api.mux.com/video/v1/' + path,
-                auth=self.auth, timeout=10, **kwargs)
-            if method == 'DELETE' and response.status_code == 404:
-                return {}
-            response.raise_for_status()
-            return response.json().get('data', {}) if response.content else {}
+            return await self.account.request(method, path, **kwargs)
         except Exception:
-            # May include the RTMP stream key in upstream errors. Never forward.
             raise MediaError('mux_request_failed') from None
 
     async def create_stream(self, scope, request, *, founder, consented, allow_billable=False):
@@ -116,17 +100,7 @@ class Mux:
                 return self.account.signed_playback(playback_id, ttl_seconds=120)
             except Exception:
                 raise MediaError('mux_signing_unavailable') from None
-        if not self.signing_id or not self.signing_private_key:
-            raise MediaError('mux_signing_unavailable')
-        # Mux signing-key API returns the PEM as base64. Never expose that value.
-        try:
-            pem = base64.b64decode(self.signing_private_key, validate=True)
-            token = jwt.encode({'sub': playback_id, 'aud': 'v',
-                'exp': int(time.time() if now is None else now) + 120}, pem,
-                algorithm='RS256', headers={'kid': self.signing_id})
-        except Exception:
-            raise MediaError('mux_signing_unavailable') from None
-        return f'https://stream.mux.com/{playback_id}.m3u8?token={token}'
+        raise MediaError('mux_signing_unavailable')
 
     async def delete(self, scope, resource, kind):
         with self.journal.connect() as db:

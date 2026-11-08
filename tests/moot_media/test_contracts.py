@@ -4,7 +4,6 @@ import hashlib
 import hmac
 import json
 from uuid import uuid4
-import httpx
 import jwt
 import pytest
 from fastapi.testclient import TestClient
@@ -109,7 +108,7 @@ def signed(event,secret='test-webhook-secret',now=1000):
 
 
 def test_mux_signatures_binding_idempotency(scope,journal):
-    mux=Mux(None,journal,webhook_secret='test-webhook-secret')
+    mux=Mux(journal,webhook_secret='test-webhook-secret')
     journal.bind(scope,'stream-local','live_stream')
     event={'id':'event-local','type':'video.live_stream.active',
       'created_at':'2026-11-08T10:00:00Z','data':{'id':'stream-local','stream_key':'must-not-be-persisted'}}
@@ -129,16 +128,16 @@ def test_mux_signatures_binding_idempotency(scope,journal):
 
 def test_mux_no_build_billing_and_no_stream_key_errors(scope,journal):
     async def run():
-        def handler(request):
-            return httpx.Response(500,json={'error':'secret-stream-key-must-not-escape'})
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            mux=Mux(client,journal,'test-id','test-secret')
-            with pytest.raises(MediaError,match='billable_media_disabled'):
-                await mux.create_stream(scope,'id',founder=True,consented=True)
-            with pytest.raises(MediaError,match='mux_request_failed') as exc:
-                await mux.create_stream(scope,'id',founder=True,consented=True,allow_billable=True)
-            assert 'secret-stream-key' not in str(exc.value)
-            assert (await mux.create_stream(scope,'id',founder=True,consented=True,allow_billable=True))['status']=='started'
+        class Account:
+            async def request(self, *args, **kwargs):
+                raise RuntimeError('secret-stream-key-must-not-escape')
+        mux=Mux(journal,account=Account())
+        with pytest.raises(MediaError,match='billable_media_disabled'):
+            await mux.create_stream(scope,'id',founder=True,consented=True)
+        with pytest.raises(MediaError,match='mux_request_failed') as exc:
+            await mux.create_stream(scope,'id',founder=True,consented=True,allow_billable=True)
+        assert 'secret-stream-key' not in str(exc.value)
+        assert (await mux.create_stream(scope,'id',founder=True,consented=True,allow_billable=True))['status']=='started'
     asyncio.run(run())
 
 
@@ -167,7 +166,7 @@ def test_internal_auth_and_exact_resume(scope,journal):
 
 
 def test_mux_lifecycle_ordering_private_publication_and_asset_binding(scope,journal):
-    mux=Mux(None,journal,webhook_secret='test-webhook-secret')
+    mux=Mux(journal,webhook_secret='test-webhook-secret')
     journal.bind(scope,'local-stream','live_stream')
     events=[('a','video.live_stream.active','2026-11-08T10:00:00Z'),
             ('b','video.live_stream.idle','2026-11-08T10:01:00Z'),
@@ -235,7 +234,12 @@ def test_signed_mux_playback_crypto_and_scope(scope,journal):
     from cryptography.hazmat.primitives import serialization
     key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
     pem=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
-    mux=Mux(None,journal,signing_id='local-signing-key',signing_private_key=base64.b64encode(pem).decode())
+    class Signer:
+        def signed_playback(self, playback_id, *, ttl_seconds):
+            import time
+            token=jwt.encode({'sub':playback_id,'aud':'v','exp':int(time.time())+ttl_seconds},pem,algorithm='RS256',headers={'kid':'local-signing-key'})
+            return f'https://stream.mux.com/{playback_id}.m3u8?token={token}'
+    mux=Mux(journal,account=Signer())
     url=mux.signed_playback('local-playback',permitted=True,published=True)
     token=url.split('token=')[1]
     claims=jwt.decode(token,key.public_key(),algorithms=['RS256'],audience='v')
@@ -285,12 +289,12 @@ def test_shared_tank_mux_account_adapter_owns_credentials(scope,journal):
             return {'id':'shared-tank-stream','status':'idle'}
         def signed_playback(self,playback_id,*,ttl_seconds):
             return f'https://stream.mux.com/{playback_id}.m3u8?token=local-test-token'
-    account=Account();mux=Mux(None,journal,account=account)
+    account=Account();mux=Mux(journal,account=account)
     result=asyncio.run(mux.create_stream(scope,'shared-request',founder=True,consented=True,allow_billable=True))
     assert result['id']=='shared-tank-stream' and len(account.calls)==1
     assert account.calls[0][0:2]==('POST','live-streams')
     assert mux.signed_playback('shared-playback',permitted=True,published=True).startswith('https://stream.mux.com/')
-    assert not any(mux.auth)
+    assert not hasattr(mux,'auth') and not hasattr(mux,'client')
 
 
 def test_optional_detection_missing_runtime_is_unavailable(monkeypatch):

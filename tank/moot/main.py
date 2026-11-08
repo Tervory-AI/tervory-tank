@@ -1,5 +1,7 @@
 """Standalone Tank-owned Moot runtime. No resources or model calls at startup."""
 import os
+import ssl
+from urllib.parse import urlsplit
 from contextlib import asynccontextmanager
 from pathlib import Path
 import httpx
@@ -15,7 +17,7 @@ from .service import create_app
 def build(*, mux_account=None):
     required = ('MOOT_REGION', 'MOOT_JOURNAL_PATH', 'MOOT_INTERNAL_API_KEY',
         'MOOT_LIVEKIT_URL', 'MOOT_LIVEKIT_PUBLIC_URL', 'MOOT_LIVEKIT_API_KEY',
-        'MOOT_LIVEKIT_API_SECRET', 'MOOT_LEGACY_URL', 'MOOT_LEGACY_API_KEY')
+        'MOOT_LIVEKIT_API_SECRET', 'MOOT_LEGACY_URL', 'MOOT_LEGACY_API_KEY', 'MOOT_TLS_CA_FILE')
     missing = [name for name in required if not os.environ.get(name)]
     if missing:
         app = FastAPI()
@@ -29,15 +31,25 @@ def build(*, mux_account=None):
     region = os.environ['MOOT_REGION']
     if region not in {'us-east', 'za'}:
         raise RuntimeError('invalid MOOT_REGION')
-    # Internal and external HTTP clients intentionally have separate proxy policy.
-    internal = httpx.AsyncClient(trust_env=False, follow_redirects=False)
+    # Standalone deployment requires verified TLS. Explicit local test harnesses
+    # instantiate Rooms directly and never relax this deployment boundary.
+    for name, scheme in (('MOOT_LIVEKIT_URL', 'https'), ('MOOT_LIVEKIT_PUBLIC_URL', 'wss')):
+        parsed = urlsplit(os.environ[name])
+        if parsed.scheme != scheme or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise RuntimeError('Moot signaling requires secure TLS URLs')
+    try:
+        tls = ssl.create_default_context()
+        tls.load_verify_locations(cafile=os.environ['MOOT_TLS_CA_FILE'])
+    except (OSError, ssl.SSLError):
+        raise RuntimeError('Moot TLS CA is unavailable or invalid') from None
+    internal = httpx.AsyncClient(verify=tls, trust_env=False, follow_redirects=False)
     journal = Journal(Path(os.environ['MOOT_JOURNAL_PATH']))
     rooms = Rooms(*(os.environ[name] for name in ('MOOT_LIVEKIT_URL', 'MOOT_LIVEKIT_PUBLIC_URL',
-        'MOOT_LIVEKIT_API_KEY', 'MOOT_LIVEKIT_API_SECRET')))
+        'MOOT_LIVEKIT_API_KEY', 'MOOT_LIVEKIT_API_SECRET')), tls_context=tls)
     bridge = LegacyHearingBridge(internal, os.environ['MOOT_LEGACY_URL'], os.environ['MOOT_LEGACY_API_KEY'], region)
     # The coordinator supplies Tank's shared Mux account adapter. Standalone
     # startup never creates a second account/key path or guesses an endpoint.
-    mux = Mux(None, journal, account=mux_account)
+    mux = Mux(journal, account=mux_account)
     app = create_app(bridge=bridge, rooms=rooms, journal=journal,
         internal_key=os.environ['MOOT_INTERNAL_API_KEY'], region=region, mux=mux,
         livekit_events=LiveKitEvents(journal, os.environ['MOOT_LIVEKIT_API_KEY'],

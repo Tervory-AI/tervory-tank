@@ -8,6 +8,7 @@ from copy import deepcopy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import ssl
 from pathlib import Path
 import threading
 import tempfile
@@ -27,7 +28,10 @@ def main():
     key,secret=next(iter(config['keys'].items()))
     scope=Scope(str(uuid4()),'us-east',str(uuid4()))
     endpoint=os.environ.get('MOOT_LOCAL_LIVEKIT_URL','http://127.0.0.1:7880')
-    rooms=Rooms(endpoint,endpoint.replace('http','ws',1),key,secret)
+    tls=ssl.create_default_context()
+    if os.environ.get('MOOT_LOCAL_TLS_CA_FILE'):
+        tls.load_verify_locations(cafile=os.environ['MOOT_LOCAL_TLS_CA_FILE'])
+    rooms=Rooms(endpoint,endpoint.replace('http','ws',1),key,secret,tls_context=tls)
     asyncio.run(rooms.create(scope))
     journal=Journal(Path(tempfile.mkdtemp(prefix='moot-browser-journal-'))/'media.sqlite')
     states={seat:{'id':scope.hearing,'region':scope.region,'revision':3,'phase':'hearing',
@@ -115,14 +119,15 @@ def main():
         print(json.dumps({'local_real_sfu':True,'real_browser_participants':2,
           'camera_and_microphone_received':True,'mute_controls':True,'device_selection':True,'reconnect':True,
           'handover_disconnect':True,'exact_pending_question_resume':True,'epoch_signaling_gateway':True,'old_token_rejoin_denied':True,
-          'actor_boundary':'fixture','mux':'not_contacted','speech':'unavailable'}))
+          'actor_boundary':'fixture','internal_signaling_tls':endpoint.startswith('https:'),
+          'browser_signaling':'loopback_test_only','mux':'not_contacted','speech':'unavailable'}))
     finally:
         server.shutdown()
         gateway_server.should_exit=True
         gateway_thread.join(timeout=3)
         async def cleanup():
             from livekit import api
-            async with api.LiveKitAPI(endpoint,key,secret) as client:
+            async with rooms.client() as client:
                 await client.room.delete_room(api.DeleteRoomRequest(room=scope.room))
         asyncio.run(cleanup())
 
