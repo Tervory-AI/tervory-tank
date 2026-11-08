@@ -4,6 +4,11 @@ import importlib.metadata
 import json
 
 
+# Shared contract for in-process fake-provider transports and this routing probe.
+# Keep the complete path here, alongside the already reviewed HTTP probe.
+COMPLETIONS_PATH = '/v1/chat/completions'
+
+
 def row(name, ident, cost, text):
     return {'model_name': name, 'litellm_params': {'model': 'openai/gpt-4o-mini',
         'api_key': 'placeholder', 'mock_response': text,
@@ -13,7 +18,7 @@ def row(name, ident, cost, text):
 
 async def completion(client, **payload):
     """Shared fake-provider HTTP probe, also used by the offline profile proof."""
-    return await client.post('/v1/chat/completions', json=payload)
+    return await client.post(COMPLETIONS_PATH, json=payload)
 
 
 async def main():
