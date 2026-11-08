@@ -11,7 +11,7 @@ from tisan_fixture import KEY, USER_A, USER_B
 async def assert_task_boundary(tisan):
     import main
     from chassis.task_contract import check_receipt
-    first = await tisan.plan()
+    first = await tisan.plan('placeholder typed adapter boundary')
     paths = [event[:2] for event in tisan.events]
     assert ('placeholder-tank', '/v1/agents/tisan/delegate') in paths
     assert ('tisan-brain', '/tasks/plan') in paths
