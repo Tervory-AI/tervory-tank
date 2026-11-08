@@ -3599,10 +3599,12 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
 
     async def _model(**kw: Any) -> dict[str, Any]:
         kw["home_region"] = chosen
-        return await _model_for_skill(**kw)
+        from skala_memory_wire import model_through_memory
+        return await model_through_memory(__import__("sys").modules[__name__], ctx, _model_for_skill, **kw)
 
-    return skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
+    ctx = skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
                               _model=_model, http=TigerOcrHTTP(_http) if pkg.id == "tiger.price_ocr" else _http, env=dict(SKILL_ENV))
+    return ctx
 
 
 # Evals and previews run under the platform tenant so their model spend never lands on a client.
@@ -3846,7 +3848,8 @@ async def run_one_skill(
         raise HTTPException(status_code=403, detail=foreign)
     token = _skill_home.set(home)
     try:
-        return await _run_one_skill(skill_id, body, caller)
+        from skala_memory_wire import run_skill_with_identity
+        return await run_skill_with_identity(skill_id, body, caller, _run_one_skill)
     finally:
         _skill_home.reset(token)
 
@@ -3907,6 +3910,8 @@ async def _run_one_skill(
         out["_ledger_id"] = str(receipt.ledger_id)
         out["_receipt"] = receipt.model_dump(mode="json")
     out["_cost_usd"] = round(ctx.cost_usd, 6)
+    if ctx.memory_receipts:
+        out["_memory_receipts"] = ctx.memory_receipts
     return out
 
 

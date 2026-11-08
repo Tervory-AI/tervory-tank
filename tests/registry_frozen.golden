@@ -10558,6 +10558,34 @@
         "name": "control"
       },
       {
+        "path": "/v1/skala/memory",
+        "methods": [
+          "GET"
+        ],
+        "name": "view"
+      },
+      {
+        "path": "/v1/skala/memory/edit",
+        "methods": [
+          "POST"
+        ],
+        "name": "edit"
+      },
+      {
+        "path": "/v1/skala/memory/forget",
+        "methods": [
+          "POST"
+        ],
+        "name": "forget"
+      },
+      {
+        "path": "/v1/skala/memory/off",
+        "methods": [
+          "POST"
+        ],
+        "name": "off"
+      },
+      {
         "path": "/v1/command/paid-steps",
         "methods": [
           "GET"
