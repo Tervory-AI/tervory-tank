@@ -7,7 +7,7 @@ import asyncio
 import hmac
 from contextlib import asynccontextmanager, suppress
 from uuid import UUID
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict
 from .contracts import Scope, MediaError
 
@@ -17,8 +17,9 @@ class GrantInput(BaseModel):
     seat: str
 
 
-def create_app(*, bridge, rooms, journal, internal_key, region, mux=None):
-    leases = {}  # Revalidation is required again on process restart/new connection.
+def create_app(*, bridge, rooms, journal, internal_key, region, mux=None, livekit_events=None):
+    leases = {(s.room, identity): (s, user, seat, epoch, identity)
+        for s, user, seat, epoch, identity in journal.leases()}
 
     async def check_leases():
         while True:
@@ -34,6 +35,7 @@ def create_app(*, bridge, rooms, journal, internal_key, region, mux=None):
                         await rooms.revoke(scope, identity)
                     except Exception:
                         continue  # retry revocation; never issue a replacement grant.
+                    journal.drop_lease(scope, identity)
                     leases.pop(key, None)
 
     @asynccontextmanager
@@ -74,6 +76,7 @@ def create_app(*, bridge, rooms, journal, internal_key, region, mux=None):
             fresh = await bridge.projection(scope, user, body.seat)
             if fresh['seats'][body.seat]['epoch'] != result['epoch']:
                 raise MediaError('seat_revoked')
+            journal.save_lease(scope, user, body.seat, result['epoch'], result['identity'])
             leases[(scope.room, result['identity'])] = (scope, user, body.seat, result['epoch'], result['identity'])
             return result
         except MediaError as exc:
@@ -97,17 +100,79 @@ def create_app(*, bridge, rooms, journal, internal_key, region, mux=None):
             raise HTTPException(403, 'not_found') from None
 
     @app.post('/webhooks/mux')
-    async def mux_webhook(request: __import__('fastapi').Request,
+    async def mux_webhook(request: Request,
                           mux_signature: str = Header(default='')):
         if mux is None:
             raise HTTPException(503, 'mux_unavailable')
-        if int(request.headers.get('content-length', '0')) > 1024 * 1024:
-            raise HTTPException(413, 'webhook_too_large')
-        raw = await request.body()
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > 1024 * 1024:
+                raise HTTPException(413, 'webhook_too_large')
+            chunks.append(chunk)
+        raw = b''.join(chunks)
         try:
             accepted = mux.webhook(raw, mux_signature)
             return {'accepted': accepted}
         except MediaError:
             raise HTTPException(400, 'invalid_webhook') from None
+
+    @app.post('/webhooks/livekit')
+    async def livekit_webhook(request: Request, authorization: str = Header(default='')):
+        if livekit_events is None:
+            raise HTTPException(503, 'livekit_events_unavailable')
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > 1024 * 1024:
+                raise HTTPException(413, 'webhook_too_large')
+            chunks.append(chunk)
+        try:
+            return {'accepted': bool(livekit_events.receive(b''.join(chunks), authorization))}
+        except MediaError:
+            raise HTTPException(400, 'invalid_webhook') from None
+
+    @app.websocket('/events')
+    async def events(websocket: WebSocket):
+        await websocket.accept()
+        try:
+            import jwt
+            import time
+            first = await asyncio.wait_for(websocket.receive_json(), timeout=3)
+            claims = jwt.decode(first.get('token', ''), rooms.secret, algorithms=['HS256'], issuer=rooms.key)
+            room = claims.get('video', {}).get('room', '')
+            _, home, tenant, hearing = room.split(':')
+            scope = Scope(tenant, home, hearing)
+            if home != region:
+                raise MediaError('wrong_region')
+            lease = next((lease for lease in journal.leases()
+                if lease[0] == scope and lease[4] == claims['sub']), None)
+            if lease is None:
+                raise MediaError('seat_revoked')
+            _, user, seat, epoch, _ = lease
+            after = first.get('after', 0)
+            if type(after) is not int or after < 0:
+                raise MediaError('invalid_cursor')
+            while time.time() < claims['exp']:
+                state = await bridge.projection(scope, user, seat)
+                if seat not in state.get('my_seats', []) or state['seats'][seat]['epoch'] != epoch:
+                    raise MediaError('seat_revoked')
+                rows = journal.events(scope, after)
+                for event in rows:
+                    after = event['seq']
+                    if event.get('kind') == 'caption':
+                        # Positive list only; no actor identity, receipt, source,
+                        # internal speech prompt or private legal context.
+                        await websocket.send_json({key: event[key] for key in
+                            ('seq', 'seat', 'text', 'final') if key in event})
+                    else:
+                        await websocket.send_json({'seq': event['seq'], 'kind': 'cursor'})
+                await asyncio.sleep(0.2)
+            await websocket.close(code=4401)
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            with suppress(Exception):
+                await websocket.close(code=4403)
 
     return app

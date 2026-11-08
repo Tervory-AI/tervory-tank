@@ -198,3 +198,73 @@ def test_retention_prevents_early_and_path_escape(tmp_path):
         Recording.local_delete(root,'../foreign.ogg',due_at=now,now=now)
     Recording.local_delete(root,'audio.ogg',due_at=now,now=now)
     assert not (root/'audio.ogg').exists()
+
+
+def test_recording_start_stop_no_duplicate_dispatch(scope,journal):
+    class Result:
+        egress_id='local-egress'
+    class Rooms:
+        starts=0;stops=0
+        async def record(self,*args,**kwargs):self.starts+=1;return Result()
+        async def stop_recording(self,*args):self.stops+=1
+    rooms=Rooms();recording=Recording(journal);state=projection(scope)
+    async def run():
+        with pytest.raises(MediaError,match='recording_consent_required'):
+            await recording.start(scope,'start',founder=True,projection=state,rooms=rooms,output=None)
+        recording.consent(scope,'consent',0,seat='applicant',user='member',projection=state,accepted=True)
+        assert (await recording.start(scope,'start',founder=True,projection=state,rooms=rooms,output=None))['state']=='starting'
+        await recording.start(scope,'start',founder=True,projection=state,rooms=rooms,output=None)
+        assert rooms.starts==1
+        with pytest.raises(MediaError,match='not_found'):
+            await recording.stop(Scope(str(uuid4()),scope.region,scope.hearing),'stop',rooms=rooms,egress_id='local-egress')
+        await recording.stop(scope,'stop',rooms=rooms,egress_id='local-egress')
+        await recording.stop(scope,'stop',rooms=rooms,egress_id='local-egress')
+        assert rooms.stops==1
+    asyncio.run(run())
+
+
+def test_signed_mux_playback_crypto_and_scope(scope,journal):
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives import serialization
+    key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
+    pem=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
+    mux=Mux(None,journal,signing_id='local-signing-key',signing_private_key=base64.b64encode(pem).decode())
+    url=mux.signed_playback('local-playback',permitted=True,published=True)
+    token=url.split('token=')[1]
+    claims=jwt.decode(token,key.public_key(),algorithms=['RS256'],audience='v')
+    assert claims['sub']=='local-playback'
+    assert jwt.get_unverified_header(token)['kid']=='local-signing-key'
+    with pytest.raises(MediaError,match='not_found'):
+        mux.playback(Scope(str(uuid4()),scope.region,scope.hearing),'local-resource',permitted=True)
+
+
+def test_caption_websocket_filters_private_fields(scope,journal):
+    class Bridge:
+        async def projection(self,scope,user,seat):return projection(scope,seat)
+    rooms=Rooms('http://localhost:7880','ws://localhost:7880','local-key','s'*32)
+    grant=rooms.grant(scope,'member','applicant',projection(scope))
+    journal.save_lease(scope,'member','applicant',2,grant['identity'])
+    journal.append(scope,'caption',0,{'kind':'caption','seat':'applicant','text':'Actual supplied caption',
+        'final':True,'bench_notes':'must never cross caption channel','actor_id':'private-actor'})
+    app=create_app(bridge=Bridge(),rooms=rooms,journal=journal,internal_key='internal-test-key',region=scope.region)
+    with TestClient(app) as client:
+        with client.websocket_connect('/events') as ws:
+            ws.send_json({'token':grant['token'],'after':0})
+            assert ws.receive_json()=={'seq':1,'seat':'applicant','text':'Actual supplied caption','final':True}
+
+
+def test_livekit_signed_recording_lifecycle_is_idempotent_and_private(scope,journal):
+    from livekit import api
+    from tank.moot.events import LiveKitEvents
+    receiver=LiveKitEvents(journal,'local-key','s'*32,'us-east')
+    raw=json.dumps({'id':'local-event','event':'egress_ended','egressInfo':{
+        'egressId':'local-egress','roomName':scope.room,'status':'EGRESS_COMPLETE',
+        'error':'private-upstream-error-must-not-escape'}}).encode()
+    token=api.AccessToken('local-key','s'*32).with_sha256(base64.b64encode(hashlib.sha256(raw).digest()).decode()).to_jwt()
+    assert receiver.receive(raw,token)==1
+    assert receiver.receive(raw,token)==1
+    events=journal.events(scope)
+    assert len(events)==1 and events[0]['kind']=='recording_ended'
+    assert 'private-upstream' not in json.dumps(events)
+    with pytest.raises(MediaError,match='invalid_webhook'):
+        receiver.receive(raw+b' ',token)

@@ -36,8 +36,7 @@ export class Participant {
       if(generation!==this.generation){await room.disconnect();return;}
       await this.refresh();
       this.state='connected';this.changed();
-    }catch(error){
-      console.warn(error instanceof Error ? error.name : "media_failed");
+    }catch{
       await room.disconnect();
       if(generation===this.generation){this.state='unavailable';this.changed();}
       throw Error('media_unavailable');
@@ -60,17 +59,42 @@ export class Participant {
   async close(){this.generation++;const room=this.room;this.room=null;await room?.disconnect();this.state='disconnected';this.changed();}
 }
 
-/** Strict cursor: transport delivery can repeat or arrive out of order. */
+/** Global cursor includes opaque advances over private lifecycle events. */
+export type Caption={seq:number;seat:Seat;text:string;final:boolean};
+type Event=Caption|{seq:number;kind:'cursor'};
 export class Captions {
   cursor=0;
-  private pending=new Map<number,{seq:number;seat:Seat;text:string;final:boolean}>();
-  constructor(private accept:(event:{seq:number;seat:Seat;text:string;final:boolean})=>void){}
-  push(event:{seq:number;seat:Seat;text:string;final:boolean}){
+  private pending=new Map<number,Event>();
+  constructor(private accept:(event:Caption)=>void){}
+  push(event:Event){
     if(!Number.isSafeInteger(event.seq)||event.seq<=this.cursor||event.seq>this.cursor+500)return;
-    if(!['applicant','respondent','judge'].includes(event.seat)||typeof event.text!=='string'||event.text.length>24000)return;
+    if(!('kind' in event)&&(!['applicant','respondent','judge'].includes(event.seat)||typeof event.text!=='string'||event.text.length>24000||typeof event.final!=='boolean'))return;
+    if('kind' in event&&event.kind!=='cursor')return;
+    if(this.pending.has(event.seq))return;
     this.pending.set(event.seq,event);
     while(this.pending.has(this.cursor+1)){
-      const next=this.pending.get(++this.cursor)!;this.pending.delete(this.cursor);this.accept(next);
+      const next=this.pending.get(++this.cursor)!;this.pending.delete(this.cursor);
+      if(!('kind' in next))this.accept(next);
     }
   }
+}
+
+export class CaptionConnection {
+  private socket:WebSocket|null=null;
+  private timer:ReturnType<typeof setTimeout>|null=null;
+  private closed=true;
+  constructor(private url:string,private grant:()=>Promise<Grant>,readonly captions:Captions,
+    private unavailable:()=>void=()=>{}){}
+  async connect(){
+    this.closed=false;
+    try{
+      const grant=await this.grant();if(this.closed)return;
+      const socket=new WebSocket(this.url);this.socket=socket;
+      socket.onopen=()=>socket.send(JSON.stringify({token:grant.token,after:this.captions.cursor}));
+      socket.onmessage=message=>{try{this.captions.push(JSON.parse(message.data) as Event);}catch{this.unavailable();}};
+      socket.onerror=()=>this.unavailable();
+      socket.onclose=()=>{if(!this.closed)this.timer=setTimeout(()=>{void this.connect();},1000);};
+    }catch{this.unavailable();if(!this.closed)this.timer=setTimeout(()=>{void this.connect();},2000);}
+  }
+  close(){this.closed=true;if(this.timer)clearTimeout(this.timer);this.socket?.close();this.socket=null;}
 }

@@ -125,3 +125,30 @@ class Mux:
         if not row:
             raise MediaError('not_found')
         await self._request('DELETE', ('assets/' if kind == 'asset' else 'live-streams/') + resource)
+
+    async def egress_output(self, scope, stream_id, *, consented, allow_billable=False):
+        if not consented:
+            raise MediaError('recording_consent_required')
+        if not allow_billable:
+            raise MediaError('billable_media_disabled')
+        with self.journal.connect() as db:
+            row = db.execute("SELECT 1 FROM mux_bindings WHERE room=? AND resource=? AND kind='live_stream'",
+                (scope.room, stream_id)).fetchone()
+        if row is None:
+            raise MediaError('not_found')
+        data = await self._request('GET', 'live-streams/' + stream_id)
+        key = data.get('stream_key')
+        if not isinstance(key, str) or not key or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_' for c in key):
+            raise MediaError('invalid_mux_response')
+        from livekit import api
+        # Private server-to-egress object. Never serialize it to a browser/error/log.
+        return api.StreamOutput(protocol=api.StreamProtocol.RTMP,
+            urls=['rtmps://global-live.mux.com:443/app/' + key])
+
+    async def disable_stream(self, scope, stream_id):
+        with self.journal.connect() as db:
+            row = db.execute("SELECT 1 FROM mux_bindings WHERE room=? AND resource=? AND kind='live_stream'",
+                (scope.room, stream_id)).fetchone()
+        if row is None:
+            raise MediaError('not_found')
+        await self._request('PUT', 'live-streams/' + stream_id + '/disable')

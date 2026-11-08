@@ -39,3 +39,7 @@ class Rooms:
             raise MediaError('not_found')
         async with api.LiveKitAPI(self.url, self.key, self.secret) as client:
             return await client.egress.start_room_composite_egress(request)
+
+    async def stop_recording(self, egress_id):
+        async with api.LiveKitAPI(self.url, self.key, self.secret) as client:
+            return await client.egress.stop_egress(api.StopEgressRequest(egress_id=egress_id))

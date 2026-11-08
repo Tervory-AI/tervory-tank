@@ -12,5 +12,8 @@
     "esbuild": "0.28.2",
     "livekit-client": "2.23.0"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
 }

@@ -15,6 +15,9 @@ class Journal:
         self.path = str(path)
         with self.connect() as db:
             db.executescript('''PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS leases (
+              room TEXT NOT NULL, identity TEXT NOT NULL, user TEXT NOT NULL,
+              seat TEXT NOT NULL, epoch INTEGER NOT NULL, PRIMARY KEY(room,identity));
             CREATE TABLE IF NOT EXISTS events (
               room TEXT NOT NULL, seq INTEGER NOT NULL, request TEXT NOT NULL,
               digest TEXT NOT NULL, payload TEXT NOT NULL,
@@ -145,3 +148,21 @@ class Journal:
                 (resource, scope.room)).rowcount
             if not changed:
                 raise MediaError('media_not_ready')
+
+    def save_lease(self, scope, user, seat, epoch, identity):
+        with self.connect() as db:
+            db.execute('INSERT OR REPLACE INTO leases VALUES (?,?,?,?,?)', (scope.room, identity, user, seat, epoch))
+
+    def leases(self):
+        from .contracts import Scope
+        with self.connect() as db:
+            rows = db.execute('SELECT * FROM leases').fetchall()
+        result = []
+        for row in rows:
+            _, region, tenant, hearing = row['room'].split(':')
+            result.append((Scope(tenant, region, hearing), row['user'], row['seat'], row['epoch'], row['identity']))
+        return result
+
+    def drop_lease(self, scope, identity):
+        with self.connect() as db:
+            db.execute('DELETE FROM leases WHERE room=? AND identity=?', (scope.room, identity))

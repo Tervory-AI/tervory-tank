@@ -20,7 +20,8 @@ def main():
     config=json.loads(Path(os.environ['MOOT_LOCAL_CONFIG']).read_text())
     key,secret=next(iter(config['keys'].items()))
     scope=Scope(str(uuid4()),'us-east',str(uuid4()))
-    rooms=Rooms('http://127.0.0.1:7880','ws://127.0.0.1:7880',key,secret)
+    endpoint=os.environ.get('MOOT_LOCAL_LIVEKIT_URL','http://127.0.0.1:7880')
+    rooms=Rooms(endpoint,endpoint.replace('http','ws',1),key,secret)
     asyncio.run(rooms.create(scope))
     states={seat:{'id':scope.hearing,'region':scope.region,'revision':3,'phase':'hearing',
       'floor':'respondent','current_issue':1,'pending_question':{'turn':2,'target':'respondent'},
@@ -52,17 +53,16 @@ def main():
     initialize="""async seat=>{
       window.received=[];
       const request=async path=>{const response=await fetch(path,{headers:{Authorization:'Bearer fixture-'+seat}});if(!response.ok)throw Error('fixture_denied');return response.json();};
-      window.peer=new window.MootParticipant(seat,()=>request('/state'),()=>request('/grant'),(track,p)=>{received.push({kind:track.kind,participant:p.identity});track.attach().forEach?.(()=>{});});
+      window.peer=new window.MootParticipant(seat,()=>request('/state'),()=>request('/grant'),(track,p)=>{received.push({kind:track.kind,participant:p.identity});document.body.append(track.attach());});
       await peer.connect();await peer.microphone(true);await peer.camera(true);
     }"""
     try:
         with sync_playwright() as p:
-            browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=[
-                '--no-sandbox','--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream','--autoplay-policy=no-user-gesture-required'])
+            browser=p.chromium.launch(executable_path=os.environ.get('MOOT_LOCAL_CHROMIUM','/usr/bin/chromium') or None,headless=True,args=[
+                '--no-sandbox','--proxy-bypass-list=livekit;localhost;127.0.0.1','--allow-loopback-in-peer-connection','--disable-features=WebRtcHideLocalIpsWithMdns','--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream','--autoplay-policy=no-user-gesture-required'])
             contexts=[browser.new_context(permissions=['camera','microphone']) for _ in range(2)]
             pages=[context.new_page() for context in contexts]
             for page,seat in zip(pages,('applicant','respondent')):
-                page.on('console',lambda m: print('browser',m.type,m.text[:160]) if m.type in ('error','warning') else None)
                 page.goto(url);page.evaluate(initialize,seat)
             for page in pages:
                 page.wait_for_function("received.some(t=>t.kind==='video')&&received.some(t=>t.kind==='audio')",timeout=30000)
@@ -89,7 +89,7 @@ def main():
         server.shutdown()
         async def cleanup():
             from livekit import api
-            async with api.LiveKitAPI('http://127.0.0.1:7880',key,secret) as client:
+            async with api.LiveKitAPI(endpoint,key,secret) as client:
                 await client.room.delete_room(api.DeleteRoomRequest(room=scope.room))
         asyncio.run(cleanup())
 
