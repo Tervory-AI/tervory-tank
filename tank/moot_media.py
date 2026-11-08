@@ -8,6 +8,21 @@ from typing import Any, Awaitable, Callable
 from uuid import UUID
 
 from moot_media_store import AsyncOwnershipStore, MediaRecord, MemoryOwnershipStore
+async def _analytics(event: str, actor: "MootActor", *, properties: dict | None = None, environ: dict | None = None) -> None:
+    """Best-effort Tank PostHog capture; never fails the media path."""
+    try:
+        from posthog_door import capture_event
+        await capture_event(
+            event=event,
+            tenant_id=actor.tenant_id,
+            user_id=actor.user_id,
+            properties=properties,
+            environ=environ,
+        )
+    except Exception:
+        return None
+
+
 from moot_mux import (
     PLAYBACK_POLICY,
     MuxError,
@@ -172,6 +187,12 @@ async def create_upload(
             idempotency_key=idempotency_key,
         )
     )
+    await _analytics(
+        "tank.media.upload_created",
+        actor,
+        properties={"outcome": "ok", "playback_policy": PLAYBACK_POLICY, "test": test},
+        environ=environ,
+    )
     return public_upload_view(created)
 
 
@@ -221,6 +242,12 @@ async def playback_access(
     await _owned(await store.by_playback(playback_id), actor, hearing_id)
     require_signed_playback_ready(environ)
     token = mint_playback_jwt(playback_id, environ=environ, ttl_s=ttl_s or 3600)
+    await _analytics(
+        "tank.media.playback_issued",
+        actor,
+        properties={"outcome": "ok", "playback_policy": PLAYBACK_POLICY},
+        environ=environ,
+    )
     return {
         "playback_id": playback_id,
         "playback_policy": PLAYBACK_POLICY,
