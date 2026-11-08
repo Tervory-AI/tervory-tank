@@ -1,11 +1,13 @@
 FROM python:3.12-slim
 WORKDIR /app
 COPY _chassis/requirements.txt .
-COPY rig/requirements.savings.txt .
-RUN pip install --no-cache-dir -r requirements.txt -r requirements.savings.txt \
+RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data \
     && chown agent:agent /data
+# DECISION reuse Tank's reviewed wheel pins for Rig's added tokenizer closure.
+COPY rig/requirements.savings.lock .
+RUN pip install --no-cache-dir --require-hashes -r requirements.savings.lock
 COPY _chassis/chassis /app/chassis
 COPY rig/rigbox /app/rigbox
 # Refuse an image whose current page assets were not published as retained objects.
