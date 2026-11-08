@@ -63,6 +63,9 @@ def install(router, tank) -> None:
 
     @router.post("/v1/agents/{room}/delegate")
     async def delegate_task(room: str, body: DelegatedTask, request: Request):
+        if room == "rig":
+            from rig_agent_tasks import delegate_task as rig_delegate
+            return await rig_delegate(tank, body, request)
         actor = await actor_for(room, body, request)
         try:
             base = origin(os.environ.get("TIGER_BRAIN_URL", "http://tiger-brain:8001"))
