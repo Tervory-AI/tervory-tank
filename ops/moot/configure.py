@@ -15,6 +15,7 @@ def configure():
         raise SystemExit('MOOT_LIVEKIT_API_SECRET must contain at least 32 characters')
     target = Path(os.environ['MOOT_CONFIG_DIR'])
     target.mkdir(mode=0o750, parents=True, exist_ok=True)
+    target.chmod(0o750)
     configs = {
         'livekit.json': {'port': 7880, 'bind_addresses': ['0.0.0.0'],
             'rtc': {'tcp_port': 7881, 'udp_port': 7882, 'use_external_ip': False},
@@ -29,6 +30,7 @@ def configure():
         # Unique UID services share a deployment-owned config group. Operator sets
         # the directory group to the containers' supplemental group before launch.
         fd = os.open(target / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
+        os.fchmod(fd, 0o640)
         with os.fdopen(fd, 'w') as stream:
             json.dump(value, stream)
 
