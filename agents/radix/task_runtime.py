@@ -1,8 +1,9 @@
 """Verified actors and resumable receipts on the existing Radix job path."""
-from contextlib import asynccontextmanager
-from contextvars import ContextVar
+import hashlib
 import json
 import os
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from uuid import UUID
 
 from fastapi import HTTPException, Request
@@ -47,18 +48,19 @@ def pool_for(app):
 @asynccontextmanager
 async def actor_lock(pool, tenant, user):
     # Serializes controls, cache reads and paid work for a person across workers.
-    key = f"radix-memory:{tenant}:{user}"
+    identity = json.dumps(["radix-memory", str(tenant), str(user)], separators=(",", ":"))
+    key = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], signed=True)
     base = pool.base if isinstance(pool, TransactionPool) else pool
     options = {"autocommit": True} if isinstance(base, TenantPool) else {}
     # The production TenantPool normally opens a transaction for a checkout.
     # Use its durable-worker mode so the pre-payment checkpoint commits now.
     with tenant_scope(tenant):
         async with pool.acquire(**options) as conn:
-            await conn.execute("SELECT pg_advisory_lock(hashtextextended($1,0))", key)
+            await conn.execute("SELECT pg_advisory_lock($1::bigint)", key)
             try:
                 yield conn
             finally:
-                await conn.execute("SELECT pg_advisory_unlock(hashtextextended($1,0))", key)
+                await conn.execute("SELECT pg_advisory_unlock($1::bigint)", key)
 
 
 def attach(app):
