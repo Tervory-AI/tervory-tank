@@ -226,6 +226,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r tank/requirements.txt -r tank/requirements-dev.txt
           pip install --require-hashes -r agents/rig/forge/requirements.lock
+          pip install --require-hashes -r tank/moot/requirements.sdk.lock
       - name: Prepare video processing tools for offline acceptance
         run: bash .github/scripts/install-video-test-tools.sh
       - name: Prepare real Radix advisory database for offline proofs
