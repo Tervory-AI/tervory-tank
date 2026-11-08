@@ -7,7 +7,10 @@ routing, model names, training, memory, OPLI or deployed configuration.
 
 ## Reproduce in an isolated cloud checkout
 
-Use Python 3.12 and the existing pinned CPU stack, in a task-local environment:
+Use Python 3.12 and the hash-pinned CPU stack, in a task-local environment.
+Torch 2.15.0+cpu and Transformers 5.22.2 replace the older repository versions
+in this isolated worker lock because OSV rejected their known vulnerabilities.
+Production requirements stay unchanged:
 
 ```sh
 uv venv --python python3.12 .venv

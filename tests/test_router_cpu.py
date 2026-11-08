@@ -93,7 +93,7 @@ def test_manifest_contains_only_immutable_inference_assets():
             assert len(item['sha256'])==64 and item['bytes']>0
             assert not item['name'].endswith(('.pt','.pth','.bin'))
     lock=(root/'requirements.lock').read_text()
-    assert 'torch==2.8.0+cpu' in lock and 'nvidia-' not in lock
+    assert 'torch==2.15.0+cpu' in lock and 'nvidia-' not in lock
 
 
 def test_resume_verifies_full_file_including_existing_prefix(tmp_path,disk):
