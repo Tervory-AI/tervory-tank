@@ -32,9 +32,13 @@ def test_off_by_default_hardened_and_no_shared_data(room):
     services = config['services']
     assert services['agent-' + stem]['environment'][upper + '_BRAIN_ENABLED'] == '${' + upper + '_BRAIN_ENABLED:-false}'
     brain, sandbox = services[stem + '-brain'], services[stem + '-sandbox']
-    assert brain['build']['dockerfile'] == 'agents/rig/Dockerfile.brain'
-    assert 'HERMES_COMMIT=d923a5eb487a17c0a68801bba9ef0f56c81040a8' in (ROOT / brain['build']['dockerfile']).read_text()
-    assert brain['command'][1] == 'brain.standby:app'
+    if room == 'radix':
+        assert brain['build'] == {'context': '..', 'dockerfile': 'radix/Dockerfile'}
+        assert brain['command'][1] == 'radix_brain_service:app'
+    else:
+        assert brain['build']['dockerfile'] == 'agents/rig/Dockerfile.brain'
+        assert 'HERMES_COMMIT=d923a5eb487a17c0a68801bba9ef0f56c81040a8' in (ROOT / brain['build']['dockerfile']).read_text()
+        assert brain['command'][1] == 'brain.standby:app'
     assert sandbox['build']['dockerfile'] == 'agents/base/Dockerfile.sandbox'
     assert brain['networks'] == ['gw', 'sandbox'] and sandbox['networks'] == ['sandbox']
     assert config['networks']['sandbox'] == {'internal': True}

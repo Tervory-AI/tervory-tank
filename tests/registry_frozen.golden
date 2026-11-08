@@ -10523,6 +10523,34 @@
         "name": "findings"
       },
       {
+        "path": "/v1/radix/memory",
+        "methods": [
+          "GET"
+        ],
+        "name": "view"
+      },
+      {
+        "path": "/v1/radix/memory/control",
+        "methods": [
+          "POST"
+        ],
+        "name": "control"
+      },
+      {
+        "path": "/v1/radix/memory/edit",
+        "methods": [
+          "POST"
+        ],
+        "name": "edit"
+      },
+      {
+        "path": "/v1/radix/memory/forget",
+        "methods": [
+          "POST"
+        ],
+        "name": "forget"
+      },
+      {
         "path": "/v1/semantic-cache/{task_type}",
         "methods": [
           "GET"

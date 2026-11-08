@@ -354,6 +354,7 @@ services:
     restart: unless-stopped
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
+      RADIX_BRAIN_ENABLED: ${RADIX_BRAIN_ENABLED:-false}
       ENGINE_C1_ENABLED: ${ENGINE_C1_ENABLED:-0}
       # DECISION engine stays offline on current Coolify apps; opt in on owned servers.
       ENGINE_LOCAL_URL: ${ENGINE_LOCAL_URL:-}

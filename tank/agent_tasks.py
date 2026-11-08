@@ -1,4 +1,4 @@
-"""Typed Tiger task adapter; reuse room policy, accounting and signed forwarding.
+"""Typed room task adapter; reuse room policy, accounting and signed forwarding.
 
 A proposal for Head review. No new provider path or deployment configuration.
 """
@@ -39,16 +39,27 @@ def install(router, tank) -> None:
     from agent_skills import Chat, complete, local_region, room_key
 
     async def actor_for(room: str, body: TaskScope, request: Request):
-        if room != "tiger":
+        if room not in {"tiger", "radix"}:
             raise HTTPException(403, "Room task unavailable")
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
-        if os.environ.get("TIGER_BRAIN_ENABLED", "false").lower() not in {"true", "1", "yes"}:
-            raise HTTPException(409, "Tiger brain is off")
+        setting = "RADIX_BRAIN_ENABLED" if room == "radix" else "TIGER_BRAIN_ENABLED"
+        if os.environ.get(setting, "false").lower() not in {"true", "1", "yes"}:
+            raise HTTPException(409, "Radix brain is off" if room == "radix" else "Tiger brain is off")
+        if room == "radix" and request.headers.get("x-home-region") != tank.box_region():
+            raise HTTPException(403, "Region mismatch")
         local_region(tank, request.headers.get("x-home-region"), room=room)
         actor = await signed_user(request, tenant_id=str(body.tenant_id), product=room,
                                   required=True, nonces=PostgresNonces(tank.pool(), "tank"))
         if actor.user_id != body.user_id:
             raise HTTPException(403, "Actor mismatch")
+        if room == "radix":
+            # Recheck the existing Radix grant and tenant home on both legs.
+            # Signed role/body selectors never create squad or founder rights.
+            from command import Actor, authorized_actor, require_tool
+            scoped = await authorized_actor(Actor(body.tenant_id, actor.user_id, False))
+            require_tool(scoped, "radix.repo.scan")
+            if isinstance(body, DelegatedTask) and (body.task_key != "radix.site_risk" or body.recall):
+                raise HTTPException(422, "Invalid Radix task")
         return actor
 
     @router.post("/v1/agents/{room}/tasks")
@@ -65,13 +76,13 @@ def install(router, tank) -> None:
     async def delegate_task(room: str, body: DelegatedTask, request: Request):
         actor = await actor_for(room, body, request)
         try:
-            base = origin(os.environ.get("TIGER_BRAIN_URL", "http://tiger-brain:8001"))
+            base = origin("http://radix-brain:8001" if room == "radix" else os.environ.get("TIGER_BRAIN_URL", "http://tiger-brain:8001"))
             parsed = urlsplit(base)
             # Private service only; this directory never accepts a caller URL.
-            if parsed.scheme != "http" or parsed.hostname != "tiger-brain" or parsed.port != 8001:
+            if parsed.scheme != "http" or parsed.hostname != room + "-brain" or parsed.port != 8001:
                 raise ValueError("Invalid private origin")
         except ValueError:
-            raise HTTPException(503, "Tiger task unavailable") from None
+            raise HTTPException(503, "Radix task unavailable" if room == "radix" else "Tiger task unavailable") from None
         target = "/tasks?" + urlencode({"tenant_id": actor.tenant_id, "user_id": actor.user_id})
         content = json.dumps({"task_key": body.task_key, "input": body.input,
                               "recall": body.recall, "run_id": str(body.run_id)}).encode()
@@ -82,15 +93,29 @@ def install(router, tank) -> None:
             # configured origin, verified actor, raw target and body.
             with actor_scope(actor):
                 response = await tank._http.post(base + target, content=content,
-                    headers={"Content-Type": "application/json", "X-Tank-Key": os.environ["TANK_KEY_TIGER"]},
+                    headers={"Content-Type": "application/json", "X-Tank-Key": os.environ["TANK_KEY_" + room.upper()],
+                             **({"X-Home-Region": tank.box_region()} if room == "radix" else {})},
                     extensions={"tervory_product_origin": (room, (parsed.scheme, parsed.hostname, parsed.port))},
                     timeout=70, follow_redirects=False)
             response.raise_for_status()
             data = response.json()
             check_receipt(data, actor.tenant_id, actor.user_id, str(body.run_id), room)
+            if room == "radix" and data["receipt"].get("region") != tank.box_region():
+                raise ValueError("Receipt region mismatch")
             return data
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
+            if room == "radix":
+                # Do not discard an actual billed-failure receipt from complete().
+                try:
+                    detail = response.json()["detail"]
+                    check_receipt(detail, actor.tenant_id, actor.user_id, str(body.run_id), room)
+                    if detail["receipt"].get("region") != tank.box_region():
+                        raise ValueError("Receipt region mismatch")
+                    error = {"message": "Radix task unavailable", "receipt": detail["receipt"]}
+                except (ValueError, KeyError, TypeError, OverflowError):
+                    error = "Radix task unavailable"
+                raise HTTPException(status if 400 <= status < 600 else 502, error) from None
             raise HTTPException(status if 400 <= status < 600 else 502, "Tiger task unavailable") from None
         except (httpx.HTTPError, ValueError, KeyError, TypeError, OverflowError):
-            raise HTTPException(502, "Tiger task unavailable") from None
+            raise HTTPException(502, "Radix task unavailable" if room == "radix" else "Tiger task unavailable") from None

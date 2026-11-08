@@ -62,8 +62,15 @@ def list_sql(schema: str) -> str:
 
 
 async def ensure_findings(conn, schema: str) -> None:
-    await conn.execute(ensure_sql(schema))
-    await conn.execute(index_sql(schema))
+    # PostgreSQL IF NOT EXISTS still races on the first concurrent CREATE.
+    # Keep the DDL and its transaction-scoped lock in one atomic statement.
+    name = validate_schema(schema)
+    await conn.execute(f"""DO $$ BEGIN
+        PERFORM pg_advisory_xact_lock(hashtextextended('radix-findings-schema:{name}',0));
+        {ensure_sql(name)};
+        {index_sql(name)};
+    END $$;""")
+
 
 
 async def insert_findings(conn, schema: str, tenant_id: str, scan_id: str, findings: list[dict]) -> None:
