@@ -176,7 +176,11 @@ async def _remember(memory: Any, tenant_id: str, text: str, kind: str, source: s
     kw["meta"] = meta_out
     if _call_supports(memory.remember, "user_id"):
         kw["user_id"] = user_id
-    return await memory.remember(tenant_id, text, kind, source, **kw)
+    try:
+        return await memory.remember(tenant_id, text, kind, source, **kw)
+    except RuntimeError as exc:
+        _refuse_memory_auth(exc)
+        raise
 
 
 async def _recall(memory: Any, tenant_id: str, query: str, *, user_id: str | None = None,
@@ -189,7 +193,16 @@ async def _recall(memory: Any, tenant_id: str, query: str, *, user_id: str | Non
         kw["limit"] = limit
     if _call_supports(memory.recall, "user_id"):
         kw["user_id"] = user_id
-    return await memory.recall(tenant_id, query, **kw)
+    try:
+        return await memory.recall(tenant_id, query, **kw)
+    except RuntimeError as exc:
+        _refuse_memory_auth(exc)
+        raise
+
+
+def _refuse_memory_auth(error: Exception) -> None:
+    if str(error) in {"hermes answered 401", "hermes answered 403"}:
+        raise MemoryScopeError("Memory identity could not be verified") from None
 
 
 def _control_allows_recall(control: str) -> bool:
@@ -309,7 +322,9 @@ def corrections_from_memories(rows: list[dict[str, Any]]) -> list[str]:
 
 
 def memory_control_from_memories(rows: list[dict[str, Any]]) -> str | None:
-    for row in reversed(rows):
+    ordered = sorted(enumerate(rows), key=lambda item: (
+        str(item[1].get("updated_at") or item[1].get("created_at") or ""), item[0]), reverse=True)
+    for _, row in ordered:
         if row.get("kind") != CONTROL_KIND:
             continue
         meta = row.get("meta") or {}
@@ -365,6 +380,7 @@ def apply_corrections(task: dict[str, Any], corrections: list[str]) -> dict[str,
             applied.append(item)
     result["applied_corrections"] = applied
     result["answered_from_memory"] = True
+    result["outcome"] = "\n".join(applied)
     return result
 
 
@@ -380,8 +396,10 @@ async def resolve_memory_control(
             memory, str(tenant_id), "memory_control",
             user_id=str(user_id), kind=CONTROL_KIND, limit=16,
         )
-    except Exception:
-        recalled = []
+    except Exception as exc:
+        if not is_memory_outage(exc):
+            raise
+        raise MemoryUnavailableError("Memory is unavailable") from None
     found = memory_control_from_memories(recalled)
     return normalize_memory_control(found or "edit")
 
@@ -405,13 +423,17 @@ async def require_owned_record(
         except TypeError:
             # Legacy records() without user_id kw: do not call unscoped; fall back.
             rows = []
-        except Exception:
-            rows = []
+        except Exception as exc:
+            _refuse_memory_auth(exc)
+            raise
     if not rows and hasattr(memory, "recall"):
+        if not _call_supports(memory.recall, "user_id"):
+            raise MemoryScopeError("The current Tank memory client is required")
         try:
             rows = list(await memory.recall(tenant, str(memory_id), user_id=user, kind=None, limit=50))
-        except Exception:
-            rows = []
+        except Exception as exc:
+            _refuse_memory_auth(exc)
+            raise
     match = None
     for row in rows or []:
         if str(row.get("id")) != str(memory_id):
@@ -468,14 +490,14 @@ async def view_memories(
     """VIEW control: signed-in actor scope only. Optional memory_id must be owned."""
     tenant, user = require_authenticated_scope(tenant_id=tenant_id, user_id=user_id)
     control = await resolve_memory_control(memory, tenant_id=tenant, user_id=user)
-    if control == "off":
-        return {"memories": [], "memory_control": control}
     if memory_id is not None:
         # Explicit target: refuse unless tenant+user match signed-in caller.
         owned = await require_owned_record(
             memory, memory_id=memory_id, tenant_id=tenant, user_id=user
         )
-        return {"memories": [owned], "memory_control": control}
+        return {"memories": [] if control == "off" else [owned], "memory_control": control}
+    if control == "off":
+        return {"memories": [], "memory_control": control}
     recalled = await _recall(
         memory, tenant, task_key, user_id=user, kind=None, limit=50,
     )
@@ -522,6 +544,8 @@ async def apply_memory_forget(
     await require_owned_record(
         memory, memory_id=memory_id, tenant_id=tenant, user_id=user
     )
+    if not _call_supports(memory.forget, "user_id"):
+        raise MemoryScopeError("The current Tank memory client is required")
     await memory.forget(memory_id, tenant, user_id=user)
 
 
@@ -676,9 +700,13 @@ async def run_with_memory(
     path runs only when free steps cannot answer.
     """
     tenant, user = require_authenticated_scope(tenant_id=tenant_id, user_id=user_id)
-    control = await resolve_memory_control(
-        memory, tenant_id=tenant, user_id=user, override=memory_control
-    )
+    unavailable = False
+    try:
+        control = await resolve_memory_control(
+            memory, tenant_id=tenant, user_id=user, override=memory_control
+        )
+    except MemoryUnavailableError:
+        control, unavailable = "off", True
     digest = task_input_hash(task)
     cache_eligible = is_cache_eligible(task_key, task)
     receipt: dict[str, Any] = {
@@ -688,6 +716,7 @@ async def run_with_memory(
         "cost_usd": 0.0, "tokens_in": 0, "tokens_out": 0, "paid_calls": 0,
         "answered_from_memory": False, "result": None,
         "memory_enabled": control != "off", "brain_enabled": brain_enabled(),
+        "memory_unavailable": unavailable,
     }
 
     # Free step: deterministic code skill (optional) before any paid Tank call.
@@ -700,9 +729,11 @@ async def run_with_memory(
             return receipt
 
     if control == "off":
+        if unavailable:
+            receipt["steps"].append({"action": "memory_unavailable"})
         receipt["steps"].append({"action": "memory_off"})
         paid = await paid_call(task)
-        receipt["paid_calls"] = 1
+        receipt["paid_calls"] = int(paid.get("paid_calls", 1))
         receipt["cost_usd"] = float(paid.get("cost_usd") or 0)
         receipt["tokens_in"] = int(paid.get("tokens_in") or 0)
         receipt["tokens_out"] = int(paid.get("tokens_out") or 0)
@@ -723,16 +754,17 @@ async def run_with_memory(
             raise
         # Outage: answer without memory; never serve a stored repeat.
         receipt["memory_unavailable"] = True
-        receipt["steps"].append({"action": "memory_unavailable", "detail": str(exc)[:200]})
+        receipt["steps"].append({"action": "memory_unavailable"})
         paid = await paid_call(task)
-        receipt["paid_calls"] = 1
+        receipt["paid_calls"] = int(paid.get("paid_calls", 1))
         receipt["cost_usd"] = float(paid.get("cost_usd") or 0)
         receipt["tokens_in"] = int(paid.get("tokens_in") or 0)
         receipt["tokens_out"] = int(paid.get("tokens_out") or 0)
         receipt["result"] = paid.get("result", paid)
         receipt["steps"].append({"action": "tank_route", "status": "done", "memory": "unavailable"})
         return receipt
-    corrections = corrections_from_memories(recalled)
+    relevant = [row for row in recalled if (row.get("meta") or {}).get("task_key") == task_key]
+    corrections = corrections_from_memories(relevant)
     receipt["steps"].append(
         {"action": "recall", "count": len(recalled), "memory_ids": [r["id"] for r in recalled]}
     )
@@ -782,7 +814,7 @@ async def run_with_memory(
         return receipt
 
     paid = await paid_call(task)
-    receipt["paid_calls"] = 1
+    receipt["paid_calls"] = int(paid.get("paid_calls", 1))
     receipt["cost_usd"] = float(paid.get("cost_usd") or 0)
     receipt["tokens_in"] = int(paid.get("tokens_in") or 0)
     receipt["tokens_out"] = int(paid.get("tokens_out") or 0)
@@ -836,18 +868,26 @@ async def run_with_memory(
         _invalidate_receipts_for_task(
             memory.rows, tenant_id=tenant, user_id=user, task_key=task_key
         )
-    reusable = None if correction else deepcopy(result_obj)
-    saved = await _remember(
-        memory, tenant, text, kind, f"opli:task:{task_key}",
-        user_id=user,
-        meta={
-            "user_id": user, "task_key": task_key, "repo": fields.get("repo"),
-            "input_hash": digest, "reusable_result": reusable, "invalidated": False,
-            "would_have_cost_usd": receipt["cost_usd"],
-            "would_have_tokens_in": receipt["tokens_in"],
-            "would_have_tokens_out": receipt["tokens_out"],
-        },
-    )
+    raw = result_obj.get("raw") or {}
+    reusable = None if correction or not cache_eligible or raw.get("requests") or raw.get("cards") else deepcopy(result_obj)
+    try:
+        saved = await _remember(
+            memory, tenant, text, kind, f"opli:task:{task_key}",
+            user_id=user,
+            meta={
+                "user_id": user, "task_key": task_key, "repo": fields.get("repo"),
+                "input_hash": digest, "reusable_result": reusable, "invalidated": False,
+                "would_have_cost_usd": receipt["cost_usd"],
+                "would_have_tokens_in": receipt["tokens_in"],
+                "would_have_tokens_out": receipt["tokens_out"],
+            },
+        )
+    except Exception as exc:
+        if not is_memory_outage(exc):
+            raise
+        receipt["memory_unavailable"] = True
+        receipt["steps"].append({"action": "remember_unavailable"})
+        return receipt
     receipt["steps"].append(
         {"action": "remember", "memory_id": saved["id"], "source": f"opli:task:{task_key}"}
     )
