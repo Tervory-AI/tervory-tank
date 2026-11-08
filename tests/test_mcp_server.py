@@ -152,7 +152,7 @@ async def test_live_session_checks_revocation_and_role_changes_every_time(mcp_ap
     headers = await initialize(client, grant)
     async with pool.acquire() as conn:
         await conn.execute("DELETE FROM tank.tenant_squad WHERE tenant_id=$1 AND agent='base'", TENANT)
-    assert (await rpc(client, headers, 'tools/list')).json()['result']['tools'] == []
+    assert {tool['name'] for tool in (await rpc(client, headers, 'tools/list')).json()['result']['tools']} == set(command.TENANT_TOOLS)
     assert (await rpc(client, headers, 'tools/call', {'name': 'base.search'})).json()['result']['isError'] is True
     await client.delete('/v1/personal-tokens/' + grant['credential_id'], headers=WORKSPACE)
     assert (await rpc(client, headers, 'ping')).status_code == 401

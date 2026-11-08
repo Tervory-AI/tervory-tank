@@ -12,11 +12,26 @@ from uuid import UUID
 import asyncpg
 import httpx
 from chassis.tank import TankClient
-from fastapi import Depends, FastAPI, Header, HTTPException
+from dataclasses import dataclass
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from trigger.service import CheckIn, CheckerIn, WriteIn, check_text, write
 from trigger.voice import VoiceStore
+
+
+@dataclass(frozen=True)
+class SignedInActor:
+    """Tenant+user bound by Tank lifecycle signature when headers are present.
+
+    CURRENT Tank room() (69832b9) sends only X-Tank-Key — no lifecycle headers.
+    Memory VIEW/EDIT/FORGET/SWITCH-OFF require this binding (401 without it).
+    Ordinary /write keeps Tank-key auth; memory recall/remember only when the
+    lifecycle signature verifies. Body or bare X-Tervory-* are never identity.
+    """
+
+    tenant_id: UUID
+    user_id: str
 
 
 async def authorized(x_tank_key: str = Header(default="")):
@@ -28,9 +43,40 @@ async def authorized(x_tank_key: str = Header(default="")):
         raise HTTPException(401, "Room authentication required")
 
 
+async def _verified_actor(request: Request, x_tank_key: str, *, required: bool):
+    await authorized(x_tank_key)
+    from chassis.user_assertion import signed_user
+    try:
+        body = await request.json() if request.method != "GET" else {}
+    except ValueError:
+        body = {}
+    tenant = body.get("tenant_id") or request.query_params.get("tenant_id")
+    actor = await signed_user(request, tenant_id=str(tenant or ""), product="trigger", required=required)
+    return SignedInActor(UUID(actor.tenant_id), actor.user_id) if actor else None
+
+
+async def signed_in_actor(request: Request, x_tank_key: str = Header(default="")) -> SignedInActor:
+    return await _verified_actor(request, x_tank_key, required=True)
+
+
+async def optional_signed_actor(request: Request, x_tank_key: str = Header(default="")) -> SignedInActor | None:
+    return await _verified_actor(request, x_tank_key, required=False)
+
+
+def refuse_scope_widen(actor: SignedInActor, *, body_tenant_id: UUID | None = None, body_user_id: str | None = None) -> None:
+    """Body tenant/user cannot widen or replace the signed-in scope."""
+    if body_tenant_id is not None and body_tenant_id != actor.tenant_id:
+        raise HTTPException(403, "Memory ownership required")
+    if body_user_id is not None and str(body_user_id).strip() and str(body_user_id).strip() != actor.user_id:
+        raise HTTPException(403, "Memory ownership required")
+
+
 @asynccontextmanager
 async def lifespan(app):
     app.state.pool = None
+    app.state.memory = None
+    from trigger.trigger_brain import brain_enabled
+    app.state.brain_enabled = brain_enabled()
     app.state.missing_settings = [name for name in ("DATABASE_URL", "TANK_KEY") if not os.environ.get(name)]
     if app.state.missing_settings:
         yield
@@ -44,6 +90,21 @@ async def lifespan(app):
         app.state.http = httpx.AsyncClient(timeout=60, follow_redirects=False, trust_env=False)
         resources.push_async_callback(app.state.http.aclose)
         app.state.tank = TankClient("http://tank:8000", os.environ.get("TANK_KEY", ""), "trigger", app.state.http)
+        from chassis.memory import MemoryClient
+        from trigger.trigger_brain import brain_enabled
+        # Hermes only (HERMES_URL). Never Tank /v1/memory. The room's TANK_KEY is
+        # the agent key injected from TANK_KEY_TRIGGER in compose — not the
+        # Workspace shared key, which Hermes refuses for writes.
+        hermes_url = (os.environ.get("HERMES_URL") or "http://hermes:8000").rstrip("/")
+        if "/v1/memory" in hermes_url:
+            raise RuntimeError("Trigger memory must call Hermes directly, not Tank /v1/memory")
+        app.state.memory = MemoryClient(
+            base_url=hermes_url,
+            api_key=os.environ.get("TANK_KEY", ""),
+            agent="trigger",
+            http=app.state.http,
+        )
+        app.state.brain_enabled = brain_enabled()
         yield
 
 
@@ -103,12 +164,53 @@ async def post_check(body: CheckIn):
     return await check_text(body, VoiceStore(app.state.pool), app.state.http, app.state.tank)
 
 
-@app.post("/write", dependencies=[Depends(authorized)])
-async def post_write(body: WriteIn):
+@app.post("/write")
+async def post_write(
+    body: WriteIn,
+    actor: SignedInActor | None = Depends(optional_signed_actor),
+):
+    """Tank-key auth for write (CURRENT room() has no signature).
+
+    Memory recall/remember is fail-closed: only with a verified signed actor.
+    Memory control routes still use hard signed_in_actor (401 without signature).
+    """
+    from trigger.gates_memory import MEMORY_OUTAGE_ERRORS, memory_enabled, memory_off_from_rows
+
+    memory = None
+    user_id = None
+    memory_unavailable = False
+    if actor is not None:
+        refuse_scope_widen(actor, body_tenant_id=body.tenant_id, body_user_id=body.user_id)
+        user_id = actor.user_id
+        memory = getattr(app.state, "memory", None)
+        if memory is not None and memory_enabled():
+            try:
+                rows = await memory.records(str(actor.tenant_id), user_id=actor.user_id)
+            except MEMORY_OUTAGE_ERRORS:
+                # Memory service down: the draft still goes through the paid route,
+                # without recall, a stored repeat or a remember.
+                rows, memory, memory_unavailable = [], None, True
+            if memory is not None and memory_off_from_rows(rows, tenant_id=str(actor.tenant_id), user_id=actor.user_id):
+                memory = None
+        else:
+            memory = None
     try:
-        return await write(body, VoiceStore(app.state.pool), app.state.tank, app.state.http, app.state.tank)
+        contact_key = (body.contact_id or "").strip() or None
+        result = await write(
+            body,
+            VoiceStore(app.state.pool),
+            app.state.tank,
+            app.state.http,
+            app.state.tank,
+            memory=memory,
+            user_id=user_id,
+            contact_key=contact_key,
+        )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
+    if memory_unavailable or (result.get("memory_receipt") or {}).get("memory_unavailable"):
+        result["memory_unavailable"] = True
+    return result
 
 
 @app.post("/skala/languagetool", dependencies=[Depends(authorized)])
@@ -128,6 +230,168 @@ async def skala_languagetool(body: CheckerIn):
 
 from pydantic import BaseModel, ConfigDict, Field
 from trigger.voice_history import VoiceHistory
+
+
+class MemoryForgetIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+    memory_id: str = Field(min_length=1, max_length=80)
+    user_id: str | None = Field(default=None, max_length=200)
+
+
+class MemoryEditIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+    text: str = Field(min_length=1, max_length=8000)
+    kind: str = Field(min_length=1, max_length=64)
+    source: str = Field(min_length=1, max_length=200)
+    user_id: str | None = Field(default=None, max_length=200)
+    contact_id: str | None = Field(default=None, max_length=200)
+    task_key: str | None = Field(default=None, max_length=200)
+    memory_id: str | None = Field(default=None, max_length=80)
+
+
+class MemorySwitchIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+    enabled: bool
+    user_id: str | None = Field(default=None, max_length=200)
+
+
+@app.get("/memory/records")
+async def memory_records(
+    tenant_id: UUID,
+    actor: SignedInActor = Depends(signed_in_actor),
+    user_id: str | None = None,
+    tier: str = Query(default="client"),
+):
+    """VIEW: list only the signed-in caller's memories in their tenant."""
+    from trigger.gates_memory import memory_enabled, memory_off_from_rows
+
+    refuse_scope_widen(actor, body_tenant_id=tenant_id, body_user_id=user_id)
+    if not memory_enabled():
+        return {"memories": [], "memory_enabled": False}
+    memory = getattr(app.state, "memory", None)
+    if memory is None:
+        raise HTTPException(503, "Memory unavailable")
+    # Pass verified actor user_id; Hermes/chassis filters — no product-side filter.
+    rows = await memory.records(
+        str(actor.tenant_id), user_id=actor.user_id, tier=tier
+    )
+    if memory_off_from_rows(rows, tenant_id=str(actor.tenant_id), user_id=actor.user_id):
+        return {"memories": [], "memory_enabled": False, "count": 0}
+    return {"memories": rows, "memory_enabled": True, "count": len(rows)}
+
+
+@app.post("/memory/edit")
+async def memory_edit(body: MemoryEditIn, actor: SignedInActor = Depends(signed_in_actor)):
+    """CONTENT EDIT: remember only into the signed-in caller's scope."""
+    from trigger.gates_memory import (
+        memory_enabled,
+        memory_kinds,
+        memory_off_from_rows,
+        owned_memory_row,
+    )
+
+    refuse_scope_widen(actor, body_tenant_id=body.tenant_id, body_user_id=body.user_id)
+    if not memory_enabled():
+        raise HTTPException(409, "Memory is switched off")
+    memory = getattr(app.state, "memory", None)
+    if memory is None:
+        raise HTTPException(503, "Memory unavailable")
+    rows = await memory.records(str(actor.tenant_id), user_id=actor.user_id)
+    if memory_off_from_rows(rows, tenant_id=str(actor.tenant_id), user_id=actor.user_id):
+        raise HTTPException(409, "Memory is switched off")
+    if body.kind not in memory_kinds():
+        raise HTTPException(422, "unsupported Trigger memory kind")
+    if body.memory_id:
+        owned = owned_memory_row(
+            rows,
+            memory_id=body.memory_id,
+            tenant_id=str(actor.tenant_id),
+            user_id=actor.user_id,
+        )
+        if owned is None:
+            raise HTTPException(403, "Memory ownership required")
+    saved = await memory.remember(
+        str(actor.tenant_id),
+        body.text,
+        body.kind,
+        body.source,
+        user_id=actor.user_id,
+        meta={
+            "user_id": actor.user_id,
+            "contact_id": body.contact_id,
+            "task_key": body.task_key,
+            "edited": True,
+            **({"replaces": body.memory_id} if body.memory_id else {}),
+        },
+    )
+    return {"ok": True, "memory": saved, "memory_enabled": True}
+
+
+@app.post("/memory/forget")
+async def memory_forget(body: MemoryForgetIn, actor: SignedInActor = Depends(signed_in_actor)):
+    """FORGET: delete only a row owned by the signed-in caller."""
+    from trigger.gates_memory import memory_enabled, owned_memory_row
+
+    refuse_scope_widen(actor, body_tenant_id=body.tenant_id, body_user_id=body.user_id)
+    if not memory_enabled():
+        raise HTTPException(409, "Memory is switched off")
+    memory = getattr(app.state, "memory", None)
+    if memory is None:
+        raise HTTPException(503, "Memory unavailable")
+    rows = await memory.records(str(actor.tenant_id), user_id=actor.user_id)
+    owned = owned_memory_row(
+        rows,
+        memory_id=body.memory_id,
+        tenant_id=str(actor.tenant_id),
+        user_id=actor.user_id,
+    )
+    if owned is None:
+        raise HTTPException(403, "Memory ownership required")
+    await memory.forget(body.memory_id, str(actor.tenant_id))
+    return {"ok": True, "forgotten": body.memory_id, "user_id": actor.user_id}
+
+
+@app.post("/memory/switch")
+async def memory_switch(body: MemorySwitchIn, actor: SignedInActor = Depends(signed_in_actor)):
+    """SWITCH-OFF/ON for the signed-in caller's own tenant+user scope only."""
+    from trigger.gates_memory import (
+        MEMORY_OFF_KIND,
+        MEMORY_OFF_SOURCE,
+        MEMORY_OFF_TEXT,
+        memory_enabled,
+    )
+
+    refuse_scope_widen(actor, body_tenant_id=body.tenant_id, body_user_id=body.user_id)
+    if not memory_enabled():
+        raise HTTPException(409, "Memory is switched off globally")
+    memory = getattr(app.state, "memory", None)
+    if memory is None:
+        raise HTTPException(503, "Memory unavailable")
+    rows = await memory.records(str(actor.tenant_id), user_id=actor.user_id)
+    off_rows = [
+        row
+        for row in rows
+        if row.get("kind") == MEMORY_OFF_KIND and MEMORY_OFF_TEXT in str(row.get("text", ""))
+    ]
+    currently_off = bool(off_rows)
+    if body.enabled is False:
+        if not currently_off:
+            await memory.remember(
+                str(actor.tenant_id),
+                MEMORY_OFF_TEXT,
+                MEMORY_OFF_KIND,
+                MEMORY_OFF_SOURCE,
+                user_id=actor.user_id,
+                meta={"user_id": actor.user_id, "memory_off": True},
+            )
+        return {"ok": True, "memory_enabled": False, "user_id": actor.user_id}
+    # Switch back on: forget this user's off markers only.
+    for row in off_rows:
+        await memory.forget(row["id"], str(actor.tenant_id))
+    return {"ok": True, "memory_enabled": True, "user_id": actor.user_id}
 
 
 class VoiceOperation(BaseModel):

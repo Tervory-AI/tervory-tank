@@ -17,6 +17,7 @@ import uuid
 
 import asyncpg
 import httpx
+from hermes_lifecycle import personal_headers
 import pytest
 import pytest_asyncio
 from qdrant_client import QdrantClient
@@ -550,28 +551,42 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
             )
             assert response.status_code == 404
 
-        async def transport(method, path, actor, *, body=None, params=None):
+        async def transport(method, path, actor, *, body=None, params=None, tenant=None):
+            # Production memory_routes.hermes now binds a one-use assertion; mirror that here.
+            from hermes_lifecycle import personal_headers as _ph
+            tenant_id = tenant or (body or {}).get("tenant_id") or (params or {}).get("tenant_id") or m.tenant
+            raw = None
+            if body is not None:
+                import json as _json
+                raw = _json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
+                signed, _ = _ph(headers["X-Tank-Key"], method, path, tenant=str(tenant_id), user=actor, body=body, params=params)
+            else:
+                signed, _ = _ph(headers["X-Tank-Key"], method, path, tenant=str(tenant_id), user=actor, params=params)
             response = await http.request(
                 method,
                 path,
-                json=body,
+                content=raw,
                 params=params,
-                headers={**headers, "X-Tervory-Admin": actor},
+                headers={**headers, **signed, "X-Tervory-Admin": actor},
             )
             assert response.status_code == 200, response.text
             return response.json()
 
         monkeypatch.setattr(memory_routes, "hermes", transport)
         for incomplete in ({}, {"identifiers": {"reviewed": True}}):
+            policy_body = {
+                "tenant_id": m.tenant,
+                "agent": m.agent,
+                "enabled": True,
+                **incomplete,
+            }
+            ph, pr = personal_headers(
+                headers["X-Tank-Key"], "POST", "/founder/publish-policy",
+                tenant=m.tenant, user=headers["X-Tervory-Admin"], body=policy_body,
+            )
+            ph["X-Tervory-Admin"] = headers["X-Tervory-Admin"]
             refused_policy = await http.post(
-                "/founder/publish-policy",
-                headers=headers,
-                json={
-                    "tenant_id": m.tenant,
-                    "agent": m.agent,
-                    "enabled": True,
-                    **incomplete,
-                },
+                "/founder/publish-policy", headers=ph, content=pr,
             )
             assert refused_policy.status_code == 422
 
@@ -615,11 +630,18 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
             "text": "fixture deliveries happen on Tuesdays.\n\n" + memory_id,
             "actions": [],
         }
-        listing = await http.get(
-            "/founder/records",
-            headers=headers,
+        list_headers, _ = personal_headers(
+            headers["X-Tank-Key"], "GET", "/founder/records",
+            tenant=m.tenant, user=headers["X-Tervory-Admin"],
             params={"tenant_id": m.tenant, "agent": m.agent},
         )
+        list_headers["X-Tervory-Admin"] = headers["X-Tervory-Admin"]
+        listing = await http.get(
+            "/founder/records",
+            headers=list_headers,
+            params={"tenant_id": m.tenant, "agent": m.agent},
+        )
+        assert listing.status_code == 200, listing.text
         row = listing.json()["memories"][0]
         assert row["claim"] == "fixture deliveries happen on Tuesdays."
         assert row["evidence"] == ["urn:tervory:command:" + str(turn)]
@@ -666,11 +688,13 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
                 )
                 + "\n"
             )
-        refused = await http.post(
-            "/founder/publish",
-            headers=headers,
-            json={"tenant_id": m.tenant, "agent": m.agent, "source_row": row["id"]},
+        pub_body = {"tenant_id": m.tenant, "agent": m.agent, "source_row": row["id"]}
+        ph, pr = personal_headers(
+            headers["X-Tank-Key"], "POST", "/founder/publish",
+            tenant=m.tenant, user=headers["X-Tervory-Admin"], body=pub_body,
         )
+        ph["X-Tervory-Admin"] = headers["X-Tervory-Admin"]
+        refused = await http.post("/founder/publish", headers=ph, content=pr)
         assert (
             refused.status_code == 403
             and refused.json()["detail"]["result"] == "disabled"
