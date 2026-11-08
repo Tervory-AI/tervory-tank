@@ -32,7 +32,10 @@ def test_off_by_default_hardened_and_no_shared_data(room):
     services = config['services']
     assert services['agent-' + stem]['environment'][upper + '_BRAIN_ENABLED'] == '${' + upper + '_BRAIN_ENABLED:-false}'
     brain, sandbox = services[stem + '-brain'], services[stem + '-sandbox']
-    if room == 'ghost':
+    if room == 'radix':
+        assert brain['build'] == {'context': '..', 'dockerfile': 'radix/Dockerfile'}
+        assert brain['command'][1] == 'radix_brain_service:app'
+    elif room == 'ghost':
         assert brain['build'] == {'context': '..', 'dockerfile': 'ghost/Dockerfile'}
         assert brain['command'][1] == 'ghost.brain_service:app'
         image = (ROOT / 'agents/ghost/Dockerfile').read_text()
