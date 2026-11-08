@@ -78,6 +78,19 @@ async def test_trained_model_registers_shadows_graduates_and_rolls_back(boundary
     assert (await b.client.post('/v1/engine/candidates', json=other, headers=headers)).status_code == 422
     invalid = {**body, 'checkpoint':'e'*64}
     assert (await b.client.post('/v1/engine/candidates', json=invalid, headers=headers)).status_code == 422
+    # Neither foreign-region nor legacy unscoped proof can register a local candidate.
+    for region in ('za', None):
+        async with b.pool.acquire() as conn:
+            if region is None:
+                await conn.execute("UPDATE tank.policy_log SET detail=detail-'region' WHERE task_type='tervor.evaluation'")
+            else:
+                await conn.execute("UPDATE tank.policy_log SET detail=jsonb_set(detail,'{region}',$1::jsonb) WHERE task_type='tervor.evaluation'", json.dumps(region))
+        response = await b.client.post('/v1/engine/candidates', json=body, headers=headers)
+        assert response.status_code == 422
+        async with b.pool.acquire() as conn:
+            assert await conn.fetchval('SELECT count(*) FROM tank.engine_candidates WHERE tenant_id=$1 AND model=$2', req.tenant_id, model['id']) == 0
+    async with b.pool.acquire() as conn:
+        await conn.execute("UPDATE tank.policy_log SET detail=jsonb_set(detail,'{region}',$1::jsonb) WHERE task_type='tervor.evaluation'", json.dumps(b.tank.box_region()))
     async with b.pool.acquire() as conn:
         await conn.execute("UPDATE tank.policy_log SET detail=jsonb_set(detail,'{eligible}','false') WHERE task_type='tervor.evaluation'")
     assert (await b.client.post('/v1/engine/candidates', json=body, headers=headers)).status_code == 422
@@ -103,10 +116,12 @@ async def test_trained_model_registers_shadows_graduates_and_rolls_back(boundary
     serving['sha256'] = 'd'*64
     assert (await engine_ladder.select(b.tank, req, policy))['model'] == model['id']
     async with b.pool.acquire() as conn:
-        stored = await tervor_serving.private_record(conn, req.tenant_id, model['id'])
+        stored = await tervor_serving.private_record(conn, req.tenant_id, model['id'], region=b.tank.box_region())
         assert stored['graduations'][0]['previous_model'] == 'local'
         assert stored['promotion_reports'][0]['id'] == report['id']
-        assert await tervor_serving.private_record(conn, b.tenants[1], model['id']) is None
+        foreign = await tervor_serving.private_record(conn, req.tenant_id, model['id'], region='za')
+        assert foreign['promotion_reports'] == [] and foreign['graduations'] == []
+        assert await tervor_serving.private_record(conn, b.tenants[1], model['id'], region=b.tank.box_region()) is None
         assert await conn.fetchval('''SELECT count(*) FROM tank.ledger WHERE tenant_id=$1
             AND model=$2 AND task_type LIKE '%#engine-shadow' ''', req.tenant_id, model['id']) == 200
     monkeypatch.delenv('TERVOR_SERVING_ENABLED')
