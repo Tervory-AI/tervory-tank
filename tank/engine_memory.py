@@ -1,4 +1,6 @@
 """Recall before selection, remember after the receipt; Hermes remains authoritative."""
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import json
 import logging
@@ -8,17 +10,42 @@ import httpx
 
 log = logging.getLogger('tank.engine_memory')
 HTTP = httpx.AsyncClient
+ENABLED: ContextVar[bool] = ContextVar('engine_memory_enabled', default=True)
+
+
+@contextmanager
+def memory_scope(enabled: bool):
+    token = ENABLED.set(enabled)
+    try:
+        yield
+    finally:
+        ENABLED.reset(token)
 
 
 async def send(path, body):
+    key = os.environ.get('TANK_API_KEY', '')
+    raw = json.dumps(body, separators=(',', ':'), sort_keys=True).encode()
+    headers = {'X-Tank-Key': key, 'Content-Type': 'application/json'}
+    user = str(body.get('user_id') or '').strip()
+    tenant = body.get('tenant_id')
+    if user and tenant is not None:
+        from command_tools._user_assertion import bind_personal_headers
+        headers.update(
+            bind_personal_headers(
+                key, 'POST', '/engine/' + path, tenant=str(tenant), user=user, body=raw
+            )
+        )
     async with HTTP(timeout=5, trust_env=False, follow_redirects=False) as client:
-        response = await client.post('http://hermes:8000/engine/' + path, json=body,
-            headers={'X-Tank-Key': os.environ.get('TANK_API_KEY', '')})
+        response = await client.post(
+            'http://hermes:8000/engine/' + path, content=raw, headers=headers
+        )
         response.raise_for_status()
         return response.json()
 
 
 async def recall(rt, req):
+    if not ENABLED.get():
+        return req, {'hits': 0, 'status': 'off'}
     from product_identity import current
     if current.get() is None:
         return req, {'hits': 0, 'status': 'unsigned'}
@@ -28,6 +55,7 @@ async def recall(rt, req):
         if not query:
             return req, {'hits': 0, 'status': 'empty'}
         result = await send('recall', {'tenant_id': str(req.tenant_id), 'task_type': req.task_type, 'query': query, **user_scope(req)})
+        __import__('embedding_cache').merge(result.get('embedding_cache'))
         rows = [row for row in result['memories'] if row.get('tenant_id') == str(req.tenant_id)]
         # Only factual data enters context. Stable content (not read timestamps
         # or similarity scores) invalidates the cache when a correction arrives.
@@ -52,6 +80,8 @@ async def recall(rt, req):
 
 
 async def remember(req, answer):
+    if not ENABLED.get():
+        return False
     from product_identity import current
     if current.get() is None:
         return False

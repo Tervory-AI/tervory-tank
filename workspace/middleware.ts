@@ -1,6 +1,7 @@
 import { isWorkspaceOrigin } from "./lib/workspace-origin";
 import { fetchWithDeadline as fetch } from "./lib/request";
 import { workspaceSetupMessage } from "./lib/workspace-setup";
+import { WORKSPACE_SESSION_COOKIE } from "./lib/signin-cookies";
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -100,7 +101,7 @@ export default async function middleware(req: NextRequest) {
     return NextResponse.json({ error: "Open this workspace and try again." }, { status: 403 });
   }
   if (!publicOk) {
-    const token = await getToken({ req, secret: process.env.TRIGGER_SIGNIN_WORKSPACE_SECRET, cookieName: "__Secure-tervory-signin", secureCookie: true });
+    const token = await getToken({ req, secret: process.env.TRIGGER_SIGNIN_WORKSPACE_SECRET, cookieName: WORKSPACE_SESSION_COOKIE, secureCookie: true });
     const principal = token?.principal as { expiresAt?: number } | undefined;
     if (!principal || (principal.expiresAt ?? 0) <= Date.now()) {
       const mobileToken = req.cookies.get("__Host-tervory-mobile")?.value;

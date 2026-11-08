@@ -211,6 +211,7 @@ class SkillContext:
     env: dict[str, str] = field(default_factory=dict)   # optional provider keys a skill may use
     calls: int = 0
     cost_usd: float = 0.0
+    memory_receipts: list[dict[str, Any]] = field(default_factory=list)
     live_evaluation: bool = False  # B3 must test the new model, not saved fixture output.
 
     async def model(self, messages: list[dict[str, str]], task_type: str, max_tokens: int | None = None) -> str:

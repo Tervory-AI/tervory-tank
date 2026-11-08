@@ -266,6 +266,7 @@ services:
       dockerfile: hermes/Dockerfile
     restart: unless-stopped
     environment:
+      ENGINE_C4_ENABLED: ${ENGINE_C4_ENABLED:-0}
       TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_REGION: us-east
@@ -353,6 +354,7 @@ services:
     restart: unless-stopped
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
+      ENGINE_C1_ENABLED: ${ENGINE_C1_ENABLED:-0}
       # DECISION engine stays offline on current Coolify apps; opt in on owned servers.
       ENGINE_LOCAL_URL: ${ENGINE_LOCAL_URL:-}
       ENGINE_LARGE_URL: ${ENGINE_LARGE_URL:-}
@@ -488,6 +490,9 @@ services:
         GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
+      ENGINE_C1_ENABLED: ${ENGINE_C1_ENABLED:-0}
+      ENGINE_C4_ENABLED: ${ENGINE_C4_ENABLED:-0}
+      ENGINE_I8_ENABLED: ${ENGINE_I8_ENABLED:-0}
       # DECISION engine stays offline on current Coolify apps; opt in on owned servers.
       ENGINE_LOCAL_URL: ${ENGINE_LOCAL_URL:-}
       ENGINE_LARGE_URL: ${ENGINE_LARGE_URL:-}

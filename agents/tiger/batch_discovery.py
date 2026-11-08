@@ -69,6 +69,8 @@ async def step(ctx, pool, fetch, render):
     result = {'slice_saved': True, 'status': 'completed' if done else 'running',
               'product_urls': sorted(urls), 'sites': cursor['sites'], 'cursor': None if done else cursor,
               'continuation_id': str(continuation) if continuation else None, 'model_calls': 0, 'skill_receipts': receipts}
+    if getattr(ctx.tank, 'parts', []):
+        result['_savings_parts'] = list(dict.fromkeys(ctx.tank.parts))
     async with pool.acquire() as conn:
         async with conn.transaction():
             if continuation:

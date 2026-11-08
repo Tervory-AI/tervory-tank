@@ -119,7 +119,7 @@ class StandingBlocks:
             row = await self.memory.remember(tenant, json.dumps(fact, sort_keys=True), 'blocked_address',
                 'urn:autumbra:receipt:' + rid, evidence=public, row_id=identity,
                 last_verified=datetime.fromtimestamp(now, timezone.utc).isoformat(),
-                meta={'public_addresses': [address]}, index=False)
+                meta={'public_addresses': [address]}, index=False, tenant_wide=True)
             existing[identity] = row
         return list(existing.values())
 

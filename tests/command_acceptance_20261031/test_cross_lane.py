@@ -138,7 +138,7 @@ async def test_persisted_pat_cannot_escalate_headers_or_cross_user_and_revokes(a
     denied = await client.post('/v1/command/build', headers=headers,
                               json={'thread_id': tid, 'brief_markdown': 'Denied offline build'})
     assert denied.status_code == 403
-    assert (await client.get('/v1/command/tools', headers=headers)).json() == []
+    assert (await client.get('/v1/command/tools', headers=headers)).json() == sorted(command.TENANT_TOOLS)
     # Workspace founder in the same tenant still cannot read this user's thread.
     assert (await client.get(f'/v1/command/threads/{tid}')).status_code == 404
     wrong_box = {**headers, 'authorization': 'Bearer ' + token.replace('us-east', 'za')}

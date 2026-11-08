@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import io
 import json
+import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,6 +26,50 @@ from agents.rig.forge.progress import cost
 from agents.rig.forge.storage import Storage
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize('database_setting', ['', 'postgresql://offline.invalid/forbidden'])
+def test_forge_deployed_dry_run_without_database_checkout_or_test_runner(tmp_path, database_setting):
+    import shutil
+    import sys
+    # Match the room image layout: no scripts, tests, Forge binaries or checkout.
+    shutil.copytree(ROOT / 'agents/rig/rigbox', tmp_path / 'rigbox',
+                    ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    shutil.copytree(ROOT / 'agents/_chassis/chassis', tmp_path / 'chassis',
+                    ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    for name in ('english-20k.txt.gz', 'shopping.txt'):
+        shutil.copy2(ROOT / 'agents/rig' / name, tmp_path / name)
+    env = dict(os.environ, PYTHONPATH=str(tmp_path), PYTHONDONTWRITEBYTECODE='1')
+    for name in ('RIG_TEST_DATABASE_URL', 'POOL_SCHEMA_DATABASE_URL', 'DATABASE_URL',
+                 'TANK_KEY', 'RIG_AGENT_URL', 'RIG_FORGE_TRELLIS_ENABLED'):
+        env.pop(name, None)
+    if database_setting:
+        env.update({name: database_setting for name in
+                    ('RIG_TEST_DATABASE_URL', 'POOL_SCHEMA_DATABASE_URL', 'DATABASE_URL')})
+    code = '''
+import asyncio, json, runpy, socket, sys
+import asyncpg
+def forbidden(*args, **kwargs):
+    raise AssertionError('Dry run attempted external I/O')
+socket.getaddrinfo = socket.socket.connect = socket.socket.connect_ex = forbidden
+asyncpg.connect = asyncpg.create_pool = forbidden
+sys.argv = ['rig-forge', '--dry-run']
+try:
+    runpy.run_module('rigbox.three_d.command', run_name='__main__')
+except SystemExit as result:
+    assert result.code == 0
+assert 'pytest' not in sys.modules
+'''
+    result = subprocess.run([sys.executable, '-c', code], cwd=tmp_path, env=env,
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr + result.stdout
+    proof = json.loads(result.stdout)
+    assert proof['dry_run'] and 'no database' in proof['source']
+    assert [row['photos'] for row in proof['runs']] == [1, 3]
+    assert all(row['status'] == 'approved' and row['receipts'] for row in proof['runs'])
+    recorded = ROOT / 'tests/fixtures/rig_r3d/approved.glb'
+    assert (tmp_path / 'rigbox/three_d/offline/approved.glb').read_bytes() == recorded.read_bytes()
+    assert all(row['sha256'] == hashlib.sha256(recorded.read_bytes()).hexdigest() for row in proof['runs'])
 
 
 @pytest.mark.asyncio

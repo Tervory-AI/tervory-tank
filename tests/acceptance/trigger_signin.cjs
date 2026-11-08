@@ -4,6 +4,7 @@ const root = path.resolve(__dirname, '../..');
 process.env.COMMAND_TEST_TOOLS = path.join(root, 'workspace/node_modules');
 const { workspace } = require('../command_acceptance_20261031/workspace_loader.cjs');
 const jwt = require(path.join(process.env.COMMAND_TEST_TOOLS, 'next-auth/jwt'));
+const { SessionStore } = require(path.join(process.env.COMMAND_TEST_TOOLS, 'next-auth/core/lib/cookie.js'));
 const provider = require(path.join(process.env.COMMAND_TEST_TOOLS, 'next-auth/providers/zitadel'));
 const next = require(path.join(process.env.COMMAND_TEST_TOOLS, 'next/server'));
 const env = {
@@ -21,6 +22,7 @@ const load = workspace({env, browser: {location: {search: '?callbackUrl=%2Frig',
   'next-auth/react': {signIn: (...args) => {controls.push({name: 'signIn', args});},
                      signOut: (...args) => {controls.push({name: 'signOut', args});}},
   'next-auth/providers/zitadel': provider,
+  'next-auth/jwt': jwt,
   './trigger-signin-runtime': {signinRuntime: async () => runtime},
   '@/lib/trigger-signin-runtime': {signinRuntime: async () => runtime},
   'next/server': next,
@@ -52,6 +54,43 @@ async function acceptance(row) {
     assert.deepEqual(Array.from(options.providers[0].options.checks), ['pkce', 'state', 'nonce']);
     assert.equal(options.providers[0].options.client.token_endpoint_auth_method, 'none');
     const encrypted = await jwt.encode({token, secret: env.TRIGGER_SIGNIN_WORKSPACE_SECRET});
+    // Exercise the actual pinned library's cookie assembly, not JWT decode in
+    // isolation: auxiliary/legacy cookies must never become session chunks.
+    const cookie = options.cookies.sessionToken;
+    const auxiliary = Object.fromEntries(Object.entries(options.cookies)
+      .filter(([name]) => name !== 'sessionToken')
+      .map(([name, value]) => [value.name, `offline-${name}`]));
+    auxiliary['__Secure-tervory-signin'] = 'offline-retired-session';
+    for (const other of Object.values(options.cookies).filter(value => value !== cookie)) {
+      assert(!other.name.startsWith(cookie.name), 'Session cookie prefix overlaps auxiliary cookie');
+    }
+    assert.equal(new SessionStore(cookie, {cookies: auxiliary}, console).value, '');
+    const cookies = {...auxiliary, [cookie.name]: encrypted};
+    assert.equal(new SessionStore(cookie, {cookies}, console).value, encrypted);
+    const assembled = await jwt.getToken({req: {cookies, headers: {}},
+      secret: env.TRIGGER_SIGNIN_WORKSPACE_SECRET, cookieName: cookie.name, secureCookie: true});
+    assert.equal(assembled.principal.userId, '50001');
+    const large = await jwt.encode({token: {...token, padding: 'offline-chunk-'.repeat(700)},
+      secret: env.TRIGGER_SIGNIN_WORKSPACE_SECRET});
+    const chunks = new SessionStore(cookie, {cookies: {}}, {debug() {}}).chunk(large, {});
+    assert(chunks.length > 1);
+    const chunked = {...auxiliary, ...Object.fromEntries(chunks.map(row => [row.name, row.value]))};
+    const restored = await jwt.getToken({req: {cookies: chunked, headers: {}},
+      secret: env.TRIGGER_SIGNIN_WORKSPACE_SECRET, cookieName: cookie.name, secureCookie: true});
+    assert.equal(restored.principal.userId, '50001');
+    const middleware = load('middleware.ts').default;
+    for (const [host, pathname] of [['base.tervory.com', '/'], ['tank.tervory.com', '/chats']]) {
+      const header = Object.entries(cookies).map(([name, value]) => `${name}=${value}`).join('; ');
+      const response = await middleware(new next.NextRequest(`https://${host}${pathname}`, {
+        headers: {host, cookie: header},
+      }));
+      assert.equal(response.headers.get('location'), null, 'Valid sessions must not return to sign-in');
+      if (pathname === '/') assert.equal(new URL(response.headers.get('x-middleware-rewrite')).pathname, '/base');
+      const noSession = await middleware(new next.NextRequest(`https://${host}${pathname}`, {
+        headers: {host, cookie: Object.entries(auxiliary).map(([name, value]) => `${name}=${value}`).join('; ')},
+      }));
+      assert.equal(new URL(noSession.headers.get('location')).pathname, '/sign-in');
+    }
     const decoded = await jwt.decode({token: encrypted, secret: env.TRIGGER_SIGNIN_WORKSPACE_SECRET});
     const session = await callbacks.session({session: {}, token: decoded});
     assert.equal(session.principal.userId, '50001');
