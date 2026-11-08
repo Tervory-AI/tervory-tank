@@ -68,8 +68,8 @@ def install(router, tank) -> None:
         unavailable = "Tiger task unavailable" if room == "tiger" else "Autumbra task unavailable"
         try:
             # Only Tank knows the private Autumbra origin; no new URL setting.
-            host = "tiger-brain" if room == "tiger" else "autumbra-brain"
-            base = origin(os.environ.get("TIGER_BRAIN_URL", "http://tiger-brain:8001") if room == "tiger" else "http://autumbra-brain:8001")
+            host = "tiger-brain" if room == "tiger" else "ghost-brain"
+            base = origin(os.environ.get("TIGER_BRAIN_URL", "http://tiger-brain:8001") if room == "tiger" else "http://ghost-brain:8001")
             parsed = urlsplit(base)
             # Private service only; this directory never accepts a caller URL.
             if parsed.scheme != "http" or parsed.hostname != host or parsed.port != 8001:

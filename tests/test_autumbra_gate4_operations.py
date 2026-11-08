@@ -168,9 +168,9 @@ def test_dry_run_registry_covers_every_watch_schedule():
     scheduled = {ast.unparse(node.args[0].func) for node in ast.walk(tree)
                  if isinstance(node, ast.Call) and ast.unparse(node.func) == "asyncio.create_task"}
     assert scheduled == {"watch", "nightly", "advisory_watch.watch", "_standing_blocks_loop",
-        "_weekly_owner_email_loop", "_act_owner_email_loop", "_market_lab_intel_loop", "_exercise_loop",
-        "_receipt_savings_loop"}
-    assert len(JOBS) == len(scheduled)
+        "_weekly_owner_email_loop", "_act_owner_email_loop", "_market_lab_intel_loop", "_exercise_loop"}
+    assert "_receipt_savings_loop" not in scheduled  # Deploy must not start new work.
+    assert len(JOBS) == len(scheduled) + 1  # Savings remains explicitly exercisable offline.
 
 
 @pytest.mark.asyncio

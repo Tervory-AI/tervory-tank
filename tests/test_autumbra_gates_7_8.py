@@ -218,10 +218,10 @@ async def test_brain_switch_defaults_on_and_off_pauses_without_paid_call(rig, mo
 
 def test_compose_brain_service_without_profile_and_default_on():
     room = yaml.safe_load((ROOT / "agents/ghost/docker-compose.yml").read_text())
-    assert room["services"]["autumbra-brain"]["profiles"] == ["brain"]
+    assert room["services"]["ghost-brain"]["profiles"] == ["brain"]
     assert room["services"]["ghost-sandbox"]["profiles"] == ["brain"]
-    assert room["services"]["autumbra-brain"]["command"][1] == "ghost.brain_service:app"
-    assert room["services"]["autumbra-brain"]["networks"] == ["gw", "sandbox"]
+    assert room["services"]["ghost-brain"]["command"][1] == "ghost.brain_service:app"
+    assert room["services"]["ghost-brain"]["networks"] == ["gw", "sandbox"]
     assert room["services"]["ghost-sandbox"]["networks"] == ["sandbox"]
     env = room["services"]["agent-ghost"]["environment"]
     assert env["GHOST_BRAIN_ENABLED"] == "${GHOST_BRAIN_ENABLED:-false}"

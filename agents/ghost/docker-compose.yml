@@ -105,7 +105,7 @@ services:
   # Product brain remains opt-in at both deployment and request boundaries.
   # Holds no model key; Tank routes and records.
   # Keeps the former ghost-brain boundary: gw for Tank, internal sandbox net.
-  autumbra-brain:
+  ghost-brain:
     profiles: [brain]
     build:
       context: ..
@@ -124,11 +124,14 @@ services:
       GHOST_BRAIN_ENABLED: ${GHOST_BRAIN_ENABLED:-false}
       TANK_KEY: ${TANK_KEY_GHOST:-}
       TANK_URL: http://tank:8000
+      HERMES_URL: http://hermes:8000
+      GHOST_URL: http://agent-ghost:8000
+      GHOST_BROWSER_URL: http://ghost-browser:8000
       TANK_REGION: ${TANK_REGION:-us-east}
       GHOST_SANDBOX_URL: http://ghost-sandbox:8002
       SANDBOX_KEY: ${SANDBOX_KEY_GHOST:-}
     volumes:
-    - agent_ghost_data:/data
+    - ghost_brain_data:/data
     networks:
     - gw
     - sandbox
@@ -179,6 +182,8 @@ volumes:
   agent_ghost_data:
   ghost_browser_data:
   threat_queues:
+  ghost_brain_data:
+    name: tervory-ghost-brain-data
 networks:
   sandbox:
     internal: true
