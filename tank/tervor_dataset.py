@@ -94,6 +94,5 @@ async def collect(conn, tenant: UUID, product: str, region: str, *, public_rows=
         rows.append(row(tenant=tenant, product=product, kind='correction', source='hermes.memory',
             provider=meta.get('provider', 'human'), licence=meta.get('licence', 'unknown'),
             source_ref=str(item['id']), task_type=meta['task_type'], input=meta['input'], output=item['claim']))
-    gold = await conn.fetch('''SELECT input FROM tank.gold_examples
-        WHERE tenant_id=$1 AND agent=$2 AND region=$3 AND holdout''', tenant, product, region)
-    return build(tenant, product, rows, gold_inputs=[obj(item['input']) for item in gold])
+    from tervor_gold import forbidden_inputs
+    return build(tenant, product, rows, gold_inputs=await forbidden_inputs(conn, tenant, region))
