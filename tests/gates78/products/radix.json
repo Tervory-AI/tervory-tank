@@ -1,10 +1,11 @@
 {
   "product": "radix",
-  "source_sha": "2d2c7094a83656829e45866e4900b959bbd4d83e",
+  "source_sha": "d4036e39fd63babb22a23ee300cf774540170d65",
   "entrypoints": [
-    "Tank main.app + TriggerSigninMiddleware -> /v1/radix/memory GET and POST /control,/edit,/forget (fixed-core corridor dependency)",
-    "agents/radix/app.py app -> memory_api.attach_memory_routes -> chassis.user_assertion.signed_user -> chassis.MemoryClient -> Hermes create_app/Records/PostgreSQL/Qdrant",
-    "agents/radix/app.py scan and agents/radix/verify/routes.py attach (Gate 8 task wiring BLOCKED)"
+    "Tank main.app + TriggerSigninMiddleware -> registered Command threads/attachments/actions/card confirmation -> radix.repo.scan -> signed POST /jobs",
+    "agents/radix/task_runtime.attach -> atomic actor/job enqueue -> chassis.worker.claim_next/run_claimed -> app.scan -> code scanners -> task_runtime.finish_scan -> signed MemoryClient + real TankClient.route + durable task_context receipt",
+    "Tank /v1/command/radix/repo/findings -> signed GET /jobs/{job_id} -> owner-only result",
+    "Tank registered /v1/radix/memory GET and POST /control,/edit,/forget (unapplied corridor dependency) -> memory_api -> shared assertion verifier -> signed MemoryClient -> real Hermes/PostgreSQL/Qdrant"
   ],
   "legacy_tests": [
     "tests/test_radix_gates_7_8.py::test_product_request_brain_route_receipt_then_memory",
@@ -40,47 +41,56 @@
   "cases": {
     "G8.default_off": [
       "tests/gates78/products/test_radix.py::test_brain_deployment_remains_opt_in",
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.default_off]"
+      "tests/gates78/products/test_radix.py::test_default_off_and_unsigned_plain_scan"
     ],
     "G8.task_path": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.task_path]"
+      "tests/gates78/products/test_radix.py::test_worker_first_repeat_changed_accounting"
     ],
     "G8.free_first": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.free_first]"
+      "tests/gates78/products/test_radix.py::test_code_first_and_incomplete_scan_never_uses_brain"
     ],
     "G8.exact_repeat": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.exact_repeat]"
+      "tests/gates78/products/test_radix.py::test_worker_first_repeat_changed_accounting"
     ],
     "G8.misses": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.misses]"
+      "tests/gates78/products/test_radix.py::test_worker_first_repeat_changed_accounting",
+      "tests/gates78/products/test_radix.py::test_repeat_misses_other_user_and_tenant"
     ],
     "G8.correction": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.correction]"
+      "tests/gates78/products/test_radix.py::test_correction_and_forget_invalidate_durable_answers[tank]"
     ],
     "G8.forget": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.forget]"
+      "tests/gates78/products/test_radix.py::test_correction_and_forget_invalidate_durable_answers[tank]"
     ],
     "G8.memory_off": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.memory_off]"
+      "tests/gates78/products/test_radix.py::test_memory_off_applies_to_only_one_worker_owner[tank]"
     ],
     "G8.outage": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.outage]"
+      "tests/gates78/products/test_radix.py::test_memory_outage_and_paid_checkpoint_retry",
+      "tests/gates78/products/test_radix.py::test_provider_failure_is_unknown_and_never_recharged"
     ],
     "G8.auth_not_outage": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.auth_not_outage]"
+      "tests/gates78/products/test_radix.py::test_memory_auth_failure_never_serves_private_cache",
+      "tests/gates78/products/test_radix.py::test_post_payment_auth_failure_retry_uses_checkpoint"
     ],
     "G8.receipts": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.receipts]"
+      "tests/gates78/products/test_radix.py::test_worker_first_repeat_changed_accounting",
+      "tests/gates78/products/test_radix.py::test_job_receipt_is_owner_scoped_through_tank",
+      "tests/gates78/products/test_radix.py::test_tank_receipt_view_matches_worker"
     ],
     "G8.retry_concurrency": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.retry_concurrency]"
+      "tests/gates78/products/test_radix.py::test_concurrent_runs_share_owner_cache_and_keep_two_receipts",
+      "tests/gates78/products/test_radix.py::test_post_payment_auth_failure_retry_uses_checkpoint",
+      "tests/gates78/products/test_radix.py::test_uncertain_execution_is_never_reissued"
     ],
     "G8.product_regressions": [
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G8.product_regressions]"
+      "tests/gates78/products/test_radix.py::test_existing_squad_and_domain_authorization_are_preserved",
+      "tests/gates78/products/test_radix.py::test_code_first_and_incomplete_scan_never_uses_brain",
+      "tests/gates78/products/test_radix.py::test_job_receipt_is_owner_scoped_through_tank"
     ],
     "G7.owner_crud": [
       "tests/gates78/products/test_radix.py::test_owner_controls_use_signed_route_and_real_hermes",
-      "tests/gates78/products/test_radix.py::test_unavailable_task_path_blocks_acceptance[G7.owner_crud-recall-list-publish]"
+      "tests/gates78/products/test_radix.py::test_worker_first_repeat_changed_accounting"
     ],
     "G7.same_tenant": [
       "tests/gates78/products/test_radix.py::test_eight_foreign_control_denials_leave_state_unchanged"

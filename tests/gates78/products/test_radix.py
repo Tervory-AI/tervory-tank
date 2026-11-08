@@ -1,8 +1,6 @@
-"""Radix acceptance contribution. BLOCKED cases deliberately fail, never skip.
+"""Radix acceptance through registered ingress, real workers and signed Hermes.
 
-The control scenarios below are executable after Head integrates the recorded
-runtime dependency. Gate 8 has no shipped paid task entrypoint; its explicit
-blockers prevent the manifest from falsely certifying helper-only unit tests.
+Runtime dependencies remain explicit: no helper-only or source-only acceptance.
 """
 from __future__ import annotations
 
@@ -17,7 +15,7 @@ import pytest
 
 from chassis.user_assertion import HEADER, PostgresNonces, SignedUser, sign_assertion
 from radix_fixture import (
-    PATH, ROOT, USER_A, USER_B, USER_C, blocked_task_contract, owner_record,
+    PATH, ROOT, USER_A, USER_B, USER_C, owner_record, memory_control, scan, submit_scan, work_next, archive_source,
     radix_runtime as radix_runtime, radix_sql_pool as radix_sql_pool,
     radix_stack as radix_stack,
 )
@@ -29,6 +27,8 @@ async def test_owner_controls_use_signed_route_and_real_hermes(radix_stack):
     record = await owner_record(s)
     assert s.forwarded and HEADER.lower() in s.forwarded[0][2]
     assert s.memory.calls, "the shipped MemoryClient never reached Hermes"
+    recalled = await s.tank.get(PATH, headers=s.headers())
+    assert recalled.status_code == 200 and any(row["id"] == record for row in recalled.json()["memories"])
     view = await s.tank.get(PATH, headers=s.headers(), params={"memory_id": record})
     assert view.status_code == 200
     assert view.json()["memories"][0]["id"] == record
@@ -44,7 +44,7 @@ async def test_owner_controls_use_signed_route_and_real_hermes(radix_stack):
 
 
 @pytest.mark.parametrize("other_tenant", [False, True], ids=["same-tenant", "other-tenant"])
-@pytest.mark.parametrize("action", ["view", "edit", "forget", "off"])
+@pytest.mark.parametrize("action", ["view", "edit", "forget", "off", "publish"])
 @pytest.mark.asyncio
 async def test_eight_foreign_control_denials_leave_state_unchanged(radix_stack, other_tenant, action, caplog):
     s = radix_stack
@@ -228,11 +228,260 @@ def test_brain_deployment_remains_opt_in():
         assert "RADIX_BRAIN_ENABLED:-true" not in json.dumps(value)
 
 
-@pytest.mark.parametrize("requirement", [
-    "G7.owner_crud-recall-list-publish",
-    "G8.default_off", "G8.task_path", "G8.free_first", "G8.exact_repeat", "G8.misses",
-    "G8.correction", "G8.forget", "G8.memory_off", "G8.outage", "G8.auth_not_outage",
-    "G8.receipts", "G8.retry_concurrency", "G8.product_regressions",
-])
-def test_unavailable_task_path_blocks_acceptance(requirement):
-    blocked_task_contract(requirement)
+@pytest.fixture
+def enabled(monkeypatch):
+    monkeypatch.setenv("RADIX_MEMORY_ENABLED", "true")
+    monkeypatch.setenv("RADIX_BRAIN_ENABLED", "true")
+
+
+@pytest.mark.asyncio
+async def test_worker_first_repeat_changed_accounting(radix_stack, enabled):
+    s = radix_stack
+    first = await scan(s)
+    receipt = first["receipt"]
+    assert receipt["status"] == "completed"
+    assert (receipt["cost_usd"], receipt["tokens_in"], receipt["tokens_out"]) == (.05, 10, 3)
+    assert len(s.provider_calls) == 1
+    assert [step["action"] for step in receipt["steps"]] == ["code_skill", "recall", "brain_route", "remember"]
+    assert first["findings"] and receipt["result"]["findings"]
+    second = await scan(s)
+    assert second["scan_id"] != first["scan_id"]
+    assert second["receipt"]["answered_from_memory"]
+    assert (second["receipt"]["cost_usd"], second["receipt"]["tokens_in"], second["receipt"]["tokens_out"]) == (0, 0, 0)
+    assert second["receipt"]["would_have_cost"] == .05
+    assert len(s.provider_calls) == 1
+    third = await scan(s, changed=True)
+    assert not third["receipt"]["answered_from_memory"] and len(s.provider_calls) == 2
+    assert (third["receipt"]["cost_usd"], third["receipt"]["tokens_in"], third["receipt"]["tokens_out"]) == (.05, 10, 3)
+    ledger = await s.pool.fetch("SELECT cost_usd,tokens_in,tokens_out FROM tank.ledger WHERE tenant_id=$1 AND task_type='radix.site_risk'", uuid.UUID(s.memory.tenant))
+    assert len(ledger) == len(s.provider_calls) == 2
+    assert sum(float(row["cost_usd"]) for row in ledger) == .10
+    rows = await s.pool.fetch("SELECT user_id,receipt FROM agent_radix.task_context")
+    assert len(rows) == 3 and all(row["user_id"] == USER_A and row["receipt"] for row in rows)
+    print("Radix recorded fixture: first $0.05 10/3 tokens 1 provider; repeat $0 0/0 tokens 0 providers; changed $0.05 10/3 tokens 1 provider")
+
+
+@pytest.mark.asyncio
+async def test_repeat_misses_other_user_and_tenant(radix_stack, enabled):
+    s = radix_stack
+    await scan(s)
+    b = await scan(s, user=USER_B)
+    c = await scan(s, user=USER_C, tenant=s.memory.other_tenant)
+    assert not b["receipt"]["answered_from_memory"] and not c["receipt"]["answered_from_memory"]
+    assert len(s.provider_calls) == 3
+    assert b["receipt"]["user_id"] == USER_B and c["receipt"]["tenant_id"] == s.memory.other_tenant
+
+
+@pytest.mark.asyncio
+async def test_default_off_and_unsigned_plain_scan(radix_stack, monkeypatch):
+    s = radix_stack
+    monkeypatch.delenv("RADIX_MEMORY_ENABLED", raising=False)
+    monkeypatch.delenv("RADIX_BRAIN_ENABLED", raising=False)
+    result = await scan(s)
+    assert "receipt" not in result and not s.memory.calls and not s.provider_calls
+    assert await s.pool.fetchval("SELECT count(*) FROM agent_radix.task_context") == 0
+    monkeypatch.setenv("RADIX_MEMORY_ENABLED", "true")
+    monkeypatch.setenv("RADIX_BRAIN_ENABLED", "true")
+    import base64
+    response = await s.product.post("/jobs", headers={"X-Tank-Key": s.memory.key}, json={
+        "tenant_id": s.memory.tenant, "kind": "scan", "input": {"source": "b64:" + base64.b64encode(archive_source()).decode(), "ref": "placeholder.tar", "user_id": USER_A}})
+    assert response.status_code == 201
+    result = await work_next(s)
+    assert "receipt" not in result and not s.memory.calls and not s.provider_calls
+    assert await s.pool.fetchval("SELECT count(*) FROM agent_radix.task_context") == 0
+
+
+@pytest.mark.asyncio
+async def test_code_first_and_incomplete_scan_never_uses_brain(radix_stack, enabled, monkeypatch):
+    s = radix_stack
+    result = await scan(s, clean=True)
+    assert result["scan_complete"] and result["findings"] == []
+    assert result["receipt"]["paid_calls"] == 0 and not s.provider_calls
+    monkeypatch.setenv("CHECKOV_BIN", "/placeholder/missing-checkov")
+    incomplete = await scan(s, changed=True)
+    assert not incomplete["scan_complete"]
+    assert incomplete["receipt"]["status"] == "incomplete" and not s.provider_calls
+    repeat = await scan(s, changed=True)
+    assert not repeat["receipt"]["answered_from_memory"] and not s.provider_calls
+
+
+@pytest.mark.parametrize("entry", ["tank", "room"])
+@pytest.mark.asyncio
+async def test_correction_and_forget_invalidate_durable_answers(radix_stack, enabled, entry):
+    s = radix_stack
+    first = await scan(s)
+    memory_id = next(step["memory_id"] for step in first["receipt"]["steps"] if step["action"] == "remember")
+    edited = await memory_control(s, entry, "/edit", {"memory_id": memory_id, "text": "placeholder-correction: the parameter is already bound"})
+    assert edited.status_code == 200, edited.text
+    corrected = await scan(s)
+    assert corrected["receipt"]["paid_calls"] == 0 and len(s.provider_calls) == 1
+    assert "placeholder-correction" in json.dumps(corrected["receipt"]["result"])
+    outsider = await scan(s, user=USER_B)
+    assert "placeholder-correction" not in json.dumps(outsider)
+    assert len(s.provider_calls) == 2
+    forgotten = await memory_control(s, entry, "/forget", {"memory_id": memory_id})
+    assert forgotten.status_code == 200
+    after = await scan(s)
+    assert "placeholder-correction" not in json.dumps(after) and not after["receipt"]["answered_from_memory"]
+    assert len(s.provider_calls) == 3
+    rows = await s.memory.records.list("radix", s.memory.tenant, user_id=USER_A)
+    assert all("placeholder-correction" not in json.dumps(row) for row in rows)
+
+
+@pytest.mark.parametrize("entry", ["tank", "room"])
+@pytest.mark.asyncio
+async def test_memory_off_applies_to_only_one_worker_owner(radix_stack, enabled, entry):
+    s = radix_stack
+    await scan(s)
+    await scan(s, user=USER_B)
+    response = await memory_control(s, entry, "/control", {"control": "off"})
+    assert response.status_code == 200
+    before = len(s.memory.calls)
+    owner = await scan(s)
+    calls = s.memory.calls[before:]
+    assert not owner["receipt"]["answered_from_memory"] and owner["receipt"]["memory_control"] == "off"
+    assert all(path != "/recall" and method != "POST" for method, path in calls)
+    other = await scan(s, user=USER_B)
+    assert other["receipt"]["answered_from_memory"] and len(s.provider_calls) == 3
+
+
+@pytest.mark.parametrize("phase", ["list", "recall", "remember"])
+@pytest.mark.asyncio
+async def test_memory_outage_and_paid_checkpoint_retry(radix_stack, enabled, phase):
+    import httpx
+    s = radix_stack
+    transport = s.memory.http._transport
+    async def edge(request):
+        fail = ((phase == "list" and request.method == "GET") or
+                (phase == "recall" and request.url.path == "/recall") or
+                (phase == "remember" and request.method == "POST" and request.url.path == "/memories"))
+        if fail:
+            return httpx.Response(503, json={"detail": "placeholder memory unavailable"})
+        return await transport.handle_async_request(request)
+    s.memory.http._transport = httpx.MockTransport(edge)
+    try:
+        job = await submit_scan(s)
+        result = await work_next(s)
+        assert result["receipt"]["memory_unavailable"] and result["receipt"]["cost_usd"] == .05
+        assert len(s.provider_calls) == 1
+        await s.pool.execute("UPDATE agent_radix.jobs SET status='queued',run_at=now() WHERE id=$1", job)
+        again = await work_next(s)
+        assert again["receipt"] == result["receipt"] and len(s.provider_calls) == 1
+    finally:
+        s.memory.http._transport = transport
+
+
+@pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.asyncio
+async def test_memory_auth_failure_never_serves_private_cache(radix_stack, enabled, status):
+    import httpx
+    s = radix_stack
+    await scan(s)
+    transport = s.memory.http._transport
+    s.memory.http._transport = httpx.MockTransport(lambda request: httpx.Response(status, json={"detail": "placeholder scope refused"}))
+    try:
+        await submit_scan(s)
+        result = await work_next(s, require_done=False)
+        assert result["status"] != "done" and result["result"] is None
+        assert len(s.provider_calls) == 1
+    finally:
+        s.memory.http._transport = transport
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runs_share_owner_cache_and_keep_two_receipts(radix_stack, enabled):
+    s = radix_stack
+    a, b = await submit_scan(s), await submit_scan(s)
+    results = await asyncio.gather(work_next(s), work_next(s))
+    assert {item["scan_id"] for item in results} == {str(a), str(b)}
+    assert sorted(item["receipt"]["paid_calls"] for item in results) == [0, 1]
+    assert len(s.provider_calls) == 1
+    assert await s.pool.fetchval("SELECT count(*) FROM agent_radix.task_context WHERE receipt IS NOT NULL") == 2
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_is_unknown_and_never_recharged(radix_stack, enabled):
+    s = radix_stack
+    s.network.fail_provider = True
+    job = await submit_scan(s)
+    result = await work_next(s)
+    assert result["receipt"]["status"] == "failed" and result["receipt"]["cost_usd"] is None
+    assert result["receipt"]["result"]["status"] == "unknown"
+    assert "none-reported" not in json.dumps(result)
+    calls = len(s.provider_calls)
+    await s.pool.execute("UPDATE agent_radix.jobs SET status='queued',run_at=now() WHERE id=$1", job)
+    await work_next(s)
+    assert len(s.provider_calls) == calls
+
+
+@pytest.mark.asyncio
+async def test_existing_squad_and_domain_authorization_are_preserved(radix_stack, enabled):
+    s = radix_stack
+    response = await s.tank.post("/v1/radix/passive/scans", headers=s.headers(), json={
+        "tenant_id": s.memory.tenant, "target": "https://placeholder.invalid/", "artifact": "commit:" + "0" * 40})
+    assert response.status_code in (401, 403)
+    await s.pool.execute("DELETE FROM tank.tenant_squad WHERE tenant_id=$1", uuid.UUID(s.memory.tenant))
+    response = await s.tank.post("/v1/command/radix/repo/scan", headers=s.headers(), json={"attachment_id": str(uuid.uuid4())})
+    assert response.status_code == 403
+    assert not s.forwarded and not s.provider_calls
+
+
+@pytest.mark.asyncio
+async def test_post_payment_auth_failure_retry_uses_checkpoint(radix_stack, enabled):
+    import httpx
+    s = radix_stack
+    transport = s.memory.http._transport
+    async def edge(request):
+        if request.method == "POST" and request.url.path == "/memories":
+            return httpx.Response(403, json={"detail": "placeholder signed user denied"})
+        return await transport.handle_async_request(request)
+    s.memory.http._transport = httpx.MockTransport(edge)
+    try:
+        job = await submit_scan(s)
+        failed = await work_next(s, require_done=False)
+        assert failed["status"] != "done" and failed["result"] is None
+        assert len(s.provider_calls) == 1
+        row = await s.pool.fetchrow("SELECT execution,receipt FROM agent_radix.task_context WHERE job_id=$1", job)
+        assert row["execution"] and row["receipt"] is None
+    finally:
+        s.memory.http._transport = transport
+    await s.pool.execute("UPDATE agent_radix.jobs SET run_at=now() WHERE id=$1", job)
+    recovered = await work_next(s)
+    assert recovered["receipt"]["status"] == "completed" and recovered["receipt"]["cost_usd"] == .05
+    assert len(s.provider_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_job_receipt_is_owner_scoped_through_tank(radix_stack, enabled):
+    s = radix_stack
+    result = await scan(s)
+    url = "/v1/command/radix/repo/findings"
+    own = await s.tank.get(url, headers=s.headers(), params={"scan_id": result["scan_id"]})
+    assert own.status_code == 200 and own.json()["scan_complete"]
+    before = len(s.provider_calls)
+    for user, tenant in ((USER_B, s.memory.tenant), (USER_C, s.memory.other_tenant)):
+        denied = await s.tank.get(url, headers=s.headers(user, tenant), params={"scan_id": result["scan_id"]})
+        assert denied.status_code == 404
+        assert "placeholder review" not in denied.text and USER_A not in denied.text
+    assert len(s.provider_calls) == before
+
+
+@pytest.mark.asyncio
+async def test_tank_receipt_view_matches_worker(radix_stack, enabled):
+    s = radix_stack
+    result = await scan(s)
+    own = await s.tank.get("/v1/command/radix/repo/findings", headers=s.headers(),
+                           params={"scan_id": result["scan_id"]})
+    assert own.status_code == 200
+    assert own.json()["receipt"] == result["receipt"]
+
+
+@pytest.mark.asyncio
+async def test_uncertain_execution_is_never_reissued(radix_stack, enabled):
+    s = radix_stack
+    job = await submit_scan(s)
+    await s.pool.execute("UPDATE agent_radix.task_context SET stage='executing' WHERE job_id=$1", job)
+    result = await work_next(s)
+    assert result["receipt"]["status"] == "uncertain"
+    assert result["receipt"]["cost_usd"] is None and result["receipt"]["paid_calls"] is None
+    assert not s.provider_calls
