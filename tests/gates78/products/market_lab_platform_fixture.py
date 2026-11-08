@@ -23,7 +23,7 @@ import pytest
 import pytest_asyncio
 
 ROOT = Path(__file__).resolve().parents[3]
-PRODUCT_SOURCE = "61c3750af3f505800c896fb78e4dbf6aee93b637"
+PRODUCT_SOURCE = "24cef6ce2ed28cac2e09479843b5e3f3b10ab3dd"
 A = "placeholder-market-owner"
 B = "placeholder-market-peer"
 KEY = "placeholder-gate78-product-key"
