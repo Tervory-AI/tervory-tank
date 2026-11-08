@@ -89,7 +89,7 @@ attach_gold(app)
 from passive_routes import attach as attach_passive
 attach_passive(app)
 
-from memory_api import attach_memory_routes
+from radix_memory_api import attach_memory_routes
 attach_memory_routes(app)
 
 from task_runtime import attach as attach_task_runtime

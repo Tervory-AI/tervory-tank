@@ -75,8 +75,8 @@ COPY radix/browser/check.cjs /app/browser/check.cjs
 COPY --from=signatures /out/ /var/lib/clamav/
 COPY _chassis/chassis /app/chassis
 COPY radix/app.py /app/app.py
-COPY radix/gates_memory.py /app/gates_memory.py
-COPY radix/memory_api.py /app/memory_api.py
+COPY radix/radix_memory.py /app/radix_memory.py
+COPY radix/radix_memory_api.py /app/radix_memory_api.py
 COPY radix/task_runtime.py /app/task_runtime.py
 COPY radix/radix_brain.py /app/radix_brain.py
 COPY radix/radix_brain_service.py /app/radix_brain_service.py

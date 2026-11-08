@@ -18,12 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents" / "radix"))
 
 from radix_memory_fakes import FakeMemory
-from gates_memory import (
+from radix_memory import (
     MemoryScopeError,
     build_memory_text,
     require_authenticated_scope,
 )
-from memory_api import attach_memory_routes
+from radix_memory_api import attach_memory_routes
 from radix_gates78_identity import SignedUnitActor, UnitNonces, install_verifier
 
 TENANT = "11111111-1111-4111-8111-111111111111"

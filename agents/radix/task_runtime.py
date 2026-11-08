@@ -10,7 +10,7 @@ from fastapi.routing import APIRoute
 from chassis.app import JobIn
 from chassis.job_contract import Job
 from chassis.tenant_db import TenantPool, tenant_path, tenant_scope
-from gates_memory import run_with_memory, task_input_hash
+from radix_memory import run_with_memory, task_input_hash
 from radix_brain import brain_enabled, brain_then_analyze
 from verify.routes import require_tank
 

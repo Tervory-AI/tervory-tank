@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents" / "radix"))
 
 from radix_memory_fakes import FakeMemory, FIXED_FAKE_PER_CALL
-from gates_memory import (
+from radix_memory import (
     MemoryControlError,
     apply_corrections,
     apply_memory_forget,
@@ -387,7 +387,7 @@ async def test_memory_outage_answers_without_memory_never_serves_repeat():
 @pytest.mark.asyncio
 async def test_missing_invalid_scope_refused_offline():
     """Point 8: missing/invalid tenant or user is refused (not an outage)."""
-    from gates_memory import MemoryScopeError, require_authenticated_scope
+    from radix_memory import MemoryScopeError, require_authenticated_scope
 
     with pytest.raises(MemoryScopeError):
         require_authenticated_scope(tenant_id=None, user_id="u")

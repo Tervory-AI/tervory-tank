@@ -10,7 +10,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from gates_memory import (
+from radix_memory import (
     MemoryControlError,
     MemoryScopeError,
     apply_memory_edit,

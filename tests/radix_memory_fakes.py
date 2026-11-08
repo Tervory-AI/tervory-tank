@@ -1,7 +1,7 @@
 """Offline Radix unit-test fixtures, excluded from the shipped room image."""
 from copy import deepcopy
 from typing import Any
-from gates_memory import memory_kinds, _text_has_secret, is_tenant_wide_kind
+from radix_memory import memory_kinds, _text_has_secret, is_tenant_wide_kind
 
 FIXED_FAKE_PER_CALL = {"cost_usd": 0.05, "tokens_in": 10, "tokens_out": 3}
 

@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents" / "radix"))
 
 from radix_memory_fakes import FakeMemory
-from gates_memory import (
+from radix_memory import (
     MemoryScopeError,
     TENANT_WIDE_KINDS,
     build_memory_text,
@@ -71,7 +71,7 @@ async def test_two_users_personal_recall_isolated_under_proposed_scope():
 
 @pytest.mark.asyncio
 async def test_tenant_wide_reaches_both_when_declared(monkeypatch):
-    import gates_memory as gm
+    import radix_memory as gm
     monkeypatch.setattr(gm, "TENANT_WIDE_KINDS", frozenset({"radix.site_scan"}))
     memory = FakeMemory()
     # Tenant-wide write: no user_id in meta.
