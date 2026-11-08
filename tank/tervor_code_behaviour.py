@@ -1,7 +1,9 @@
-"""Bounded Python behaviour checks in mandatory Linux namespaces and seccomp.
+"""Bounded Python observations; arbitrary-Python behaviour grading is blocked.
 
 Only trusted, predeclared test calls are selected on the host. Candidate source
 is data until imported by the isolated worker. Candidate commands never run.
+Stdout and interpreter state are candidate-controlled, so matching claims never
+authorize a passing behaviour grade.
 """
 from __future__ import annotations
 
@@ -193,8 +195,6 @@ class Sandbox:
                 raise ValueError('Expected worker object')
         except (ValueError, UnicodeDecodeError, RecursionError):
             return dict(result, status='candidate_failure', reason='invalid_worker_output')
-        if value.get('kind') == 'exception' and value.get('type') == 'MemoryError':
-            return dict(result, status='memory_limit', reason='worker_memory_error')
         return dict(result, status='completed', value=value)
 
     def probe(self) -> dict:
@@ -221,8 +221,15 @@ class Sandbox:
     def run(self, files: dict, test: dict) -> dict:
         if not self.ready:
             raise InfrastructureError('isolation_probe_required')
-        return self._launch(files, {**{key: test[key] for key in ('module', 'function', 'args')},
-                                    'operation': test['kind']})
+        observation = self._launch(files, {**{key: test[key] for key in ('module', 'function', 'args')},
+                                           'operation': test['kind']})
+        if observation['status'] == 'completed':
+            # This channel cannot prove invocation or trusted serialization.
+            # Candidate import code can emit the exact envelope and exit zero,
+            # or modify json/builtins/worker frames in the same interpreter.
+            observation['untrusted_claim'] = observation.pop('value')
+            observation.update(status='integrity_unverified', reason='candidate_controls_result_channel')
+        return observation
 
 
 def evaluate(item: dict, answer: object, sandbox: Sandbox) -> dict:
@@ -245,18 +252,25 @@ def evaluate(item: dict, answer: object, sandbox: Sandbox) -> dict:
                 execution = sandbox.run(files | test.get('overrides', {}), test)
             except (InfrastructureError, OSError, subprocess.SubprocessError):
                 return dict(result, status='infrastructure_error', reason='sandbox_invocation_failed')
-            passed = execution['status'] == 'completed' and encoded(execution.get('value')) == encoded(test['expected'])
-            row = dict(name=test['name'], passed=passed, **execution)
-            observed = row.pop('value', {})
+            # No arbitrary-Python execution has an authenticated grading channel.
+            # Even a future adapter returning completed must not reopen grading.
+            observed = execution.pop('untrusted_claim', execution.pop('value', {}))
+            if execution['status'] == 'completed':
+                execution.update(status='integrity_unverified', reason='candidate_controls_result_channel')
+            row = dict(name=test['name'], passed=False, **execution)
+            row['claim_matches_expected'] = encoded(observed) == encoded(test['expected'])
+            row['grading_integrity'] = 'not_established'
             if observed.get('kind') == 'exception' and observed.get('type') in (
                     'PermissionError', 'FileNotFoundError', 'OSError', 'AssertionError',
                     'ModuleNotFoundError', 'AttributeError', 'MemoryError'):
                 row['exception_type'] = observed['type']
             row.pop('value', None)  # Raw candidate output never enters the persisted report.
         result['tests'].append(row)
-    result['passed'] = all(row['passed'] for row in result['tests'])
-    status = 'passed' if result['passed'] else 'candidate_failure'
-    for outcome in ('timeout', 'cpu_or_signal_limit', 'memory_limit', 'output_limit'):
+    result['contract_only'] = all(test['kind'] == 'commands' for test in task['tests'])
+    result['contract_matched'] = result['contract_only'] and all(row['passed'] for row in result['tests'])
+    result['passed'] = False
+    status = 'contract_checked' if result['contract_only'] else 'integrity_unverified'
+    for outcome in ('timeout', 'cpu_or_signal_limit', 'output_limit', 'candidate_failure'):
         if any(row['status'] == outcome for row in result['tests']):
             status = outcome
             break
@@ -281,17 +295,52 @@ def report(data: dict, spec: dict, predictions: dict | None = None, *, split: st
     comparisons = {}
     for name, answers in controls.items():
         rows = [evaluate(item, answers[item['case']['id']], sandbox) for item in items]
-        comparisons[name] = dict(n=len(rows), passed=sum(r['passed'] for r in rows),
+        comparisons[name] = dict(n=len(rows), passed=0,
+            contract_matches=sum(r.get('contract_matched', False) for r in rows),
+            unverified_cases=sum(r['status'] == 'integrity_unverified' for r in rows),
             infrastructure_errors=sum(r['status'] == 'infrastructure_error' for r in rows), rows=rows)
-    return dict(schema=1, model_code='tervor-code', product=baseline.PRODUCT, tenant_id=baseline.PLATFORM,
-        method='isolated_predeclared_python_behaviour', split=split, holdout=split != 'train',
+    return dict(schema=2, model_code='tervor-code', product=baseline.PRODUCT, tenant_id=baseline.PLATFORM,
+        method='isolated_untrusted_python_observation', split=split, holdout=split != 'train',
         harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         data_sha256=digest(data), tests_sha256=digest(spec), split_hashes=baseline.preflight(data)['split_hashes'],
         isolation=isolation, comparisons=comparisons, eligible=False, model_quality_measured=False,
+        grading=dict(available=False, reason='Candidate and serializer share an interpreter; stdout is unauthenticated',
+                     required='Independent trustworthy grading boundary before any Python behaviour pass'),
         cost_usd=0, ledger_ids=[],
         status='infrastructure_error' if isolation['status'] != 'ready' or any(
-            value['infrastructure_errors'] for value in comparisons.values()) else 'fixture_harness_only',
+            value['infrastructure_errors'] for value in comparisons.values()) else 'grading_blocked',
         training_preflight=baseline.preflight(data))
+
+
+def integrity_demonstrations(data: dict, spec: dict, *, sandbox: Sandbox | None = None) -> dict:
+    """Exact-envelope and shared-interpreter attacks: observations, never grades."""
+    sandbox = sandbox or Sandbox()
+    isolation = sandbox.probe()
+    selected = deepcopy(next(i for i in suite(data, spec) if i['case']['id'] == 'gold-multi'))
+    selected['task']['tests'] = selected['task']['tests'][:1]
+    selected['tests_sha256'] = digest(selected['task']['tests'])
+    envelope = '{"kind":"return","value":16}'
+    variants = {
+        'exact_envelope_import_exit': f'import os\nos.write(1, {envelope.encode()!r})\nos._exit(0)\n',
+        'exact_envelope_function_exit': f'def page_size():\n    import os\n    os.write(1, {envelope.encode()!r})\n    os._exit(0)\n',
+        'serializer_monkeypatch': f'import json\njson.dumps = lambda *a, **k: {envelope!r}\ndef page_size():\n    return -1\n',
+        'worker_frame_introspection': f'def page_size():\n    import inspect\n    scope = inspect.currentframe().f_back.f_globals\n    scope["json"].dumps = lambda *a, **k: {envelope!r}\n    return -1\n',
+        'ordinary_reference_observation': selected['case']['expected']['files']['page.py'],
+        'ordinary_wrong_observation': 'def page_size():\n    return -1\n',
+    }
+    results = {}
+    for name, source in variants.items():
+        answer = deepcopy(selected['case']['expected'])
+        answer['files']['page.py'] = source
+        results[name] = evaluate(selected, answer, sandbox)
+    selected = deepcopy(next(i for i in suite(data, spec) if i['case']['id'] == 'gold-tests'))
+    selected['task']['tests'] = selected['task']['tests'][1:]
+    selected['tests_sha256'] = digest(selected['task']['tests'])
+    answer = deepcopy(selected['case']['expected'])
+    envelope = b'{"kind":"exception","type":"AssertionError"}'
+    answer['files']['test_discount.py'] = f'import os\nos.write(1, {envelope!r})\nos._exit(0)\n'
+    results['exact_exception_import_exit'] = evaluate(selected, answer, sandbox)
+    return dict(isolation=isolation, scenarios=results)
 
 
 def demonstrations(data: dict, spec: dict) -> dict:
@@ -329,6 +378,7 @@ def demonstrations(data: dict, spec: dict) -> dict:
     answer = deepcopy(reference)
     answer['commands'] = [['sh', '-c', 'echo untrusted']]
     results['host_command'] = evaluate(attack_item, answer, sandbox)
+    results.update(integrity_demonstrations(data, spec, sandbox=sandbox)['scenarios'])
     return dict(isolation=isolation, scenarios=results)
 
 

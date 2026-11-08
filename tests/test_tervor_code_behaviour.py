@@ -166,20 +166,26 @@ def test_real_isolation_or_explicit_fail_closed(monkeypatch):
     # Only this branch may execute the candidate strings, through Bubblewrap.
     data, spec = fixtures()
     measured = behaviour.report(data, spec, sandbox=sandbox)
-    assert measured['comparisons']['reference_fixture']['passed'] == 5
+    assert measured['comparisons']['reference_fixture']['passed'] == 0
+    assert measured['status'] == 'grading_blocked'
+    assert measured['grading']['available'] is False
     assert measured['comparisons']['no_change']['passed'] == 0
     assert measured['eligible'] is False and measured['model_quality_measured'] is False
     public = behaviour.report(data, spec, split='train', sandbox=sandbox)
-    assert public['comparisons']['reference_fixture']['passed'] == 1
+    assert public['comparisons']['reference_fixture']['passed'] == 0
     assert public['comparisons']['no_change']['passed'] == 0
     checks = behaviour.demonstrations(data, spec)['scenarios']
-    for name in ('valid_but_wrong', 'network', 'runtime_test_tampering', 'host_escape', 'process_creation', 'self_reported_pass', 'nonfinite_output'):
-        assert checks[name]['status'] == 'candidate_failure'
+    for name in ('valid_but_wrong', 'network', 'runtime_test_tampering', 'host_escape', 'process_creation', 'self_reported_pass'):
+        assert checks[name]['status'] == 'integrity_unverified'
+        assert checks[name]['passed'] is False
+    assert checks['nonfinite_output']['status'] == 'candidate_failure'
     assert checks['network']['tests'][0]['exception_type'] == 'PermissionError'
-    assert checks['equivalent_correct']['passed'] is True  # Different source, same behavior.
+    assert checks['equivalent_correct']['passed'] is False
+    assert all(t['claim_matches_expected'] for t in checks['equivalent_correct']['tests'])
     assert checks['wall_timeout']['status'] == 'timeout'
     assert checks['cpu_limit']['status'] == 'cpu_or_signal_limit'
-    assert checks['memory_limit']['status'] == 'memory_limit'
+    assert checks['memory_limit']['status'] == 'integrity_unverified'
+    assert checks['memory_limit']['tests'][0]['exception_type'] == 'MemoryError'
     assert checks['output_limit']['status'] == 'output_limit'
     for name in ('path_escape', 'test_patch_tampering', 'host_command'):
         assert checks[name]['status'] == 'refused'
@@ -223,5 +229,41 @@ def test_checked_in_measurement_is_for_current_sources_and_tests():
     assert evidence['isolation']['worker_sha256'] == hashlib.sha256(behaviour.WORKER.read_bytes()).hexdigest()
     assert evidence['harness_sha256'] == hashlib.sha256(Path(behaviour.__file__).read_bytes()).hexdigest()
     assert evidence['eligible'] is False and evidence['model_quality_measured'] is False
-    assert evidence['comparisons']['reference_fixture']['passed'] == 5
-    assert evidence['comparisons']['no_change']['passed'] == 0
+    assert evidence['status'] == 'grading_blocked'
+    assert evidence['retracts_prior_behavior_grades'] is True
+    assert all(not row['passed'] for row in evidence['focused_integrity_proof']['scenarios'].values())
+
+
+@pytest.fixture(scope='module')
+def integrity_proof():
+    data, spec = fixtures()
+    return behaviour.integrity_demonstrations(data, spec)
+
+
+@pytest.mark.parametrize('scenario', [
+    'exact_envelope_import_exit', 'exact_envelope_function_exit', 'serializer_monkeypatch',
+    'worker_frame_introspection', 'ordinary_reference_observation', 'ordinary_wrong_observation',
+    'exact_exception_import_exit'])
+def test_exact_envelopes_and_interpreter_tampering_never_pass(integrity_proof, scenario):
+    result = integrity_proof['scenarios'][scenario]
+    assert result['passed'] is False
+    if integrity_proof['isolation']['status'] != 'ready':
+        assert result['status'] == 'infrastructure_error'
+        return
+    assert result['status'] == 'integrity_unverified'
+    row = result['tests'][0]
+    assert row['passed'] is False and row['grading_integrity'] == 'not_established'
+    # These are the exact matching envelopes the previous grader accepted.
+    assert row['claim_matches_expected'] is (scenario != 'ordinary_wrong_observation')
+
+
+def test_matching_completed_adapter_cannot_reopen_grading():
+    class ClaimsCompleted(behaviour.Sandbox):
+        def run(self, files, test):
+            return dict(status='completed', value=test['expected'])
+    sandbox = ClaimsCompleted()
+    sandbox.ready = True
+    selected = item()
+    result = behaviour.evaluate(selected, selected['case']['expected'], sandbox)
+    assert result['passed'] is False and result['status'] == 'integrity_unverified'
+    assert all(t['claim_matches_expected'] and not t['passed'] for t in result['tests'])

@@ -1,4 +1,8 @@
-"""Trusted single-process sandbox bootstrap; invoked only inside Bubblewrap."""
+"""Sandbox bootstrap; trusted only before candidate import.
+
+Candidate code shares this interpreter, including json and worker frames. Its
+stdout after import is an untrusted claim, never authenticated grading evidence.
+"""
 from __future__ import annotations
 
 import ctypes
