@@ -970,8 +970,13 @@ def test_workspace_gates_ts_auth_refuse_and_outage_degrade_static():
     assert "isMemoryOutageFailure" in gates
     assert "memory_unavailable" in gates
     assert 'memory_status: "memory unavailable"' in gates or "memory unavailable" in gates
-    assert "await route(" in gates
-    assert "await createTask(" in gates
+    # A backend 5xx can follow payment. The server owns availability fallback;
+    # the browser must never dispatch a second model/job after an unknown result.
+    assert "await route(" not in gates
+    assert "await createTask(" not in gates
+    assert 'commandRequest(identity, "threads"' in gates
+    assert 'tool: "workspace.task.create"' in gates
+    assert 'confirmation_required: true' in gates
     # Auth path still throws InputError (no paid call at this layer for empty scope).
     assert 'throw new InputError("Signed-in tenant required.")' in gates
     assert 'throw new InputError("Signed-in user required.")' in gates

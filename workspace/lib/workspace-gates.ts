@@ -1,42 +1,17 @@
 /**
- * Gates 7+8 Workspace request path (live).
- *
- * Call chain — chat:
- *   app/api/chat/route.ts
- *     → lib/workspace-gates.ts chatWithMemory (this file)
- *       → Tank /v1/command/workspace/chat
- *         → integrations/tank/workspace.py _run_chat_with_memory
- *           → integrations/workspace/request_path.py run_chat_request
- *             → gates_memory.product_to_tank_agent_memory
- *               free: code_skill → recall → correction → identical_reuse
- *               paid: Tank agent route → remember → receipt
- *       (memory outage only: lib/tank.ts route → /v1/route with memory_unavailable)
- *
- * Call chain — tasks POST:
- *   app/api/tasks/route.ts
- *     → lib/workspace-gates.ts createTaskWithMemory (this file)
- *       → Tank /v1/command/workspace/task.create
- *         → integrations/tank/workspace.py _run_task_create_with_memory
- *           → integrations/workspace/request_path.py run_task_request
- *             → gates_memory.product_to_tank_agent_memory
- *               free steps then Tank agent create_task → receipt
- *       (memory outage only: lib/tank.ts createTask → /v1/tasks with memory_unavailable)
- *
- * Auth/scope errors (missing tenant/user, tenant-as-user) always refuse — no paid call.
- * Memory outage answers through the Tank agent path, marks memory unavailable, and
- * never serves identical_reuse or remembers.
- *
- * Memory controls (off/view/edit/forget) are per tenant+user via the existing
- * memory corridor (workspace.memory.* tools → MemoryClient → Hermes /memories
- * with the Workspace agent key). Never Tank /v1/memory and never the shared
- * TANK_API_KEY for writes.
+ * Tank /v1/command/workspace/chat runs code_skill → recall → correction → reuse.
+ * Genuine memory outages return memory_unavailable from Tank, never a client retry.
+ * Workspace uses authenticated Tank Command tools for memory and model work.
+ * Task submission proposes an existing Command card; only explicit Confirm
+ * queues work. The board observes real completion and its paid receipt.
+ * Tank owns pre-dispatch outage handling. An uncertain response never triggers
+ * a second client-side paid request. Personal controls use the memory corridor.
  */
 import "server-only";
 import { InputError } from "@/lib/route-input";
 import {
   COMMAND_LIMITS,
-  createTask,
-  route,
+  commandRequest,
   type ChatMessage,
   type RouteResult,
   type Task,
@@ -112,16 +87,6 @@ export function classifyWorkspaceCommandFailure(err: unknown): "auth" | "outage"
   return "error";
 }
 
-function memoryUnavailableBracket(reason: string) {
-  return {
-    memory_unavailable: true,
-    memory_status: "memory unavailable",
-    reason,
-    answered_from_memory: false,
-    identical_reuse: false,
-    steps: [{ action: "memory_unavailable", reason }, { action: "tank_agent", status: "done" }],
-  };
-}
 
 async function commandWorkspace<T>(
   identity: { tenantId: string; userId: string },
@@ -174,52 +139,30 @@ export async function chatWithMemory(
         ? err
         : new InputError(err instanceof Error ? err.message : "Chat failed.", 503);
     }
-    const reason = err instanceof Error ? err.message : "memory unavailable";
-    const routed = await route(identity.tenantId, taskType, messages);
-    return {
-      ...routed,
-      memory_bracket: memoryUnavailableBracket(reason),
-    };
+    throw new InputError("Workspace could not finish this action. Check its receipt before trying again.", 503);
   }
 }
 
-/** Task create through free steps then Tank agent path. Auth refuses; memory outage degrades. */
+/** Propose through Command; the existing approved card owns explicit Confirm. */
 export async function createTaskWithMemory(
-  tenantId: string,
-  userId: string,
-  title: string,
-  taskType: string,
-  request: string,
+  tenantId: string, userId: string, title: string, taskType: string, request: string,
   options: { memoryControl?: MemoryControl } = {},
-): Promise<Task & { memory_bracket?: Record<string, unknown> }> {
+): Promise<{ confirmation_required: true; thread_id: string; card_id: string }> {
   const identity = refuseEmptyScope(tenantId, userId);
-  try {
-    return await commandWorkspace(identity, "task.create", {
-      title,
-      request,
-      task_type: taskType,
+  const thread = await (await commandRequest(identity, "threads", { method: "POST", body: "{}" })).json();
+  const card = await (await commandRequest(identity, `threads/${thread.thread_id}/actions`, {
+    method: "POST", body: JSON.stringify({ tool: "workspace.task.create", arguments: {
+      title, request, task_type: taskType,
       ...(options.memoryControl ? { memory_control: options.memoryControl } : {}),
-    });
-  } catch (err) {
-    if (isAuthOrScopeFailure(err)) {
-      throw err instanceof InputError
-        ? err
-        : new InputError(err instanceof Error ? err.message : "Signed-in tenant and user required.", 401);
-    }
-    if (!isMemoryOutageFailure(err)) {
-      throw err instanceof InputError
-        ? err
-        : new InputError(err instanceof Error ? err.message : "Task create failed.", 503);
-    }
-    const reason = err instanceof Error ? err.message : "memory unavailable";
-    const created = await createTask(identity.tenantId, identity.userId, title, taskType, [
-      { role: "user", content: request },
-    ]);
-    return {
-      ...created,
-      memory_bracket: memoryUnavailableBracket(reason),
-    };
-  }
+    } }),
+  })).json();
+  return { confirmation_required: true, thread_id: thread.thread_id, card_id: card.card_id };
+}
+
+/** The normal board poll observes completed work through its owned adapter. */
+export async function listTasksWithMemory(tenantId: string, userId: string): Promise<Task[]> {
+  const response = await commandRequest(refuseEmptyScope(tenantId, userId), "workspace/tasks");
+  return (await response.json()).tasks;
 }
 
 export async function setWorkspaceMemoryControl(
