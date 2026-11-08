@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import hashlib
-import fcntl
 import os
 import re
 import shutil
@@ -140,10 +139,13 @@ class ThreatPayloadQueue:
             pass
 
     def write_receipt(self, receipt: dict[str, Any]) -> Path:
+        from .savings import code_cost
+        code_cost(receipt)
         summarize_budgets(receipt)
         if "timestamp" not in receipt:
             receipt["timestamp"] = utc_now()
         rid = str(receipt.get("id") or uuid.uuid4())
+        receipt["id"] = rid
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", rid):
             raise ValueError("Invalid receipt identifier.")
         if self._active_item:

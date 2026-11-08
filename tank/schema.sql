@@ -3661,6 +3661,11 @@ CREATE TABLE IF NOT EXISTS tank.moot_upload_requests (
 CREATE INDEX IF NOT EXISTS moot_upload_request_budget
     ON tank.moot_upload_requests(tenant_id,user_id,created_at);
 -- END moot_media
+-- BEGIN autumbra
+CREATE SCHEMA IF NOT EXISTS agent_ghost;
+-- Counterfactual tokens reuse the shared comparison columns, never billed usage.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS autumbra_reference_hash text;
+-- END autumbra
 
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
