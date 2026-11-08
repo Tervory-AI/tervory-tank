@@ -12,7 +12,6 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
-import main as tank_runtime
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "agents" / "opli"))
@@ -122,12 +121,7 @@ async def product_api(proposed, runtime, monkeypatch):
             await pool.execute(schema)
         runtime.pool = lambda: pool
         monkeypatch.setattr(proposed, "db", lambda: pool)
-        # The legacy command fixture stubs main. Keep the cache receipt on the
-        # actual Tank SQL writer, sharing this test's disposable database.
-        monkeypatch.setattr(tank_runtime, "pool", lambda: pool)
-        runtime.Message = tank_runtime.Message
-        runtime.RouteRequest = tank_runtime.RouteRequest
-        runtime._record_local = tank_runtime._record_local
+
 
         edge = HermesEdge()
         # Chassis MemoryClient; only Hermes HTTP is faked at the edge.
@@ -181,6 +175,18 @@ async def _fixed_route_code(proposed, pool, monkeypatch):
 async def test_live_opli_code_turn_uses_tank_agent_then_memory_repeat(product_api, monkeypatch):
     client, pool, proposed, edge, memory = product_api
     assert memory is not None
+    runtime = sys.modules["main"]
+    # The legacy command fixture stubs main. Keep the cache receipt on the
+    # actual Tank SQL writer, without initializing global main at collection.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("placeholder_opli_receipt_runtime", ROOT / "tank/main.py")
+    tank_runtime = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, tank_runtime)
+    spec.loader.exec_module(tank_runtime)
+    monkeypatch.setattr(tank_runtime, "pool", lambda: pool)
+    runtime.Message = tank_runtime.Message
+    runtime.RouteRequest = tank_runtime.RouteRequest
+    runtime._record_local = tank_runtime._record_local
 
     thread = (await client.post("/v1/command/threads", json={})).json()["thread_id"]
     stub = await _fixed_route_code(proposed, pool, monkeypatch)
