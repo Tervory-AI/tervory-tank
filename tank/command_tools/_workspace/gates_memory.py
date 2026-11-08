@@ -527,7 +527,11 @@ def apply_corrections(task: dict[str, Any], corrections: list[str]) -> dict[str,
 
 def memory_control_from_memories(rows: list[dict[str, Any]]) -> str | None:
     """Most recent per-tenant+user memory_control preference, if any."""
-    for row in reversed(rows):
+    # Hermes lists newest first; legacy in-process clients append oldest first.
+    # Prefer the persisted creation time while keeping insertion order for rows
+    # without timestamps. Authorization already restricted the candidate rows.
+    ordered = sorted(rows, key=lambda row: str(row.get("created_at") or ""))
+    for row in reversed(ordered):
         if row.get("kind") != CONTROL_KIND:
             continue
         meta = row.get("meta") or {}
