@@ -158,6 +158,19 @@ class MemoryOwnershipStore:
                 reservation.idempotency_key,
             ):
                 raise ReservationError("upload_owner_mismatch")
+            previous = self._by_upload.get(record.upload_id)
+            if previous is not None and (
+                previous.tenant_id,
+                previous.user_id,
+                previous.hearing_id,
+                previous.idempotency_key,
+            ) != (
+                record.tenant_id,
+                record.user_id,
+                record.hearing_id,
+                record.idempotency_key,
+            ):
+                raise ReservationError("upload_owner_mismatch")
             await self.save(record)
             reservation.upload_id = record.upload_id
 

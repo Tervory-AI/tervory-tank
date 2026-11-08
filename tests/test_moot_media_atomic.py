@@ -177,6 +177,8 @@ async def test_revoked_membership_refuses_all_media_access(ownership):
         "/assets/" + record.asset_id,
         "/playback/" + record.playback_ids[0],
     ]:
+        status, _ = await request(resource)
+        assert status == 200
         status, body = await request(resource, revoked)
         assert status == 404 and body == {"error": "not_found"}
     with pytest.raises(MuxError, match="not_found"):
@@ -216,6 +218,36 @@ async def test_revocation_during_provider_read_does_not_release_upload_url(
         hearing_allowed=gate,
     )
     assert status == 404 and "upload_url" not in body
+
+
+@pytest.mark.asyncio
+async def test_revocation_during_create_keeps_intent_but_withholds_upload_url(
+    ownership, monkeypatch
+):
+    provider = YieldingProvider()
+    permitted = True
+
+    async def gate(*_):
+        return permitted
+
+    original = provider.create_direct_upload
+
+    async def create(**kwargs):
+        nonlocal permitted
+        result = await original(**kwargs)
+        permitted = False
+        return result
+
+    monkeypatch.setattr(provider, "create_direct_upload", create)
+    args = arguments(ownership, provider, hearing_allowed=gate)
+    with pytest.raises(MuxError, match="not_found"):
+        await create_upload(**args)
+    assert provider.create_calls == 1
+    upload_id = next(iter(provider.uploads))
+    assert await ownership.by_upload(upload_id, tenant_id=TENANT) is not None
+    with pytest.raises(MuxError, match="not_found"):
+        await create_upload(**args)
+    assert provider.create_calls == 1
 
 
 @pytest.mark.asyncio
