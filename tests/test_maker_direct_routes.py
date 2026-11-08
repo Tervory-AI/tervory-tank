@@ -1,13 +1,7 @@
-"""Offline checks for maker-direct LiteLLM routes (PR soft spots).
-
-No live model calls, no network inference. Sarvam extra_headers env
-interpolation is verified against pinned LiteLLM v1.106.4 proxy behavior when
-that package is importable; otherwise the config-shape assertions still run.
-"""
+"""Offline roster checks; the pinned gateway contract runs in nonroot CI."""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -35,7 +29,7 @@ EXPECTED = {
     "sarvam-105b-direct": "openai/sarvam-105b",
 }
 
-PINNED_LITELLM = "1.106.4"
+HELD = {"sarvam-105b-direct", "trinity-large-thinking-direct"}
 
 
 def _rows(filename: str) -> dict:
@@ -47,33 +41,47 @@ def _rows(filename: str) -> dict:
 def test_maker_direct_exact_upstream_ids(filename: str) -> None:
     book = _rows(filename)
     for name, upstream in EXPECTED.items():
+        if name in HELD:
+            continue
         assert name in book, name
         assert book[name]["litellm_params"]["model"] == upstream, name
 
 
 @pytest.mark.parametrize("filename", FILES)
 def test_sarvam_extra_headers_env_ref_present(filename: str) -> None:
-    row = _rows(filename)["sarvam-105b-direct"]
+    config = yaml.safe_load((ROOT / "litellm" / filename).read_text())
+    row = next(row for row in config["x_unpriced_models"] if row["model_name"] == "sarvam-105b-direct")
     headers = row["litellm_params"]["extra_headers"]
     assert headers["api-subscription-key"] == "os.environ/SARVAM_API_KEY"
     assert row["litellm_params"]["api_key"] == "os.environ/SARVAM_API_KEY"
 
 
 @pytest.mark.parametrize("filename", FILES)
-def test_sarvam_and_arcee_usd_ledger_not_invented(filename: str) -> None:
-    book = _rows(filename)
-    sarvam = book["sarvam-105b-direct"]
-    assert sarvam["litellm_params"]["input_cost_per_token"] == 0
-    assert sarvam["litellm_params"]["output_cost_per_token"] == 0
-    assert sarvam["model_info"]["input_cost_per_token"] == 0
-    assert sarvam["model_info"]["output_cost_per_token"] == 0
-    assert "159345" not in (ROOT / "litellm" / filename).read_text(encoding="utf-8")
-    assert "0.010623" not in (ROOT / "litellm" / filename).read_text(encoding="utf-8")
-
-    arcee = book["trinity-large-thinking-direct"]
-    assert arcee["litellm_params"]["input_cost_per_token"] == 0
-    assert arcee["litellm_params"]["output_cost_per_token"] == 0
-    assert arcee["model_info"].get("price_unverified") == "blog-only-2026-11-07"
+def test_unpriced_models_are_unavailable_even_with_provider_keys(filename, monkeypatch):
+    import importlib.util
+    root = ROOT / "litellm"
+    monkeypatch.syspath_prepend(str(root))
+    spec = importlib.util.spec_from_file_location("maker_engine_config", root / "engine_config.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    config = yaml.safe_load((root / filename).read_text())
+    monkeypatch.setenv("SARVAM_API_KEY", "placeholder-sarvam")
+    monkeypatch.setenv("ARCEE_API_KEY", "placeholder-arcee")
+    assert HELD.isdisjoint(_rows(filename))
+    held = {row["model_name"]: row for row in config["x_unpriced_models"]}
+    assert held.keys() == HELD
+    for name, row in held.items():
+        assert row["litellm_params"]["model"] == EXPECTED[name]
+        for section in ("litellm_params", "model_info"):
+            assert "input_cost_per_token" not in row[section]
+            assert "output_cost_per_token" not in row[section]
+    generated = module.configure(config)
+    assert "x_unpriced_models" not in generated
+    assert HELD.isdisjoint(row["model_name"] for row in generated["model_list"])
+    for section in ("litellm_settings", "router_settings"):
+        for chain in generated.get(section, {}).get("fallbacks", []):
+            assert HELD.isdisjoint(chain)
+            assert all(HELD.isdisjoint(targets) for targets in chain.values())
 
 
 def test_docs_mark_unverified_and_omit_invented_fx() -> None:
@@ -89,36 +97,3 @@ def test_docs_mark_unverified_and_omit_invented_fx() -> None:
 def test_dockerfile_pins_litellm_v1_106_4() -> None:
     text = (ROOT / "litellm" / "Dockerfile").read_text(encoding="utf-8")
     assert "ghcr.io/berriai/litellm:v1.106.4" in text
-
-
-def test_sarvam_extra_headers_interpolated_by_pinned_proxy_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ProxyConfig recursive os.environ walk (LiteLLM v1.106.4) expands nested headers."""
-    litellm = pytest.importorskip("litellm")
-    import importlib.metadata as metadata
-
-    ver = metadata.version("litellm")
-    if ver != PINNED_LITELLM:
-        pytest.skip(f"need litellm=={PINNED_LITELLM} for pin-faithful check, have {ver}")
-
-    from litellm.proxy.proxy_server import ProxyConfig
-
-    monkeypatch.setenv("SARVAM_API_KEY", "offline-test-key-not-real")
-    cfg = {
-        "model_list": [
-            {
-                "model_name": "sarvam-105b-direct",
-                "litellm_params": {
-                    "model": "openai/sarvam-105b",
-                    "api_base": "https://api.sarvam.ai/v1",
-                    "api_key": "os.environ/SARVAM_API_KEY",
-                    "extra_headers": {
-                        "api-subscription-key": "os.environ/SARVAM_API_KEY",
-                    },
-                },
-            }
-        ]
-    }
-    out = ProxyConfig()._check_for_os_environ_vars(cfg)
-    params = out["model_list"][0]["litellm_params"]
-    assert params["api_key"] == "offline-test-key-not-real"
-    assert params["extra_headers"]["api-subscription-key"] == "offline-test-key-not-real"
