@@ -109,7 +109,8 @@ def run_exercise(
         receipt["result"] = "ran" if all(receipt["checks"].values()) else "failed"
         receipt["learning"].append("supply-chain watch should open a match against the planted lockfile version")
 
-    return receipt
+    from .savings import code_cost
+    return code_cost(receipt)
 
 
 def run_own_sites_exercise_pass(
