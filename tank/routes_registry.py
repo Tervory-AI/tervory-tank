@@ -59,6 +59,7 @@ ROUTES = (
     ('late', 'rig_forge_provider', 'build_router', ('tank',), True),
     ('late', 'market_lab_routes', 'build_router', ('tank',), True),
     ('late', 'radix_passive_routes', 'build_router', ('tank',), True),
+    ('late', 'radix_memory_routes', 'build_router', (), True),
     ('late', 'semantic_cache', 'build_router', ('tank',), True),
     ('late', 'skala_intake', 'install', ('app', 'tank'), False),
     ('late', 'vault_routes', 'build_router', ('tank',), True),

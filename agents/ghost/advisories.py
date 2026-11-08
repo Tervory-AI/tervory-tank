@@ -834,6 +834,7 @@ class Watcher:
                    "new_matches": len(cycle.new), "resolved": len(cycle.resolved),
                    "open": len(self.store.matches(self.tenant, "open"))}
         self.store.set_state(self.tenant, "last_cycle", summary)
+        self.store.record_run(self.tenant, "advisories", "unavailable" if "unavailable" in cycle.sources.values() else "checked")
         return summary
 
     async def receipt(self, item: dict, step: str) -> None:
@@ -843,8 +844,9 @@ class Watcher:
             return
         ledger_id = str(uuid5(UUID(item["id"]), "advisory_" + step))
         try:
-            await self.receipts.record(ledger_id, "advisory_" + step, "delivered", task_type="ghost.advisory")
-            item[slot].update(ledger_id=ledger_id, status="recorded")
+            priced = await self.receipts.record(ledger_id, "advisory_" + step, "delivered", task_type="ghost.advisory")
+            item[slot].update(ledger_id=ledger_id, status="recorded", tenant_id=self.tenant, cost_usd=0,
+                              would_have_cost_usd=priced.get("would_have_cost_usd") if isinstance(priced, dict) else None)
         except Exception:
             item[slot].update(status="pending")
         self.store.save_match(self.tenant, item)

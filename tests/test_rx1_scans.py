@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tarfile
 import zipfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -87,8 +88,19 @@ def _assert_hidden(blob: str) -> None:
 class Conn:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple]] = []
+        self.in_transaction = False
+
+    @asynccontextmanager
+    async def transaction(self):
+        self.in_transaction = True
+        try:
+            yield self
+        finally:
+            self.in_transaction = False
 
     async def execute(self, sql: str, *args: object) -> None:
+        if "pg_advisory_xact_lock" in sql or "CREATE " in sql:
+            assert self.in_transaction
         self.calls.append((sql, args))
 
     async def close(self) -> None:
@@ -253,14 +265,18 @@ async def test_rows_and_logs_do_not_contain_the_secret(
     assert result["leaked"] is False
     inserts = [call for call in conn.calls if "INSERT INTO" in call[0]]
     assert inserts
+    lock_sql = "SELECT pg_advisory_xact_lock(hashtextextended($1,0))"
+    assert conn.calls[0] == (lock_sql, ("radix-findings-schema:agent_radix",))
     for sql, args in conn.calls:
-        assert "tenant_id" in sql
+        if sql != lock_sql:
+            assert "tenant_id" in sql
         assert FIXTURE not in sql
         assert FIXTURE not in repr(args)
         if "INSERT INTO" in sql:
             assert args[0].hex  # uuid
             assert str(args[0]) == TENANT
-    assert "CREATE TABLE IF NOT EXISTS agent_radix.findings" in conn.calls[0][0]
+    assert "CREATE TABLE IF NOT EXISTS agent_radix.findings" in conn.calls[1][0]
+    assert not conn.in_transaction
 
 
 def test_gitleaks_report_is_masked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

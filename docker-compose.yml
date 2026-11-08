@@ -354,6 +354,7 @@ services:
     restart: unless-stopped
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
+      RADIX_BRAIN_ENABLED: ${RADIX_BRAIN_ENABLED:-false}
       ENGINE_C1_ENABLED: ${ENGINE_C1_ENABLED:-0}
       # DECISION engine stays offline on current Coolify apps; opt in on owned servers.
       ENGINE_LOCAL_URL: ${ENGINE_LOCAL_URL:-}
@@ -495,6 +496,7 @@ services:
       HF_JOBS_TOKEN: ${HF_JOBS_TOKEN:-}
       HF_JOBS_NAMESPACE: ${HF_JOBS_NAMESPACE:-}
       RIG_FORGE_TRELLIS_ENABLED: ${RIG_FORGE_TRELLIS_ENABLED:-false}
+      GHOST_BRAIN_ENABLED: ${GHOST_BRAIN_ENABLED:-false}
       ENGINE_C1_ENABLED: ${ENGINE_C1_ENABLED:-0}
       ENGINE_C4_ENABLED: ${ENGINE_C4_ENABLED:-0}
       ENGINE_I8_ENABLED: ${ENGINE_I8_ENABLED:-0}
@@ -583,6 +585,13 @@ services:
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+      # Moot confidential media (Mux). Tank-only door; never copy to agent rooms.
+      MOOT_MUX_TOKEN_ID: ${MOOT_MUX_TOKEN_ID:-}
+      MOOT_MUX_TOKEN_SECRET: ${MOOT_MUX_TOKEN_SECRET:-}
+      MOOT_MUX_SIGNING_KEY_ID: ${MOOT_MUX_SIGNING_KEY_ID:-}
+      MOOT_MUX_SIGNING_PRIVATE_KEY: ${MOOT_MUX_SIGNING_PRIVATE_KEY:-}
+      POSTHOG_PROJECT_API_KEY: ${POSTHOG_PROJECT_API_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-}
     volumes:
       - tank_trace_outbox:/var/lib/tank-traces
     depends_on:

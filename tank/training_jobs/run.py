@@ -21,8 +21,8 @@ HARDWARE = frozenset({'a10g-small', 'a10g-large'})
 def training_hardware(agent: str) -> str:
     if agent not in ('', 'zenas', 'tiger'):
         raise ValueError('Unsupported training agent')
-    # Qwen3-4B bf16 LoRA with batch size one and gradient checkpointing fits
-    # the 24 GB A10G used by the small flavor, including Zenas at 4096 tokens.
+    # Legacy job flavor. A real run still needs the founder's explicit base;
+    # fitting a different base on this GPU must be verified before submission.
     return 'a10g-small'
 
 
@@ -129,6 +129,14 @@ async def run(args):
             return {'status': 'not_configured', 'settings': missing}
         return {'status': 'unconfigured', 'missing_settings': missing,
                 'message': 'Missing settings: ' + ', '.join(missing)}
+    if args.submit or dry_run:
+        missing = [name for name in ('HF_TRAIN_BASE_MODEL', 'HF_TRAIN_BASE_REVISION')
+                   if not os.environ.get(name, '').strip()]
+        if missing:
+            return {'status': 'not_configured', 'settings': missing}
+        if (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*', os.environ['HF_TRAIN_BASE_MODEL'])
+                or not re.fullmatch('[a-f0-9]{40}', os.environ['HF_TRAIN_BASE_REVISION'])):
+            raise ValueError('Training requires an explicit base model and immutable revision')
     import asyncpg
     from huggingface_hub import HfApi
     agent = getattr(args, 'agent', '')
@@ -198,7 +206,7 @@ async def run(args):
             if agent == 'tiger':
                 result.update(dataset=f'{org}/tervory-public-tiger', revision=tiger_revision,
                               training_rows=len(tiger_rows), holdout_rows=len(tiger_held),
-                              model='Qwen/Qwen3-4B', context_length=4096,
+                              model=os.environ['HF_TRAIN_BASE_MODEL'], context_length=4096,
                               output_prefix=f'{org}/tervory-own-tiger-',
                               artifacts=['evaluation.json', 'holdout.json'], eval_gate='exact_price_fields')
         return result
@@ -219,6 +227,9 @@ async def run(args):
             api.create_repo(repo_id=repo, private=True, repo_type='model')
             if api.model_info(repo).private is not True:
                 raise ValueError('Output repository must be private')
+            api.upload_file(repo_id=repo, path_in_repo='training-config.json',
+                path_or_fileobj=json.dumps({'base_model': os.environ['HF_TRAIN_BASE_MODEL'],
+                    'base_revision': os.environ['HF_TRAIN_BASE_REVISION']}).encode())
             job = api.run_uv_job(str(Path(__file__).with_name('train.py')), namespace=org,
                                 flavor=flavor, timeout=args.minutes * 60,
                                 env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo,

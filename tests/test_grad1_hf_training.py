@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import uuid
 import pytest
+from tervor_training_fixtures import configured_base as configured_base
 from fastapi import HTTPException
 import training
 from gold import PLATFORM_TENANT
@@ -181,7 +182,7 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
         jobs.append(kwargs)
         return SimpleNamespace(id='fixture-job')
     api = SimpleNamespace(list_jobs_hardware=lambda: [SimpleNamespace(name='a10g-small',unit_label='minute',unit_cost_micro_usd=16667)],
-                          create_repo=lambda **kw: repos.append(kw), model_info=lambda repo: SimpleNamespace(private=True), run_uv_job=launch)
+                          upload_file=lambda **kw: None, create_repo=lambda **kw: repos.append(kw), model_info=lambda repo: SimpleNamespace(private=True), run_uv_job=launch)
     monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **kw: api))
     import asyncpg
     conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]), close=AsyncMock())
@@ -277,7 +278,7 @@ async def test_reservation_blocks_second_submission_even_after_hf_error(database
             raise RuntimeError('Uncertain submission')
         return SimpleNamespace(id='fixture-job')
     api = SimpleNamespace(list_jobs_hardware=lambda: [SimpleNamespace(name='a10g-small', unit_label='minute', unit_cost_micro_usd=16667)],
-                          create_repo=lambda **kw: None, model_info=lambda repo: SimpleNamespace(private=True), run_uv_job=submit)
+                          upload_file=lambda **kw: None, create_repo=lambda **kw: None, model_info=lambda repo: SimpleNamespace(private=True), run_uv_job=submit)
     monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **kw: api))
     args = SimpleNamespace(receipt=None, minutes=120, submit=True, day='2026-10-20')
     if failed_submission:
