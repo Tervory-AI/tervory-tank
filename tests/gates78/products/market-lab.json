@@ -1,6 +1,6 @@
 {
   "product": "market-lab",
-  "source_sha": "05a4cfdd26a9c771b2b4e1d233d06748fd54ca8c",
+  "source_sha": "52fb9e460315e208687eb3a00cd8c8f39772dc1d",
   "entrypoints": [
     "POST /market/ask",
     "POST /jobs -> chassis.app._context -> app.state.handlers[research]",
@@ -36,13 +36,16 @@
   ],
   "cases": {
     "G7.owner_crud": [
-      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields"
+      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
+      "tests/gates78/products/test_market_lab.py::test_supported_publish_owner_and_foreign_denials"
     ],
     "G7.same_tenant": [
-      "tests/gates78/products/test_market_lab.py::test_foreign_reads_mutations_and_publish_leave_state_unchanged"
+      "tests/gates78/products/test_market_lab.py::test_foreign_reads_mutations_and_publish_leave_state_unchanged",
+      "tests/gates78/products/test_market_lab.py::test_supported_publish_owner_and_foreign_denials"
     ],
     "G7.other_tenant": [
-      "tests/gates78/products/test_market_lab.py::test_foreign_reads_mutations_and_publish_leave_state_unchanged"
+      "tests/gates78/products/test_market_lab.py::test_foreign_reads_mutations_and_publish_leave_state_unchanged",
+      "tests/gates78/products/test_market_lab.py::test_supported_publish_owner_and_foreign_denials"
     ],
     "G7.tenant_wide": [
       "tests/gates78/products/test_market_lab.py::test_declared_shared_kinds_and_unowned_personal_rows"
