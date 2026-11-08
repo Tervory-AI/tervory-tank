@@ -465,6 +465,7 @@ async def test_stateful_moot_ai_turns_never_reuse_a_legal_answer(zenas,monkeypat
     owner=Actor(zenas.stack.tenant,USER_A,zenas.body['home_region'],True)
     store=HearingStore(zenas.stack.records.pool)
     before=len(zenas.model.calls)
+    hearings = []
     for _ in range(2):
         source=problem();source['region']=zenas.body['home_region']
         state=await store.create(owner,str(uuid4()),source,{seat:{'kind':'ai'} for seat in ('applicant','respondent','judge')})
@@ -482,6 +483,7 @@ async def test_stateful_moot_ai_turns_never_reuse_a_legal_answer(zenas,monkeypat
         replay=await zenas.request('POST',f"/moot/hearings/{state['id']}/ai",headers=headers,
             body=body, run_id=command)
         assert replay.status_code == 200 and replay.json() == response.json()
+        hearings.append((state['id'], headers, body, command, response.json()))
     assert len(zenas.model.calls)==before+2
     assert not prepared
     assert zenas.stack.calls == memory_calls and await zenas.snapshot() == memories
@@ -490,6 +492,15 @@ async def test_stateful_moot_ai_turns_never_reuse_a_legal_answer(zenas,monkeypat
                for _, path, _, headers in zenas.raw_assertions)
     assert not any((row.get('meta') or {}).get('task_key','').startswith('moot.')
                    for row in await zenas.records() if row['kind']=='zenas.result')
+    row = next(row for row in await zenas.records() if row['kind'] == 'zenas.result')
+    forgotten = await zenas.request('POST', '/memory/forget', body={
+        'tenant_id': zenas.stack.tenant, 'memory_id': row['id']})
+    assert forgotten.status_code == 200, forgotten.text
+    for hearing, headers, body, command, expected in hearings:
+        replay = await zenas.request('POST', f'/moot/hearings/{hearing}/ai',
+            headers=headers, body=body, run_id=command)
+        assert replay.status_code == 200 and replay.json() == expected
+    assert len(zenas.model.calls) == before + 2
     await first_answer(zenas, changes={'features': {**zenas.body['features'],
         'facts': {'delivery':'placeholder updated civil delivery fact'}}})
     assert '/answers' in prepared and len(await zenas.snapshot()) > len(memories)
