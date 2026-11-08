@@ -12,7 +12,7 @@ from .events import LiveKitEvents
 from .service import create_app
 
 
-def build():
+def build(*, mux_account=None):
     required = ('MOOT_REGION', 'MOOT_JOURNAL_PATH', 'MOOT_INTERNAL_API_KEY',
         'MOOT_LIVEKIT_URL', 'MOOT_LIVEKIT_PUBLIC_URL', 'MOOT_LIVEKIT_API_KEY',
         'MOOT_LIVEKIT_API_SECRET', 'MOOT_LEGACY_URL', 'MOOT_LEGACY_API_KEY')
@@ -36,9 +36,9 @@ def build():
     rooms = Rooms(*(os.environ[name] for name in ('MOOT_LIVEKIT_URL', 'MOOT_LIVEKIT_PUBLIC_URL',
         'MOOT_LIVEKIT_API_KEY', 'MOOT_LIVEKIT_API_SECRET')))
     bridge = LegacyHearingBridge(internal, os.environ['MOOT_LEGACY_URL'], os.environ['MOOT_LEGACY_API_KEY'], region)
-    mux = Mux(external, journal, *(os.environ.get(name, '') for name in ('MOOT_MUX_TOKEN_ID',
-        'MOOT_MUX_TOKEN_SECRET', 'MOOT_MUX_WEBHOOK_SECRET', 'MOOT_MUX_SIGNING_KEY_ID',
-        'MOOT_MUX_SIGNING_PRIVATE_KEY')))
+    # The coordinator supplies Tank's shared Mux account adapter. Standalone
+    # startup never creates a second account/key path or guesses an endpoint.
+    mux = Mux(None, journal, account=mux_account)
     app = create_app(bridge=bridge, rooms=rooms, journal=journal,
         internal_key=os.environ['MOOT_INTERNAL_API_KEY'], region=region, mux=mux,
         livekit_events=LiveKitEvents(journal, os.environ['MOOT_LIVEKIT_API_KEY'],

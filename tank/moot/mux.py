@@ -14,13 +14,18 @@ from .contracts import MediaError
 
 class Mux:
     def __init__(self, client, journal, token_id='', token_secret='', webhook_secret='',
-                 signing_id='', signing_private_key=''):
-        self.client, self.journal = client, journal
+                 signing_id='', signing_private_key='', account=None):
+        self.client, self.journal, self.account = client, journal, account
         self.auth = (token_id, token_secret)
         self.webhook_secret = webhook_secret
         self.signing_id, self.signing_private_key = signing_id, signing_private_key
 
     async def _request(self, method, path, **kwargs):
+        if self.account is not None:
+            try:
+                return await self.account.request(method, path, **kwargs)
+            except Exception:
+                raise MediaError('mux_request_failed') from None
         if not all(self.auth):
             raise MediaError('mux_unavailable')
         try:
@@ -106,6 +111,11 @@ class Mux:
     def signed_playback(self, playback_id, *, permitted, published, now=None):
         if not permitted or not published:
             raise MediaError('playback_not_published')
+        if self.account is not None:
+            try:
+                return self.account.signed_playback(playback_id, ttl_seconds=120)
+            except Exception:
+                raise MediaError('mux_signing_unavailable') from None
         if not self.signing_id or not self.signing_private_key:
             raise MediaError('mux_signing_unavailable')
         # Mux signing-key API returns the PEM as base64. Never expose that value.

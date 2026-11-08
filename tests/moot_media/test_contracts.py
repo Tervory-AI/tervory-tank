@@ -268,3 +268,19 @@ def test_livekit_signed_recording_lifecycle_is_idempotent_and_private(scope,jour
     assert 'private-upstream' not in json.dumps(events)
     with pytest.raises(MediaError,match='invalid_webhook'):
         receiver.receive(raw+b' ',token)
+
+
+def test_shared_tank_mux_account_adapter_owns_credentials(scope,journal):
+    class Account:
+        calls=[]
+        async def request(self,method,path,**kwargs):
+            self.calls.append((method,path,kwargs))
+            return {'id':'shared-tank-stream','status':'idle'}
+        def signed_playback(self,playback_id,*,ttl_seconds):
+            return f'https://stream.mux.com/{playback_id}.m3u8?token=local-test-token'
+    account=Account();mux=Mux(None,journal,account=account)
+    result=asyncio.run(mux.create_stream(scope,'shared-request',founder=True,consented=True,allow_billable=True))
+    assert result['id']=='shared-tank-stream' and len(account.calls)==1
+    assert account.calls[0][0:2]==('POST','live-streams')
+    assert mux.signed_playback('shared-playback',permitted=True,published=True).startswith('https://stream.mux.com/')
+    assert not any(mux.auth)
