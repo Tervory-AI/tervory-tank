@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from skala_memory_client import memory_client_for_skala
@@ -27,6 +27,13 @@ class ControlBody(BaseModel):
 class EditBody(ControlBody):
     memory_id: str = Field(min_length=1, max_length=80)
     text: str = Field(min_length=1, max_length=4000)
+
+
+async def require_service_key(request: Request) -> None:
+    # Authenticate before FastAPI validates caller-controlled body/query fields.
+    # Actor/tenant/user verification still runs before any memory operation.
+    from main import require_key
+    await require_key(request, request.headers.get("X-Tank-Key", ""))
 
 
 async def verified_actor(request: Request, tenant_id: str) -> dict[str, str]:
@@ -72,25 +79,25 @@ def attach_memory_routes(app: FastAPI, *, authorize=verified_actor) -> None:
         finally:
             clear_verified_actor()
 
-    @app.get("/v1/skala/memory")
+    @app.get("/v1/skala/memory", dependencies=[Depends(require_service_key)])
     async def view(request: Request, tenant_id: UUID, user_id: str = Query(min_length=1, max_length=200),
                    memory_id: str | None = None, task_key: str = "memory_control",
                    memory_control: str = "view") -> dict[str, Any]:
         return await invoke(request, tenant_id, user_id, view_memories, memory_id=memory_id, task_key=task_key)
 
-    @app.post("/v1/skala/memory/edit")
+    @app.post("/v1/skala/memory/edit", dependencies=[Depends(require_service_key)])
     async def edit(request: Request, body: EditBody) -> dict[str, Any]:
         return await invoke(request, body.tenant_id, body.user_id, apply_memory_edit,
                             memory_id=body.memory_id, text=body.text, memory_control="edit")
 
-    @app.post("/v1/skala/memory/forget")
+    @app.post("/v1/skala/memory/forget", dependencies=[Depends(require_service_key)])
     async def forget(request: Request, body: ControlBody) -> dict[str, bool]:
         if not body.memory_id:
             raise HTTPException(422, "memory_id required")
         await invoke(request, body.tenant_id, body.user_id, apply_memory_forget, memory_id=body.memory_id)
         return {"deleted": True}
 
-    @app.post("/v1/skala/memory/off")
+    @app.post("/v1/skala/memory/off", dependencies=[Depends(require_service_key)])
     async def off(request: Request, body: ControlBody) -> dict[str, Any]:
         saved = await invoke(request, body.tenant_id, body.user_id, set_memory_control,
                              control="off", memory_id=body.memory_id)
