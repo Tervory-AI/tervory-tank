@@ -23,7 +23,7 @@ import pytest
 import pytest_asyncio
 
 ROOT = Path(__file__).resolve().parents[3]
-PRODUCT_SOURCE = "30ebf40f6915f36defea7d15ae2a86e84eea4090"
+PRODUCT_SOURCE = "b6c8c45273157190a9c021d4e085c5996e228a5f"
 A = "placeholder-market-owner"
 B = "placeholder-market-peer"
 KEY = "placeholder-gate78-product-key"
@@ -34,7 +34,8 @@ SOURCE_TEXT = "placeholder recorded market observation increased by four units."
 
 def require_runtime():
     required = ["agents/market_lab/gates_memory.py", "agents/market_lab/memory_api.py",
-                "agents/market_lab/market_lab_brain.py", "agents/market_lab/core/savings.py"]
+                "agents/market_lab/market_lab_brain.py", "agents/market_lab/core/savings.py",
+                "agents/market_lab/market_lab_brain_service.py"]
     missing = [p for p in required if not (ROOT / p).is_file()]
     if missing:
         pytest.fail("BLOCKED: Tank candidate lacks authoritative product runtime " + PRODUCT_SOURCE
@@ -47,6 +48,7 @@ def require_runtime():
 @pytest_asyncio.fixture
 async def market_runtime(gate78_memory, gate78_database, monkeypatch):
     require_runtime()
+    from tank_routing.litellm_probe import COMPLETIONS_PATH
     product_root = ROOT/'agents/market_lab'
     roots = {'researcher'} | {p.stem for p in product_root.glob('*.py')} | {p.name for p in product_root.iterdir() if p.is_dir() and p.name != "__pycache__"}
     saved_modules = {name: mod for name,mod in sys.modules.items() if name.split('.')[0] in roots}
@@ -76,6 +78,8 @@ async def market_runtime(gate78_memory, gate78_database, monkeypatch):
         assert Path(gates.__file__).resolve() == product_root/'gates_memory.py'
         assert Path(importlib.import_module('core.http').__file__).resolve() == product_root/'core/http.py'
         assert Path(tank.__file__).resolve() == ROOT/'tank/main.py'
+        brain_service = importlib.import_module("market_lab_brain_service")
+        brain_service.app.state.pool = pool
         researcher = importlib.import_module("researcher.app")
         assert Path(researcher.__file__).resolve() == ROOT/"researcher/app.py"
         sources = importlib.import_module("researcher.sources")
@@ -112,6 +116,9 @@ async def market_runtime(gate78_memory, gate78_database, monkeypatch):
         unavailable = set()
         failed_edges=[]
         public_page={"text":SOURCE_TEXT}
+        brain_requests=[]
+        brain_fault={"status":None}
+        research_fault={"status":None}
 
         async def edge(request):
             host, path = request.url.host, request.url.path
@@ -126,6 +133,8 @@ async def market_runtime(gate78_memory, gate78_database, monkeypatch):
                 assertions.append(request)
                 return await httpx.ASGITransport(app=product.app).handle_async_request(request)
             if host == "market-research":
+                if research_fault['status']:
+                    return httpx.Response(research_fault['status'],json={'detail':'placeholder research unavailable'})
                 return await httpx.ASGITransport(app=research_app).handle_async_request(request)
             if host == "tank":
                 response=await httpx.ASGITransport(app=tank.app).handle_async_request(request)
@@ -133,18 +142,26 @@ async def market_runtime(gate78_memory, gate78_database, monkeypatch):
                     failed_edges.append((path,response.status_code,(await response.aread()).decode()[:300]))
                 return response
             if host == 'market-lab-brain':
-                return httpx.Response(200,json={'status':'accepted'})
+                assert path == '/tasks'
+                brain_requests.append(request)
+                if brain_fault['status']:
+                    return httpx.Response(brain_fault['status'], json={'detail':'placeholder brain unavailable'})
+                return await httpx.ASGITransport(app=brain_service.app).handle_async_request(request)
             if host == "litellm":
-                if path.endswith("chat/completions"):
+                if path == COMPLETIONS_PATH:
+                    assert request.method == "POST" and request.url.port == 4000
                     body = json.loads(request.content)
                     provider_calls.append(body)
                     prompt = json.dumps(body.get("messages", []))
                     content = json.dumps({"claims": [{"text": public_page["text"], "url": SOURCE_URL, "quote": public_page["text"]}]}) if "claims" in prompt else json.dumps(["placeholder market observation"])
+                    if 'Market Lab: return JSON' in prompt:
+                        content = json.dumps({'summary':public_page['text']})
                     return httpx.Response(200, json={"choices": [{"message": {"content": content}}],
                         "usage": {"prompt_tokens": 10, "completion_tokens": 3}},
                         headers={"x-litellm-response-cost": "0.05", "x-litellm-model-group": "llama-small"})
                 if path.endswith('/router/settings'):
                     return httpx.Response(200,json={'current_values':{'fallbacks':[]}})
+                assert path in {'/model/info', '/v1/model/info', '/models', '/v1/models'}
                 return httpx.Response(200, json={"data": [{"model_name": "llama-small", "litellm_params":{"model":"openai/placeholder-market-model"}, "model_info": {"input_cost_per_token": .005, "output_cost_per_token": 0}}]})
             raise AssertionError("Unexpected network edge " + str(request.url))
 
@@ -154,8 +171,14 @@ async def market_runtime(gate78_memory, gate78_database, monkeypatch):
         opened.append(http)
         monkeypatch.setattr(tank, "_http", http)
         monkeypatch.setattr(tank, "httpx", SimpleNamespace(AsyncClient=lambda **kw: client_type(transport=transport, **kw), HTTPError=httpx.HTTPError))
-        brain=importlib.import_module('market_lab_brain')
-        monkeypatch.setattr(brain,'httpx',SimpleNamespace(AsyncClient=lambda **kw:client_type(transport=transport,**kw)))
+        import agent_skills
+        monkeypatch.setattr(agent_skills, 'httpx', SimpleNamespace(**{
+            **vars(httpx), 'AsyncClient':lambda **kw:client_type(transport=transport,**kw)}))
+        from chassis.tank import TankClient
+        task_http = client_type(transport=transport)
+        opened.append(task_http)
+        product.app.state.tank = TankClient('http://tank:8000', KEY, 'market_lab', task_http)
+        brain_service.app.state.http = task_http
         adapter = importlib.import_module("core.research_adapter")
         monkeypatch.setattr(adapter, "httpx", SimpleNamespace(AsyncClient=lambda **kw: client_type(transport=transport, **kw), HTTPError=httpx.HTTPError))
         memory_http = client_type(transport=transport, timeout=30)
@@ -236,7 +259,7 @@ async def market_runtime(gate78_memory, gate78_database, monkeypatch):
         result = Runtime()
         result.__dict__.update(stack=stack, pool=pool, url=url, product=product, gates=gates, http=http,
             client=client, calls=provider_calls, outbound=outbound, assertions=assertions,
-            unavailable=unavailable, issuer=provider, transport=transport, memory_attempts=memory_attempts,failed_edges=failed_edges,public_page=public_page)
+            unavailable=unavailable, issuer=provider, transport=transport, memory_attempts=memory_attempts,failed_edges=failed_edges,public_page=public_page, brain_requests=brain_requests,brain_fault=brain_fault,brain_service=brain_service,research_fault=research_fault)
         yield result
     finally:
         for name in list(sys.modules):

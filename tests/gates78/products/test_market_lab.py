@@ -447,3 +447,110 @@ async def test_supported_publish_owner_and_foreign_denials(market_runtime):
     published=accepted(await r.request('POST','/v1/memory/publish',json={
         'agent':'market_lab','tenant_id':r.stack.tenant,'source_row':target}))
     assert published['result']=='published' and published['published_row']
+
+
+async def brain_policy(r, *, admitted=True):
+    """Disposable operator policy only; never add/enable a production paid route."""
+    await r.pool.execute("""INSERT INTO tank.policy(task_type,rung,model,priority,cache_scope,max_tokens_out)
+        VALUES('agent.market_lab.think',1,'llama-small','standard','none',256)""")
+    from paid_steps import model_step
+    step = model_step('agent.market_lab.think','llama-small',agent='market_lab')
+    await r.pool.execute("INSERT INTO tank.paid_steps(step_id,product,kind,source) VALUES($1,'market_lab','model','placeholder-brain-policy') ON CONFLICT DO NOTHING",step)
+    if admitted:
+        await r.pool.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,$2,'auto','placeholder-owner')", UUID(r.stack.tenant),step)
+    return step
+
+
+async def test_private_brain_missing_policy_fails_closed(market_runtime):
+    r=market_runtime
+    r.research_fault['status']=503
+    result=accepted(await r.ask())
+    assert result['status']=='unavailable' and result['brain']['error']=='HTTPStatusError'
+    assert len(r.brain_requests)==1 and not r.calls
+    assert result['cost'] is None and result['run_receipt']['ledger_ids']==[]
+    assert any('/v1/agents/market_lab/tasks'==path and status==404 for path,status,_ in r.failed_edges)
+
+
+async def test_private_brain_real_entry_and_receipt(market_runtime):
+    r=market_runtime
+    await brain_policy(r)
+    r.research_fault['status']=503
+    result=accepted(await r.ask())
+    assert result['status']=='unavailable'  # An ungrounded summary is never presented as sourced facts.
+    assert result['brain']['result']=={'summary':SOURCE_TEXT}
+    assert result['cost']==.05 and result['tokens_in']==10 and result['tokens_out']==3
+    receipt=result['receipts'][0]
+    assert receipt['room']=='market_lab' and receipt['task_type']=='agent.market_lab.think'
+    assert receipt['tenant_id']==r.stack.tenant and receipt['region']=='us-east'
+    assert receipt['paid_step_mode']=='automatic' and len(r.calls)==1
+    row=await r.pool.fetchrow('SELECT agent,task_type,cost_usd,tokens_in,tokens_out FROM tank.ledger WHERE id=$1',UUID(receipt['ledger_id']))
+    assert row['agent']=='market_lab' and row['task_type']==receipt['task_type']
+    assert float(row['cost_usd'])==.05 and (row['tokens_in'],row['tokens_out'])==(10,3)
+    stored=await r.pool.fetchval('SELECT receipt FROM tank.agent_receipts WHERE ledger_id=$1',UUID(receipt['ledger_id']))
+    assert json.loads(stored)==receipt
+    assert result['run_receipt']['ledger_ids']==[receipt['ledger_id']]
+    assert len(r.brain_requests)==1 and not any('tiger' in host or '/tiger/' in path for host,path in r.outbound)
+    request=r.brain_requests[0]
+    assert request.headers.get('X-Tervory-User-Assertion')
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=r.brain_service.app)) as client:
+        replay=await client.send(httpx.Request(request.method,request.url,headers=request.headers,content=request.content))
+    assert replay.status_code==401 and len(r.calls)==1
+
+
+async def test_private_brain_retry_reuses_real_paid_checkpoint(market_runtime):
+    r=market_runtime
+    await brain_policy(r)
+    from chassis.user_assertion import SignedUser
+    from market_lab_brain import post_task
+    actor=SignedUser(r.stack.tenant,A,'member')
+    run=str(uuid4())
+    kwargs=dict(actor=actor,run_id=run,task_key='market.research',payload={'question':'placeholder gap'},tank_client=r.product.app.state.tank)
+    first=await post_task(**kwargs)
+    second=await post_task(**kwargs)
+    assert first==second and len(r.calls)==1 and len(r.brain_requests)==2
+    receipt=first['receipt']
+    from task_contract import paid_identity
+    assert receipt['task_id']==paid_identity(actor.tenant_id,A,run)
+    assert await r.pool.fetchval('SELECT count(*) FROM tank.ledger WHERE task_id=$1',UUID(receipt['task_id']))==1
+    other=await post_task(**{**kwargs,'actor':SignedUser(r.stack.tenant,B,'member')})
+    assert other['receipt']['task_id']!=receipt['task_id'] and len(r.calls)==2
+
+
+@pytest.mark.parametrize('defect',['key','user','tenant','body','region','off','other-room'])
+async def test_private_brain_boundary_refusals(market_runtime,monkeypatch,defect):
+    r=market_runtime
+    await brain_policy(r)
+    from chassis.user_assertion import SignedUser,sign_assertion,HEADER
+    actor=SignedUser(r.stack.tenant,A,'member')
+    path='/v1/agents/market_lab/tasks'
+    body={'tenant_id':actor.tenant_id,'user_id':A,'run_id':str(uuid4()),'messages':[{'role':'user','content':'placeholder gap'}]}
+    if defect=='user': body['user_id']=B
+    if defect=='tenant': body['tenant_id']=r.stack.other_tenant
+    if defect=='other-room': path='/v1/agents/tiger/tasks'
+    raw=json.dumps(body).encode()
+    token=sign_assertion('market_lab',actor,'POST',path,raw,key=KEY)
+    if defect=='body': raw=raw+b' '
+    headers={'Content-Type':'application/json','X-Tank-Key':KEY,HEADER:token,'X-Home-Region':'us-east'}
+    if defect=='key': headers['X-Tank-Key']='placeholder-wrong-key'
+    if defect=='region': headers['X-Home-Region']='za'
+    if defect=='off': monkeypatch.delenv('MARKET_LAB_BRAIN_ENABLED')
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=__import__('main').app),base_url='http://tank') as client:
+        denied=await client.post(path,content=raw,headers=headers)
+    assert denied.status_code in {401,403,409},denied.text
+    assert not r.calls and not r.brain_requests
+    assert await r.pool.fetchval("SELECT count(*) FROM tank.ledger WHERE task_type='agent.market_lab.think'")==0
+
+
+async def test_private_brain_paid_admission_and_outage(market_runtime):
+    r=market_runtime
+    await brain_policy(r,admitted=False)
+    from chassis.user_assertion import SignedUser
+    from market_lab_brain import post_task
+    actor=SignedUser(r.stack.tenant,A,'member')
+    with pytest.raises(httpx.HTTPStatusError) as denied:
+        await post_task(actor=actor,run_id=str(uuid4()),task_key='market.research',payload={},tank_client=r.product.app.state.tank)
+    assert denied.value.response.status_code==409 and not r.calls
+    r.brain_fault['status']=503
+    with pytest.raises(httpx.HTTPStatusError) as outage:
+        await post_task(actor=actor,run_id=str(uuid4()),task_key='market.research',payload={},tank_client=r.product.app.state.tank)
+    assert outage.value.response.status_code==503 and not r.calls

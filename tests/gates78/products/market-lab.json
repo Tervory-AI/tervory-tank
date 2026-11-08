@@ -1,13 +1,14 @@
 {
   "product": "market-lab",
-  "source_sha": "30ebf40f6915f36defea7d15ae2a86e84eea4090",
+  "source_sha": "b6c8c45273157190a9c021d4e085c5996e228a5f",
   "entrypoints": [
     "POST /market/ask",
     "POST /jobs -> chassis.app._context -> app.state.handlers[research]",
     "GET /v1/market-lab/memory",
     "POST /v1/market-lab/memory/control",
     "POST /v1/market-lab/memory/edit",
-    "POST /v1/market-lab/memory/forget"
+    "POST /v1/market-lab/memory/forget",
+    "POST /v1/agents/market_lab/delegate -> private Market Lab /tasks -> POST /v1/agents/market_lab/tasks"
   ],
   "legacy_tests": [
     "tests/test_market_lab_gates_7_8.py::test_product_request_brain_route_receipt_then_memory",
@@ -56,7 +57,8 @@
     ],
     "G7.signed_actor": [
       "tests/gates78/products/test_market_lab.py::test_real_signin_body_impersonation_and_missing_identity",
-      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields"
+      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_boundary_refusals"
     ],
     "G7.assertion_rejection": [
       "tests/gates78/products/test_market_lab.py::test_nonce_assertion_rejections_cannot_return_cached_private_data"
@@ -80,14 +82,16 @@
     ],
     "G7.runtime_contract": [
       "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
-      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice"
+      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_real_entry_and_receipt"
     ],
     "G8.default_off": [
       "tests/gates78/products/test_market_lab.py::test_default_off_and_code_steps_before_added_work"
     ],
     "G8.task_path": [
       "tests/gates78/products/test_market_lab.py::test_http_exact_repeat_changed_input_and_user_tenant_misses",
-      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice"
+      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_real_entry_and_receipt"
     ],
     "G8.free_first": [
       "tests/gates78/products/test_market_lab.py::test_code_research_passages_precede_brain_and_paid_network"
@@ -111,19 +115,24 @@
     ],
     "G8.outage": [
       "tests/gates78/products/test_market_lab.py::test_outages_are_truthful_and_do_not_expose_private_cache",
-      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice"
+      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_paid_admission_and_outage",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_missing_policy_fails_closed"
     ],
     "G8.auth_not_outage": [
       "tests/gates78/products/test_market_lab.py::test_real_signin_body_impersonation_and_missing_identity",
-      "tests/gates78/products/test_market_lab.py::test_nonce_assertion_rejections_cannot_return_cached_private_data"
+      "tests/gates78/products/test_market_lab.py::test_nonce_assertion_rejections_cannot_return_cached_private_data",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_boundary_refusals"
     ],
     "G8.receipts": [
       "tests/gates78/products/test_market_lab.py::test_http_exact_repeat_changed_input_and_user_tenant_misses",
-      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields"
+      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_real_entry_and_receipt"
     ],
     "G8.retry_concurrency": [
       "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
-      "tests/gates78/products/test_market_lab.py::test_durable_nonce_concurrency_restart_and_forget_replay"
+      "tests/gates78/products/test_market_lab.py::test_durable_nonce_concurrency_restart_and_forget_replay",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_retry_reuses_real_paid_checkpoint"
     ],
     "G8.product_regressions": [
       "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
