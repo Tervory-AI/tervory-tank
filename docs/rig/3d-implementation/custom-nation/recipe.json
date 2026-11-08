@@ -1,0 +1,15 @@
+{
+  "source": {
+    "repository": "zenascapetown-code/custom-nation-preview",
+    "revision": "beca4673a51f33b464dd8dad6c947c65032b6dc8",
+    "branch": "recover/launch-now-20260915-evening",
+    "catalogue": "src/lib/catalogue-data.json"
+  },
+  "public_origin": "https://customnation.co.za",
+  "products": ["hardy-hybrid", "grayboe-phoenix-2", "falcon-t50i"],
+  "rights_evidence": [
+    "Source repository docs/handoffs/TASK-2-PROVENANCE.md: owner review required; media availability does not establish use rights.",
+    "https://customnation.co.za/robots.txt observed 2026-11-08 UTC: search=yes, ai-train=no, use=reference. No training or generative-model authorization is inferred.",
+    "Founder selected Custom Nation for case-study preparation; production writes and approvals remain coordinator operations."
+  ]
+}
