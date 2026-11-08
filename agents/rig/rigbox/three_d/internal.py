@@ -48,6 +48,13 @@ async def workspace(operation: str, body: Call, request: Request):
         return await value.capabilities(tenant)
     if not body.actor:
         raise RigError("unauthorized", "Administrator authorization is required.", 403)
+    if operation == 'page-settings':
+        from .page import PageConfig, save
+        try:
+            config = PageConfig.model_validate(body.payload)
+        except ValidationError:
+            raise RigError('invalid', 'The request is not valid.', 422) from None
+        return await save(value.catalogue, tenant, config)
     await value.require(tenant)
     try:
         if operation == "dashboard" and not body.payload:

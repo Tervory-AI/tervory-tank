@@ -80,8 +80,8 @@ def test_p01_shell():
     shell.test_sidebar_order_squad_popout_and_escape()
 
 
-def test_p02_dashboard_render():
-    dashboards.test_frontend_access_sources_and_banned_copy()
+def test_p02_dashboard_render(tmp_path):
+    dashboards.test_frontend_access_sources_and_banned_copy(tmp_path)
 
 
 def test_p03_founder_controls(client, conn):
