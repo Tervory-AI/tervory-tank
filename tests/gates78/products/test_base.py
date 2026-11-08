@@ -13,7 +13,7 @@ from base_fixture import USER_A, USER_B
 from base_fixture import base_entry as base_entry
 
 ROOT = Path(__file__).resolve().parents[3]
-SOURCE_SHA = '55c0e7875ae4dcae99f272c34942ac371df707c6'
+SOURCE_SHA = '07b5822ecfed4e46067c1d3c4d78e52ab34cb8ee'
 
 
 async def owner_view(e, user=USER_A, tenant=None):
@@ -363,3 +363,110 @@ async def test_free_passes_precede_real_drive_batch(base_entry,monkeypatch):
         sys.setprofile(previous)
     assert '_run_batch' in events and 'drive_batch' in events
     assert events.index('_run_batch')<events.index('drive_batch')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('accounting', ['recorded', 'missing_price', 'ledger_unavailable'])
+async def test_drive_batch_persisted_inputs_and_unknown_accounting(gate78_memory, monkeypatch, accounting):
+    """Real worker/SQL/Hermes/signing; brain/ledger HTTP is an offline provider fixture."""
+    import importlib
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from uuid import UUID
+
+    import httpx
+
+    stack = await gate78_memory('base')
+    monkeypatch.syspath_prepend(str(ROOT / 'agents/base'))
+    worker = importlib.import_module('base_brain')
+    route = importlib.import_module('brain_route')
+    room = importlib.import_module('room')
+    pool = stack.records.pool
+    async with pool.acquire() as conn:
+        await conn.execute('CREATE SCHEMA IF NOT EXISTS agent_base')
+        await room.ensure_tables(conn, recover=False)
+    monkeypatch.setenv('BASE_BRAIN_URL', 'http://base-brain.test')
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    posts = []
+    real_http = httpx.AsyncClient
+
+    def provider(request):
+        if request.url.host == 'base-brain.test':
+            body = json.loads(request.content)
+            posts.append(body['task_id'])
+            return httpx.Response(200, json={
+                'tenant_id': stack.tenant, 'task_id': body['task_id'],
+                'room': 'base', 'status': 'done', 'model_receipts': [],
+            })
+        assert request.url.host == 'tank.test'
+        if accounting == 'ledger_unavailable':
+            return httpx.Response(503, json={'detail': 'placeholder ledger outage'})
+        return httpx.Response(200, json={'receipts': [{
+            'ledger_id': str(uuid4()), 'cost_usd': None if accounting == 'missing_price' else .00056,
+            'tokens_in': 400, 'tokens_out': 80,
+        }]})
+
+    transport = httpx.MockTransport(provider)
+    # Keep the real product task/receipt routine; replace its HTTP edge only.
+    monkeypatch.setattr(route, 'httpx', SimpleNamespace(AsyncClient=lambda **kw: real_http(transport=transport, **kw)))
+    tenant = UUID(stack.tenant)
+    rows = [{'name': 'placeholder-one', 'source': {'sha256': 'placeholder-source-a'}},
+            {'name': 'placeholder-two', 'nested_id': str(uuid4())}]
+    cfg = {'tenant_id': stack.tenant, 'batch': 'placeholder-identical-label', 'count': 2,
+           'engine': None, 'preview': False, 'registry': None, 'model_spend': 0,
+           'user_id': USER_A, 'created_by': USER_A, 'verified_user_id': USER_A,
+           'refs': {'base.normalize': 'base.normalize@1.0.0'}, 'engine_data_version': '1.0.0',
+           'memory_control': 'edit'}
+
+    async def task(raws):
+        task_id = uuid4()
+        async with pool.acquire() as conn:
+            await room.insert_batch(conn, tenant, USER_A, cfg['batch'], raws, '', False, None, 1, None, task_id=task_id)
+        return task_id, dict(cfg)
+
+    async def stored(task_id):
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow('SELECT status,input FROM agent_base.tasks WHERE tenant_id=$1 AND id=$2', tenant, task_id)
+            return row['status'], json.loads(row['input']) if isinstance(row['input'], str) else row['input']
+
+    skills = SimpleNamespace(memory=stack.client(USER_A), _base='http://tank.test', _headers=dict,
+                             _http=real_http(transport=transport))
+    try:
+        first_id, first = await task(rows)
+        if accounting != 'recorded':
+            with pytest.raises(RuntimeError, match='cost is not recorded'):
+                await worker.drive_batch(pool, skills, first_id, first, AsyncMock())
+            status, saved = await stored(first_id)
+            assert status == 'failed'
+            assert saved['brain_spend'] is saved['model_spend'] is None
+            assert saved['brain_receipt']['memory_bracket']['cost_usd'] is None
+            assert len(posts) == 1
+            assert await stack.client(USER_A).records(stack.tenant) == []
+            return
+        await worker.drive_batch(pool, skills, first_id, first, AsyncMock())
+        assert (await stored(first_id))[0] == 'done'
+        assert first['brain_spend'] == pytest.approx(.00056)
+        # Actual signed Hermes records, not an in-process memory dictionary.
+        memories = await stack.client(USER_A).records(stack.tenant)
+        assert len(memories) == 1 and memories[0]['kind'] == 'base.receipt'
+        assert await stack.client(USER_B).records(stack.tenant) == []
+        repeat_id, repeat = await task(list(reversed(rows)))
+        assert repeat_id != first_id
+        await worker.drive_batch(pool, skills, repeat_id, repeat, AsyncMock())
+        assert repeat['brain_receipt']['answered_from_memory'] is True
+        assert len(posts) == 1
+        # Same label/count/options with changed record content, then provenance.
+        for field in ('name', 'source'):
+            changed = json.loads(json.dumps(rows))
+            changed[0][field] = 'placeholder-changed' if field == 'name' else {'sha256': 'placeholder-source-b'}
+            changed_id, changed_cfg = await task(changed)
+            await worker.drive_batch(pool, skills, changed_id, changed_cfg, AsyncMock())
+            assert changed_cfg['brain_receipt']['memory_bracket']['answered_from_memory'] is False
+            assert changed_cfg['brain_spend'] == pytest.approx(.00056)
+            assert changed_id != first_id
+        assert len(posts) == 3
+    finally:
+        await skills._http.aclose()
+        async with pool.acquire() as conn:
+            await conn.execute('DELETE FROM agent_base.records WHERE tenant_id=$1', tenant)
+            await conn.execute('DELETE FROM agent_base.tasks WHERE tenant_id=$1', tenant)
