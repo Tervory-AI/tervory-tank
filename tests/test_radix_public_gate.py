@@ -72,7 +72,7 @@ async def test_public_deploy_request_preserves_internal_gate_and_refuses_bad_aut
     target = tmp_path / ROUTE
     target.parent.mkdir(parents=True)
     target.write_text(candidate)
-    for name in ('workspace/lib/tank.ts', 'workspace/lib/workspace-origin.ts', 'workspace/lib/route-input.ts', 'workspace/lib/request.ts', 'workspace/lib/workspace-setup.ts', 'workspace/lib/product-hosts.ts', 'workspace/middleware.ts',
+    for name in ('workspace/lib/tank.ts', 'workspace/lib/workspace-origin.ts', 'workspace/lib/route-input.ts', 'workspace/lib/request.ts', 'workspace/lib/workspace-setup.ts', 'workspace/lib/product-hosts.ts', 'workspace/lib/signin-cookies.ts', 'workspace/middleware.ts',
                  'workspace/app/v1/command/[...path]/route.ts', 'tests/command_acceptance_20261031/workspace_loader.cjs'):
         target = tmp_path / name
         target.parent.mkdir(parents=True, exist_ok=True)
