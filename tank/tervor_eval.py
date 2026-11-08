@@ -46,6 +46,9 @@ async def evaluate(rt, req, model_id: str, gold: dict, *, caller=None) -> dict:
         version=model['version'], gold_sha256=gold['sha256'], quality_version=engine_quality.VERSION,
         count=len(cases), completed=0, eligible=False, scores={}, baselines={}, ledger_ids=[],
         cost_usd=0., status='held', reason='At least 200 gold cases are required')
+    if hasattr(rt, '_roster_models'):
+        roster = {row['model_name']: row for row in await rt._roster_models()}
+        report['artifact_sha256'] = roster.get(model_id, {}).get('model_info', {}).get('tervor_serving', {}).get('sha256')
     if len(cases) >= MIN_CASES:
         report['reason'] = 'Evaluation unavailable; no promotion'
         results = []
@@ -55,6 +58,12 @@ async def evaluate(rt, req, model_id: str, gold: dict, *, caller=None) -> dict:
                     if not case['task_type'].startswith(model['product'] + '.'):
                         raise ValueError('Gold task does not match the model product')
                     policy = await rt.load_policy(case['task_type'], req.tenant_id)
+                    async with rt.pool().acquire() as conn:
+                        current = await conn.fetchval('''SELECT model FROM tank.engine_state
+                            WHERE tenant_id=$1 AND region=$2 AND task_type=$3''',
+                            req.tenant_id, rt.box_region(), case['task_type'])
+                    if current:
+                        policy = {**policy, 'model': current}
                     if policy['model'] == model_id:
                         raise ValueError('Candidate must differ from the current rung')
                     report['baselines'][case['task_type']] = policy['model']

@@ -61,6 +61,8 @@ class TriggerNetwork(httpx.AsyncBaseTransport):
 
 @pytest_asyncio.fixture
 async def trigger_stack(gate78_memory, monkeypatch):
+    # Standalone/sharded collection cannot rely on another room adding this path.
+    monkeypatch.syspath_prepend(str(ROOT / "agents"))
     monkeypatch.setenv('DATABASE_URL', os.environ['MEMORY_TEST_DATABASE_URL'])
     from chassis.memory import MemoryClient
     from chassis.tank import TankClient

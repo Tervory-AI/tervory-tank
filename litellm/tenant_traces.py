@@ -10,6 +10,12 @@ class TenantLangfuseCallback(ResponseCacheMixin, CustomLogger):
         super().__init__()
         self.sink = TraceSink()
 
+    async def async_post_call_response_headers_hook(
+            self, data, user_api_key_dict, response, request_headers=None, litellm_call_info=None):
+        # LiteLLM 1.106.4 detects this hook in the leaf class, not its mixins.
+        return await super().async_post_call_response_headers_hook(
+            data, user_api_key_dict, response, request_headers, litellm_call_info)
+
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
         # File/batch management has no generated answer. Tank traces each native
         # batch item separately with the same exporter and scoped project keys.

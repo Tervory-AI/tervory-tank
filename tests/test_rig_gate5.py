@@ -369,9 +369,10 @@ async def test_brain_io_stalls_without_replaying_mutations(monkeypatch, tmp_path
     from rig_brain import service as brain
     from agents.rig.forge import service as forge
     async def stalled(*args, **kwargs): await asyncio.Future()
-    client = SimpleNamespace(post=AsyncMock(side_effect=stalled))
+    client = SimpleNamespace(post=AsyncMock(side_effect=stalled), request=AsyncMock(side_effect=stalled))
     wait_for = asyncio.wait_for
-    module = forge if kind == 'relay' else brain
+    import rig_memory
+    module = forge if kind == 'relay' else rig_memory if kind == 'memory' else brain
     monkeypatch.setattr(module, 'asyncio', SimpleNamespace(wait_for=lambda awaitable, timeout: wait_for(awaitable, .01)))
     if kind == 'relay':
         from contextlib import asynccontextmanager
@@ -380,11 +381,13 @@ async def test_brain_io_stalls_without_replaying_mutations(monkeypatch, tmp_path
         monkeypatch.setattr(forge.httpx, 'AsyncClient', connection)
         operation = forge.relay('steps', {})
     elif kind == 'memory':
-        operation = brain.memory(client, '/memories', {})
+        memory = brain.MemoryClient('http://hermes:8000', 'placeholder-rig-key', 'rig', client)
+        operation = rig_memory.memory_call(memory.remember(str(TENANT), 'placeholder-note',
+            'rig.receipt', 'placeholder-source', user_id='placeholder-rig-owner'))
     else:
         operation = brain.step(client, SimpleNamespace(tenant_id=TENANT, task_id=TENANT, home_region='us-east'), 'recall', 'done')
     with pytest.raises(TimeoutError): await operation
-    assert client.post.await_count == 1
+    assert (client.request if kind == 'memory' else client.post).await_count == 1
 
 
 @pytest.mark.asyncio

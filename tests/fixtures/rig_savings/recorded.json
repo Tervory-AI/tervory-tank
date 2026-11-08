@@ -1,0 +1,160 @@
+{
+  "basis": "offline cl100k reference; three recorded catalogue contracts, input plus output, not provider billing",
+  "before_tokens": 741,
+  "after_tokens": 0,
+  "cases": [
+    {
+      "task": "rig.ask",
+      "payload": {
+        "products": [
+          {
+            "id": "scope",
+            "sku": "scope",
+            "name": "Scope",
+            "brand": "Placeholder",
+            "category": "Optics",
+            "family": "scope-family",
+            "attributes": {
+              "magnification": "4x"
+            },
+            "price": {
+              "amount": 12,
+              "currency": "USD"
+            }
+          },
+          {
+            "id": "mount",
+            "sku": "mount",
+            "name": "Mount",
+            "family": "mount-family",
+            "attributes": {
+              "fits_sku": "scope"
+            }
+          }
+        ],
+        "fits": [
+          {
+            "part_sku": "mount",
+            "fits_sku": "scope",
+            "source": "import",
+            "approved": true,
+            "rule": {
+              "diameter": 30
+            },
+            "note": "Checked catalogue attachment"
+          }
+        ],
+        "question": "What is the magnification of the scope?",
+        "product_id": "scope"
+      },
+      "before_prompt": "Choose which catalogue rows the question is about. Do not write the answer. Reply with JSON: {\"cites\": [product id], \"fields\": [field name]}. If no row answers it, reply {\"cites\": [], \"fields\": []}. Catalogue: {\"products\": [{\"id\": \"scope\", \"sku\": \"scope\", \"name\": \"Scope\", \"brand\": \"Placeholder\", \"category\": \"Optics\", \"family\": \"scope-family\", \"attributes\": {\"magnification\": \"4x\"}, \"price\": {\"amount\": 12, \"currency\": \"USD\"}}, {\"id\": \"mount\", \"sku\": \"mount\", \"name\": \"Mount\", \"family\": \"mount-family\", \"attributes\": {\"fits_sku\": \"scope\"}}], \"fits\": [{\"part_sku\": \"mount\", \"fits_sku\": \"scope\", \"source\": \"import\", \"approved\": true, \"rule\": {\"diameter\": 30}, \"note\": \"Checked catalogue attachment\"}]}\nQuestion: What is the magnification of the scope?",
+      "before_response": "{\"cites\": [\"scope\"], \"fields\": [\"magnification\"]}",
+      "expected": {
+        "cites": [
+          "scope"
+        ]
+      }
+    },
+    {
+      "task": "rig.explain",
+      "payload": {
+        "centre": {
+          "id": "scope",
+          "sku": "scope",
+          "name": "Scope",
+          "brand": "Placeholder",
+          "category": "Optics",
+          "family": "scope-family",
+          "attributes": {
+            "magnification": "4x"
+          },
+          "price": {
+            "amount": 12,
+            "currency": "USD"
+          }
+        },
+        "part": {
+          "id": "mount",
+          "sku": "mount",
+          "name": "Mount",
+          "family": "mount-family",
+          "attributes": {
+            "fits_sku": "scope"
+          }
+        },
+        "fit": {
+          "part_sku": "mount",
+          "fits_sku": "scope",
+          "source": "import",
+          "approved": true,
+          "rule": {
+            "diameter": 30
+          },
+          "note": "Checked catalogue attachment"
+        },
+        "material": [
+          {
+            "role": "Mounts",
+            "id": "mount",
+            "name": "Mount"
+          }
+        ]
+      },
+      "before_prompt": "Write why these parts fit. You cannot add, remove, or rename parts. Reply with JSON: {\"why\": [string]}. Material: [{\"role\": \"Mounts\", \"id\": \"mount\", \"name\": \"Mount\"}]",
+      "before_response": "{\"why\": [\"diameter is 30\", \"Checked catalogue attachment\"]}",
+      "expected": {
+        "why": [
+          "diameter is 30",
+          "Checked catalogue attachment"
+        ]
+      }
+    },
+    {
+      "task": "rig.fit_suggest",
+      "payload": {
+        "products": [
+          {
+            "id": "scope",
+            "sku": "scope",
+            "name": "Scope",
+            "brand": "Placeholder",
+            "category": "Optics",
+            "family": "scope-family",
+            "attributes": {
+              "magnification": "4x"
+            },
+            "price": {
+              "amount": 12,
+              "currency": "USD"
+            }
+          },
+          {
+            "id": "mount",
+            "sku": "mount",
+            "name": "Mount",
+            "family": "mount-family",
+            "attributes": {
+              "fits_sku": "scope"
+            }
+          }
+        ]
+      },
+      "before_prompt": "Propose fit rows from product attributes. Reply with JSON: {\"fits\": [{\"part_sku\", \"fits_sku\" or \"fits_family\", \"rule\", \"confidence\"}]}. Use only the product ids you are given. Products: [{\"id\": \"scope\", \"sku\": \"scope\", \"name\": \"Scope\", \"brand\": \"Placeholder\", \"category\": \"Optics\", \"family\": \"scope-family\", \"attributes\": {\"magnification\": \"4x\"}, \"price\": {\"amount\": 12, \"currency\": \"USD\"}}, {\"id\": \"mount\", \"sku\": \"mount\", \"name\": \"Mount\", \"family\": \"mount-family\", \"attributes\": {\"fits_sku\": \"scope\"}}]",
+      "before_response": "{\"fits\": [{\"part_sku\": \"mount\", \"fits_sku\": \"scope\", \"rule\": {}, \"confidence\": 1.0}]}",
+      "expected": {
+        "fits": [
+          {
+            "part_sku": "mount",
+            "fits_sku": "scope",
+            "fits_family": null,
+            "rule": {},
+            "note": "",
+            "source": "suggested",
+            "approved": false,
+            "confidence": 1.0
+          }
+        ]
+      }
+    }
+  ]
+}
