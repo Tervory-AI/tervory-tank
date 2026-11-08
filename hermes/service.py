@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -136,6 +136,25 @@ def create_app(
         except ValueError:
             raise HTTPException(status_code=400, detail="Unknown agent.") from None
 
+
+    async def enforce_personal(
+        request: Request,
+        *,
+        method: str,
+        path: str,
+        key: str,
+        tenant,
+        user,
+    ) -> tuple[str, str] | None:
+        """Personal ops require nonce-protected signed tenant+user; tenant-wide (no user) skips."""
+        if user is None or not str(user).strip():
+            return None
+        from hermes.signed_identity import verify_personal_identity
+        return await verify_personal_identity(
+            request=request, records=holder['records'], key=key,
+            body_tenant=str(tenant) if tenant is not None else None, body_user=str(user).strip(),
+        )
+
     @app.get("/health")
     async def health() -> dict[str, bool]:
         if holder['records'] is not None:
@@ -146,8 +165,47 @@ def create_app(
             raise HTTPException(status_code=503, detail="memory store unreachable")
         return {"ok": True}
 
+    @app.patch("/memories/{memory_id}")
+    async def edit_memory(
+        request: Request,
+        memory_id: uuid.UUID,
+        body: MemoryIn,
+        x_tank_key: str = Header(default=""),
+    ):
+        _json_meta(body.meta)
+        agent = resolve_agent(caller_agent(x_tank_key), body.agent, write=True)
+        if not body.user_id or (body.id is not None and body.id != memory_id) or not body.index:
+            raise HTTPException(422, "Personal edit requires user_id, matching id and indexing")
+        await enforce_personal(
+            request,
+            method="PATCH",
+            path=f"/memories/{memory_id}",
+            key=x_tank_key,
+            tenant=body.tenant_id,
+            user=body.user_id,
+        )
+        try:
+            meta = write_meta(agent, body.kind, body.meta, body.user_id)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        if holder['records'] is None:
+            raise HTTPException(503, "memory store unreachable")
+        try:
+            saved = await holder['records'].edit(agent, str(body.tenant_id), str(memory_id), body.text,
+                list(dict.fromkeys([body.source, *body.evidence])), user_id=body.user_id,
+                kind=body.kind, meta=meta, confidence=body.confidence, last_verified=body.last_verified)
+        except ClaimTooLong as exc:
+            raise claim_validation_error("text", exc) from None
+        if saved is None:
+            raise HTTPException(404, "not found")
+        return saved
+
     @app.post("/memories")
-    async def remember(body: MemoryIn, x_tank_key: str = Header(default="")) -> JSONResponse:
+    async def remember(
+        request: Request,
+        body: MemoryIn,
+        x_tank_key: str = Header(default=""),
+    ) -> JSONResponse:
         _json_meta(body.meta)
         caller = caller_agent(x_tank_key)
         agent = resolve_agent(caller, body.agent, write=True)
@@ -155,6 +213,16 @@ def create_app(
             body.meta = write_meta(agent, body.kind, body.meta, body.user_id)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
+        # Personal rows: nonce-protected signed identity required. Declared tenant-wide
+        # kinds with no user keep agent-key-only background writes.
+        await enforce_personal(
+            request,
+            method="POST",
+            path="/memories",
+            key=x_tank_key,
+            tenant=body.tenant_id,
+            user=body.meta.get("user_id") or body.user_id,
+        )
         if holder['records'] is not None:
             try:
                 saved = await holder['records'].save(agent,str(body.tenant_id),body.text,
@@ -195,9 +263,21 @@ def create_app(
         return JSONResponse(saved, status_code=status)
 
     @app.post("/recall")
-    async def recall(body: RecallIn, x_tank_key: str = Header(default="")) -> dict[str, Any]:
+    async def recall(
+        request: Request,
+        body: RecallIn,
+        x_tank_key: str = Header(default=""),
+    ) -> dict[str, Any]:
         caller = caller_agent(x_tank_key)
         agent = resolve_agent(caller, body.agent, write=False)
+        await enforce_personal(
+            request,
+            method="POST",
+            path="/recall",
+            key=x_tank_key,
+            tenant=body.tenant_id,
+            user=body.user_id,
+        )
         if holder['records'] is not None:
             try:
                 new_hits = await holder['records'].recall(agent,str(body.tenant_id),body.query,body.kind,body.limit,body.tier,user_id=body.user_id)
@@ -233,11 +313,25 @@ def create_app(
         return {"memories": [_hit(hit) for hit in hits]}
 
     @app.delete("/memories/{memory_id}")
-    async def forget(memory_id: uuid.UUID, tenant_id: uuid.UUID | None = None, user_id: str | None = None, x_tank_key: str = Header(default="")) -> dict[str, bool]:
+    async def forget(
+        request: Request,
+        memory_id: uuid.UUID,
+        tenant_id: uuid.UUID | None = None,
+        user_id: str | None = None,
+        x_tank_key: str = Header(default=""),
+    ) -> dict[str, bool]:
         caller = caller_agent(x_tank_key)
         agent = resolve_agent(caller, None, write=True)
         if tenant_id is None:
             raise HTTPException(422, 'A tenant UUID is required')
+        await enforce_personal(
+            request,
+            method="DELETE",
+            path=f"/memories/{memory_id}",
+            key=x_tank_key,
+            tenant=tenant_id,
+            user=user_id,
+        )
         if holder['records'] is not None:
             removed = await holder['records'].forget(agent,str(tenant_id),str(memory_id),user_id=user_id)
             if not removed:
@@ -260,9 +354,22 @@ def create_app(
         return {"deleted": True}
 
     @app.delete("/tenants/{tenant_id}")
-    async def forget_tenant(tenant_id: uuid.UUID, user_id: str | None = None, x_tank_key: str = Header(default="")) -> dict[str, int]:
+    async def forget_tenant(
+        request: Request,
+        tenant_id: uuid.UUID,
+        user_id: str | None = None,
+        x_tank_key: str = Header(default=""),
+    ) -> dict[str, int]:
         caller = caller_agent(x_tank_key)
         agent = resolve_agent(caller, None, write=True)
+        await enforce_personal(
+            request,
+            method="DELETE",
+            path=f"/tenants/{tenant_id}",
+            key=x_tank_key,
+            tenant=tenant_id,
+            user=user_id,
+        )
         if holder['records'] is not None:
             removed = await holder['records'].forget(agent,str(tenant_id),user_id=user_id)
             ready,_ = current()

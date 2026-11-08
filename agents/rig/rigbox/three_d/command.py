@@ -164,7 +164,7 @@ async def live(args):
 
 def main():
     parser = argparse.ArgumentParser(description='Rig photos → checked draft → checksum-bound human approval → GLB receipt.')
-    parser.add_argument('--dry-run', action='store_true', help='Run the offline recorded HF response proof; no live services.')
+    parser.add_argument('--dry-run', action='store_true', help='Replay the packaged Forge command proof; no database or live services.')
     parser.add_argument('--job', type=Path, help='Existing Job JSON: id, tenant_id, product_id, source, dimensions_mm, anchors and cost_cap_usd.')
     parser.add_argument('--photos', type=Path, nargs='+'); parser.add_argument('--actor', default='')
     parser.add_argument('--review', type=Path, help='JSON containing job_id, sha256 and scale/appearance/attachment_points review.')
@@ -174,17 +174,11 @@ def main():
     args = parser.parse_args()
     try:
         if args.dry_run:
-            # Explicit test-only entry point; no fakes are reachable from live routes.
-            import subprocess
-            root = Path(__file__).resolve().parents[4]
-            from rigbox.dry_run import local_database
-            local_database(os.environ.get('RIG_TEST_DATABASE_URL', ''))
-            env = dict(os.environ)
-            env['PYTHONPATH'] = ':'.join([str(root), str(root / 'tests'), env.get('PYTHONPATH', '')])
-            env['PATH'] = str(root / 'agents/rig/forge/node_modules/.bin') + ':' + env['PATH']
-            return subprocess.run([sys.executable, '-m', 'pytest', '-q', '-s',
-                'tests/test_rig_r3d.py', '-k', 'r3d_recorded', '--disable-socket', '--allow-unix-socket',
-                '--allow-hosts=127.0.0.1,localhost,::1', '--timeout=120'], cwd=root, env=env).returncode
+            # Packaged with rigbox: this also works in the deployed room image,
+            # without a source checkout, pytest, database, or Forge CPU tools.
+            from .dry_run import replay
+            print(json.dumps(asyncio.run(replay()), sort_keys=True))
+            return 0
         print(json.dumps(asyncio.run(live(args)), sort_keys=True))
         return 0
     except Exception as exc:

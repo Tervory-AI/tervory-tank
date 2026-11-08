@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse
 from readiness import capabilities, problems
 from execution import job_pool, once_check
+from savings import receipted
 
 from alert_email import deliver_pending
 from rig_watch import RigWatches, TankRig, check_now, CatalogueDiscovery, DiscoveryGate
@@ -305,10 +306,13 @@ async def _competitor_match_slice(ctx, root):
     async def render(url):
         return await _render(url, "", AGENT, ctx.tenant_id, str(ctx.job_id), catalogue_match=True)
     async def publish(site, url, html, human_check):
-        return await corridor.request('POST', '/match-page', json={
+        value = await corridor.request('POST', '/match-page', json={
             'tenant_id': str(ctx.tenant_id), 'site': site, 'url': url,
             'job_id': str(ctx.job_id), 'root_job_id': root,
             'html': html, 'human_check': human_check})
+        if hasattr(getattr(ctx, 'tank', None), 'remember'):
+            ctx.tank.remember(value)
+        return value
     cursor, done = await CatalogueDiscovery(fetch, render, DiscoveryGate(app.state.pool), publish).step(
         original.get('sites', []), original.get('products', []), cursor)
     continuation = None if done else uuid5(NAMESPACE_URL, str(ctx.job_id) + ':continuation')
@@ -323,6 +327,8 @@ async def _competitor_match_slice(ctx, root):
     cursor['sites'] = summaries
     result = {'slice_saved': True, 'status': 'completed' if done else 'running',
               'sites': summaries, 'model_calls': 0, 'continuation_id': str(continuation) if continuation else None}
+    if getattr(getattr(ctx, 'tank', None), 'parts', []):
+        result['_savings_parts'] = list(dict.fromkeys(ctx.tank.parts))
     progress = {**result, 'sites':detailed_sites}
     async with app.state.pool.acquire() as conn:
         async with conn.transaction():
@@ -348,7 +354,9 @@ async def batch_discover(ctx):
 
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "check": check, "dispatch": dispatch, "rig_discover": rig_discover, "competitor_match": competitor_match},
+    handlers={name: receipted(handler) for name, handler in {
+        "ping": ping, "check": check, "dispatch": dispatch,
+        "rig_discover": rig_discover, "competitor_match": competitor_match}.items()},
     job_timeouts={"competitor_match": 45},
     schedules=[
         {"tenant_id": HEARTBEAT_TENANT, "cron": "* * * * *", "kind": "rig_discover", "input": {}},
@@ -681,3 +689,8 @@ async def gold_candidates(
     return candidates(
         limit, region=os.environ.get("TANK_REGION", "us-east"),
     )
+
+
+# Gates 7+8 routes use the shared signed-user chassis and fail closed without it.
+from gates_api import install as install_gates
+install_gates(app)

@@ -36,6 +36,9 @@ def once_check(pool):
                         token = _pool.set(ConnectionPool(conn))
                         try:
                             result = await handler(ctx)
+                            parts = getattr(ctx.tank, 'parts', []) if hasattr(ctx, 'tank') else []
+                            if parts:
+                                result['_savings_parts'] = list(dict.fromkeys(parts))
                             await conn.execute('''UPDATE agent_tiger.jobs SET result=$3::jsonb
                                 WHERE tenant_id=$1 AND id=$2 AND kind='check' ''',
                                 UUID(str(ctx.tenant_id)), UUID(str(ctx.job_id)), json.dumps(result))

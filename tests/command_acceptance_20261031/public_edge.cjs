@@ -33,7 +33,13 @@ const transport = async(url,init)=>{
   assert(output.includes('Offline acceptance cancellation'));
   assert(!output.includes(founder));
   const tank = new cli.Tank(client,transport);
-  assert.deepEqual(await tank.json('/v1/command/tools'),[]);
+  assert.deepEqual(await tank.json('/v1/command/tools'), [
+    'opli.code-turn', 'opli.memory.control', 'opli.memory.edit', 'opli.memory.forget', 'opli.memory.view',
+    'workspace.chat', 'workspace.csv.parse', 'workspace.data.retry', 'workspace.data.run',
+    'workspace.feedback', 'workspace.files', 'workspace.memory.control', 'workspace.memory.edit',
+    'workspace.memory.forget', 'workspace.memory.view', 'workspace.savings', 'workspace.task.create',
+    'workspace.task.receipt', 'workspace.tasks',
+  ]);
   const tid = (await tank.json('/v1/command/threads',{})).thread_id;
   await assert.rejects(()=>tank.json('/v1/command/build',{thread_id:tid,brief_markdown:'Denied'}),/403/);
   const count = upstreamCalls;

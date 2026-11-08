@@ -1,0 +1,11 @@
+[
+  {"text":"workspace.tasks {}"},
+  {"text":"workspace.task.create {\"title\":\"Supplier email\",\"request\":\"Draft a brief request for the current price list.\",\"task_type\":\"tier0.draft\"}"},
+  {"text":"workspace.task.receipt {\"task_id\":\"00000000-0000-4000-8000-000000000201\"}"},
+  {"text":"workspace.savings {}"},
+  {"text":"workspace.files {\"batch\":\"own-upload\",\"limit\":10}"},
+  {"text":"workspace.feedback {\"ledger_id\":\"00000000-0000-4000-8000-000000000301\",\"verdict\":\"useful\"}"},
+  {"text":"workspace.csv.parse {\"text\":\"name,city\\nNew client,London\\n\"}"},
+  {"text":"workspace.data.run {\"batch\":\"own-upload\",\"records\":[{\"name\":\"New client\",\"city\":\"London\"}],\"preview\":true}"},
+  {"text":"workspace.data.retry {\"batch\":\"own-upload\"}"}
+]
