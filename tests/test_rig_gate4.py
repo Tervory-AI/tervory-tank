@@ -106,10 +106,15 @@ asyncpg.create_pool = forbidden
 httpx.AsyncClient = forbidden
 from rigbox.three_d.asgi import app
 with TestClient(app) as client:
-    for path in ('/health', '/v1/rig/search?q=anything', '/3d/config'):
+    for path in ('/health', '/v1/rig/search?q=anything'):
         response = client.get(path)
         assert response.status_code == 503
         assert response.json()['missing_settings'] == ['DATABASE_URL']
+    config = client.get('/3d/config')
+    assert config.status_code == 200 and config.json()['configured'] is False
+    assert config.json()['publishable_key'] == ''
+    assert client.get('/3d/').status_code == 200
+    assert client.get('/3d/terminal.js').status_code == 200
     result = client.get('/health/configuration')
     assert result.status_code == 200
     assert result.json()['catalogue']['missing_settings'] == ['DATABASE_URL']
