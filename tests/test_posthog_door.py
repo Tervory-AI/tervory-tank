@@ -1,4 +1,5 @@
 """Offline contract tests for Tank PostHog door (no live PostHog calls)."""
+
 from __future__ import annotations
 
 import sys
@@ -9,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tank"))
 
-from posthog_door import (  # noqa: E402
+from posthog_door import (
     API_KEY_NAME,
     ALLOWED_EVENT_NAMES,
     FakePosthogProvider,
@@ -45,14 +46,16 @@ def test_opaque_distinct_id_stable_and_not_raw():
 
 
 def test_sanitize_drops_pii_and_unknown_keys():
-    cleaned = sanitize_properties({
-        "outcome": "ok",
-        "email": "a@b.com",
-        "name": "Alice",
-        "error_code": "not_found",
-        "secret_token": "x" * 50,
-        "playback_policy": "signed",
-    })
+    cleaned = sanitize_properties(
+        {
+            "outcome": "ok",
+            "email": "a@b.com",
+            "name": "Alice",
+            "error_code": "not_found",
+            "secret_token": "x" * 50,
+            "playback_policy": "signed",
+        }
+    )
     assert cleaned["outcome"] == "ok"
     assert cleaned["error_code"] == "not_found"
     assert cleaned["playback_policy"] == "signed"

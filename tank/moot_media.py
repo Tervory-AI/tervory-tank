@@ -1,17 +1,33 @@
 """Authenticated Moot media gateway on Tank. Tenant/user/hearing isolated."""
+
 from __future__ import annotations
 
 import os
 import re
-import time
+import hashlib
+import json
 from typing import Any, Awaitable, Callable
 from uuid import UUID
 
-from moot_media_store import AsyncOwnershipStore, MediaRecord, MemoryOwnershipStore
-async def _analytics(event: str, actor: "MootActor", *, properties: dict | None = None, environ: dict | None = None) -> None:
+from moot_media_store import (
+    AsyncOwnershipStore,
+    MediaRecord,
+    MemoryOwnershipStore,
+    ReservationError,
+)
+
+
+async def _analytics(
+    event: str,
+    actor: "MootActor",
+    *,
+    properties: dict | None = None,
+    environ: dict | None = None,
+) -> None:
     """Best-effort Tank PostHog capture; never fails the media path."""
     try:
         from posthog_door import capture_event
+
         await capture_event(
             event=event,
             tenant_id=actor.tenant_id,
@@ -89,7 +105,9 @@ def _int_env(name: str, default: int, environ: dict | None) -> int:
     return value if value > 0 else default
 
 
-async def _owned(record: MediaRecord | None, actor: MootActor, hearing_id: str) -> MediaRecord:
+async def _owned(
+    record: MediaRecord | None, actor: MootActor, hearing_id: str
+) -> MediaRecord:
     if record is None:
         raise MuxError("not_found", 404)
     if record.tenant_id != actor.tenant_id or record.hearing_id != hearing_id:
@@ -100,15 +118,25 @@ async def _owned(record: MediaRecord | None, actor: MootActor, hearing_id: str) 
 
 
 def public_upload_view(data: dict[str, Any]) -> dict[str, Any]:
-    settings = data.get("new_asset_settings") if isinstance(data.get("new_asset_settings"), dict) else {}
-    policies = settings.get("playback_policies") or data.get("playback_policies") or [PLAYBACK_POLICY]
+    settings = (
+        data.get("new_asset_settings")
+        if isinstance(data.get("new_asset_settings"), dict)
+        else {}
+    )
+    policies = (
+        settings.get("playback_policies")
+        or data.get("playback_policies")
+        or [PLAYBACK_POLICY]
+    )
     return {
         "upload_id": data.get("id"),
         "status": data.get("status"),
         "upload_url": data.get("url"),
         "timeout": data.get("timeout"),
         "asset_id": data.get("asset_id"),
-        "playback_policy": PLAYBACK_POLICY if PLAYBACK_POLICY in policies else "unknown",
+        "playback_policy": PLAYBACK_POLICY
+        if PLAYBACK_POLICY in policies
+        else "unknown",
         "test": bool(data.get("test") or settings.get("test")),
     }
 
@@ -117,7 +145,9 @@ def public_asset_view(data: dict[str, Any]) -> dict[str, Any]:
     playback_ids = []
     for row in data.get("playback_ids") or []:
         if isinstance(row, dict) and row.get("id"):
-            playback_ids.append({"id": row["id"], "policy": row.get("policy") or PLAYBACK_POLICY})
+            playback_ids.append(
+                {"id": row["id"], "policy": row.get("policy") or PLAYBACK_POLICY}
+            )
     return {
         "asset_id": data.get("id"),
         "status": data.get("status"),
@@ -128,21 +158,11 @@ def public_asset_view(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def _enforce_write_budget(
-    *,
-    actor: MootActor,
-    store: AsyncOwnershipStore,
-    environ: dict | None,
+async def _hearing_access(
+    actor: MootActor, hearing_id: str, hearing_allowed: HearingGate
 ) -> None:
-    rate = _int_env("MOOT_MUX_UPLOAD_RATE_PER_MIN", DEFAULT_UPLOAD_RATE_PER_MIN, environ)
-    daily = _int_env("MOOT_MUX_DAILY_UPLOAD_CAP", DEFAULT_DAILY_UPLOAD_CAP, environ)
-    now = time.time()
-    recent = await store.count_uploads_since(actor.tenant_id, actor.user_id, now - 60)
-    if recent >= rate:
-        raise MuxError("rate_limited", 429)
-    day = await store.count_uploads_since(actor.tenant_id, actor.user_id, now - 86400)
-    if day >= daily:
-        raise MuxError("upload_budget_exhausted", 429)
+    if not await hearing_allowed(actor.tenant_id, actor.user_id, hearing_id):
+        raise MuxError("not_found", 404)
 
 
 async def create_upload(
@@ -160,39 +180,74 @@ async def create_upload(
     UUID(hearing_id)
     UUID(actor.tenant_id)
     origin = normalize_cors_origin(cors_origin)
-    if not await hearing_allowed(actor.tenant_id, actor.user_id, hearing_id):
-        raise MuxError("not_found", 404)
-    if idempotency_key:
-        if not IDEMPOTENCY_RE.fullmatch(idempotency_key):
-            raise MuxError("invalid_idempotency_key", 422)
-        existing = await store.by_idempotency(actor.tenant_id, actor.user_id, hearing_id, idempotency_key)
-        if existing is not None:
-            data = await provider.retrieve_upload(existing.upload_id)
-            return public_upload_view(data)
-    await _enforce_write_budget(actor=actor, store=store, environ=environ)
-    marker = passthrough_for(actor, hearing_id)
-    created = await provider.create_direct_upload(
-        cors_origin=origin, passthrough=marker, test=test
-    )
-    upload_id = str(created.get("id") or "")
-    if not upload_id:
-        raise MuxError("mux_upstream_error", 502)
-    await store.save(
-        MediaRecord(
+    await _hearing_access(actor, hearing_id, hearing_allowed)
+    if not idempotency_key or not IDEMPOTENCY_RE.fullmatch(idempotency_key):
+        raise MuxError("invalid_idempotency_key", 422)
+    digest = hashlib.sha256(
+        json.dumps([origin, test], separators=(",", ":")).encode()
+    ).hexdigest()
+    try:
+        reservation = await store.reserve_upload(
             tenant_id=actor.tenant_id,
             user_id=actor.user_id,
             hearing_id=hearing_id,
-            upload_id=upload_id,
-            passthrough=marker,
             idempotency_key=idempotency_key,
+            input_hash=digest,
+            rate=_int_env(
+                "MOOT_MUX_UPLOAD_RATE_PER_MIN", DEFAULT_UPLOAD_RATE_PER_MIN, environ
+            ),
+            daily=_int_env(
+                "MOOT_MUX_DAILY_UPLOAD_CAP", DEFAULT_DAILY_UPLOAD_CAP, environ
+            ),
         )
-    )
+    except ReservationError as exc:
+        code = str(exc)
+        raise MuxError(
+            code, 429 if code in {"rate_limited", "upload_budget_exhausted"} else 409
+        ) from None
+    if reservation.upload_id:
+        return await upload_status(
+            actor=actor,
+            hearing_id=hearing_id,
+            upload_id=reservation.upload_id,
+            provider=provider,
+            store=store,
+            hearing_allowed=hearing_allowed,
+        )
+    # The committed intent is recoverable even if the provider response is lost.
+    # Do not assume the provider supports an idempotency header or retry a write.
+    marker = "moot-request:" + reservation.request_id
+    try:
+        await _hearing_access(actor, hearing_id, hearing_allowed)
+        created = await provider.create_direct_upload(
+            cors_origin=origin, passthrough=marker, test=test
+        )
+        upload_id = str(created.get("id") or "")
+        if not upload_id:
+            raise MuxError("mux_upstream_error", 502)
+        await store.complete_upload(
+            reservation,
+            MediaRecord(
+                tenant_id=actor.tenant_id,
+                user_id=actor.user_id,
+                hearing_id=hearing_id,
+                upload_id=upload_id,
+                passthrough=marker,
+                idempotency_key=idempotency_key,
+            ),
+        )
+    except MuxError:
+        raise
+    except Exception:
+        # Keep the committed reservation/quota charge on unknown outcomes.
+        raise MuxError("upload_pending_or_uncertain", 409) from None
     await _analytics(
         "tank.media.upload_created",
         actor,
         properties={"outcome": "ok", "playback_policy": PLAYBACK_POLICY, "test": test},
         environ=environ,
     )
+    await _hearing_access(actor, hearing_id, hearing_allowed)
     return public_upload_view(created)
 
 
@@ -203,8 +258,12 @@ async def upload_status(
     upload_id: str,
     provider: MuxProvider,
     store: AsyncOwnershipStore,
+    hearing_allowed: HearingGate,
 ) -> dict[str, Any]:
-    record = await _owned(await store.by_upload(upload_id), actor, hearing_id)
+    await _hearing_access(actor, hearing_id, hearing_allowed)
+    record = await _owned(
+        await store.by_upload(upload_id, tenant_id=actor.tenant_id), actor, hearing_id
+    )
     data = await provider.retrieve_upload(upload_id)
     asset_id = data.get("asset_id")
     if isinstance(asset_id, str) and asset_id:
@@ -214,7 +273,10 @@ async def upload_status(
             for row in (asset.get("playback_ids") or [])
             if isinstance(row, dict) and row.get("id")
         ]
-        await store.bind_asset(record.upload_id, asset_id, playback_ids)
+        await store.bind_asset(
+            record.upload_id, asset_id, playback_ids, tenant_id=actor.tenant_id
+        )
+    await _hearing_access(actor, hearing_id, hearing_allowed)
     return public_upload_view(data)
 
 
@@ -225,9 +287,15 @@ async def asset_status(
     asset_id: str,
     provider: MuxProvider,
     store: AsyncOwnershipStore,
+    hearing_allowed: HearingGate,
 ) -> dict[str, Any]:
-    await _owned(await store.by_asset(asset_id), actor, hearing_id)
-    return public_asset_view(await provider.retrieve_asset(asset_id))
+    await _hearing_access(actor, hearing_id, hearing_allowed)
+    await _owned(
+        await store.by_asset(asset_id, tenant_id=actor.tenant_id), actor, hearing_id
+    )
+    data = await provider.retrieve_asset(asset_id)
+    await _hearing_access(actor, hearing_id, hearing_allowed)
+    return public_asset_view(data)
 
 
 async def playback_access(
@@ -236,10 +304,16 @@ async def playback_access(
     hearing_id: str,
     playback_id: str,
     store: AsyncOwnershipStore,
+    hearing_allowed: HearingGate,
     environ: dict | None = None,
     ttl_s: int | None = None,
 ) -> dict[str, Any]:
-    await _owned(await store.by_playback(playback_id), actor, hearing_id)
+    await _hearing_access(actor, hearing_id, hearing_allowed)
+    await _owned(
+        await store.by_playback(playback_id, tenant_id=actor.tenant_id),
+        actor,
+        hearing_id,
+    )
     require_signed_playback_ready(environ)
     token = mint_playback_jwt(playback_id, environ=environ, ttl_s=ttl_s or 3600)
     await _analytics(
@@ -248,6 +322,7 @@ async def playback_access(
         properties={"outcome": "ok", "playback_policy": PLAYBACK_POLICY},
         environ=environ,
     )
+    await _hearing_access(actor, hearing_id, hearing_allowed)
     return {
         "playback_id": playback_id,
         "playback_policy": PLAYBACK_POLICY,
@@ -268,8 +343,10 @@ def error_payload(exc: MuxError) -> dict[str, Any]:
     return body
 
 
-async def always_allow_hearing(tenant_id: str, user_id: str, hearing_id: str) -> bool:
-    return True
+async def deny_missing_hearing_gate(
+    tenant_id: str, user_id: str, hearing_id: str
+) -> bool:
+    return False
 
 
 async def handle_media_request(
@@ -292,7 +369,7 @@ async def handle_media_request(
     kind = matched["kind"]
     resource_id = matched["resource_id"]
     store = store or DEFAULT_STORE
-    hearing_allowed = hearing_allowed or always_allow_hearing
+    hearing_allowed = hearing_allowed or deny_missing_hearing_gate
     try:
         if provider is None:
             provider = provider_from_env(environ)
@@ -319,18 +396,30 @@ async def handle_media_request(
             return 201, result
         if method == "GET" and kind == "uploads" and resource_id:
             return 200, await upload_status(
-                actor=actor, hearing_id=hearing_id, upload_id=resource_id,
-                provider=provider, store=store,
+                actor=actor,
+                hearing_id=hearing_id,
+                upload_id=resource_id,
+                provider=provider,
+                store=store,
+                hearing_allowed=hearing_allowed,
             )
         if method == "GET" and kind == "assets" and resource_id:
             return 200, await asset_status(
-                actor=actor, hearing_id=hearing_id, asset_id=resource_id,
-                provider=provider, store=store,
+                actor=actor,
+                hearing_id=hearing_id,
+                asset_id=resource_id,
+                provider=provider,
+                store=store,
+                hearing_allowed=hearing_allowed,
             )
         if method == "GET" and kind == "playback" and resource_id:
             return 200, await playback_access(
-                actor=actor, hearing_id=hearing_id, playback_id=resource_id,
-                store=store, environ=environ,
+                actor=actor,
+                hearing_id=hearing_id,
+                playback_id=resource_id,
+                store=store,
+                environ=environ,
+                hearing_allowed=hearing_allowed,
             )
         return 404, {"error": "not_found"}
     except MuxError as exc:

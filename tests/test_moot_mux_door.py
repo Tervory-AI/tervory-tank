@@ -1,4 +1,5 @@
 """Offline contract tests for Tank-controlled Moot Mux door (no live Mux, no paid calls)."""
+
 from __future__ import annotations
 
 import base64
@@ -14,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tank"))
 
-from moot_media import (  # noqa: E402
+from moot_media import (
     MootActor,
     create_upload,
     handle_media_request,
@@ -22,8 +23,8 @@ from moot_media import (  # noqa: E402
     playback_access,
     upload_status,
 )
-from moot_media_store import MemoryOwnershipStore  # noqa: E402
-from moot_mux import (  # noqa: E402
+from moot_media_store import MemoryOwnershipStore
+from moot_mux import (
     PLAYBACK_POLICY,
     FakeMuxProvider,
     MuxError,
@@ -83,15 +84,25 @@ def test_credentials_presence_and_fail_closed(monkeypatch):
 
 def test_match_media_path_shapes():
     assert match_media_path(f"moot/hearings/{HEARING}/media/uploads") == {
-        "hearing_id": HEARING, "kind": "uploads", "resource_id": "",
+        "hearing_id": HEARING,
+        "kind": "uploads",
+        "resource_id": "",
     }
-    assert match_media_path(f"moot/hearings/{HEARING}/media/uploads/upload_abc")["resource_id"] == "upload_abc"
+    assert (
+        match_media_path(f"moot/hearings/{HEARING}/media/uploads/upload_abc")[
+            "resource_id"
+        ]
+        == "upload_abc"
+    )
     assert match_media_path(f"moot/hearings/{HEARING}/media/assets") is None
     assert match_media_path("moot/hearings") is None
 
 
 def test_cors_origin_allowlist():
-    assert normalize_cors_origin("https://zenas.tervory.com/") == "https://zenas.tervory.com"
+    assert (
+        normalize_cors_origin("https://zenas.tervory.com/")
+        == "https://zenas.tervory.com"
+    )
     assert normalize_cors_origin("https://app.tervory.com") == "https://app.tervory.com"
     with pytest.raises(MuxError) as forbidden:
         normalize_cors_origin("https://evil.example")
@@ -103,6 +114,7 @@ def test_cors_origin_allowlist():
 
 def test_mint_playback_jwt_offline_contract():
     import time
+
     env, public, kid = _ephemeral_signing_env()
     issued = int(time.time())
     token = mint_playback_jwt("playback_abc123", environ=env, ttl_s=600, now=issued)
@@ -130,6 +142,7 @@ async def test_create_upload_signed_only_and_isolated():
         store=store,
         hearing_allowed=allow,
         test=True,
+        idempotency_key=str(uuid4()),
     )
     assert created["playback_policy"] == PLAYBACK_POLICY
     assert created["upload_id"]
@@ -144,13 +157,18 @@ async def test_create_upload_signed_only_and_isolated():
             provider=provider,
             store=store,
             hearing_allowed=deny,
+            idempotency_key=str(uuid4()),
         )
     assert denied.value.code == "not_found"
 
     provider.complete_upload(created["upload_id"])
     status = await upload_status(
-        actor=actor, hearing_id=HEARING, upload_id=created["upload_id"],
-        provider=provider, store=store,
+        actor=actor,
+        hearing_id=HEARING,
+        upload_id=created["upload_id"],
+        provider=provider,
+        store=store,
+        hearing_allowed=allow,
     )
     assert status["status"] == "asset_created"
     assert status["asset_id"]
@@ -158,12 +176,16 @@ async def test_create_upload_signed_only_and_isolated():
     other = MootActor(TENANT, OTHER)
     with pytest.raises(Exception) as cross:
         await upload_status(
-            actor=other, hearing_id=HEARING, upload_id=created["upload_id"],
-            provider=provider, store=store,
+            actor=other,
+            hearing_id=HEARING,
+            upload_id=created["upload_id"],
+            provider=provider,
+            store=store,
+            hearing_allowed=allow,
         )
     assert cross.value.code == "not_found"
 
-    record = await store.by_upload(created["upload_id"])
+    record = await store.by_upload(created["upload_id"], tenant_id=TENANT)
     assert record and record.playback_ids
     with pytest.raises(SignedPlaybackUnconfigured) as play:
         await playback_access(
@@ -172,6 +194,7 @@ async def test_create_upload_signed_only_and_isolated():
             playback_id=record.playback_ids[0],
             store=store,
             environ={},
+            hearing_allowed=allow,
         )
     assert play.value.required_names == (
         "MOOT_MUX_SIGNING_KEY_ID",
@@ -186,22 +209,52 @@ async def test_playback_jwt_success_and_non_owner_denied():
     actor = MootActor(TENANT, USER)
     env, public, kid = _ephemeral_signing_env()
     created = await create_upload(
-        actor=actor, hearing_id=HEARING, cors_origin="https://zenas.tervory.com",
-        provider=provider, store=store, hearing_allowed=allow, test=True,
+        actor=actor,
+        hearing_id=HEARING,
+        cors_origin="https://zenas.tervory.com",
+        provider=provider,
+        store=store,
+        hearing_allowed=allow,
+        test=True,
+        idempotency_key=str(uuid4()),
     )
     provider.complete_upload(created["upload_id"])
-    await upload_status(actor=actor, hearing_id=HEARING, upload_id=created["upload_id"], provider=provider, store=store)
-    record = await store.by_upload(created["upload_id"])
+    await upload_status(
+        actor=actor,
+        hearing_id=HEARING,
+        upload_id=created["upload_id"],
+        provider=provider,
+        store=store,
+        hearing_allowed=allow,
+    )
+    record = await store.by_upload(created["upload_id"], tenant_id=TENANT)
     pid = record.playback_ids[0]
-    access = await playback_access(actor=actor, hearing_id=HEARING, playback_id=pid, store=store, environ=env, ttl_s=120)
+    access = await playback_access(
+        actor=actor,
+        hearing_id=HEARING,
+        playback_id=pid,
+        store=store,
+        environ=env,
+        ttl_s=120,
+        hearing_allowed=allow,
+    )
     assert access["playback_policy"] == "signed"
-    assert access["playback_url"].startswith(f"https://stream.mux.com/{pid}.m3u8?token=")
+    assert access["playback_url"].startswith(
+        f"https://stream.mux.com/{pid}.m3u8?token="
+    )
     claims = jwt.decode(access["token"], public, algorithms=["RS256"], audience="v")
     assert claims["sub"] == pid
     assert jwt.get_unverified_header(access["token"])["kid"] == kid
     other = MootActor(TENANT, OTHER)
     with pytest.raises(MuxError) as cross:
-        await playback_access(actor=other, hearing_id=HEARING, playback_id=pid, store=store, environ=env)
+        await playback_access(
+            actor=other,
+            hearing_id=HEARING,
+            playback_id=pid,
+            store=store,
+            environ=env,
+            hearing_allowed=allow,
+        )
     assert cross.value.code == "not_found"
 
 
@@ -211,13 +264,23 @@ async def test_idempotency_and_rate_guard():
     store = MemoryOwnershipStore()
     actor = MootActor(TENANT, USER)
     first = await create_upload(
-        actor=actor, hearing_id=HEARING, cors_origin="https://zenas.tervory.com",
-        provider=provider, store=store, hearing_allowed=allow, test=True,
+        actor=actor,
+        hearing_id=HEARING,
+        cors_origin="https://zenas.tervory.com",
+        provider=provider,
+        store=store,
+        hearing_allowed=allow,
+        test=True,
         idempotency_key="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
     )
     second = await create_upload(
-        actor=actor, hearing_id=HEARING, cors_origin="https://zenas.tervory.com",
-        provider=provider, store=store, hearing_allowed=allow, test=True,
+        actor=actor,
+        hearing_id=HEARING,
+        cors_origin="https://zenas.tervory.com",
+        provider=provider,
+        store=store,
+        hearing_allowed=allow,
+        test=True,
         idempotency_key="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
     )
     assert first["upload_id"] == second["upload_id"]
@@ -225,9 +288,18 @@ async def test_idempotency_and_rate_guard():
     # Force rate limit with tiny cap
     with pytest.raises(MuxError) as capped:
         await create_upload(
-            actor=actor, hearing_id=HEARING, cors_origin="https://zenas.tervory.com",
-            provider=provider, store=store, hearing_allowed=allow, test=True,
-            environ={"MOOT_MUX_UPLOAD_RATE_PER_MIN": "1", "MOOT_MUX_DAILY_UPLOAD_CAP": "100"},
+            actor=actor,
+            hearing_id=HEARING,
+            cors_origin="https://zenas.tervory.com",
+            provider=provider,
+            store=store,
+            hearing_allowed=allow,
+            test=True,
+            environ={
+                "MOOT_MUX_UPLOAD_RATE_PER_MIN": "1",
+                "MOOT_MUX_DAILY_UPLOAD_CAP": "100",
+            },
+            idempotency_key=str(uuid4()),
         )
     assert capped.value.code == "rate_limited"
 
@@ -247,6 +319,7 @@ async def test_handle_media_request_contract():
         store=store,
         hearing_allowed=allow,
         allow_test_uploads=True,
+        idempotency_key=str(uuid4()),
     )
     assert status == 201
     assert body["playback_policy"] == "signed"
@@ -259,10 +332,12 @@ async def test_handle_media_request_contract():
         body=None,
         provider=provider,
         store=store,
+        idempotency_key=str(uuid4()),
+        hearing_allowed=allow,
     )
     assert status == 200
     assert body["asset_id"]
-    record = await store.by_upload(upload_id)
+    record = await store.by_upload(upload_id, tenant_id=TENANT)
     status, body = await handle_media_request(
         method="GET",
         path=f"moot/hearings/{HEARING}/media/playback/{record.playback_ids[0]}",
@@ -271,6 +346,8 @@ async def test_handle_media_request_contract():
         provider=provider,
         store=store,
         environ={},
+        idempotency_key=str(uuid4()),
+        hearing_allowed=allow,
     )
     assert status == 503
     assert body["error"] == "signed_playback_unconfigured"
@@ -285,6 +362,7 @@ async def test_handle_media_request_contract():
         store=store,
         hearing_allowed=allow,
         allow_test_uploads=True,
+        idempotency_key=str(uuid4()),
     )
     assert status == 403
     assert body["error"] == "cors_origin_forbidden"

@@ -177,3 +177,18 @@ CREATE INDEX IF NOT EXISTS moot_media_asset ON tank.moot_media (asset_id) WHERE 
 CREATE UNIQUE INDEX IF NOT EXISTS moot_media_idempotency
     ON tank.moot_media (tenant_id, user_id, hearing_id, idempotency_key)
     WHERE idempotency_key IS NOT NULL;
+
+-- Durable pre-provider upload intent; uncertain attempts continue to consume quota.
+CREATE TABLE IF NOT EXISTS tank.moot_upload_requests (
+    request_id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    hearing_id uuid NOT NULL,
+    idempotency_key text NOT NULL,
+    input_hash text NOT NULL CHECK (input_hash ~ '^[a-f0-9]{64}$'),
+    upload_id text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id,user_id,hearing_id,idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS moot_upload_request_budget
+    ON tank.moot_upload_requests(tenant_id,user_id,created_at);
