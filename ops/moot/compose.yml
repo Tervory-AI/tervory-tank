@@ -30,7 +30,6 @@ services:
         read_only: true
     networks: [control, media]
     ports:
-      - '127.0.0.1:7880:7880/tcp'
       - '127.0.0.1:7881:7881/tcp'
       - '127.0.0.1:7882:7882/udp'
     depends_on:
@@ -42,16 +41,52 @@ services:
     mem_limit: 1g
     cpus: 2
     pids_limit: 256
+  livekit-tls:
+    image: nginx:stable-alpine@sha256:583b7f2fce1cdb8da5ad5c39ebd3c33b98b87d493190e548bdee1fa8c619c311
+    user: '10004:10004'
+    group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
+    entrypoint: [nginx]
+    command: [-c, /run/moot/nginx.conf, -g, 'daemon off;']
+    volumes:
+      - type: bind
+        source: ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/nginx.conf
+        target: /run/moot/nginx.conf
+        read_only: true
+      - type: bind
+        source: ${MOOT_TLS_CERT_FILE:?set MOOT_TLS_CERT_FILE}
+        target: /run/moot/tls.crt
+        read_only: true
+      - type: bind
+        source: ${MOOT_TLS_KEY_FILE:?set MOOT_TLS_KEY_FILE}
+        target: /run/moot/tls.key
+        read_only: true
+    networks: [control]
+    ports: ['127.0.0.1:8443:8443']
+    depends_on:
+      livekit: {condition: service_started}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 32
   boundary:
     build: {context: ., dockerfile: Dockerfile.boundary}
     user: '10002:10002'
     environment:
       MOOT_REGION: ${MOOT_REGION:?set MOOT_REGION}
+      SSL_CERT_FILE: /run/moot/tls-ca.crt
+    volumes:
+      - type: bind
+        source: ${MOOT_TLS_CA_FILE:?set MOOT_TLS_CA_FILE}
+        target: /run/moot/tls-ca.crt
+        read_only: true
     networks: [control]
     ports: ['127.0.0.1:8090:8090']
     depends_on:
       redis: {condition: service_healthy}
-      livekit: {condition: service_started}
+      livekit-tls: {condition: service_started}
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -69,10 +104,15 @@ services:
     group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
     environment:
       EGRESS_CONFIG_FILE: /run/moot/egress.json
+      SSL_CERT_FILE: /run/moot/tls-ca.crt
     volumes:
       - type: bind
         source: ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/egress.json
         target: /run/moot/egress.json
+        read_only: true
+      - type: bind
+        source: ${MOOT_TLS_CA_FILE:?set MOOT_TLS_CA_FILE}
+        target: /run/moot/tls-ca.crt
         read_only: true
       - recordings:/out
     networks: [control, media]

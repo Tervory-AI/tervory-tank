@@ -2,6 +2,7 @@
 import json
 import os
 import socket
+import ssl
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -17,8 +18,10 @@ def ready():
             if conn.recv(32) != b'+PONG\r\n':
                 return False
         # Internal transport probe must not use an inherited outbound proxy.
-        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
-            'http://livekit:7880/', timeout=1
+        with urllib.request.build_opener(urllib.request.ProxyHandler({}),
+            urllib.request.HTTPSHandler(context=ssl.create_default_context(
+                cafile=os.environ.get('SSL_CERT_FILE')))).open(
+            'https://livekit-tls:8443/', timeout=1
         ) as response:
             return response.status == 200
     except (OSError, ValueError):
