@@ -4,14 +4,11 @@ Keeps other lanes' app.py unchanged. The existing image already copies rigbox.
 No stand-in or automatic entitlement in this production entry point.
 """
 import os
-import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Request
 from fastapi.responses import FileResponse
 from .static import ViewerFiles
-from pydantic import Field
 from app import app
 
 from .api import mount
@@ -19,7 +16,6 @@ from .assets import R2Assets, ForgeFiles, PhotoInputError
 from .engine import Engine
 from .forge import BrainForge
 from .store import Store
-from .contracts import Strict, NAME
 from rigbox.service import RigError
 
 mount(app)
@@ -89,23 +85,8 @@ class LazyR2:
 app.router.lifespan_context = lifespan
 
 
-class PageConfig(Strict):
-    publishable_key: str = Field(pattern=r"^rk_pub_[A-Za-z0-9_-]+$")
-    photo_key: str = Field(default="", pattern=r"^(rk_pub_[A-Za-z0-9_-]+)?$")
-    product_id: str = Field(pattern=NAME)
-    kiosk_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
-
-
-@app.get("/3d/config", include_in_schema=False)
-async def page_config(request: Request):
-    # Public embed configuration only. No new credential or environment variable.
-    path = Path(os.environ.get("DATA_DIR", "/data")) / "rig-3d-page.json"
-    try:
-        config = PageConfig.model_validate(json.loads(path.read_text()))
-    except (OSError, ValueError):
-        raise RigError("configuration", "The 3D test page is not configured.", 503) from None
-    await request.app.state.rig.authenticate(config.publishable_key)
-    return config.model_dump()
+from .page import PageConfig, page_config, router as page_router
+app.include_router(page_router)
 
 
 bundle = Path(__file__).with_name("widget")

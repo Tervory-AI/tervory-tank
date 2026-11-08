@@ -14,7 +14,7 @@ const generatedDigest = crypto.createHash('sha256').update(generated).digest('he
 const key = 'rk_pub_offline_r3d';
 const clients = new Set(), requested = [];
 const empty = () => ({date:'2026-11-06',timezone:'UTC',counts:{approved:0,today:0,active:0},approved:[],live:null,latest:null});
-let state = empty(), deny = false, completedRows = [];
+let state = empty(), deny = false, configured = true, completedRows = [];
 const event = (stage, elapsed) => ({id:stage,stage,elapsed_ms:elapsed,at:'2026-11-06T12:00:00+00:00',outcome:'delivered',cost:{amount_usd:'0.10',basis:'upper_bound',receipt_ids:[]}});
 const build = n => ({id:`00000000-0000-0000-0000-${String(n).padStart(12,'0')}`,name:`Approved fixture ${n}`,status:'approved',today:true,
   price:{amount:'100',currency:'USD'},events:['understand','design','check','price','ready'].map((stage,i)=>event(stage,2500*i)),
@@ -25,7 +25,7 @@ const packet = () => 'event: build\ndata: ' + JSON.stringify(state) + '\n\n';
 const publish = () => {for(const client of clients) client.write(packet());};
 const server = http.createServer((req,res) => {
   requested.push(req.url);
-  if(req.url === '/3d/config') {res.setHeader('Content-Type','application/json');res.end(JSON.stringify({publishable_key:key}));return;}
+  if(req.url === '/3d/config') {res.setHeader('Content-Type','application/json');res.end(JSON.stringify({configured,publishable_key:configured?key:''}));return;}
   if(req.url.startsWith('/v1/')) {
     if(req.headers['x-rig-key'] !== key || deny) {res.writeHead(403);res.end();return;}
     if(req.url.endsWith('/events')) {
@@ -69,6 +69,26 @@ try {
         }
       }
     });
+    const unconfiguredStart = requested.length;
+    configured = false;
+    await page.goto(url + '/3d/');
+    await page.waitForFunction(()=>document.querySelector('#connection').textContent === '3D product view');
+    assert.equal(await page.locator('#today-count').textContent(),'0');
+    assert.equal(await page.locator('#active-count').textContent(),'0');
+    assert.equal(await page.locator('#receipt').isVisible(),false);
+    assert.equal(await page.locator('#retry').isVisible(),false);
+    assert.equal(await page.locator('#start-build').textContent(),'Start a new build');
+    assert.equal(await page.locator('#start-build').getAttribute('href'),'https://app.tervory.com/rig/admin/three-d');
+    await page.locator('#start-build').focus();
+    assert.equal(await page.evaluate(()=>document.activeElement.id),'start-build');
+    await page.clock.setSystemTime(new Date(Date.now()+61000)); await page.waitForTimeout(1100);
+    assert.equal(await page.locator('body').getAttribute('data-attract'),'true');
+    assert(!requested.slice(unconfiguredStart).some(name=>name.startsWith('/v1/') || name.includes('terminal-runtime')));
+    configured = true;
+    const connected = page.waitForResponse(response=>response.url().endsWith('/v1/rig/3d/terminal/events'));
+    await page.clock.fastForward(31000);
+    assert.equal((await connected).status(),200);
+    await page.clock.setSystemTime(new Date());
     const before = requested.length;
     await page.goto(url + '/3d/');
     await page.waitForFunction(()=>document.querySelector('#connection').textContent === '3D product view');
