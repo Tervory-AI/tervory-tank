@@ -1,6 +1,6 @@
 {
   "product": "tisan",
-  "source_sha": "0ffe302bc9b69eea3cbeffd63bc02f415ceb7697",
+  "source_sha": "4f51f6462f9674ac3edac75840ac7b6443dfe2c4",
   "entrypoints": [
     "POST /v1/command/tisan/plan -> shipped product_identity/paid_http -> POST /plan/start; same-request verified actor persisted in agent_tisan.job_actors",
     "chassis.worker.claim_next/run_claimed -> chassis.app._context -> plan_jobs.owner -> builder.execute -> real Hermes -> TankClient and stable paid_run_id -> actual Tank paid checkpoint",
