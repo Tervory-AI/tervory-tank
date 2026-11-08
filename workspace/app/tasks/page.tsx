@@ -4,6 +4,7 @@ import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackButtons } from "../feedback-buttons";
 import "./tasks.css";
+import { TaskReceipt } from "./receipt";
 
 type Status = "queued" | "running" | "done" | "failed";
 type Task = {
@@ -18,6 +19,8 @@ type Task = {
   model?: string | null;
   rung?: number | null;
   cost_usd?: number | string | null;
+  baseline_cost_usd?: number | string | null;
+  baseline_status?: string | null;
   latency_ms?: number | null;
   feedback?: "accepted" | "rejected" | null;
 };
@@ -130,7 +133,7 @@ export default function TasksPage() {
   return (
     <div className="tasks-page">
       <h1>Tasks</h1>
-      {!tasks.length && <p className="empty">Add a task to fill this board.</p>}
+      {!tasks.length && <><p className="empty">Add a task to fill this board.</p><TaskReceipt cost={null} baseline={null} ledgerId={null} /></>}
       {submissionUnknown && <p role="status">The task could not be confirmed. Reload tasks to check whether it was created. Do not submit it again.</p>}
       <form onSubmit={submit} className="task-form">
         <label htmlFor="task-title">Title</label>
@@ -187,6 +190,7 @@ export default function TasksPage() {
                       {t.model} · rung {t.rung ?? "—"} · {t.cost_usd == null ? "—" : `$${Number(t.cost_usd).toFixed(5)}`} · {t.latency_ms ?? "—"} ms
                     </div>
                   )}
+                  <TaskReceipt cost={t.cost_usd} baseline={t.baseline_cost_usd} status={t.baseline_status} ledgerId={t.ledger_id} />
                   {t.status === "done" && t.ledger_id && (
                     <div className="meta">
                       <FeedbackButtons ledgerId={t.ledger_id} initial={t.feedback ?? null} />

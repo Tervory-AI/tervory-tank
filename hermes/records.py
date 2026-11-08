@@ -188,6 +188,42 @@ class Records:
             "index_pending": index and saved["embed_model"] != self.model,
         }
 
+    async def edit(self, agent: str, tenant: str, row_id: str, claim: str,
+                   evidence: list[str], *, user_id: str, kind: str, meta: dict,
+                   confidence: float = 0.5, last_verified: datetime | None = None) -> dict | None:
+        """Explicit personal edit; create/idempotent replay retains save's conflict rules."""
+        if not user_id or meta.get("user_id") != user_id:
+            raise ValueError("Personal edit requires matching user_id")
+        try:
+            await asyncio.to_thread(self.encoder.validate, claim)
+        except ValueError as exc:
+            raise ClaimTooLong(str(exc)) from None
+        s = self.schema(agent)
+        tenant_id, identity = uuid.UUID(tenant), uuid.UUID(row_id)
+        async with self.pool.acquire() as conn, conn.transaction():
+            await self.lock(conn, s, identity)
+            row = await conn.fetchrow(_sql("""UPDATE {schema}.memory_records
+                SET claim=$4,evidence=$5::jsonb,meta=$6::jsonb,confidence=$7,
+                    last_verified=$8,embed_model='',updated_at=now()
+                WHERE id=$1 AND tenant_id=$2 AND tier='client'
+                  AND meta->>'user_id'=$3 AND kind=$9 RETURNING id""", s),
+                identity, tenant_id, user_id, claim, json.dumps(evidence),
+                json.dumps(meta), confidence, last_verified, kind)
+            if row is None:
+                return None
+            # A changed claim gets its own retry budget. Stale vectors remain
+            # invisible until the committed new claim has been re-indexed.
+            await conn.execute(_sql("""DELETE FROM {schema}.memory_index_jobs
+                WHERE row_id=$1 AND tenant_id=$2 AND operation='upsert'""", s), identity, tenant_id)
+            await self.enqueue(conn, s, identity, tenant_id, self.model)
+        await self.process_one(agent, tenant_id, identity, self.model)
+        saved = await self.get(agent, tenant, row_id, user_id=user_id)
+        if saved is None:
+            return None
+        return {**saved, "text": saved["claim"], "sources": saved["evidence"],
+                "source": next(iter(saved["evidence"]), ""), "updated": True,
+                "index_pending": saved["embed_model"] != self.model}
+
     async def enqueue(
         self,
         conn: Any,

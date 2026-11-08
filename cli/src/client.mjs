@@ -523,7 +523,7 @@ export async function run(argv, { store, transport, io, env = process.env }) {
   }
   if (flags.output !== undefined || ((flags.resume !== undefined || flags.plain !== undefined) && name !== 'code')) throw new Error('Invalid command option.');
   if (!name || name === 'help') {
-    io.write('tervory login [--region us-east|za] | logout | chat [thread] | code [folder] [--resume] [--plain] | -p "<task>" [--output json|text] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] [--dry-run --output json|text] | build "change" | receipts <thread|task> | mcp secret <server> <name> | mcp block|unblock <server> | update [--version X.Y.Z] | version\n');
+    io.write('tervory login [--region us-east|za] | logout | chat [thread] | code [folder] [--resume] [--plain] | -p "<task>" [--output json|text] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] [--dry-run --output json|text] | build "change" | receipts <thread|task> | memory view|edit|forget|off|control <args> | mcp secret <server> <name> | mcp block|unblock <server> | update [--version X.Y.Z] | version\n');
     return;
   }
   if (name === 'update') {
@@ -563,6 +563,47 @@ export async function run(argv, { store, transport, io, env = process.env }) {
     await tank.json('/v1/command/code-mcp-policy', { server_id, blocked: rest[0] === 'block' }, 'PUT');
     io.write('MCP policy updated.\n'); return;
   }
+
+  if (name === 'memory') {
+    // Live view/edit/forget/switch-off via Tank /v1/command/opli/memory.* (tenant+user scoped).
+    if (Object.keys(flags).length) throw new Error('Invalid command option.');
+    const action = rest[0];
+    if (!['view', 'edit', 'forget', 'off', 'control'].includes(action)) {
+      throw new Error('memory requires view, edit, forget, off, or control.');
+    }
+    if (action === 'view') {
+      if (rest.length > 2) throw new Error('Invalid command option.');
+      const task_key = rest[1] || 'memory_control';
+      const result = await tank.json(`/v1/command/opli/memory.view?task_key=${encodeURIComponent(task_key)}&memory_control=view`);
+      io.write(`${safe(JSON.stringify(result, null, 2))}\n`);
+      return result;
+    }
+    if (action === 'off' || (action === 'control' && rest[1])) {
+      const control = action === 'off' ? 'off' : rest[1];
+      if (!['off', 'view', 'edit', 'forget'].includes(control) || rest.length !== (action === 'off' ? 1 : 2)) {
+        throw new Error('memory control accepts off, view, edit, or forget.');
+      }
+      const result = await tank.json('/v1/command/opli/memory.control', { control });
+      io.write(`Memory control set to ${safe(control)}.\n`);
+      return result;
+    }
+    if (action === 'forget') {
+      if (rest.length !== 2) throw new Error('memory forget requires a memory id.');
+      const result = await tank.json('/v1/command/opli/memory.forget', { memory_id: rest[1], memory_control: 'forget' });
+      io.write(`Forgot memory ${safe(rest[1])}.\n`);
+      return result;
+    }
+    if (action === 'edit') {
+      if (rest.length < 3) throw new Error('memory edit requires a memory id and text.');
+      const memory_id = rest[1];
+      const body = rest.slice(2).join(' ');
+      const result = await tank.json('/v1/command/opli/memory.edit', { memory_id, text: body, memory_control: 'edit' });
+      io.write(`Edited memory ${safe(memory_id)}.\n`);
+      return result;
+    }
+    throw new Error('memory requires view, edit, forget, off, or control.');
+  }
+
   if (name === 'code') {
     if (rest.length > 1 || Object.keys(flags).some(flag => !['model', 'resume','plain'].includes(flag))) throw new Error('Invalid command option.');
     return codeSession(tank, rest[0] ?? '.', flags.model ?? 'auto', io, receiptLines, safe, { resume: flags.resume });

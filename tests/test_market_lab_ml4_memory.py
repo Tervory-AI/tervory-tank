@@ -72,14 +72,11 @@ async def test_private_save_fake_encoder_founder_only_publish_and_other_tenant_s
         assert await client.records(m.other, tier='platform') == []
 
         # The actual Tank route proxies into Hermes's existing founder routes.
-        async def corridor(method, path, actor, **kwargs):
-            response = await http.request(method, path, json=kwargs.get('body'), params=kwargs.get('params'),
-                                          headers={'X-Tank-Key': 'placeholder-workspace', 'X-Tervory-Admin': actor})
-            from fastapi import HTTPException
-            if not response.is_success:
-                raise HTTPException(response.status_code, response.json().get('detail'))
-            return response.json()
-        monkeypatch.setattr(memory_routes, 'hermes', corridor)
+        client_type = httpx.AsyncClient
+        def transport(**kwargs):
+            kwargs.setdefault('transport', httpx.ASGITransport(app=app))
+            return client_type(**kwargs)
+        monkeypatch.setattr(memory_routes.httpx, 'AsyncClient', transport)
         tank = FastAPI()
         tank.include_router(memory_routes.router)
         headers = {'X-Tank-Key': 'placeholder-workspace', 'X-Tervory-Admin': 'placeholder-founder'}
