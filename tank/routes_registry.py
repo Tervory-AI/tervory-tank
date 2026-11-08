@@ -38,6 +38,7 @@ ROUTES = (
     ('early', 'mobile_push', 'router', None, True),
     ('late', 'ghost_routes', 'router', None, True),
     ('late', 'research', 'register', ('app', 'globals'), False),
+    ('late', 'tiger_savings', 'build_router', ('tank',), True),
     ('late', 'command', 'router', None, True),
     ('late', 'command_tools.workspace', 'build_router', (), True),
     ('late', 'command_tools.opli_memory', 'build_router', (), True),

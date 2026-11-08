@@ -674,9 +674,10 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     # Its own queued background calls only; route_job checks the caller.
     job_route = request.method == "GET" and path.startswith("/v1/route/jobs/") and path.count("/") == 4
     event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle", "/v1/mobile/notify"}
+    tiger_savings = matched == "tiger" and request.method == "POST" and path == "/v1/tiger/savings"
     paid_status = request.method == "GET" and re.fullmatch(r"/v1/paid-steps/approvals/[0-9a-fA-F-]{36}", path)
     paid_admit = matched == "base" and request.method == "POST" and path == "/v1/paid-steps/admit"
-    if path not in {"/health", "/v1/route"} and not paid_status and not paid_admit and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
+    if path not in {"/health", "/v1/route"} and not tiger_savings and not paid_status and not paid_admit and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -3883,6 +3884,16 @@ async def _run_one_skill(
     if state != "approved" and not body.preview:
         raise HTTPException(status_code=409, detail=f"{pkg.ref} is {state!r}; only approved versions run for clients")
     ctx = make_ctx(pkg, body.tenant_id, preview=body.preview)
+    if caller == 'tiger':
+        ctx._tiger_run_id = uuid.uuid4()
+        ctx._tiger_ledger_ids = []
+        routed_model = ctx._model
+        async def metered_model(**kwargs):
+            result = await routed_model(**kwargs)
+            if result.get('ledger_id'):
+                ctx._tiger_ledger_ids.append(result['ledger_id'])
+            return result
+        ctx._model = metered_model
     if caller:
         ctx.agent = caller
     if caller == "base":
@@ -3898,18 +3909,23 @@ async def _run_one_skill(
         receipt_policy = {"priority": "standard", "acceptance_window_s": 86400}
     await _preflight_mask(request, receipt_policy, [m.model_dump() for m in request.messages], ctx.task_id)
     try:
-        out = await skala.run_skill(pkg, body.input, ctx)
+        if caller == "tiger":
+            out = await __import__('tiger_savings').cached_extract(__import__('sys').modules[__name__], pkg, body, ctx)
+        else:
+            out = await skala.run_skill(pkg, body.input, ctx)
     except Exception:
         if pkg.task_type is None and not ctx.calls and not ctx.cost_usd:
             await _record_local(request, receipt_policy, model="skill:"+pkg.ref, rung=3,
                                 content="", outcome="failed", error="skill_error", task_id=ctx.task_id)
         raise
     if not ctx.calls and not ctx.cost_usd:
-        receipt = await _record_local(request, receipt_policy, model="skill:"+pkg.ref, rung=3,
+        receipt = await _record_local(request, receipt_policy, model="skill:"+pkg.ref, rung=4 if getattr(ctx, "_tiger_cache_hit", False) else 3,
                                       content=json.dumps(out), outcome="unverified" if body.preview else "delivered", task_id=ctx.task_id)
         out["_ledger_id"] = str(receipt.ledger_id)
         out["_receipt"] = receipt.model_dump(mode="json")
     out["_cost_usd"] = round(ctx.cost_usd, 6)
+    if caller == "tiger" and not body.preview:
+        out['_savings'] = await __import__('tiger_savings').skill_receipt(__import__('sys').modules[__name__], pkg, body, ctx, out)
     if getattr(ctx, "memory_receipts", None):
         out["_memory_receipts"] = ctx.memory_receipts
     return out
@@ -4374,6 +4390,33 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
 # The Workspace is not on Tiger's corridor. These routes forward to the Tiger
 # agent and stamp the caller's tenant_id on the way. Rows for any other tenant
 # are dropped before the response leaves Tank.
+
+async def tiger_savings_record(request: Request, caller: str | None = Depends(require_key)):
+    if caller != 'tiger':
+        raise HTTPException(403, 'Tiger room credential required')
+    from tiger_savings import Run, record
+    from pydantic import ValidationError
+    try:
+        body = Run.model_validate(await request.json())
+    except (ValidationError, ValueError):
+        raise HTTPException(422, 'Invalid Tiger receipt') from None
+    if request.headers.get('x-tenant-id') not in (None, str(body.tenant_id)):
+        raise HTTPException(403, 'tenant mismatch')
+    with tenant_scope(body.tenant_id):
+        async with pool().acquire() as conn:
+            async with conn.transaction():
+                return await record(conn, body)
+
+
+async def tiger_savings_list(request: Request):
+    from tiger_savings import listed
+    tenant = _tiger_tenant(request)
+    if request.headers.get('x-tenant-id') not in (None, str(tenant)):
+        raise HTTPException(403, 'tenant mismatch')
+    with tenant_scope(tenant):
+        async with pool().acquire() as conn:
+            return {'receipts': await listed(conn, tenant)}
+
 
 TIGER_AGENT_URL = "http://agent-tiger:8000"
 _TIGER_LIST_KEYS = ("watches", "observations", "alerts")

@@ -50,7 +50,7 @@ async def test_identity_roles_and_region(runtime, monkeypatch):
     headers = {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-tenant': str(TENANT),
                'x-tervory-user': 'client', 'x-tervory-squad': 'tiger'}
     actor = await command.identity(request(**headers))
-    assert command.allowed_tools(actor) == sorted([*command.TENANT_TOOLS, 'plugins.list', 'tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.match.undo', 'tiger.matches', 'tiger.position', 'tiger.read', 'tiger.watch', 'tiger.watch.bulk', 'tiger.watch.pause', 'tiger.watch.remove', 'tiger.watch.resume', 'tiger.watches'])
+    assert command.allowed_tools(actor) == sorted([*command.TENANT_TOOLS, 'plugins.list', 'tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.match.undo', 'tiger.matches', 'tiger.position', 'tiger.read', 'tiger.receipts', 'tiger.watch', 'tiger.watch.bulk', 'tiger.watch.pause', 'tiger.watch.remove', 'tiger.watch.resume', 'tiger.watches'])
     with pytest.raises(HTTPException) as refused:
         command.require_tool(actor, 'worker.build')
     assert refused.value.status_code == 403
@@ -60,6 +60,7 @@ async def test_identity_roles_and_region(runtime, monkeypatch):
     assert 'zenas.review' in command.allowed_tools(founder)
     assert 'training.status' in command.allowed_tools(founder)
     assert {'training.run', 'training.receipt'} <= set(command.allowed_tools(founder))
+    assert 'tiger.receipts' not in command.allowed_tools(command.Actor(TENANT, 'placeholder-other-user', False))
     assert 'training.status' not in command.allowed_tools(command.Actor(TENANT, 'placeholder-admin', False, tenant_admin=True))
     assert not {'training.run', 'training.receipt'} & set(command.allowed_tools(command.Actor(TENANT, 'placeholder-admin', False, tenant_admin=True)))
     headers['x-tervory-home-region'] = 'za'
@@ -974,7 +975,7 @@ async def test_tenant_squad_grants_are_founder_only_isolated_and_logged(api, mon
     grants = (await client.get('/v1/command/squads')).json()
     assert len(grants) == 7
     assert next(g for g in grants if g['agent'] == 'tiger')['enabled_by'] == 'founder'
-    assert (await client.get('/v1/command/tools', headers=client_headers)).json() == sorted([*command.TENANT_TOOLS, 'plugins.list', 'tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.match.undo', 'tiger.matches', 'tiger.position', 'tiger.read', 'tiger.watch', 'tiger.watch.bulk', 'tiger.watch.pause', 'tiger.watch.remove', 'tiger.watch.resume', 'tiger.watches'])
+    assert (await client.get('/v1/command/tools', headers=client_headers)).json() == sorted([*command.TENANT_TOOLS, 'plugins.list', 'tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.match.undo', 'tiger.matches', 'tiger.position', 'tiger.read', 'tiger.receipts', 'tiger.watch', 'tiger.watch.bulk', 'tiger.watch.pause', 'tiger.watch.remove', 'tiger.watch.resume', 'tiger.watches'])
     assert (await client.get('/v1/command/tools', headers={**client_headers, 'x-tervory-tenant': str(OTHER)})).json() == sorted(command.TENANT_TOOLS)
     assert (await client.get('/v1/command/squads/log', headers={'x-tervory-tenant': str(OTHER)})).json() == []
     assert (await client.put('/v1/command/squads/worker', json={'enabled': True})).status_code == 422

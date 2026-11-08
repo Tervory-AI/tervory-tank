@@ -1940,6 +1940,8 @@ async def record_receipts(conn: Any, row: dict, state: dict, step_id: str, ids: 
     # Mutate the JSON state only after every provenance claim has passed.
     for ledger_id in ids:
         receipt = receipt_row(by_id[str(ledger_id)], step_id)
+        if by_id[str(ledger_id)].get('agent') == 'tiger':
+            receipt = await __import__('tiger_savings').command_comparison(conn, receipt, row['tenant_id'], step_id, ids)
         requested_model = state["steps"].get(step_id, {}).get("requested_model")
         if requested_model not in (None, "auto"):
             price = state["steps"].get(step_id, {}).get("auto_comparison") or {}
@@ -2047,6 +2049,19 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         ids = explicit_ledger_ids(result)
         async with editing(thread_id, actor) as (conn, row, state):
             card = state["cards"][card_id]
+            if action.tool.startswith('tiger.'):
+                if not ids and 200 <= status < 300:
+                    from trigger_routes import code_receipt
+                    ledger = await code_receipt(actor.tenant_id, action.tool, task_id=uuid.UUID(card_id), agent='tiger', conn=conn)
+                    ids = [ledger]
+                    result = {**result, 'ledger_id': str(ledger)}
+                from tiger_savings import Run, record, public
+                savings = await record(conn, Run(tenant_id=actor.tenant_id, id=uuid.UUID(card_id),
+                    action=action.tool, input=action.arguments,
+                    output=result if 200 <= status < 300 and isinstance(result, dict) else {'status': 'failed'},
+                    failed=not 200 <= status < 300), ledger_ids=ids)
+                if isinstance(result, dict) and 200 <= status < 300:
+                    result = {**result, 'savings': public(savings)}
             card["status"] = "confirmed" if 200 <= status < 300 else "failed"
             card["retry_safe"] = False  # Never repeat an attempted side effect.
             card["evidence_ids"] = [str(x) for x in ids]

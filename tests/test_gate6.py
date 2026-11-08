@@ -153,8 +153,7 @@ def tool(monkeypatch, tank):
         return JSONResponse(response.json())
     main.list_tasks, main.create_task, main.ledger_feedback, main.base_proxy = tasks, create, feedback, base_response
     # Gates 7+8 fail closed without a memory client; offline FakeMemory keeps the bracket live.
-    sys.path.insert(0, str(ROOT / 'integrations' / 'workspace'))
-    from gates_memory import FakeMemory
+    from integrations.workspace.gates_memory import FakeMemory
     main.memory = FakeMemory()
     monkeypatch.setitem(sys.modules, 'main', main)
     monkeypatch.setitem(sys.modules, 'agent_skills', SimpleNamespace(input_encoding=encoding))
