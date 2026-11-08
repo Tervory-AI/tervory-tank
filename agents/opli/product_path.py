@@ -113,6 +113,8 @@ async def run_opli_code_turn_with_memory(
             outcome = f"code-turn:{task_payload.get('task_type') or 'command.code'}"
         return {
             "cost_usd": cost,
+            "paid_calls": sum(1 for row in (result.get("receipt") or {}).get("rows", [])
+                              if row.get("cost_usd") is not None and float(row["cost_usd"]) > 0),
             "tokens_in": tokens_in,
             "tokens_out": tokens_out,
             "result": {
@@ -145,16 +147,21 @@ async def run_opli_code_turn_with_memory(
         "answered_from_memory": receipt.get("answered_from_memory"),
         "task_key": task_key,
         "input_hash": receipt.get("input_hash"),
+        "memory_unavailable": receipt.get("memory_unavailable", False),
+        "would_have_cost_usd": receipt.get("would_have_cost_usd", receipt["cost_usd"]),
+        "would_have_tokens_in": receipt.get("would_have_tokens_in", receipt["tokens_in"]),
+        "would_have_tokens_out": receipt.get("would_have_tokens_out", receipt["tokens_out"]),
     }
     if isinstance(raw, dict) and not receipt.get("answered_from_memory"):
         return {**raw, "memory_bracket": bracket}
-    return {
-        "answer": result_obj.get("outcome") or "answered from memory",
-        "requests": [],
-        "cards": [],
-        "receipt": {"rows": [], "totals": {"cost_usd": 0}},
-        "memory_bracket": bracket,
-    }
+    # A free answer is still a command turn: reserve the request in the existing
+    # durable thread/task corridor, enforce ownership and replay guards, and
+    # persist its zero-cost ledger receipt before exposing the answer.
+    completed = await command.code_turn(
+        thread_id, body, actor,
+        _memory_answer=result_obj.get("outcome") or "answered from memory",
+    )
+    return {**completed, "memory_bracket": bracket}
 
 
 __all__ = [
