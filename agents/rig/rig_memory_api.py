@@ -12,7 +12,7 @@ from uuid import UUID
 
 from chassis.user_assertion import signed_user
 from fastapi import FastAPI, HTTPException, Query, Request
-from gates_memory import (
+from rig_memory import (
     MEMORY_OFF_KIND,
     MEMORY_OFF_SOURCE,
     MEMORY_OFF_TEXT,

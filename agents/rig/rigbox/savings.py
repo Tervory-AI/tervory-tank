@@ -236,6 +236,9 @@ def measured(service, action, call):
 
 
 def instrument(service):
+    from rig_memory import memory_enabled
+    if not memory_enabled():
+        return
     for name in ACTIONS:
         call = getattr(service, name, None)
         if call is not None:

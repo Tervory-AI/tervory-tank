@@ -9,6 +9,8 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents/rig"))
 from fastapi import FastAPI
 
 import rig_savings

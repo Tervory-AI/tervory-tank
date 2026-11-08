@@ -596,7 +596,8 @@ class Service:
         from .savings import reference
         reference(prompt)
         structured = getattr(self.models, 'structured', None)
-        if structured is not None:
+        from rig_memory import memory_enabled
+        if structured is not None and memory_enabled():
             return await structured(tenant_id, task, payload)
         return await self.models.complete(tenant_id, task, [{'role': 'user', 'content': prompt}])
 

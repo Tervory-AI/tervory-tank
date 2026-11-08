@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents" / "rig"))
 
-from offline_box import OfflineBox, demo_catalogue
+from rig_offline_box_fixture import OfflineBox, demo_catalogue
 
 
 @pytest.fixture

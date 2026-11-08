@@ -87,7 +87,7 @@ class CartOrder(CartSession):
 MAIN = ['rig.search', 'rig.ask', 'rig.product', 'rig.setups', 'rig.graph', 'rig.compare', 'rig.swap',
         'rig.quote', 'rig.receipts', 'rig.receipt', 'rig.suggest', 'rig.forge.submit', 'rig.forge.poll', 'rig.forge.approve', *['rig.cart.' + action for action in ('session','view','add','remove','checkout','order')]]
 ADMIN = ['rig.receipts', 'rig.receipt', 'rig.suggest', 'rig.forge.submit', 'rig.forge.poll', 'rig.forge.approve']
-TOOLS = {'rig': ['rig.search', 'rig.ask', 'rig.quote.confirm_payment', 'rig.store.onboard', 'rig.rooms.list', 'rig.store.destroy', *MAIN[2:]]}
+TOOLS = {'rig': ['rig.search', 'rig.ask', 'rig.quote.confirm_payment', 'rig.store.onboard', 'rig.rooms.list', 'rig.store.destroy', 'rig.product', 'rig.setups', 'rig.graph', 'rig.compare', 'rig.swap', 'rig.quote', 'rig.receipts', 'rig.receipt', 'rig.suggest', 'rig.forge.submit', 'rig.forge.poll', 'rig.forge.approve', 'rig.cart.session', 'rig.cart.view', 'rig.cart.add', 'rig.cart.remove', 'rig.cart.checkout', 'rig.cart.order']}
 FOUNDER_TOOLS = []
 TENANT_ADMIN_TOOLS = ['rig.quote.confirm_payment', *ADMIN]
 ADMIN_ONLY_TOOLS = frozenset(['rig.quote.confirm_payment', 'rig.store.onboard', 'rig.rooms.list', 'rig.store.destroy', *ADMIN])
@@ -97,7 +97,7 @@ CONFIRMED = frozenset(['rig.quote.confirm_payment', 'rig.store.onboard', 'rig.st
 def adapters(command):
     return {
         'rig.search': command.Adapter('GET', '/v1/rig/tools/search', SearchArgs, 'Search the product catalogue'),
-        'rig.ask': command.Adapter('POST', '/v1/rig/tools/ask', command.RigAskArgs, 'Ask about a product'),
+        'rig.ask': command.Adapter('POST', '/v1/rig/tools/ask', command.RigAskArgs, 'Ask about a product', True, 'paid_run'),
         'rig.quote.confirm_payment': command.Adapter('POST', '/v1/access/rig/admin/confirm-store-payment', command.RigConfirmPaymentArgs, 'rig.quote.confirm_payment'),
         'rig.store.onboard': command.Adapter('POST', '/v1/access/rig/rooms/onboard', command.EmptyArgs, 'rig.store.onboard'),
         'rig.rooms.list': command.Adapter('POST', '/v1/access/rig/rooms/list', command.EmptyArgs, 'rig.rooms.list'),

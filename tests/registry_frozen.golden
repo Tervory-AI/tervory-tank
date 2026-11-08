@@ -3366,8 +3366,8 @@
           "method": "POST",
           "path": "/v1/rig/tools/ask",
           "label": "Ask about a product",
-          "paid": false,
-          "kind": "other",
+          "paid": true,
+          "kind": "paid_run",
           "skill": null,
           "arguments": {
             "additionalProperties": false,

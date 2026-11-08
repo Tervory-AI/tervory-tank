@@ -6,8 +6,10 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents/rig"))
 from rig_memory_fakes import FakeMemory
-from gates_memory import (
+from rig_memory import (
     MemoryScopeError,
     is_cache_eligible,
     memory_enabled,
@@ -34,6 +36,25 @@ async def test_unset_memory_never_reads_writes_or_reuses(monkeypatch):
     memory.recall.assert_not_called()
     memory.remember.assert_not_called()
     paid.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_default_off_preserves_model_path_without_new_receipt_writes(monkeypatch):
+    from rigbox.service import Service
+    from rigbox.store import MemoryStore
+    monkeypatch.delenv('RIG_MEMORY_ENABLED', raising=False)
+    models = SimpleNamespace(
+        complete=AsyncMock(return_value='placeholder answer'),
+        structured=AsyncMock(side_effect=AssertionError('New code cache must remain off')))
+    store = MemoryStore()
+    service = Service(store, models)
+    result = await service._complete('placeholder-tenant', 'rig.ask', {}, 'placeholder original prompt')
+    assert result == 'placeholder answer'
+    models.complete.assert_awaited_once_with('placeholder-tenant', 'rig.ask',
+        [{'role': 'user', 'content': 'placeholder original prompt'}])
+    models.structured.assert_not_called()
+    assert not hasattr(store, '_savings_runs')
+    assert not hasattr(service, '_savings_tasks')
 
 
 @pytest.mark.asyncio
@@ -106,7 +127,7 @@ async def test_shipped_model_client_never_fills_in_fixture_prices(monkeypatch, c
 
 @pytest.mark.asyncio
 async def test_model_bracket_rejects_actor_tenant_mismatch_before_any_work(monkeypatch):
-    from actor_context import reset_verified_actor, set_verified_actor
+    from rig_actor_context import reset_verified_actor, set_verified_actor
     from test_rig import _load_rig_app
     module = _load_rig_app()
     tank = SimpleNamespace(route=AsyncMock())

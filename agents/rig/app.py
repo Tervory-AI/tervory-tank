@@ -154,9 +154,9 @@ _close_public_surface(app)
 mount_page(app)
 
 # Gates 7+8: memory VIEW/EDIT/FORGET/SWITCH-OFF through signed lifecycle identity.
-from memory_api import attach_memory_routes
+from rig_memory_api import attach_memory_routes
 attach_memory_routes(app)
-from actor_context import VerifiedActorMiddleware
+from rig_actor_context import VerifiedActorMiddleware
 app.add_middleware(VerifiedActorMiddleware)
 
 
@@ -445,16 +445,18 @@ async def _lifespan(app: FastAPI):
         from rigbox.price_events import consume_loop
         consumer = asyncio.create_task(consume_loop(service, app.state.http))
         from rigbox.savings import worker as savings_worker
-        savings_task = asyncio.create_task(savings_worker(service))
+        from rig_memory import memory_enabled
+        savings_task = asyncio.create_task(savings_worker(service)) if memory_enabled() else None
         try:
             async with serve_retailer(service):
                 yield
         finally:
-            savings_task.cancel()
+            if savings_task is not None:
+                savings_task.cancel()
             pending = list(getattr(service, '_savings_tasks', ()))
             for task in pending:
                 task.cancel()
-            await asyncio.gather(savings_task, *pending, return_exceptions=True)
+            await asyncio.gather(*([savings_task] if savings_task is not None else []), *pending, return_exceptions=True)
             consumer.cancel()
             await asyncio.gather(consumer, return_exceptions=True)
             if cart_worker is not None:
@@ -471,8 +473,8 @@ from rigbox.inference import Models
 class _TankModels(Models):
     async def complete(self, tenant_id: str, task_type: str, messages: list[dict[str, str]]) -> str:
         from rigbox.savings import model_started, model_result
-        from actor_context import get_verified_actor
-        from gates_memory import MemoryScopeError, run_with_memory
+        from rig_actor_context import get_verified_actor
+        from rig_memory import MemoryScopeError, run_with_memory
         from rig_brain_client import brain_then_route
         async with asyncio.timeout(150):
             # Code/free passes first; brain only for gaps; Tank route carries the paid call.

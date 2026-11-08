@@ -12,7 +12,7 @@ def brain_enabled() -> bool:
 
 async def brain_then_route(http: Any, tank: Any, *, tenant_id: str, task_type: str,
                            messages: list[dict[str, str]], run_id: str | None = None) -> dict[str, Any]:
-    from actor_context import get_verified_actor
+    from rig_actor_context import get_verified_actor
     from chassis.user_assertion import SignedUser
     from rigbox.savings import active
     del http  # Private discovery, forwarding and timeouts belong to Tank.

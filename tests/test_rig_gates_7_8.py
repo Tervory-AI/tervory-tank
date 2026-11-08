@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "vendor" / "tervory-tank" / "agents" / "_chassis")
 sys.path.insert(0, str(ROOT / "vendor" / "tervory-tank"))
 
 from rig_memory_fakes import FakeMemory, FIXED_FAKE_PER_CALL
-from gates_memory import (
+from rig_memory import (
     MEMORY_OFF_KIND,
     MEMORY_OFF_SOURCE,
     MEMORY_OFF_TEXT,
@@ -34,7 +34,7 @@ from gates_memory import (
     select_tenant_user_memories,
     task_input_fingerprint,
 )
-from memory_api import attach_memory_routes
+from rig_memory_api import attach_memory_routes
 from rig_brain_client import brain_enabled
 
 
@@ -562,7 +562,7 @@ async def test_brain_actually_called_when_enabled(monkeypatch):
     from rig_brain_client import brain_then_route
 
     monkeypatch.setenv("RIG_BRAIN_ENABLED", "true")
-    from actor_context import set_verified_actor, reset_verified_actor
+    from rig_actor_context import set_verified_actor, reset_verified_actor
     tenant, user = str(uuid4()), "placeholder-owner"
     calls = {"http": 0, "tasks": 0, "route": 0}
 
@@ -662,7 +662,7 @@ async def test_memory_outage_answers_without_memory_never_repeat():
 
 @pytest.mark.asyncio
 async def test_missing_tenant_or_user_refused():
-    from gates_memory import MemoryScopeError
+    from rig_memory import MemoryScopeError
 
     memory = FakeMemory()
 

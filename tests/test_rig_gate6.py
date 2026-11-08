@@ -9,6 +9,8 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents/rig"))
 from fastapi import FastAPI
 
 from rigbox import inference, savings
@@ -20,6 +22,11 @@ from test_rig import _loaded, TENANT, OTHER
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / 'tests/fixtures/rig_savings/recorded.json'
+
+
+@pytest.fixture(autouse=True)
+def explicitly_enable_new_code_cache_and_receipts(monkeypatch):
+    monkeypatch.setenv('RIG_MEMORY_ENABLED', 'true')
 
 
 @pytest.mark.asyncio
@@ -162,7 +169,8 @@ def test_mcp_adapters_validate_all_main_actions_and_do_not_allow_identity(monkey
     listed = {row['name']: row for row in mcp_server.tools(actor)['tools']}
     assert set(MAIN) <= listed.keys()
     assert listed['rig.search']['annotations']['readOnlyHint']
-    assert not command.ADAPTERS['rig.ask'].paid
+    # Preserve main's paid preflight; optional code/cache work must not remove it.
+    assert command.ADAPTERS['rig.ask'].paid
     for name in MAIN:
         assert 'tenant_id' not in listed[name]['inputSchema']['properties']
         assert listed[name]['inputSchema']['additionalProperties'] is False

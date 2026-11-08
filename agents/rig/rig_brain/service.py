@@ -10,14 +10,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
-from actor_context import reset_verified_actor, set_verified_actor
+from rig_actor_context import reset_verified_actor, set_verified_actor
 from brain.security import tenant_dir
 from chassis.memory import MemoryClient
 from chassis.sqlite_nonces import SQLiteNonces
 from chassis.user_assertion import HEADER, signed_user
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from gates_memory import run_with_memory
+from rig_memory import run_with_memory
 
 from rig_brain.room import Question, authorize
 

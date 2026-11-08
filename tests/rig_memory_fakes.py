@@ -1,7 +1,7 @@
 """Offline Rig unit-test memory and provider tariff; never shipped in the room."""
 from copy import deepcopy
 from typing import Any
-from gates_memory import memory_kinds, _text_has_secret
+from rig_memory import memory_kinds, _text_has_secret
 
 FIXED_FAKE_PER_CALL = {"cost_usd": 0.05, "tokens_in": 10, "tokens_out": 3}
 
