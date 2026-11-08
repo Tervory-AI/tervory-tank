@@ -12,6 +12,7 @@ import uuid
 
 import pytest
 import yaml
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 from gates78.products.autumbra_stack import autumbra, A, B, TASK, TEXT, COST, TOKENS_IN, TOKENS_OUT, ROOT
 
 # Imported fixture is intentionally part of this module's public pytest surface.
@@ -243,8 +244,9 @@ async def test_direct_tank_route_default_off_has_no_work(autumbra, monkeypatch, 
     payload = {'tenant_id':b.stack.tenant,'task_type':TASK,'messages':[{'role':'user','content':TEXT}]}
     async with b.tank.pool().acquire() as conn:
         policies = await conn.fetch("SELECT semantic_cache,cache_scope,matter_matching FROM tank.policy WHERE task_type LIKE 'ghost.brain.%'")
-        assert len(policies) == 4
-        assert all(not p['semantic_cache'] and p['cache_scope'] == 'none' and p['matter_matching'] for p in policies)
+        assert policies == []  # Reuse agent.ghost.think; no new paid task policies.
+        policy = await conn.fetchrow("SELECT model,cache_scope FROM tank.policy WHERE task_type='agent.ghost.think'")
+        assert policy['model'] == b.state.policy_model and policy['cache_scope'] == 'none'
         tables = ('ledger','engine_state','engine_evals','route_cache')
         before = [await conn.fetchval('SELECT count(*) FROM tank.'+table) for table in tables]
     response = await b.client.post('/v1/route',json=payload,headers={'X-Tank-Key':b.stack.key})
@@ -298,7 +300,7 @@ async def test_actual_task_receipt_remember_and_exact_business_repeat(autumbra):
     assert first_calls == 1 and len(b.state.provider_calls) == 2
     import engine_ladder
     assert b.state.catalogue == engine_ladder.order({'model':'luna'})
-    assert all(call['model'] == b.state.catalogue[0] for call in b.state.provider_calls)
+    assert all(call['model'] == b.state.policy_model for call in b.state.provider_calls)
     assert first['task_id'] != repeat['task_id'] != changed['task_id']
     assert (first['cost_usd'],first['tokens_in'],first['tokens_out']) == (COST,TOKENS_IN,TOKENS_OUT)
     assert (repeat['cost_usd'],repeat['tokens_in'],repeat['tokens_out']) == (0,0,0)
@@ -306,12 +308,12 @@ async def test_actual_task_receipt_remember_and_exact_business_repeat(autumbra):
     assert (changed['cost_usd'],changed['tokens_in'],changed['tokens_out']) == (COST,TOKENS_IN,TOKENS_OUT)
     assert changed['answer'] != first['answer']
     paths = [(host,path) for _,host,path in b.state.network]
-    assert paths.index(('hermes','/recall')) < paths.index(('litellm','/v1/chat/completions')) < paths.index(('hermes','/memories'))
+    assert paths.index(('hermes','/recall')) < paths.index(('litellm',COMPLETIONS_PATH)) < paths.index(('hermes','/memories'))
     row = next(r for r in await b.rows() if r['meta'].get('task_id') == first['task_id'])
     assert row['evidence'] and row['meta']['input_hash'] and row['meta']['tokens_in'] == TOKENS_IN
     assert row['confidence'] == 0  # Unverified model output is never asserted as human verification.
     async with b.tank.pool().acquire() as conn:
-        receipts = await conn.fetch('SELECT cost_usd,tokens_in,tokens_out FROM tank.ledger WHERE tenant_id=$1 AND task_type=$2',uuid.UUID(b.stack.tenant),TASK)
+        receipts = await conn.fetch('SELECT cost_usd,tokens_in,tokens_out FROM tank.ledger WHERE tenant_id=$1 AND task_type=$2',uuid.UUID(b.stack.tenant),'agent.ghost.think')
     assert len(receipts) == 2 and sum(float(r['cost_usd']) for r in receipts) == 2*COST
     print(f'FAKE provider: first calls=1 cost={COST} tokens={TOKENS_IN}/{TOKENS_OUT}; exact repeat calls=0 cost=0 tokens=0/0; changed calls=1 cost={COST} tokens={TOKENS_IN}/{TOKENS_OUT}')
 
@@ -320,7 +322,7 @@ async def test_missing_serving_rung_does_not_bypass_ladder(autumbra):
     b = autumbra
     missing = b.state.catalogue.pop(0)
     response = await b.client.post('/v1/route',headers={'X-Tank-Key':b.stack.key},
-        json={'tenant_id':b.stack.tenant,'task_type':TASK,'messages':[{'role':'user','content':TEXT}]})
+        json={'tenant_id':b.stack.tenant,'task_type':'agent.ghost.think','messages':[{'role':'user','content':TEXT}]})
     assert response.status_code == 503 and 'Engine rung unavailable: ' + missing in response.text
     assert not b.state.provider_calls
 
@@ -422,3 +424,73 @@ async def test_original_browser_journeys(node):
                                     capture_output=True,text=True,timeout=170)
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'skipped' not in result.stdout and 'xfailed' not in result.stdout
+
+
+async def test_private_brain_uses_tank_adapter_policy_and_actual_receipt(autumbra):
+    from chassis.task_contract import paid_identity
+    b = autumbra
+    run = str(uuid.uuid4())
+    result = await b.task(run_id=run)
+    paths = [__import__('urllib.parse',fromlist=['urlsplit']).urlsplit(url).path for _,url,_,_ in b.state.private]
+    assert paths == ['/v1/agents/ghost/delegate','/tasks','/v1/agents/ghost/tasks']
+    assert all(headers.get('x-tervory-user-assertion') for _,_,_,headers in b.state.private)
+    receipt = result['model_receipts'][0]
+    assert receipt['room'] == 'ghost' and receipt['task_type'] == 'agent.ghost.think'
+    assert receipt['task_id'] == paid_identity(b.stack.tenant,A,run)
+    assert receipt['region'] == 'us-east' and receipt['model'] == b.state.policy_model
+    async with b.tank.pool().acquire() as conn:
+        row = await conn.fetchrow('SELECT receipt FROM tank.agent_receipts WHERE tenant_id=$1 AND ledger_id=$2',
+                                  uuid.UUID(b.stack.tenant),uuid.UUID(receipt['ledger_id']))
+    actual = json.loads(row['receipt'])
+    assert all(receipt[k] == actual[k] for k in actual)
+    assert (actual['cost_usd'],actual['tokens_in'],actual['tokens_out']) == (COST,TOKENS_IN,TOKENS_OUT)
+
+
+@pytest.mark.parametrize('fault',['missing','wrong_key','owner','tenant','region','replay'])
+async def test_private_adapter_refuses_scope_and_replay(autumbra,fault):
+    from chassis.user_assertion import SignedUser, sign_assertion, HEADER
+    b=autumbra
+    await b.task()
+    _,url,raw,headers = b.state.private[0]
+    path=__import__('urllib.parse',fromlist=['urlsplit']).urlsplit(url).path
+    if fault == 'missing':
+        headers.pop(HEADER.lower())
+    elif fault != 'replay':
+        actor=SignedUser(b.stack.other_tenant if fault=='tenant' else b.stack.tenant,B if fault=='owner' else A,'org:admin')
+        headers[HEADER.lower()]=sign_assertion('ghost',actor,'POST',path,raw,key='placeholder-wrong-key' if fault=='wrong_key' else b.stack.key)
+    if fault=='region':
+        headers['x-home-region']='za'
+    response=await b.client.post(url,content=raw,headers=headers)
+    assert response.status_code in {401,403},response.text
+    assert len(b.state.provider_calls)==1
+    async with b.tank.pool().acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1',uuid.UUID(b.stack.tenant))==1
+
+
+@pytest.mark.parametrize('operation',['tasks','delegate'])
+async def test_private_adapter_default_off_never_dispatches(autumbra,monkeypatch,operation):
+    from chassis.user_assertion import SignedUser, sign_assertion, HEADER
+    b=autumbra
+    monkeypatch.delenv('GHOST_BRAIN_ENABLED')
+    body={'tenant_id':b.stack.tenant,'user_id':A,'run_id':str(uuid.uuid4())}
+    body.update({'messages':[{'role':'user','content':TEXT}]} if operation=='tasks' else
+                {'task_key':TASK,'input':{'text':TEXT},'recall':[]})
+    raw=json.dumps(body).encode();path='/v1/agents/ghost/'+operation
+    token=sign_assertion('ghost',SignedUser(b.stack.tenant,A,'org:admin'),'POST',path,raw,key=b.stack.key)
+    response=await b.client.post(path,content=raw,headers={'X-Tank-Key':b.stack.key,HEADER:token,'Content-Type':'application/json','X-Home-Region':'us-east'})
+    assert response.status_code==409 and 'GHOST_BRAIN_ENABLED' in response.text
+    assert not b.state.network and not b.state.provider_calls
+
+
+async def test_private_brain_requires_its_own_signed_actor(autumbra):
+    import httpx
+    b=autumbra
+    await b.task()
+    _,url,raw,headers=next(row for row in b.state.private if '/v1/' not in row[1])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=b.private_app)) as client:
+        replay=await client.post(url,content=raw,headers=headers)
+        assert replay.status_code==401
+        headers.pop('x-tervory-user-assertion')
+        unsigned=await client.post(url,content=raw,headers=headers)
+        assert unsigned.status_code==401
+    assert len(b.state.provider_calls)==1

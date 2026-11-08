@@ -12,6 +12,7 @@ import asyncpg
 import httpx
 import pytest
 import pytest_asyncio
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 ROOT = Path(__file__).resolve().parents[3]
 A, B = 'placeholder-alice', 'placeholder-bob'
@@ -24,8 +25,6 @@ WORKSPACE_KEY = 'placeholder-autumbra-workspace-key'
 def require_runtime():
     required = ('agents.ghost.brain', 'agents.ghost.brain_service', 'agents.ghost.brain_state')
     missing = [name for name in required if importlib.util.find_spec(name) is None]
-    if not all(task in (ROOT/'tank/schema.sql').read_text() for task in ('ghost.brain.explain_incident','ghost.brain.plan_fix')):
-        missing.append('Tank brain policy rows from PR #3 patch')
     if missing:
         pytest.fail('BLOCKED runtime dependency: integrate Autumbra PR #3 source_sha from autumbra.json; missing ' + ', '.join(missing))
 
@@ -34,7 +33,7 @@ def require_runtime():
 async def autumbra(gate78_memory, monkeypatch, tmp_path):
     require_runtime()
     from agents.ghost.app import create_app, _brain_service
-    from agents.ghost.brain import Brain, UserMemory, classify_alert_code, TASK_TYPES
+    from agents.ghost.brain import Brain, UserMemory, classify_alert_code
     from agents.ghost.brain_service import create_app as brain_app
     from agents.ghost.store import Store
     from chassis.memory import MemoryClient
@@ -48,14 +47,14 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
     from tenant_db import TenantPool
 
     stack = await gate78_memory('autumbra')
-    state = SimpleNamespace(provider_calls=[], network=[], signed=[], fault=None)
+    state = SimpleNamespace(provider_calls=[], network=[], signed=[], private=[], fault=None)
     original_http, original_paid = httpx.AsyncClient, paid_http.Client
     provider = Provider('us-east')
     install_registry(monkeypatch, [provider], {'10001':stack.tenant, '10002':stack.other_tenant})
     monkeypatch.setattr(identity_oidc, 'http_client', lambda: original_http(transport=httpx.MockTransport(provider)))
     identity_oidc._cache.clear()
     for key, value in {'TANK_KEY':stack.key, 'TANK_KEY_GHOST':stack.key, 'TANK_API_KEY':WORKSPACE_KEY,
-                       'GHOST_BRAIN_ENABLED':'true', 'TANK_REGION':'us-east', 'AUTUMBRA_BRAIN_URL':'http://autumbra-brain:8001',
+                       'GHOST_BRAIN_ENABLED':'true', 'TANK_REGION':'us-east',
                        'TANK_URL':'http://tank:8000', 'LITELLM_MASTER_KEY':'placeholder-offline-provider'}.items():
         monkeypatch.setenv(key, value)
     monkeypatch.setattr(tank, 'TANK_API_KEY', WORKSPACE_KEY)
@@ -81,15 +80,14 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
         monkeypatch.setattr(tank, '_agent_keys_synced', False)
         async with raw.acquire() as conn:
             await conn.execute((ROOT/'tank/schema.sql').read_text())
-            policies = await conn.fetch("SELECT task_type FROM tank.policy WHERE task_type LIKE 'ghost.brain.%'")
-            assert set(TASK_TYPES) <= {row['task_type'] for row in policies}, 'BLOCKED: apply PR #3 policy/corridor patches to Tank before acceptance'
+            # Disposable explicit approval/configuration for the existing room
+            # policy. Production adapter never seeds or changes its model route.
+            await conn.execute("INSERT INTO tank.policy(task_type,rung,model,priority,cache_scope,max_tokens_out) VALUES('agent.ghost.think',1,'luna','standard','none',1024)")
+            state.policy_model = 'luna'
             for tenant in (stack.tenant, stack.other_tenant):
-                for task in TASK_TYPES:
-                    for model in models:
-                        step = paid_steps.model_step(task, model, agent='ghost')
-                        await paid_steps.register(conn, step, 'autumbra', 'model', 'tank.policy', task=task, model=model)
-                        await conn.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,$2,'auto','placeholder-offline-owner')",
-                                           uuid.UUID(tenant), step)
+                step = paid_steps.model_step('agent.ghost.think',state.policy_model,agent='ghost')
+                await paid_steps.register(conn,step,'autumbra','model','tank.policy',task='agent.ghost.think',model=state.policy_model)
+                await conn.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,$2,'auto','placeholder-offline-owner')",uuid.UUID(tenant),step)
 
         # Real non-superuser SQL, with the same schema privileges used by agent roles.
         schema = stack.records.schema('ghost')
@@ -110,6 +108,8 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
         async def edge(request):
             state.network.append((request.method, request.url.host, request.url.path))
             if request.url.host in apps:
+                if request.url.host == 'autumbra-brain' or request.url.path.startswith('/v1/agents/ghost/'):
+                    state.private.append((request.method, str(request.url), request.content, dict(request.headers)))
                 if request.url.host == 'hermes' and state.fault and state.fault[0] == (request.method, request.url.path):
                     if state.fault[1] == 'timeout':
                         raise httpx.ReadTimeout('placeholder memory outage', request=request)
@@ -127,7 +127,7 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
                         for model in state.catalogue]})
                 if request.url.path == '/router/settings':
                     return httpx.Response(200, json={'current_values':{'fallbacks':[]}})
-                assert request.url.path == '/v1/chat/completions', request.url
+                assert request.url.path == COMPLETIONS_PATH, request.url
                 state.provider_calls.append(json.loads(request.content))
                 return httpx.Response(200, headers={'x-litellm-response-cost':str(COST), 'x-litellm-model-group':state.provider_calls[-1]['model']},
                     json={'choices':[{'message':{'content':f'Fixture analysis {len(state.provider_calls)}: inspect the deployment rule.'}}],
@@ -148,7 +148,8 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
             network = await cleanup.enter_async_context(http())
             tank_http = await cleanup.enter_async_context(paid())
             monkeypatch.setattr(tank, '_http', tank_http)
-            apps['autumbra-brain'] = brain_app(network)
+            private_store = Store(tmp_path/'private-brain.sqlite3')
+            apps['autumbra-brain'] = brain_app(network, private_store)
             watch.state.user_memory = UserMemory(MemoryClient('http://tank:8000/v1/ghost/autumbra/memory', stack.key, 'ghost', network), store)
             watch.state.brain = Brain(watch.state.user_memory, _brain_service(network), [classify_alert_code])
             client = await cleanup.enter_async_context(original_http(transport=httpx.ASGITransport(app=tank.app), base_url='http://tank'))
@@ -180,7 +181,7 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
                 return response.json()
 
             box = SimpleNamespace(stack=stack,state=state,watch=watch,store=store,tank=tank,provider=provider,
-                                  client=client,direct=direct,request=request,task=task,rows=rows,write=write,role=role)
+                                  private_app=apps['autumbra-brain'], private_store=private_store, client=client,direct=direct,request=request,task=task,rows=rows,write=write,role=role)
             try:
                 yield box
             finally:
@@ -188,6 +189,7 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
                     import asyncio
                     await asyncio.gather(*list(tank._background))
                 store.close()
+                private_store.close()
                 stack.records.pool = old_pool
                 await restricted.close()
                 async with old_pool.acquire() as conn:
