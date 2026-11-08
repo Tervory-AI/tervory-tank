@@ -37,6 +37,7 @@ export default async function WeeklyReceiptPage({
       </p>
       {note && receipts.length === 0 ? <p style={{ color: "#6b7280" }}>{note}</p> : null}
       <p>{available === false ? "—" : receipts.length} recorded</p>
+      {!receipts.length && <dl><dt>Cost</dt><dd>—</dd><dt>Would have cost</dt><dd>—</dd></dl>}
       {receipts.length === 0 ? (
         <p>{unauthorized ? "This link is invalid or has expired." : available === false
           ? "Reconnect Autumbra to load this week's receipts."
@@ -50,6 +51,10 @@ export default async function WeeklyReceiptPage({
             return (
               <li key={id} style={{ marginBottom: "1rem" }}>
                 <div>{title}</div>
+                <dl>
+                  <dt>Cost</dt><dd>{row.cost_usd === undefined ? "—" : `$${row.cost_usd.toFixed(6)}`}</dd>
+                  <dt>Would have cost</dt><dd>{row.would_have_cost_usd === undefined ? "—" : `$${row.would_have_cost_usd.toFixed(6)}`}</dd>
+                </dl>
                 {when ? (
                   <div style={{ color: "#6b7280", fontSize: "0.95rem" }}>{when}</div>
                 ) : null}

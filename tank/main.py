@@ -436,6 +436,9 @@ def model_call_refusal(
     skip the rule. model=None asks the early question: is there any
     permitted SA model at all? Pure-code skills do not call this.
     """
+    refusal = __import__("command_tools.autumbra", fromlist=["brain_refusal"]).brain_refusal(task_type)
+    if refusal:
+        return refusal
     here = normalize_box(box)
     build = build_model_refusal(model, tenant_id) if model is not None else None
     if build:
@@ -1173,6 +1176,7 @@ async def _preflight_mask(req: RouteRequest, policy: dict[str, Any], messages: l
 
 
 async def _check_route_task(req: RouteRequest, task_id: uuid.UUID | None) -> None:
+    __import__("command_tools.autumbra", fromlist=["require_brain_enabled"]).require_brain_enabled(req.task_type)
     if task_id is None:
         return
     async with pool().acquire() as conn:
@@ -2938,6 +2942,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 @app.post("/v1/route", response_model=RouteResponse | priority_queue.QueuedResponse, response_model_exclude_none=True)
 @tenant_path("body")
 async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
+    __import__("command_tools.autumbra", fromlist=["require_brain_enabled"]).require_brain_enabled(body.task_type)
     if caller:
         body = body.model_copy(update={"agent": caller})
     foreign = home_region_refusal(await __import__("tenant_regions").resolve_home(__import__("sys").modules[__name__], body.tenant_id, body.home_region), box_region())
