@@ -1,0 +1,133 @@
+{
+  "product": "opli",
+  "source_sha": "f7837e9e327982d7e4b9084774985f065666f4b1",
+  "entrypoints": [
+    "POST /v1/command/opli/code-turn",
+    "GET /v1/command/opli/memory.view",
+    "POST /v1/command/opli/memory.edit",
+    "POST /v1/command/opli/memory.forget",
+    "POST /v1/command/opli/memory.control",
+    "tank/command_tools/opli_memory.py",
+    "tank/command.py:code_turn",
+    "tervory code / CLI acceptance worksheet"
+  ],
+  "legacy_tests": [
+    "tests/opli_agent/test_gates_7_8.py::test_product_request_tank_route_receipt_then_memory",
+    "tests/opli_agent/test_gates_7_8.py::test_correction_applies_next_time_with_no_paid_call",
+    "tests/opli_agent/test_gates_7_8.py::test_second_user_and_second_tenant_see_nothing",
+    "tests/opli_agent/test_gates_7_8.py::test_same_task_twice_reports_cost_and_tokens_each_run",
+    "tests/opli_agent/test_gates_7_8.py::test_forget_and_memory_off_skip_store",
+    "tests/opli_agent/test_gates_7_8.py::test_free_code_skill_runs_before_tank_and_skips_paid",
+    "tests/opli_agent/test_gates_7_8.py::test_code_request_path_free_then_tank",
+    "tests/opli_agent/test_gates_7_8.py::test_live_memory_view_edit_forget_and_control",
+    "tests/opli_agent/test_gates_7_8.py::test_remembered_fields_never_hardcoded_empty",
+    "tests/opli_agent/test_gates_7_8.py::test_opli_memory_module_exposes_live_routes",
+    "tests/opli_agent/test_gates_7_8.py::test_cli_wires_memory_commands_and_code_turn_memory_wrap",
+    "tests/opli_agent/test_gates_7_8.py::test_invalid_scope_refused_before_memory_or_paid",
+    "tests/opli_agent/test_gates_7_8.py::test_memory_outage_answers_without_memory_never_serves_repeat",
+    "tests/opli_agent/test_gates_7_8_product_path.py::test_live_opli_code_turn_uses_tank_agent_then_memory_repeat",
+    "tests/opli_agent/test_gates_7_8_product_path.py::test_live_endpoint_refuses_empty_tenant_or_user",
+    "tests/opli_agent/test_gates_7_8_product_path.py::test_live_memory_view_edit_forget_control_via_memory_client",
+    "tests/opli_agent/test_gates_7_8_product_path.py::test_live_memory_control_refuses_foreign_tenant_or_user"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_opli.py::test_owner_crud"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_opli.py::test_foreign_controls_unchanged",
+      "tests/gates78/products/test_opli.py::test_foreign_publish_unchanged",
+      "tests/gates78/products/test_opli.py::test_real_founder_publish_owner_scope"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_opli.py::test_foreign_controls_unchanged",
+      "tests/gates78/products/test_opli.py::test_foreign_publish_unchanged",
+      "tests/gates78/products/test_opli.py::test_real_founder_publish_owner_scope"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_opli.py::test_declared_tenant_wide"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_opli.py::test_required_owner_and_strict_input"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_opli.py::test_signed_actor",
+      "tests/gates78/products/test_opli.py::test_cached_answer_rechecks_thread_owner"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_opli.py::test_assertion_rejection"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_opli.py::test_replay_cannot_restore_forgotten"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_opli.py::test_sql_before_vector"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_opli.py::test_restricted_database_role"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_opli.py::test_controls_need_identity_plain_task_preserved",
+      "tests/gates78/products/test_opli.py::test_foreign_controls_unchanged",
+      "tests/gates78/products/test_opli.py::test_cached_answer_rechecks_thread_owner"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_opli.py::test_no_content_leak"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_opli.py::test_runtime_contract",
+      "tests/gates78/products/test_opli.py::test_shared_fixture_positive_recall"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_opli.py::test_default_off"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_opli.py::test_task_path"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_opli.py::test_existing_code_skill_before_model"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_opli.py::test_exact_repeat_receipts",
+      "tests/gates78/products/test_opli.py::test_cached_prompt_reservation_and_receipt",
+      "tests/gates78/products/test_opli.py::test_cached_request_id_replay_and_untrusted_override"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_opli.py::test_misses"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_opli.py::test_correction_owner_only"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_opli.py::test_forget_invalidates_answer"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_opli.py::test_memory_off_owner_only"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_opli.py::test_outage_truthful_no_paid_retry"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_opli.py::test_auth_not_outage"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_opli.py::test_exact_repeat_receipts",
+      "tests/gates78/products/test_opli.py::test_meaningful_remembered_fields",
+      "tests/gates78/products/test_opli.py::test_cached_prompt_reservation_and_receipt",
+      "tests/gates78/products/test_opli.py::test_cached_request_id_replay_and_untrusted_override"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_opli.py::test_retry_concurrency",
+      "tests/gates78/products/test_opli.py::test_cached_prompt_reservation_and_receipt",
+      "tests/gates78/products/test_opli.py::test_cached_request_id_replay_and_untrusted_override"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_opli.py::test_cli_acceptance_retained",
+      "tests/gates78/products/test_opli.py::test_owner_crud",
+      "tests/gates78/products/test_opli.py::test_task_path",
+      "tests/gates78/products/test_opli.py::test_meaningful_remembered_fields",
+      "tests/gates78/products/test_opli.py::test_correction_owner_only",
+      "tests/gates78/products/test_opli.py::test_outage_truthful_no_paid_retry"
+    ]
+  }
+}

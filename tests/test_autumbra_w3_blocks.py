@@ -45,6 +45,8 @@ class FakeMemory:
 
     async def remember(self, tenant, text, kind, source, **options):
         assert options['index'] is False
+        assert options['tenant_wide'] is True
+        assert not options.get('user_id') and 'user_id' not in options['meta']
         self.writes.append((text, source, options))
         row = {'id': options['row_id'], 'claim': text, 'kind': kind, 'last_verified': options['last_verified']}
         self.client.setdefault(tenant, {})[row['id']] = row
@@ -384,3 +386,15 @@ async def test_existing_memory_client_pages_without_recall():
         memory = MemoryClient(base_url='http://placeholder', api_key='placeholder-memory-key', http=http)
         assert len(await memory.records(A)) == 201
     assert offsets == [0, 200]
+
+
+@pytest.mark.asyncio
+async def test_standing_block_supports_the_pinned_legacy_client_signature(standing):
+    s = standing
+    current = s.memory.remember
+    async def legacy(tenant, text, kind, source, *, evidence, row_id, last_verified, meta, index):
+        return await current(tenant,text,kind,source,evidence=evidence,row_id=row_id,
+                             last_verified=last_verified,meta=meta,index=index,tenant_wide=True)
+    s.memory.remember = legacy
+    assert len(await s.service.reconcile(A)) == 1
+    assert s.memory.writes[0][2]['index'] is False

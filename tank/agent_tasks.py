@@ -39,12 +39,12 @@ def install(router, tank) -> None:
     from agent_skills import Chat, complete, local_region, room_key
 
     async def actor_for(room: str, body: TaskScope, request: Request):
-        if room not in {"tiger", "radix"}:
+        if room not in {"tiger", "radix", "ghost"}:
             raise HTTPException(403, "Room task unavailable")
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
-        setting = "RADIX_BRAIN_ENABLED" if room == "radix" else "TIGER_BRAIN_ENABLED"
+        setting = {"radix": "RADIX_BRAIN_ENABLED", "tiger": "TIGER_BRAIN_ENABLED", "ghost": "GHOST_BRAIN_ENABLED"}[room]
         if os.environ.get(setting, "false").lower() not in {"true", "1", "yes"}:
-            raise HTTPException(409, "Radix brain is off" if room == "radix" else "Tiger brain is off")
+            raise HTTPException(409, {"radix": "Radix brain is off", "tiger": "Tiger brain is off", "ghost": "GHOST_BRAIN_ENABLED is off."}[room])
         if room == "radix" and request.headers.get("x-home-region") != tank.box_region():
             raise HTTPException(403, "Region mismatch")
         local_region(tank, request.headers.get("x-home-region"), room=room)
@@ -75,14 +75,15 @@ def install(router, tank) -> None:
     @router.post("/v1/agents/{room}/delegate")
     async def delegate_task(room: str, body: DelegatedTask, request: Request):
         actor = await actor_for(room, body, request)
+        unavailable = {"tiger": "Tiger task unavailable", "radix": "Radix task unavailable", "ghost": "Autumbra task unavailable"}[room]
         try:
-            base = origin("http://radix-brain:8001" if room == "radix" else os.environ.get("TIGER_BRAIN_URL", "http://tiger-brain:8001"))
+            base = origin(os.environ.get("TIGER_BRAIN_URL", "http://tiger-brain:8001") if room == "tiger" else f"http://{room}-brain:8001")
             parsed = urlsplit(base)
             # Private service only; this directory never accepts a caller URL.
             if parsed.scheme != "http" or parsed.hostname != room + "-brain" or parsed.port != 8001:
                 raise ValueError("Invalid private origin")
         except ValueError:
-            raise HTTPException(503, "Radix task unavailable" if room == "radix" else "Tiger task unavailable") from None
+            raise HTTPException(503, unavailable) from None
         target = "/tasks?" + urlencode({"tenant_id": actor.tenant_id, "user_id": actor.user_id})
         content = json.dumps({"task_key": body.task_key, "input": body.input,
                               "recall": body.recall, "run_id": str(body.run_id)}).encode()
@@ -116,6 +117,6 @@ def install(router, tank) -> None:
                 except (ValueError, KeyError, TypeError, OverflowError):
                     error = "Radix task unavailable"
                 raise HTTPException(status if 400 <= status < 600 else 502, error) from None
-            raise HTTPException(status if 400 <= status < 600 else 502, "Tiger task unavailable") from None
+            raise HTTPException(status if 400 <= status < 600 else 502, unavailable) from None
         except (httpx.HTTPError, ValueError, KeyError, TypeError, OverflowError):
-            raise HTTPException(502, "Radix task unavailable" if room == "radix" else "Tiger task unavailable") from None
+            raise HTTPException(502, unavailable) from None
