@@ -38,6 +38,15 @@ MEMORY_OUTAGE_ERRORS: tuple[type[BaseException], ...] = (RuntimeError, Connectio
 _FINGERPRINT_KEYS = ("contact_id", "text", "format")
 
 
+class MemoryAuthorizationError(PermissionError):
+    """The memory service refused the product credential, not a store outage."""
+
+
+def refuse_memory_auth(error):
+    if isinstance(error, RuntimeError) and str(error) in {"hermes answered 401", "hermes answered 403"}:
+        raise MemoryAuthorizationError("Memory ownership required") from None
+
+
 class MemoryScopeError(ValueError):
     """Memory needs a tenant and a signed-in user; anything less is refused."""
 
@@ -141,7 +150,7 @@ def memory_off_from_rows(rows: list[dict[str, Any]], *, tenant_id: str, user_id:
             continue
         if str(meta.get("user_id", "")) != user:
             continue
-        if MEMORY_OFF_TEXT in str(row.get("text", "")):
+        if MEMORY_OFF_TEXT in str(row.get("text", row.get("claim", ""))):
             return True
     return False
 
@@ -241,7 +250,7 @@ def categories_from_memories(rows: list[dict[str, Any]]) -> dict[str, list[str]]
             _add("objections", outcome.get("objections"))
             _add("tone", outcome.get("tone"))
             _add("handover_notes", outcome.get("handover_notes"))
-        text = str(row.get("text", ""))
+        text = str(row.get("text", row.get("claim", "")))
         for part in text.split(";"):
             chunk = part.strip()
             for marker, bucket in markers.items():
@@ -253,7 +262,7 @@ def categories_from_memories(rows: list[dict[str, Any]]) -> dict[str, list[str]]
 def corrections_from_memories(rows: list[dict[str, Any]]) -> list[str]:
     found: list[str] = []
     for row in rows:
-        text = str(row.get("text", ""))
+        text = str(row.get("text", row.get("claim", "")))
         marker = "correction="
         if marker in text:
             found.append(text.split(marker, 1)[1].split(";")[0].strip())
@@ -273,6 +282,7 @@ def apply_corrections(task: dict[str, Any], corrections: list[str]) -> dict[str,
         if item and item not in applied:
             applied.append(item)
     result["applied_corrections"] = applied
+    result["text"] = "\n".join(applied)
     result["answered_from_memory"] = True
     return result
 
@@ -463,13 +473,14 @@ class FakeMemory:
             out.append(row)
         return deepcopy(out)
 
-    async def forget(self, memory_id: str, tenant_id: str) -> None:
+    async def forget(self, memory_id: str, tenant_id: str, *, user_id: str | None = None) -> None:
         tenant = str(tenant_id)
         wanted = str(memory_id)
         self.forgets += 1
         self.rows = [
             row for row in self.rows
-            if not (row["id"] == wanted and row["tenant_id"] == tenant)
+            if not (row["id"] == wanted and row["tenant_id"] == tenant
+                    and (user_id is None or (row.get("meta") or {}).get("user_id") == user_id))
         ]
 
     async def recall(
@@ -570,6 +581,7 @@ async def run_with_memory(
     try:
         setting_rows = await memory.records(tenant, user_id=user)
     except MEMORY_OUTAGE_ERRORS as exc:
+        refuse_memory_auth(exc)
         receipt["memory_error"] = type(exc).__name__
         return await _pay_without_memory("outage")
     if memory_off_from_rows(setting_rows, tenant_id=tenant, user_id=user):
@@ -579,6 +591,7 @@ async def run_with_memory(
     try:
         recalled = await memory.recall(tenant, task_key, user_id=user, kind=None, limit=32)
     except MEMORY_OUTAGE_ERRORS as exc:
+        refuse_memory_auth(exc)
         receipt["memory_error"] = type(exc).__name__
         return await _pay_without_memory("outage")
     corrections = corrections_from_memories(recalled)
@@ -630,6 +643,11 @@ async def run_with_memory(
         }
         receipt["steps"].append({"action": "brain_route", "status": "done"})
 
+    # A reuse is a read, not a new approved source. Cloning an outcome here
+    # would let a forgotten or superseded source survive through its copies.
+    if receipt["answered_from_memory"]:
+        return receipt
+
     result_obj = receipt["result"] or {}
     text = build_memory_text(
         summary=f"Trigger task {task_key}",
@@ -671,6 +689,7 @@ async def run_with_memory(
     try:
         saved = await memory.remember(tenant, text, kind, f"trigger:task:{task_key}", **remember_kwargs)
     except MEMORY_OUTAGE_ERRORS as exc:
+        refuse_memory_auth(exc)
         # The answer (and any paid receipt) stands; only the write was lost.
         receipt["memory_unavailable"] = True
         receipt["memory_error"] = type(exc).__name__

@@ -22,12 +22,10 @@ from trigger.voice import VoiceStore
 
 @dataclass(frozen=True)
 class SignedInActor:
-    """Tenant+user bound by Tank lifecycle signature when headers are present.
+    """Tenant and user verified by the shared nonce-protected assertion helper.
 
-    CURRENT Tank room() (69832b9) sends only X-Tank-Key — no lifecycle headers.
-    Memory VIEW/EDIT/FORGET/SWITCH-OFF require this binding (401 without it).
-    Ordinary /write keeps Tank-key auth; memory recall/remember only when the
-    lifecycle signature verifies. Body or bare X-Tervory-* are never identity.
+    Memory controls require this binding. Ordinary writing keeps Tank-key auth
+    without personal identity; body or bare X-Tervory-* are never identity.
     """
 
     tenant_id: UUID
@@ -45,6 +43,8 @@ async def authorized(x_tank_key: str = Header(default="")):
 
 async def _verified_actor(request: Request, x_tank_key: str, *, required: bool):
     await authorized(x_tank_key)
+    if not required and not request.headers.get("X-Tervory-User-Assertion"):
+        return None
     from chassis.user_assertion import signed_user
     try:
         body = await request.json() if request.method != "GET" else {}
@@ -109,6 +109,14 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+from trigger.gates_memory import MemoryAuthorizationError
+
+
+@app.exception_handler(MemoryAuthorizationError)
+async def memory_auth_refused(request: Request, error: MemoryAuthorizationError):
+    return JSONResponse(status_code=401, content={"detail": "Memory ownership required"})
+
+
 REQUEST_TIMEOUT_SECONDS = 60
 
 
@@ -174,7 +182,7 @@ async def post_write(
     Memory recall/remember is fail-closed: only with a verified signed actor.
     Memory control routes still use hard signed_in_actor (401 without signature).
     """
-    from trigger.gates_memory import MEMORY_OUTAGE_ERRORS, memory_enabled, memory_off_from_rows
+    from trigger.gates_memory import MEMORY_OUTAGE_ERRORS, memory_enabled, memory_off_from_rows, refuse_memory_auth
 
     memory = None
     user_id = None
@@ -186,7 +194,8 @@ async def post_write(
         if memory is not None and memory_enabled():
             try:
                 rows = await memory.records(str(actor.tenant_id), user_id=actor.user_id)
-            except MEMORY_OUTAGE_ERRORS:
+            except MEMORY_OUTAGE_ERRORS as exc:
+                refuse_memory_auth(exc)
                 # Memory service down: the draft still goes through the paid route,
                 # without recall, a stored repeat or a remember.
                 rows, memory, memory_unavailable = [], None, True
@@ -283,6 +292,17 @@ async def memory_records(
     return {"memories": rows, "memory_enabled": True, "count": len(rows)}
 
 
+@app.get("/memory/records/{memory_id}")
+async def memory_record(memory_id: UUID, tenant_id: UUID, actor: SignedInActor = Depends(signed_in_actor)):
+    from trigger.gates_memory import owned_memory_row
+    listed = await memory_records(tenant_id, actor=actor, user_id=actor.user_id, tier="client")
+    row = owned_memory_row(listed["memories"], memory_id=str(memory_id),
+                           tenant_id=str(actor.tenant_id), user_id=actor.user_id)
+    if row is None:
+        raise HTTPException(404, "Memory ownership required")
+    return {"memory": row, "memory_enabled": listed["memory_enabled"]}
+
+
 @app.post("/memory/edit")
 async def memory_edit(body: MemoryEditIn, actor: SignedInActor = Depends(signed_in_actor)):
     """CONTENT EDIT: remember only into the signed-in caller's scope."""
@@ -304,6 +324,9 @@ async def memory_edit(body: MemoryEditIn, actor: SignedInActor = Depends(signed_
         raise HTTPException(409, "Memory is switched off")
     if body.kind not in memory_kinds():
         raise HTTPException(422, "unsupported Trigger memory kind")
+    from trigger.gates_memory import _text_has_secret
+    if _text_has_secret(body.text):
+        raise HTTPException(422, "Trigger memory refuses secret-bearing text")
     if body.memory_id:
         owned = owned_memory_row(
             rows,
@@ -327,6 +350,8 @@ async def memory_edit(body: MemoryEditIn, actor: SignedInActor = Depends(signed_
             **({"replaces": body.memory_id} if body.memory_id else {}),
         },
     )
+    if body.memory_id and str(saved["id"]) != str(body.memory_id):
+        await memory.forget(body.memory_id, str(actor.tenant_id), user_id=actor.user_id)
     return {"ok": True, "memory": saved, "memory_enabled": True}
 
 
@@ -350,7 +375,7 @@ async def memory_forget(body: MemoryForgetIn, actor: SignedInActor = Depends(sig
     )
     if owned is None:
         raise HTTPException(403, "Memory ownership required")
-    await memory.forget(body.memory_id, str(actor.tenant_id))
+    await memory.forget(body.memory_id, str(actor.tenant_id), user_id=actor.user_id)
     return {"ok": True, "forgotten": body.memory_id, "user_id": actor.user_id}
 
 
@@ -374,7 +399,7 @@ async def memory_switch(body: MemorySwitchIn, actor: SignedInActor = Depends(sig
     off_rows = [
         row
         for row in rows
-        if row.get("kind") == MEMORY_OFF_KIND and MEMORY_OFF_TEXT in str(row.get("text", ""))
+        if row.get("kind") == MEMORY_OFF_KIND and MEMORY_OFF_TEXT in str(row.get("text", row.get("claim", "")))
     ]
     currently_off = bool(off_rows)
     if body.enabled is False:
@@ -390,7 +415,7 @@ async def memory_switch(body: MemorySwitchIn, actor: SignedInActor = Depends(sig
         return {"ok": True, "memory_enabled": False, "user_id": actor.user_id}
     # Switch back on: forget this user's off markers only.
     for row in off_rows:
-        await memory.forget(row["id"], str(actor.tenant_id))
+        await memory.forget(row["id"], str(actor.tenant_id), user_id=actor.user_id)
     return {"ok": True, "memory_enabled": True, "user_id": actor.user_id}
 
 

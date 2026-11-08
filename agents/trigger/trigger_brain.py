@@ -24,3 +24,8 @@ async def brain_then_route(
     """
     routed = await tank.route(str(tenant_id), task_type, messages)
     return {**routed, "brain": {"enabled": False, "free_first": True, "code_first": True}}
+
+
+async def ask_brain_tasks(http: Any, *, tenant_id: str, task_type: str, messages: list[dict[str, str]]) -> dict[str, Any]:
+    """Legacy standby contract; model execution remains exclusively on Tank."""
+    return {"status": "standby", "gap_filled": False}
