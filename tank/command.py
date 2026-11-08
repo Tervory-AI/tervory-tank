@@ -2484,6 +2484,10 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
             # The task primary key reserves a request durably, including failed
             # and unknown outcomes. Raising rolls back all thread/event changes.
             raise HTTPException(409, 'This request was already submitted. Reopen the session to inspect its state.')
+        import code_gate
+        gate = code_gate.advance(state, str(body.prompt_id), body.tool_results)
+        if gate:
+            return await code_gate.stopped_response(__import__(__name__), conn, row, state, actor, turn_id, gate)
     read_tools = {'list_files', 'read_file', 'search', 'git'}
     schema = {name: model.model_json_schema() for name, model in CODE_TOOLS.items()
               if body.mode != 'plan' or name in read_tools}
