@@ -53,7 +53,9 @@ async def database():
     if not url:
         pytest.skip('set explicit disposable loopback database')
     parsed = urlsplit(url)
-    assert parsed.hostname == '127.0.0.1' and parsed.path == '/radix_passive_test' and not parsed.password
+    worker = os.environ.get('PYTEST_XDIST_WORKER')
+    expected = '/radix_passive_test' + (f'_{worker}' if worker else '')
+    assert parsed.hostname == '127.0.0.1' and parsed.path == expected and not parsed.password
     pool = await asyncpg.create_pool(url, min_size=1, max_size=3)
     async with pool.acquire() as conn:
         await conn.execute('CREATE SCHEMA IF NOT EXISTS agent_radix')
