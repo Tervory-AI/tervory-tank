@@ -1,6 +1,6 @@
 {
   "product": "trigger",
-  "source_sha": "3652e05ae1792ca4c5504df02dd920ba94e9e912",
+  "source_sha": "49b37df76b58d962646d5d22965d1a2c95de51ee",
   "entrypoints": [
     "Tank OIDC middleware -> Command confirm -> trigger_routes.room -> POST /write",
     "GET /memory/records",

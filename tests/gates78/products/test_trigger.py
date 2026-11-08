@@ -375,7 +375,9 @@ async def test_remembered_contact_categories_are_meaningful_and_recall_is_bounde
     assert recall['count'] >= 1
     capped = next(step for step in receipt['steps'] if step['action'] == 'recall_cap')
     assert 0 < capped['memory_context_tokens'] <= capped['budget'] and not capped['billed']
-    outcome = (await control(b)).json()['memories'][-1]['meta']['outcome']
+    remembered_id = next(step['memory_id'] for step in receipt['steps'] if step['action'] == 'remember')
+    remembered = next(row for row in (await control(b)).json()['memories'] if row['id'] == remembered_id)
+    outcome = remembered['meta']['outcome']
     for name in ('deal_history', 'conversation_context', 'objections', 'tone', 'handover_notes'):
         assert outcome[name], name
     assert len(b.net.providers) == 1
@@ -388,6 +390,7 @@ async def test_forgetting_original_invalidates_any_derived_repeat(trigger_stack)
     first_id = next(step['memory_id'] for step in original['memory_receipt']['steps'] if step['action'] == 'remember')
     repeat = (await write(b))['result']
     assert repeat['cost_usd'] == 0 and len(b.net.providers) == 1
+    assert {row['id'] for row in await rows(b)} == {first_id}
     response = await control(b, 'forget', body={'memory_id': first_id})
     assert response.status_code == 200
     fresh = (await write(b))['result']
@@ -545,5 +548,6 @@ async def test_superseding_an_approved_source_invalidates_cached_derivatives(tri
     edited = await control(b, 'edit', body={'memory_id': source_id, 'kind': 'trigger.receipt',
         'text': 'placeholder explicitly superseded receipt', 'source': 'urn:placeholder:superseded'})
     assert edited.status_code == 200
+    assert source_id not in {row['id'] for row in await rows(b)}
     fresh = (await write(b))['result']
     assert fresh['cost_usd'] == COST and len(b.net.providers) == 2
