@@ -9,6 +9,7 @@ import pytest
 import engine_memory
 import product_identity
 from trigger_signin_fakes import set_founders
+from hermes_lifecycle import personal_headers
 from test_engine_memory import remembered  # noqa: F401
 from test_tank_tenant_boundaries import boundary  # noqa: F401
 from test_engine_ladder import setup_engine, local_gateway
@@ -28,8 +29,10 @@ async def test_twenty_real_local_requests_with_receipts_and_tenant_isolation(rem
             WHERE task_type='engine.classify'""")
     req = req.model_copy(update={'task_type': 'engine.answer', 'messages': [b.tank.Message(role='user', content='What is our office city?')]})
     calls = local_gateway(b, monkeypatch)
-    result = await b.memory_client.post('/founder/memories', headers={'X-Tervory-Admin': 'placeholder-founder'},
-        json={'id': str(uuid.uuid4()), 'tenant_id': str(req.tenant_id), 'agent': 'tank', 'claim': 'Our office city is Paris.'})
+    body = {'id': str(uuid.uuid4()), 'tenant_id': str(req.tenant_id), 'agent': 'tank', 'claim': 'Our office city is Paris.'}
+    headers, raw = personal_headers(b.key, 'POST', '/founder/memories', tenant=str(req.tenant_id),
+        user='placeholder-founder', body=body, extra={'X-Tervory-Admin': 'placeholder-founder'})
+    result = await b.memory_client.post('/founder/memories', headers=headers, content=raw)
     assert result.status_code == 200, result.text
     recalled, _ = await engine_memory.recall(b.tank, req)
     async with b.pool.acquire() as conn:

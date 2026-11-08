@@ -7,7 +7,15 @@ const mocks={
  'server-only':{},
  'next-auth/jwt':{getToken:async()=>({principal:{expiresAt:Date.now()+60000}})},
  '@/lib/tenant':{currentTenant:async()=>{if(!authenticated)throw Error('Trigger sign-in required');return tenant;}},
- '@/lib/tank':Object.fromEntries(['createTask','listTasks','route','sendFeedback','ledgerSummary','ledgerFailures','baseRun','baseRecords','baseBatches','baseEngines'].map(name=>[name,async(...args)=>{calls.push({name,args});if(fail)throw Error('upstream-secret-must-not-leak');return name==='baseRecords'?[{status:'done',confidence:1,profile:{name:{value:'=HYPERLINK("unsafe")'}}}]:{id:'result'};}]))
+ '@/lib/tank':Object.fromEntries(['createTask','listTasks','route','sendFeedback','ledgerSummary','ledgerFailures','baseRun','baseRecords','baseBatches','baseEngines'].map(name=>[name,async(...args)=>{calls.push({name,args});if(fail)throw Error('upstream-secret-must-not-leak');return name==='baseRecords'?[{status:'done',confidence:1,profile:{name:{value:'=HYPERLINK("unsafe")'}}}]:{id:'result'};}])),
+ '@/lib/workspace-gates':{
+   chatWithMemory:async(tenantId,userId,messages)=>{calls.push({name:'chatWithMemory',args:[tenantId,userId,messages]});if(fail)throw Error('upstream-secret-must-not-leak');return {id:'result',content:'ok'};},
+   createTaskWithMemory:async(tenantId,userId,title,taskType,request)=>{calls.push({name:'createTaskWithMemory',args:[tenantId,userId,title,taskType,request]});if(fail)throw Error('upstream-secret-must-not-leak');return {id:'result'};},
+   setWorkspaceMemoryControl:async()=>({memory_control:'edit'}),
+   viewWorkspaceMemory:async()=>({memories:[],memory_control:'edit'}),
+   editWorkspaceMemory:async()=>({id:'x',updated:true}),
+   forgetWorkspaceMemory:async()=>({forgotten:true}),
+ }
 };
 Module._load=function(name,parent,main){if(Object.hasOwn(mocks,name))return mocks[name];return originalLoad.call(this,name,parent,main);};
 Module._resolveFilename=function(name,parent,...args){if(name.startsWith('@/'))name=path.join(root,'workspace',name.slice(2));return originalResolve.call(this,name,parent,...args);};
@@ -19,8 +27,8 @@ async function main(){
  for(const body of [null,[],{title:1,request:{}},{title:'x',request:'y',task_type:'unapproved'},{title:'x',request:'x'.repeat(20001)}])assert.equal((await task.POST(json(body))).status,400);
  assert.equal(calls.length,0);
  const own={title:'Own task',request:'Own request',tenant_id:'other-tenant'};
- assert.equal((await task.POST(json(own))).status,202);assert.equal(calls[0].args[0],tenant.tenantId);assert.equal(calls[0].args[1],tenant.userId);
- assert.equal((await task.POST(json(own))).status,202);assert.equal(calls.filter(c=>c.name==='createTask').length,1);
+ assert.equal((await task.POST(json(own))).status,202);assert.equal(calls[0].name,'createTaskWithMemory');assert.equal(calls[0].args[0],tenant.tenantId);assert.equal(calls[0].args[1],tenant.userId);
+ assert.equal((await task.POST(json(own))).status,202);assert.equal(calls.filter(c=>c.name==='createTaskWithMemory').length,1);
  assert.equal((await task.POST(json({...own,title:'changed'}))).status,409);
  const persistent=process.env.WORKSPACE_SUBMISSIONS_DIR;delete process.env.WORKSPACE_SUBMISSIONS_DIR;assert.equal((await task.POST(json(own))).status,503);process.env.WORKSPACE_SUBMISSIONS_DIR=persistent;
  authenticated=false;calls=[];assert.equal((await task.GET()).status,401);assert.equal(calls.length,0);
