@@ -156,3 +156,20 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('base.extract', 1, 'haiku', 'batch', 'tenant', 600,
    'You extract structured facts from website text and reply with strict JSON only.')
 ON CONFLICT DO NOTHING;
+
+
+-- Moot confidential media ownership (Mux via Tank door). Idempotent.
+CREATE TABLE IF NOT EXISTS tank.moot_media (
+    upload_id       text PRIMARY KEY,
+    tenant_id       uuid NOT NULL,
+    user_id         text NOT NULL,
+    hearing_id      uuid NOT NULL,
+    asset_id        text,
+    playback_ids    jsonb NOT NULL DEFAULT '[]'::jsonb,
+    passthrough     text NOT NULL DEFAULT '',
+    region          text NOT NULL DEFAULT 'us-east',
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS moot_media_tenant_hearing ON tank.moot_media (tenant_id, hearing_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS moot_media_asset ON tank.moot_media (asset_id) WHERE asset_id IS NOT NULL;
