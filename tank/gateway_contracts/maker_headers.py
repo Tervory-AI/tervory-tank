@@ -23,9 +23,9 @@ def main():
         # or make a provider request. This method is the installed proxy code.
         resolved = ProxyConfig()._check_for_os_environ_vars({"model_list": [held]})
         params = resolved["model_list"][0]["litellm_params"]
-        # The pin deliberately keeps api_key as a secret pointer for the
-        # router; nested extra_headers are resolved during proxy config load.
-        assert params["api_key"] == "os.environ/SARVAM_API_KEY"
+        # Ordinary api_key and nested headers both resolve during config
+        # loading; only federation *_ref fields retain secret pointers.
+        assert params["api_key"] == "placeholder-sarvam-header-contract"
         assert params["extra_headers"]["api-subscription-key"] == "placeholder-sarvam-header-contract"
     print("maker gateway contract: pinned proxy resolves both regional headers; unpriced routes held")
 
