@@ -29,17 +29,22 @@ async def test_owner_controls_use_real_hermes(trigger_stack):
 async def test_first_repeat_changed_input_receipts_and_provider_counts(trigger_stack):
     b = trigger_stack
     first = (await write(b))['result']
+    first_calls = len(b.net.providers)
     repeated = (await write(b))['result']
+    repeat_calls = len(b.net.providers) - first_calls
     changed = (await write(b, 'Describe the placeholder product in detail.'))['result']
+    changed_calls = len(b.net.providers) - first_calls - repeat_calls
     (ROOT / '.tmp/trigger-gate78-fixture-costs.json').write_text(json.dumps({
         'fixture_only': True, 'runs': {name: {'cost_usd': item['cost_usd'], 'tokens_in': item['tokens_in'],
             'tokens_out': item['tokens_out']} for name, item in [('first', first), ('exact_repeat', repeated), ('changed_input', changed)]},
+        'provider_calls_per_run': dict(first=first_calls, exact_repeat=repeat_calls, changed_input=changed_calls),
         'captured_provider_calls': len(b.net.providers)}, indent=2))
     assert first['cost_usd'] == changed['cost_usd'] == COST
     assert (first['tokens_in'], first['tokens_out']) == TOKENS
     assert repeated['cost_usd'] == repeated['tokens_in'] == repeated['tokens_out'] == 0, (first.get('memory_receipt'), repeated.get('memory_receipt'))
     assert repeated['memory_receipt']['would_have_cost']['cost_usd'] == COST
     assert len(b.net.providers) == 2
+    assert (first_calls, repeat_calls, changed_calls) == (1, 0, 1)
 
 
 @pytest.mark.asyncio

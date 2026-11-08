@@ -169,7 +169,8 @@
     "previous_product_sha": "f769d18f5da475a7c858e24fb00d5646a28a44e0",
     "integrated_tank_runtime_sha": "e7d108e6fd5e8d00501e9e1309fa5264b1743613",
     "foundation_sha": "514a539d933faf37857097f800ad55196a84614a",
-    "proposed_product_port_not_integrated": true
+    "proposed_product_port_not_integrated": true,
+    "shared_fixture_corrections_sha": "373bc179e"
   },
   "fixture_boundaries": [
     "Local signed OIDC issuer; production verifier, middleware and nonce assertions unchanged",
@@ -179,7 +180,6 @@
     "Restricted role granted only the isolated product schema and nonce table; no superuser-only read proof"
   ],
   "blocked_dependencies": [
-    "Shared fixture SQL agent default and Qdrant collection identity disagree; own recall currently misses",
     "Proposed product runtime port and fixed-core vendor dependency await Head integration; no temporary patch is applied"
   ]
 }
