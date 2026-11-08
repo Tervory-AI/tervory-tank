@@ -581,6 +581,8 @@ services:
       # Moot confidential media (Mux). Tank-only door; never copy to agent rooms.
       MOOT_MUX_TOKEN_ID: ${MOOT_MUX_TOKEN_ID:-}
       MOOT_MUX_TOKEN_SECRET: ${MOOT_MUX_TOKEN_SECRET:-}
+      MOOT_MUX_SIGNING_KEY_ID: ${MOOT_MUX_SIGNING_KEY_ID:-}
+      MOOT_MUX_SIGNING_PRIVATE_KEY: ${MOOT_MUX_SIGNING_PRIVATE_KEY:-}
     volumes:
       - tank_trace_outbox:/var/lib/tank-traces
     depends_on:

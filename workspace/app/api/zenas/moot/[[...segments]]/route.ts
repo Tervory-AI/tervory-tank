@@ -91,10 +91,20 @@ async function serve(req: Request, context: Context) {
         if (mediaKeys.length) return reply({ error: "invalid_request" }, 400);
       }
       const mediaPath = "moot/" + segments.join("/");
+      // x-tervory-* triggers Workspace signinFetch → Tank OIDC verification.
+      // X-Moot remains for the Zenas room hearing gate; Tank binds actor from trigger_signin only.
+      const mediaHeaders: Record<string, string> = {
+        "X-Moot-Actor": tenant.userId,
+        "X-Moot-Tenant": tenant.tenantId,
+        "x-tervory-user": tenant.userId,
+        "x-tervory-tenant": tenant.tenantId,
+      };
+      const idem = req.headers.get("idempotency-key");
+      if (idem && /^[0-9a-fA-F-]{8,64}$/.test(idem)) mediaHeaders["idempotency-key"] = idem;
       const response = await zenas(`${mediaPath}?${params}`, {
         method: req.method,
         signal: req.signal,
-        headers: { "X-Moot-Actor": tenant.userId, "X-Moot-Tenant": tenant.tenantId },
+        headers: mediaHeaders,
         ...(mediaBody ? { body: JSON.stringify(mediaBody) } : {}),
       });
       if (!response.ok) {

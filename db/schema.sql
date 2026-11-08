@@ -167,9 +167,13 @@ CREATE TABLE IF NOT EXISTS tank.moot_media (
     asset_id        text,
     playback_ids    jsonb NOT NULL DEFAULT '[]'::jsonb,
     passthrough     text NOT NULL DEFAULT '',
+    idempotency_key text,
     region          text NOT NULL DEFAULT 'us-east',
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS moot_media_tenant_hearing ON tank.moot_media (tenant_id, hearing_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS moot_media_asset ON tank.moot_media (asset_id) WHERE asset_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS moot_media_idempotency
+    ON tank.moot_media (tenant_id, user_id, hearing_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;

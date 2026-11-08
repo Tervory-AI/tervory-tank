@@ -1,7 +1,9 @@
 """Authenticated Moot media gateway on Tank. Tenant/user/hearing isolated."""
 from __future__ import annotations
 
+import os
 import re
+import time
 from typing import Any, Awaitable, Callable
 from uuid import UUID
 
@@ -12,8 +14,11 @@ from moot_mux import (
     MuxNotConfigured,
     MuxProvider,
     SignedPlaybackUnconfigured,
+    mint_playback_jwt,
+    normalize_cors_origin,
     provider_from_env,
     require_signed_playback_ready,
+    signed_playback_url,
 )
 
 HEARING_UUID = re.compile(
@@ -21,6 +26,11 @@ HEARING_UUID = re.compile(
 )
 
 HearingGate = Callable[[str, str, str], Awaitable[bool]]
+
+# Soft guards before provider writes (env-overridable; fail closed on overflow).
+DEFAULT_UPLOAD_RATE_PER_MIN = 6
+DEFAULT_DAILY_UPLOAD_CAP = 40
+IDEMPOTENCY_RE = re.compile(r"^[0-9a-fA-F-]{8,64}$")
 
 
 class MootActor:
@@ -50,6 +60,18 @@ def match_media_path(path: str) -> dict[str, str] | None:
 
 def passthrough_for(actor: MootActor, hearing_id: str) -> str:
     return f"moot:{actor.tenant_id}:{hearing_id}:{actor.user_id}"[:255]
+
+
+def _int_env(name: str, default: int, environ: dict | None) -> int:
+    env = os.environ if environ is None else environ
+    raw = str(env.get(name, "")).strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
 
 
 async def _owned(record: MediaRecord | None, actor: MootActor, hearing_id: str) -> MediaRecord:
@@ -91,6 +113,23 @@ def public_asset_view(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def _enforce_write_budget(
+    *,
+    actor: MootActor,
+    store: AsyncOwnershipStore,
+    environ: dict | None,
+) -> None:
+    rate = _int_env("MOOT_MUX_UPLOAD_RATE_PER_MIN", DEFAULT_UPLOAD_RATE_PER_MIN, environ)
+    daily = _int_env("MOOT_MUX_DAILY_UPLOAD_CAP", DEFAULT_DAILY_UPLOAD_CAP, environ)
+    now = time.time()
+    recent = await store.count_uploads_since(actor.tenant_id, actor.user_id, now - 60)
+    if recent >= rate:
+        raise MuxError("rate_limited", 429)
+    day = await store.count_uploads_since(actor.tenant_id, actor.user_id, now - 86400)
+    if day >= daily:
+        raise MuxError("upload_budget_exhausted", 429)
+
+
 async def create_upload(
     *,
     actor: MootActor,
@@ -100,16 +139,25 @@ async def create_upload(
     store: AsyncOwnershipStore,
     hearing_allowed: HearingGate,
     test: bool = False,
+    idempotency_key: str | None = None,
+    environ: dict | None = None,
 ) -> dict[str, Any]:
     UUID(hearing_id)
     UUID(actor.tenant_id)
-    if not cors_origin or len(cors_origin) > 200:
-        raise MuxError("invalid_cors_origin", 422)
+    origin = normalize_cors_origin(cors_origin)
     if not await hearing_allowed(actor.tenant_id, actor.user_id, hearing_id):
         raise MuxError("not_found", 404)
+    if idempotency_key:
+        if not IDEMPOTENCY_RE.fullmatch(idempotency_key):
+            raise MuxError("invalid_idempotency_key", 422)
+        existing = await store.by_idempotency(actor.tenant_id, actor.user_id, hearing_id, idempotency_key)
+        if existing is not None:
+            data = await provider.retrieve_upload(existing.upload_id)
+            return public_upload_view(data)
+    await _enforce_write_budget(actor=actor, store=store, environ=environ)
     marker = passthrough_for(actor, hearing_id)
     created = await provider.create_direct_upload(
-        cors_origin=cors_origin, passthrough=marker, test=test
+        cors_origin=origin, passthrough=marker, test=test
     )
     upload_id = str(created.get("id") or "")
     if not upload_id:
@@ -121,6 +169,7 @@ async def create_upload(
             hearing_id=hearing_id,
             upload_id=upload_id,
             passthrough=marker,
+            idempotency_key=idempotency_key,
         )
     )
     return public_upload_view(created)
@@ -167,10 +216,18 @@ async def playback_access(
     playback_id: str,
     store: AsyncOwnershipStore,
     environ: dict | None = None,
+    ttl_s: int | None = None,
 ) -> dict[str, Any]:
     await _owned(await store.by_playback(playback_id), actor, hearing_id)
     require_signed_playback_ready(environ)
-    raise SignedPlaybackUnconfigured()
+    token = mint_playback_jwt(playback_id, environ=environ, ttl_s=ttl_s or 3600)
+    return {
+        "playback_id": playback_id,
+        "playback_policy": PLAYBACK_POLICY,
+        "token": token,
+        "playback_url": signed_playback_url(playback_id, token),
+        "expires_in": ttl_s or 3600,
+    }
 
 
 def error_payload(exc: MuxError) -> dict[str, Any]:
@@ -180,6 +237,7 @@ def error_payload(exc: MuxError) -> dict[str, Any]:
         body["playback_policy"] = PLAYBACK_POLICY
     if isinstance(exc, MuxNotConfigured):
         body["required_secrets"] = ["MOOT_MUX_TOKEN_ID", "MOOT_MUX_TOKEN_SECRET"]
+    # Never attach secret values or provider diagnostics.
     return body
 
 
@@ -198,6 +256,7 @@ async def handle_media_request(
     hearing_allowed: HearingGate | None = None,
     environ: dict | None = None,
     allow_test_uploads: bool = False,
+    idempotency_key: str | None = None,
 ) -> tuple[int, dict[str, Any]]:
     matched = match_media_path(path)
     if matched is None:
@@ -214,8 +273,11 @@ async def handle_media_request(
             cors = ""
             test = False
             if isinstance(body, dict):
+                # Caller body cannot choose another user/hearing; only cors_origin (+ optional test).
                 cors = str(body.get("cors_origin") or "").strip()
                 test = bool(body.get("test")) and allow_test_uploads
+                if any(k not in {"cors_origin", "home_region", "test"} for k in body):
+                    raise MuxError("invalid_request", 422)
             result = await create_upload(
                 actor=actor,
                 hearing_id=hearing_id,
@@ -224,6 +286,8 @@ async def handle_media_request(
                 store=store,
                 hearing_allowed=hearing_allowed,
                 test=test,
+                idempotency_key=idempotency_key,
+                environ=environ,
             )
             return 201, result
         if method == "GET" and kind == "uploads" and resource_id:
