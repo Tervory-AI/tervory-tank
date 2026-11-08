@@ -14,17 +14,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def _load(name: str, rel: str):
-    path = ROOT / "integrations" / "workspace" / rel
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-_gates = _load("integrations.workspace.gates_memory", "gates_memory.py")
-_request = _load("integrations.workspace.request_path", "request_path.py")
+_gates = importlib.import_module("integrations.workspace.gates_memory")
+_request = importlib.import_module("integrations.workspace.request_path")
 FIXED_FAKE_PER_CALL = _gates.FIXED_FAKE_PER_CALL
 FakeMemory = _gates.FakeMemory
 MemoryControlError = _gates.MemoryControlError
@@ -1731,7 +1722,7 @@ def test_classify_workspace_command_failure_ts_unit_via_node():
         """const fs = require("fs");
 const src = fs.readFileSync("workspace/lib/workspace-gates.ts", "utf8");
 const start = src.indexOf("function isAuthOrScopeFailure");
-const end = src.indexOf("function memoryUnavailableBracket");
+const end = src.indexOf("async function commandWorkspace");
 if (start < 0 || end < 0) throw new Error("helpers missing");
 let body = src.slice(start, end);
 body = body
