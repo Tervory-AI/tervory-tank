@@ -6,7 +6,6 @@ queue locally and sync when online again.
 """
 from __future__ import annotations
 
-import json
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
