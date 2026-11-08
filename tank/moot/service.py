@@ -175,4 +175,6 @@ def create_app(*, bridge, rooms, journal, internal_key, region, mux=None, liveki
             with suppress(Exception):
                 await websocket.close(code=4403)
 
+    from .gateway import SignalingGate
+    SignalingGate(bridge, rooms, journal, region).install(app)
     return app

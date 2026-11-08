@@ -26,8 +26,8 @@ class Rooms:
                 'epoch': projection['seats'][seat]['epoch'], 'expires_in': 60}
 
     async def revoke(self, scope, identity):
-        # Removing a participant revokes its current token in LiveKit. New grants
-        # always re-read the authoritative seat epoch and membership projection.
+        # OSS removal closes the current connection; it does not revoke its JWT.
+        # The signaling gateway checks epoch/membership on every reconnect.
         async with api.LiveKitAPI(self.url, self.key, self.secret) as client:
             await client.room.remove_participant(api.RoomParticipantIdentity(
                 room=scope.room, identity=identity))

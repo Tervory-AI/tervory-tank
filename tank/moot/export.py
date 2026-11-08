@@ -1,6 +1,5 @@
 """Local-only recording/feedback export. No shell and no external media URLs."""
 import html
-import json
 from pathlib import Path
 import subprocess
 from .contracts import MediaError

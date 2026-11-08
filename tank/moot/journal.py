@@ -5,6 +5,7 @@ shared transactional store before enabling multiple orchestration replicas.
 """
 import hashlib
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from .contracts import MediaError
@@ -38,6 +39,8 @@ class Journal:
     @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=5)
+        if self.path != ":memory:":
+            os.chmod(self.path, 0o600)
         db.row_factory = sqlite3.Row
         try:
             yield db
@@ -116,7 +119,9 @@ class Journal:
                 return False
             from datetime import datetime
             created = datetime.fromisoformat(event['created_at'].replace('Z', '+00:00')).timestamp()
-            db.execute('INSERT INTO mux_events VALUES (?,?,?,?,?)', (event['id'], digest, binding['room'], created, data))
+            safe = {key: event[key] for key in ('id', 'type', 'created_at')}
+            safe['data'] = {key: event['data'][key] for key in ('id', 'live_stream_id', 'status', 'playback_ids') if key in event['data']}
+            db.execute('INSERT INTO mux_events VALUES (?,?,?,?,?)', (event['id'], digest, binding['room'], created, json.dumps(safe)))
             states = {'video.live_stream.active': 'live', 'video.live_stream.idle': 'paused',
                 'video.live_stream.disabled': 'ended', 'video.live_stream.deleted': 'deleted',
                 'video.asset.ready': 'ready', 'video.asset.errored': 'failed', 'video.asset.deleted': 'deleted'}

@@ -40,8 +40,3 @@ dnspython==2.9.0
 
 # Trigger's style checks (tests/skala_intake, tests/trigger_*); same pin as agents/trigger/requirements.txt.
 -r ../agents/trigger/requirements.txt
-
-# Moot's standalone media contracts import the selected LiveKit SDKs in offline CI.
-# The optional Agents/VAD runtime stays in tank/moot/requirements.audio.lock.
-livekit==1.2.0
-livekit-api==1.2.2

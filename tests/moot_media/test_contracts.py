@@ -112,10 +112,12 @@ def test_mux_signatures_binding_idempotency(scope,journal):
     mux=Mux(None,journal,webhook_secret='test-webhook-secret')
     journal.bind(scope,'stream-local','live_stream')
     event={'id':'event-local','type':'video.live_stream.active',
-      'created_at':'2026-11-08T10:00:00Z','data':{'id':'stream-local'}}
+      'created_at':'2026-11-08T10:00:00Z','data':{'id':'stream-local','stream_key':'must-not-be-persisted'}}
     raw,signature=signed(event)
     assert mux.webhook(raw,signature,now=1000)
     assert mux.webhook(raw,signature,now=1000) is False
+    with journal.connect() as db:
+        assert 'must-not-be-persisted' not in db.execute('SELECT payload FROM mux_events').fetchone()[0]
     for data,signature2,now in [(raw+b' ',signature,1000),(raw,signature,2000),(raw,'t=1000,v1=bad',1000)]:
         with pytest.raises(MediaError):mux.webhook(data,signature2,now=now)
     with pytest.raises(MediaError,match='resource_binding_conflict'):
@@ -331,3 +333,20 @@ def test_object_retention_exact_region_and_hearing(scope,journal):
     assert asyncio.run(retention.run_once(scope,now=now+timedelta(days=2)))==1
     assert asyncio.run(retention.run_once(scope,now=now+timedelta(days=2)))==0
     assert store.deleted==[{'bucket':'local-us-bucket','key':scope.room+'/audio.ogg'}]
+
+
+def test_self_hosted_old_jwt_cannot_rejoin_after_epoch_handover(scope,journal):
+    from tank.moot.gateway import SignalingGate
+    state=projection(scope)
+    class Bridge:
+        async def projection(self,scope,user,seat):return state
+    rooms=Rooms('http://localhost:7880','ws://localhost:8091','local-key','s'*32)
+    token=rooms.grant(scope,'member','applicant',state)
+    journal.save_lease(scope,'member','applicant',2,token['identity'])
+    gate=SignalingGate(Bridge(),rooms,journal,scope.region)
+    assert asyncio.run(gate.authorize(token['token']))[3]==2
+    state['seats']['applicant']={'kind':'ai','epoch':3}
+    with pytest.raises(MediaError,match='seat_revoked'):
+        asyncio.run(gate.authorize(token['token']))
+    # Old token remains cryptographically valid, so token expiry alone would fail.
+    jwt.decode(token['token'],'s'*32,algorithms=['HS256'])

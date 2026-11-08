@@ -10,6 +10,12 @@ import json
 import os
 from pathlib import Path
 import threading
+import tempfile
+import time
+import socket
+import uvicorn
+from tank.moot.journal import Journal
+from tank.moot.service import create_app
 from uuid import uuid4
 from playwright.sync_api import sync_playwright
 from tank.moot.contracts import Scope
@@ -23,11 +29,26 @@ def main():
     endpoint=os.environ.get('MOOT_LOCAL_LIVEKIT_URL','http://127.0.0.1:7880')
     rooms=Rooms(endpoint,endpoint.replace('http','ws',1),key,secret)
     asyncio.run(rooms.create(scope))
+    journal=Journal(Path(tempfile.mkdtemp(prefix='moot-browser-journal-'))/'media.sqlite')
     states={seat:{'id':scope.hearing,'region':scope.region,'revision':3,'phase':'hearing',
       'floor':'respondent','current_issue':1,'pending_question':{'turn':2,'target':'respondent'},
       'transcript':[{'number':2,'seat':'judge','text':'Saved pending question'}],
       'seats':{s:{'kind':'human','epoch':0} for s in ('applicant','respondent','judge')},'my_seats':[seat]}
       for seat in ('applicant','respondent')}
+    class Bridge:
+        async def projection(self,scope,user,seat):return deepcopy(states[seat])
+    with socket.socket() as candidate:
+        candidate.bind(('127.0.0.1',0));gateway_port=candidate.getsockname()[1]
+    gateway=create_app(bridge=Bridge(),rooms=rooms,journal=journal,internal_key='local-fixture-key',region=scope.region)
+    gateway_server=uvicorn.Server(uvicorn.Config(gateway,host='127.0.0.1',port=gateway_port,
+        log_level='critical',access_log=False))
+    gateway_thread=threading.Thread(target=gateway_server.run,daemon=True);gateway_thread.start()
+    deadline=time.monotonic()+5
+    while not gateway_server.started:
+        if time.monotonic()>deadline:raise RuntimeError('local gateway did not start')
+        time.sleep(.02)
+    rooms.public_url=f'ws://127.0.0.1:{gateway_port}'
+    tokens={}
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path=self.path.split('?')[0]
@@ -40,6 +61,9 @@ def main():
                 state=deepcopy(states[seat])
                 try:
                     result=state if path=='/state' else rooms.grant(scope,'fixture-'+seat,seat,state)
+                    if path=='/grant':
+                        journal.save_lease(scope,'fixture-'+seat,seat,result['epoch'],result['identity'])
+                        tokens[seat]=result['token']
                 except ValueError:
                     self.send_error(403);return
                 body=json.dumps(result).encode();mime='application/json'
@@ -79,14 +103,21 @@ def main():
             states['applicant']['seats']['applicant']={'kind':'ai','epoch':1}
             pages[0].evaluate('async()=>{try{await peer.refresh()}catch{}}')
             assert pages[0].evaluate('peer.state')=='disconnected'
+            import httpx
+            denied=httpx.get(f'http://127.0.0.1:{gateway_port}/rtc/v1/validate',params={'access_token':tokens['applicant']},trust_env=False)
+            assert denied.status_code==403
+            attacker_connected=pages[0].evaluate('''async input=>{const room=new window.LiveKitRoom();try{await room.connect(input.url,input.token,{maxRetries:0});return true;}catch{return false;}finally{await room.disconnect();}}''',{'url':rooms.public_url,'token':tokens['applicant']})
+            assert attacker_connected is False
             assert pages[1].evaluate('peer.hearing.current_issue')==1
             browser.close()
         print(json.dumps({'local_real_sfu':True,'real_browser_participants':2,
           'camera_and_microphone_received':True,'mute_controls':True,'reconnect':True,
-          'handover_disconnect':True,'exact_pending_question_resume':True,
+          'handover_disconnect':True,'exact_pending_question_resume':True,'epoch_signaling_gateway':True,'old_token_rejoin_denied':True,
           'actor_boundary':'fixture','mux':'not_contacted','speech':'unavailable'}))
     finally:
         server.shutdown()
+        gateway_server.should_exit=True
+        gateway_thread.join(timeout=3)
         async def cleanup():
             from livekit import api
             async with api.LiveKitAPI(endpoint,key,secret) as client:
