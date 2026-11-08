@@ -4397,9 +4397,10 @@ async def tiger_savings_record(request: Request, caller: str | None = Depends(re
         raise HTTPException(422, 'Invalid Tiger receipt') from None
     if request.headers.get('x-tenant-id') not in (None, str(body.tenant_id)):
         raise HTTPException(403, 'tenant mismatch')
-    async with pool().acquire() as conn:
-        async with conn.transaction():
-            return await record(conn, body)
+    with tenant_scope(body.tenant_id):
+        async with pool().acquire() as conn:
+            async with conn.transaction():
+                return await record(conn, body)
 
 
 async def tiger_savings_list(request: Request):
@@ -4407,8 +4408,9 @@ async def tiger_savings_list(request: Request):
     tenant = _tiger_tenant(request)
     if request.headers.get('x-tenant-id') not in (None, str(tenant)):
         raise HTTPException(403, 'tenant mismatch')
-    async with pool().acquire() as conn:
-        return {'receipts': await listed(conn, tenant)}
+    with tenant_scope(tenant):
+        async with pool().acquire() as conn:
+            return {'receipts': await listed(conn, tenant)}
 
 
 TIGER_AGENT_URL = "http://agent-tiger:8000"
