@@ -26,7 +26,7 @@ import workspace_fixture
 
 workspace_entry = workspace_fixture.workspace_entry
 
-SOURCE_SHA = 'f9a266f8c9b818295d8978500757c7b575b21736'
+SOURCE_SHA = '5ec069d50e929745845a19142356593dc3bd7f80'
 ROOT = Path(__file__).resolve().parents[3]
 CHAT = {'messages': [{'role': 'user', 'content': 'placeholder summarize the project'}], 'task_type': 'tier0.answer'}
 
@@ -203,6 +203,8 @@ async def test_restricted_database_role_uses_product_entry(workspace_entry):
     schema = e.stack.records.schema(e.stack.agent)
     await e.pool.execute(f'CREATE ROLE {role} NOSUPERUSER NOCREATEDB NOCREATEROLE')
     await e.pool.execute(f'GRANT USAGE,CREATE ON SCHEMA {schema} TO {role}')
+    await e.pool.execute(f'GRANT USAGE,CREATE ON SCHEMA {e.engine_schema} TO {role}')
+    await e.pool.execute(f'GRANT SELECT,INSERT,DELETE ON {e.engine_schema}.user_assertion_nonces TO {role}')
     await e.pool.execute(f'GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA {schema} TO {role}')
     restricted = await asyncpg.create_pool(os.environ['MEMORY_TEST_DATABASE_URL'], min_size=1, max_size=1,
                                          server_settings={'role': role})
@@ -244,7 +246,11 @@ async def test_default_off_has_no_memory_or_added_work(workspace_entry, monkeypa
     e.stack.calls.clear()
     first = await chat(e)
     assert first.get('memory_bracket') in (None, {})
-    assert not e.stack.calls and await e.snapshot() == before
+    # The fixed Tank core already has its own /engine corridor. An unset
+    # Workspace switch adds no product recall, control lookup or memory writes.
+    assert e.stack.calls and all(path.startswith('/engine/') for _, path in e.stack.calls)
+    assert all(status == 200 for _, path, status in e.statuses if path.startswith('/engine/'))
+    assert await e.snapshot() == before
     assert len(e.provider_calls) == 1
 
 
@@ -254,15 +260,31 @@ async def test_paid_entry_runs_real_tank_lifecycle(workspace_entry, entry):
     e = workspace_entry
     body = CHAT if entry == 'chat' else {'title': 'placeholder project', 'request': 'placeholder summarize the project'}
     if entry == 'task.create':
-        direct = await e.request(entry, body)
-        assert direct.status_code == 409 and not e.provider_calls
-        result, completed = await e.confirmed_task(body)
-        assert completed['ledger_id'] and completed['call']['tokens_in'] == 10
-        assert completed['call']['tokens_out'] == 3
+        refused = await e.request(entry, body)
+        assert refused.status_code == 409 and not e.provider_calls
+        response = await e.confirmed_task(body)
+        data = response.json()
+        assert data['status'] == 'confirmed', e.statuses
+        board = await e.request('tasks', {}, method='GET')
+        assert board.status_code == 200, board.text
+        created = [row for row in board.json()['tasks'] if row['title'] == body['title'] and row['created_by'] == USER_A]
+        assert len(created) == 1
+        task_id = created[0]['id']
+        async with asyncio.timeout(10):
+            while True:
+                task = await e.main.get_task(UUID(task_id), UUID(e.stack.tenant))
+                if task['status'] in {'done', 'failed'}:
+                    break
+                await asyncio.sleep(.01)
+        assert task['status'] == 'done', task.get('error')
+        assert task['ledger_id']
+        response = await e.request('task.receipt', {'task_id': task_id}, method='GET')
+        assert response.status_code == 200, response.text
+        assert response.json()['rows'][0]['tokens_in'] == 10 and response.json()['rows'][0]['tokens_out'] == 3
     else:
         response = await e.request(entry, body)
-        assert response.status_code == 200, response.text
-        result = response.json()
+    assert response.status_code == 200, response.text
+    result = response.json()
     assert len(e.provider_calls) == 1
     assert result['memory_bracket']['paid_calls'] == 1
     paid_at = next(index for index, event in enumerate(e.timeline) if event[0] == 'PAID')
@@ -314,10 +336,16 @@ async def test_correction_forget_and_off_invalidate_reusable_answers(workspace_e
     edited = await e.request('memory.edit', {'memory_id': receipt['id'], 'text': 'placeholder corrected project answer'})
     assert edited.status_code == 200
     corrected = await chat(e)
-    assert 'placeholder corrected project answer' in json.dumps(corrected)
+    assert corrected['content'] == 'placeholder corrected project answer'
+    assert len(e.provider_calls) == before
     assert corrected != first
+    other = await chat(e, user=USER_B)
+    assert other['content'] == 'placeholder completed answer'
+    assert 'placeholder corrected project answer' not in json.dumps(other)
     assert (await e.request('memory.forget', {'memory_id': receipt['id']})).status_code == 200
-    assert receipt['id'] not in json.dumps(await chat(e))
+    forgotten = await chat(e)
+    assert forgotten['content'] != corrected['content']
+    assert receipt['id'] not in json.dumps(forgotten)
     assert (await e.request('memory.control', {'control': 'off'})).status_code == 200
     await chat(e)
     await chat(e)
@@ -329,8 +357,13 @@ async def test_correction_forget_and_off_invalidate_reusable_answers(workspace_e
 @pytest.mark.parametrize('method', ['POST', 'GET'])
 async def test_memory_network_outage_is_truthful_and_no_double_payment(workspace_entry, method):
     e = workspace_entry
-    e.fault['method'] = method
+    e.fault.update(method=method, path='/records' if method == 'GET' else '/recall')
+    if method == 'GET':
+        control = await e.request('memory.view')
+        assert control.status_code == 503 and not e.provider_calls
+        assert e.fault['hits'] > 0
     result = await chat(e)
+    assert e.fault['hits'] > 0
     assert result['memory_bracket']['memory_unavailable'] is True
     assert result['memory_bracket']['answered_from_memory'] is False
     assert len(e.provider_calls) == 1
@@ -377,7 +410,10 @@ async def test_memory_off_is_per_user_and_does_not_recall_or_remember(workspace_
     before = await e.snapshot()
     e.stack.calls.clear()
     await chat(e)
-    assert not e.stack.calls and await e.snapshot() == before
+    # Reading the signed-in user's durable control preference is necessary to
+    # discover OFF. It must use SQL listing, never semantic recall or a write.
+    assert e.stack.calls and all(method == 'GET' and path == '/records' for method, path in e.stack.calls)
+    assert await e.snapshot() == before
     assert (await e.request('memory.view', {}, user=USER_B)).status_code == 200
 
 
@@ -394,16 +430,70 @@ async def test_retry_and_concurrent_paid_requests_keep_accounting(workspace_entr
     assert len(e.provider_calls) == before
 
 
-def test_legacy_requirements_and_product_browser_entrypoints_are_retained():
+@pytest.mark.asyncio
+async def test_legacy_requirements_and_product_browser_entrypoints_are_retained(workspace_entry):
+    import socket
+    import subprocess
+    import uvicorn
+    e = workspace_entry
     manifest = json.loads((Path(__file__).with_name('workspace.json')).read_text())
     assert set(manifest['cases']) == set(REQUIREMENTS)
     assert manifest['source_sha'] == SOURCE_SHA
     assert len(manifest['legacy_tests']) >= 30
-    # This is a deliberately strict dependency test, not simulated browser proof:
-    # the deployed Tank tree must actually contain Workspace's approved controls.
-    components = (ROOT / 'workspace/app').rglob('*.tsx')
-    controls = [path for path in components if any(name in path.read_text() for name in ('/api/memory', 'viewWorkspaceMemory', 'setWorkspaceMemoryControl'))]
-    assert controls, 'BLOCKED: no rendered personal-memory controls entry; approved empty/error/off browser proof is unavailable'
+    assert os.environ.get('WORKSPACE_PRODUCT_SOURCE'), 'Set WORKSPACE_PRODUCT_SOURCE to the exact reviewed product checkout'
+    source = Path(os.environ['WORKSPACE_PRODUCT_SOURCE'])
+    assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip() == SOURCE_SHA
+    assert not subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=normal'], cwd=source, text=True).strip()
+    assert (source / 'workspace/app/tasks/page.tsx').is_file()
+    from fastapi import Depends
+    import command
+
+    @e.app.get('/fixture/workspace/state')
+    async def state(actor=Depends(command.identity)):
+        assert actor.user_id == USER_A and str(actor.tenant_id) == e.stack.tenant
+        paid = await e.pool.fetch('SELECT tokens_in,tokens_out,cost_usd FROM tank.ledger WHERE tenant_id=$1 AND tokens_in>0', UUID(e.stack.tenant))
+        return {'provider_calls': len(e.provider_calls),
+            'done_tasks': await e.pool.fetchval("SELECT count(*) FROM tank.tasks WHERE tenant_id=$1 AND created_by=$2 AND status='done'", UUID(e.stack.tenant), USER_A),
+            'paid_receipts': [dict(row) for row in paid],
+            'memories': await e.snapshot()}
+
+    @e.app.post('/fixture/workspace/fault')
+    async def fault(body: dict, actor=Depends(command.identity)):
+        assert actor.user_id == USER_A and str(actor.tenant_id) == e.stack.tenant
+        assert body['method'] in {None, 'GET', 'POST'} and body['status'] == 503
+        e.fault.update(body)
+        return {'ok': True}
+
+    sock = socket.socket()
+    sock.bind(('127.0.0.1', 0))
+    server = uvicorn.Server(uvicorn.Config(e.app, log_level='error', access_log=False, lifespan='off', timeout_graceful_shutdown=3))
+    serving = asyncio.create_task(server.serve(sockets=[sock]))
+    process = None
+    try:
+        async with asyncio.timeout(10):
+            while not server.started:
+                if serving.done():
+                    await serving
+                await asyncio.sleep(.01)
+        env = {**os.environ, 'WORKSPACE_PRODUCT_SOURCE': str(source),
+            'WORKSPACE_BROWSER_BACKEND': f'http://127.0.0.1:{sock.getsockname()[1]}',
+            'WORKSPACE_BROWSER_HEADERS': json.dumps(e.headers()),
+            'WORKSPACE_BROWSER_OUTPUT': str(ROOT / '.tmp/workspace-browser'),
+            'WORKSPACE_BROWSER_TENANT': e.stack.tenant, 'WORKSPACE_BROWSER_USER': USER_A}
+        process = await asyncio.create_subprocess_exec('node', str(Path(__file__).with_name('workspace_browser.cjs')), env=env,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        output, _ = await asyncio.wait_for(process.communicate(), timeout=100)
+        assert process.returncode == 0, output.decode()
+        print(output.decode())
+        assert len(e.provider_calls) == 2
+        assert e.fault['hits'] > 0
+    finally:
+        if process and process.returncode is None:
+            process.kill()
+            await process.wait()
+        server.should_exit = True
+        await serving
+        sock.close()
 
 
 @pytest.mark.asyncio
@@ -478,7 +568,7 @@ async def test_denied_control_keeps_memory_settings_and_receipts_unchanged(works
     scope = {'user': USER_B} if foreign == 'user' else {'tenant': e.stack.other_tenant}
     before = await e.snapshot()
     tenants = [UUID(e.stack.tenant), UUID(e.stack.other_tenant)]
-    query = 'SELECT id,tenant_id,cost_usd,tokens_in,tokens_out,outcome FROM tank.ledger WHERE tenant_id=ANY($1::uuid[]) ORDER BY id'
+    query = 'SELECT * FROM tank.ledger WHERE tenant_id=ANY($1::uuid[]) ORDER BY id'
     receipts = await e.pool.fetch(query, tenants)
     body = {'memory_id': row['id']}
     if operation == 'memory.edit':
@@ -488,18 +578,19 @@ async def test_denied_control_keeps_memory_settings_and_receipts_unchanged(works
     assert await e.snapshot() == before
     after = await e.pool.fetch(query, tenants)
     original_ids = {row['id'] for row in receipts}
-    assert [row for row in after if row['id'] in original_ids] == receipts
-    # Existing failure auditing is retained, while every pre-existing receipt is immutable.
+    assert [row for row in after if row['id'] in original_ids] == receipts, 'Denied controls must not mutate any existing receipt'
     audits = [row for row in after if row['id'] not in original_ids]
-    assert len(audits) == 1
+    assert len(audits) == 1, 'Keep exactly one sanitized caller denial audit'
     audit = audits[0]
-    caller_tenant = e.stack.other_tenant if foreign == 'tenant' else e.stack.tenant
-    assert str(audit['tenant_id']) == caller_tenant
-    assert audit['outcome'] == 'failed' and float(audit['cost_usd']) == 0
+    assert str(audit['id']) == response.json()['detail']['ledger_id']
+    assert str(audit['tenant_id']) == scope.get('tenant', e.stack.tenant)
+    assert audit['agent'] == 'workspace' and audit['task_type'] == 'command.turn'
+    assert audit['outcome'] == 'failed' and audit['cost_usd'] == 0
     assert audit['tokens_in'] == audit['tokens_out'] == 0
-    assert response.json()['detail']['ledger_id'] == str(audit['id'])
-    assert row['id'] not in response.text and 'placeholder original answer' not in response.text
-    assert 'placeholder refused edit' not in json.dumps([dict(value) for value in audits], default=str)
+    assert json.loads(audit['error']) == {'action': 'workspace.' + operation, 'status': 'denied',
+        'actor_user_id': scope.get('user', USER_A)}
+    for private in (row['id'], 'placeholder original answer', 'placeholder refused edit', e.stack.key):
+        assert private not in str(dict(audit))
     assert not e.provider_calls
 
 
@@ -520,3 +611,43 @@ async def test_ladder_evaluates_accepted_case_and_accounts_for_both_calls(worksp
     repeat = await chat(e)
     assert len(e.provider_calls) == 2 and repeat['memory_bracket']['paid_calls'] == 0
     assert first['memory_bracket']['cost_usd'] == pytest.approx(.013)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [401, 403])
+async def test_post_payment_auth_refusal_preserves_model_receipt_without_retry(workspace_entry, status):
+    e = workspace_entry
+    e.fault.update(method='POST', path='/memories', status=status)
+    response = await e.request('chat', CHAT)
+    assert response.status_code == status and e.fault['hits'] == 1
+    assert len(e.provider_calls) == 1
+    detail = response.json()['detail']
+    row = await e.pool.fetchrow('SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2', UUID(detail['ledger_id']), UUID(e.stack.tenant))
+    assert row['tokens_in'] == 10 and row['tokens_out'] == 3
+    assert float(row['cost_usd']) == detail['receipt']['cost_usd'] == .013
+    assert detail['action_ledger_id'] != detail['ledger_id']
+    assert not await e.snapshot()
+
+
+@pytest.mark.asyncio
+async def test_real_engine_memory_is_available_and_personally_scoped(workspace_entry):
+    e = workspace_entry
+    await chat(e)
+    calls = [status for method, path, status in e.statuses if path.startswith('/engine/')]
+    assert calls and all(status == 200 for status in calls)
+    rows = await e.pool.fetch(f'SELECT tenant_id,meta FROM {e.engine_schema}.memory_records')
+    assert rows
+    assert all(str(row['tenant_id']) == e.stack.tenant and json.loads(row['meta'])['user_id'] == USER_A for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_confirm_replay_does_not_enqueue_or_pay_twice(workspace_entry):
+    e = workspace_entry
+    result = await e.confirmed_task({'title': 'placeholder once', 'request': 'placeholder request'})
+    card = result.json()['card_id']
+    replies = await asyncio.gather(*[e.client.post(f'/v1/command/cards/{card}', headers=e.headers(), json={'action': 'confirm'}) for _ in range(2)])
+    assert all(response.status_code in {200, 409} for response in replies)
+    for task in tuple(e.main._background):
+        await task
+    assert await e.pool.fetchval('SELECT count(*) FROM tank.tasks WHERE tenant_id=$1', UUID(e.stack.tenant)) == 1
+    assert len(e.provider_calls) == 1
