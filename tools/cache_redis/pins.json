@@ -1,0 +1,18 @@
+{
+  "gateway_image": "ghcr.io/berriai/litellm@sha256:c169fb3adc514fcf210377c203f3de406d54f10bfdacf13948a4a839db9af7de",
+  "gateway_release": "1.106.4",
+  "redis_image": "redis:7.4.12@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039",
+  "source_commit": "687753acd45123ef9dc364762540f34404560b3d",
+  "source_sha256": {
+    "engine_config.py": "1eb7d4e74b940d745f9e6ee2a2055b8ce108dc452614f4b5f47929fa4045c30b",
+    "engine_runtime.py": "4790d58163ac3ce41d9d2a95690041dbf5a6842e4b7c8bc98b64b97c5409f1f4",
+    "tenant_traces.py": "9966d05a864dcf14104915b75eb3bcf76101ae822cb7267371bbd4dd6799d481",
+    "trace_sink.py": "05122ef2057b39e2389240ddcc3574af6d209f515d06d0a2008dd61fab765118",
+    "response_cache.py": "5cc622efee7f937b5ed0232ec391a91cbb99bc421371ddfc0d65b3506bb5efe0",
+    "config.yaml": "0730221219fd1171a497c86e4fe68fe1f0790f6c9d85c234cd28f0d4e7631a4f",
+    "config.za.yaml": "7311a9a2720717b517aaceebd70ee6249e3e7e177f5be085dc0178657415854e"
+  },
+  "reported_deployed_image_id": "sha256:6f8b4ffbd0e13d8d86a8f87f88dae58f27f2020d70aef53511d5af4e4942809f",
+  "reported_deployed_image_id_provenance": "coordinator read-only observation; not independently inspected in this cloud task",
+  "equivalence": "pinned dependency image plus exact deployed callback/config sources; not byte-identical custom-image proof"
+}
