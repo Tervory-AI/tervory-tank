@@ -1,6 +1,6 @@
 {
   "product": "zenas",
-  "source_sha": "21e4a4a7314913d87505bed70a86ebd67b24fc42",
+  "source_sha": "25840393d75c1bccddc67997c68783957ec37c2a",
   "entrypoints": [
     "Tank TriggerSigninMiddleware -> zenas_proxy -> POST /answers",
     "Tank TriggerSigninMiddleware -> zenas_proxy -> POST /drafts",
@@ -135,7 +135,8 @@
       "tests/gates78/products/test_zenas.py::test_real_ledger_reconciliation_and_first_repeat_changed_evidence",
       "tests/gates78/products/test_zenas.py::test_private_brain_dispatch_preserves_real_policy_identity_and_receipts",
       "tests/gates78/products/test_zenas.py::test_private_brain_forged_receipts_fail_closed_without_second_payment",
-      "tests/gates78/products/test_zenas.py::test_completed_private_task_without_output_never_pays_fallback"
+      "tests/gates78/products/test_zenas.py::test_completed_private_task_without_output_never_pays_fallback",
+      "tests/gates78/products/test_zenas.py::test_private_receipt_reconciliation_preserves_provider_precision"
     ],
     "G8.retry_concurrency": [
       "tests/gates78/products/test_zenas.py::test_retry_and_concurrent_requests_pay_at_most_once",

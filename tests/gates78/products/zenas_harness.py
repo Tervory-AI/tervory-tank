@@ -19,7 +19,7 @@ import pytest_asyncio
 from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 ROOT = Path(__file__).resolve().parents[3]
-SOURCE_SHA = "21e4a4a7314913d87505bed70a86ebd67b24fc42"
+SOURCE_SHA = "25840393d75c1bccddc67997c68783957ec37c2a"
 USER_A, USER_B, USER_C = ("placeholder-user-a", "placeholder-user-b", "placeholder-user-c")
 WORKSPACE_KEY = "placeholder-gate78-workspace-key"
 QUOTE = "A written supply agreement requires notice before cancellation and remedies for breach."
@@ -55,6 +55,7 @@ class ExternalProvider:
     brain_calls: list[str] = field(default_factory=list)
     brain_reply: dict | None = None
     brain_status: int = 404
+    response_cost: float = FIXTURE_COST
     brain_actors: list = field(default_factory=list)
     brain_requests: list = field(default_factory=list)
     nonces: object = None
@@ -110,7 +111,7 @@ class ExternalProvider:
             result = {"text": "placeholder drafted commercial terms", "clauses": [], "issues": []}
         self.calls.append(body)
         self.events.append(('provider', body['model']))
-        return httpx.Response(200, headers={'x-litellm-response-cost': str(FIXTURE_COST),
+        return httpx.Response(200, headers={'x-litellm-response-cost': str(self.response_cost),
             'x-litellm-model-group': body['model']}, json={'id':'placeholder-completion',
             'choices':[{'message':{'role':'assistant','content':json.dumps(result)}, 'finish_reason':'stop'}],
             'usage':{'prompt_tokens':FIXTURE_INPUT,'completion_tokens':FIXTURE_OUTPUT}})

@@ -608,6 +608,9 @@ async def private_code_reply(entry, request, actor, content):
     bill = {key: row[key] for key in ('model','region','tokens_in','tokens_out','task_type')}
     bill.update(ledger_id=str(ident), tenant_id=str(row['tenant_id']), task_id=str(row['task_id']),
                 room='zenas', cost_usd=float(row['cost_usd']))
+    with tenant_scope(actor.tenant_id):
+        await entry.stack.records.pool.execute("""INSERT INTO tank.agent_receipts(ledger_id,tenant_id,room,receipt)
+            VALUES($1,$2,'zenas',$3::jsonb)""", ident, UUID(actor.tenant_id), json.dumps(bill))
     return {'result': {'content': content}, 'receipt': bill}
 
 
@@ -784,3 +787,27 @@ async def test_completed_private_task_without_output_never_pays_fallback(zenas, 
     rows = await zenas.request('GET', '/receipts')
     assert rows.status_code == 200
     assert any(r['cost'] == FIXTURE_COST for r in rows.json()['receipts'])
+
+
+@pytest.mark.asyncio
+async def test_private_receipt_reconciliation_preserves_provider_precision(zenas, monkeypatch):
+    from decimal import Decimal
+    from uuid import UUID
+
+    from chassis.tank import TankClient
+    from chassis.user_assertion import SignedUser
+    monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
+    zenas.model.response_cost = 0.002400004
+    async def paid(request, actor):
+        return await private_paid_reply(zenas, request, actor)
+    zenas.model.brain_reply = paid
+    actor = SignedUser(zenas.stack.tenant, USER_A, 'org:admin')
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=zenas.tank.app)) as http:
+        client = TankClient('http://tank:8000', zenas.stack.key, 'zenas', http)
+        data = await client.delegate_task(actor, str(uuid4()), 'zenas.rule_card',
+            {'messages':[{'role':'user','content':'Review the written civil supply agreement and its notice terms.'}]}, [])
+    bill = data['receipt']
+    assert bill['cost_usd'] == 0.002400004 and len(zenas.model.calls) == 1
+    row = await zenas.stack.records.pool.fetchrow('SELECT cost_usd FROM tank.ledger WHERE tenant_id=$1 AND id=$2',
+        UUID(zenas.stack.tenant), UUID(bill['ledger_id']))
+    assert row['cost_usd'] == Decimal('0.00240000')
