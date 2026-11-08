@@ -130,6 +130,8 @@ async def test_real_runtime_client_and_packaging(tisan):
     assert any(path == '/memories' for _, path in tisan.stack.calls)
     docker = (Path(tisan.runtime.builder.__file__).with_name('Dockerfile')).read_text()
     assert 'gates_memory.py' in docker and 'memory_api.py' in docker and 'brain_service.py' in docker
+    from tisan_adapter_assertions import assert_task_boundary
+    await assert_task_boundary(tisan)
 
 @pytest.mark.asyncio
 async def test_default_off_keeps_profiles_and_introduces_no_memory_work(tisan, monkeypatch):
