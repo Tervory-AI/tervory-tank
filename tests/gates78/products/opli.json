@@ -1,6 +1,6 @@
 {
   "product": "opli",
-  "source_sha": "0e2a55f28fd966b6cf93334979dddd35ee2e3e2f",
+  "source_sha": "f7837e9e327982d7e4b9084774985f065666f4b1",
   "entrypoints": [
     "POST /v1/command/opli/code-turn",
     "GET /v1/command/opli/memory.view",

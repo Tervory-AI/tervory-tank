@@ -12,6 +12,7 @@ import httpx
 import pytest_asyncio
 
 from chassis.memory import MemoryClient
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 from trigger_signin_fakes import native_provider, ORG, set_founders
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -40,7 +41,7 @@ class OpliGateway:
             } for name in ("llama-small", "gpt-oss-small", "qwen-small", "gpt-oss", "llama", "placeholder-frontier")]})
         if request.url.path == "/router/settings":
             return httpx.Response(200, json={"current_values": {"fallbacks": []}})
-        assert request.method == "POST" and request.url.path == "/v1/chat/completions"
+        assert request.method == "POST" and request.url.path == COMPLETIONS_PATH
         self.calls.append(json.loads(request.content))
         self.events.append("provider")
         self.entered.set()
