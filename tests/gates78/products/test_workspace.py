@@ -26,7 +26,7 @@ import workspace_fixture
 
 workspace_entry = workspace_fixture.workspace_entry
 
-SOURCE_SHA = 'c0119aac147f3a3c2c9036b692ca858953282fa6'
+SOURCE_SHA = '02df1877f88c28948952e5c7e88f9d7a8c0b8e1a'
 ROOT = Path(__file__).resolve().parents[3]
 CHAT = {'messages': [{'role': 'user', 'content': 'placeholder summarize the project'}], 'task_type': 'tier0.answer'}
 
