@@ -191,7 +191,8 @@ async def run(rows, tenant, batch, checkpoint, client, *, sleep=asyncio.sleep, r
                     'observation_id': observation.get('id'), 'observed_at': observation.get('ts'),
                     'method': observation.get('method'), 'price': observation.get('price'),
                     'currency': observation.get('currency'), 'availability': observation.get('availability'),
-                    'source_receipt': result.get('receipt'), 'skill_receipts': result.get('skill_receipts', []), 'model_calls': 0})
+                    'source_receipt': result.get('receipt'), 'skill_receipts': result.get('skill_receipts', []),
+                    'savings': result.get('savings'), 'model_calls': 0})
                 state.save(row['id'], receipt)
             receipt['status'] = 'complete'
             receipt['source_status'] = ('checked' if receipt['pages'] and all(page['status'] == 'observed' for page in receipt['pages'])

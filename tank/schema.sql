@@ -3104,6 +3104,32 @@ ALTER TABLE tank.trigger_bot_messages ADD COLUMN IF NOT EXISTS person text;
 -- BEGIN base (new blocks for base go here)
 -- END base
 -- BEGIN tiger (new blocks for tiger go here)
+CREATE TABLE IF NOT EXISTS tank.tiger_savings (
+ tenant_id uuid NOT NULL, id uuid NOT NULL, action text NOT NULL,
+ component boolean NOT NULL DEFAULT false, receipt jsonb NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS tiger_savings_history ON tank.tiger_savings(tenant_id,created_at DESC) WHERE NOT component;
+CREATE TABLE IF NOT EXISTS tank.tiger_extract_cache (
+ tenant_id uuid NOT NULL, key text NOT NULL, output jsonb NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tenant_id,key)
+);
+DO $$
+DECLARE relation text;
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+     WHERE n.nspname='tank' AND c.relname='ledger' AND c.relrowsecurity) THEN RETURN; END IF;
+ FOREACH relation IN ARRAY ARRAY['tiger_savings','tiger_extract_cache'] LOOP
+  EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY', relation);
+  EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY', relation);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='tank' AND tablename=relation AND policyname='tenant_access') THEN
+   EXECUTE format('CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',relation);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='tank' AND tablename=relation AND policyname='tenant_boundary') THEN
+   EXECUTE format('CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',relation);
+  END IF;
+ END LOOP;
+END $$;
 -- END tiger
 -- BEGIN market_lab (new blocks for market_lab go here)
 -- END market_lab
