@@ -72,21 +72,25 @@
     ],
     "G8.default_off": [
       "tests/gates78/products/test_tiger.py::test_default_off_and_unauthenticated_plain_free_path",
-      "tests/gates78/products/test_tiger.py::test_typed_adapter_origin_timeout_redirect_and_default_off"
+      "tests/gates78/products/test_tiger.py::test_typed_adapter_origin_timeout_redirect_and_default_off",
+      "tests/gates78/products/test_tiger.py::test_merged_extraction_cache_opt_in_and_actual_accounting"
     ],
     "G8.task_path": [
       "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses"
     ],
     "G8.free_first": [
       "tests/gates78/products/test_tiger.py::test_code_first_and_ineligible_task_reuse",
-      "tests/gates78/products/test_tiger.py::test_original_reader_ocr_and_brain_regressions"
+      "tests/gates78/products/test_tiger.py::test_original_reader_ocr_and_brain_regressions",
+      "tests/gates78/products/test_tiger.py::test_merged_extraction_cache_opt_in_and_actual_accounting"
     ],
     "G8.exact_repeat": [
-      "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses"
+      "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses",
+      "tests/gates78/products/test_tiger.py::test_merged_extraction_cache_opt_in_and_actual_accounting"
     ],
     "G8.misses": [
       "tests/gates78/products/test_tiger.py::test_task_path_receipts_exact_repeat_and_misses",
-      "tests/gates78/products/test_tiger.py::test_code_first_and_ineligible_task_reuse"
+      "tests/gates78/products/test_tiger.py::test_code_first_and_ineligible_task_reuse",
+      "tests/gates78/products/test_tiger.py::test_merged_extraction_cache_opt_in_and_actual_accounting"
     ],
     "G8.correction": [
       "tests/gates78/products/test_tiger.py::test_correction_and_forget_invalidate_derived_answers"
@@ -109,14 +113,16 @@
       "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields",
       "tests/gates78/products/test_tiger.py::test_typed_adapter_rejects_corrupt_receipt_at_network_edge",
       "tests/gates78/products/test_tiger.py::test_typed_adapter_verified_scope_run_and_replay",
-      "tests/gates78/products/test_tiger.py::test_worker_receipt_prerequisite_is_real_and_tenant_scoped"
+      "tests/gates78/products/test_tiger.py::test_worker_receipt_prerequisite_is_real_and_tenant_scoped",
+      "tests/gates78/products/test_tiger.py::test_merged_extraction_cache_opt_in_and_actual_accounting"
     ],
     "G8.retry_concurrency": [
       "tests/gates78/products/test_tiger.py::test_retry_concurrency_and_no_content_leak"
     ],
     "G8.product_regressions": [
       "tests/gates78/products/test_tiger.py::test_original_reader_ocr_and_brain_regressions",
-      "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields"
+      "tests/gates78/products/test_tiger.py::test_owner_crud_and_meaningful_fields",
+      "tests/gates78/products/test_tiger.py::test_merged_extraction_cache_opt_in_and_actual_accounting"
     ]
   },
   "runtime_dependencies": {
@@ -130,9 +136,13 @@
     ],
     "required_shared_client": [
       "agents/_chassis/chassis/task_contract.py",
-      "tank/agent_tasks.py"
+      "tank/agent_tasks.py",
+      "agents/_chassis/chassis/tank.py",
+      "tank/task_contract.py",
+      "tank/command_tools/_user_assertion.py"
     ],
-    "existing_receipt_proposal": "tank-patches/gate6-savings.patch",
-    "registry": "Regenerate on the combined integration; no standalone snapshot."
+    "registry": "Merged combined registry, unchanged.",
+    "integrated_tank_commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
+    "receipt_runtime": "tank/tiger_savings.py registered through tank/routes_registry.py; validated tenant_scope and TenantPool"
   }
 }

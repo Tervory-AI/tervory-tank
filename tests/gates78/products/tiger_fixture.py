@@ -30,7 +30,8 @@ RUNTIME = ('gates_api.py', 'gates_brain.py', 'gates_brain_service.py', 'gates_me
 
 def runtime_dependencies():
     missing = [f'agents/tiger/{name}' for name in RUNTIME if not (ROOT / 'agents/tiger' / name).is_file()]
-    missing += [name for name in ('agents/_chassis/chassis/task_contract.py', 'tank/agent_tasks.py',
+    missing += [name for name in ('agents/_chassis/chassis/task_contract.py', 'tank/task_contract.py',
+                                 'tank/command_tools/_user_assertion.py', 'tank/agent_tasks.py',
                                  'tank/tiger_savings.py') if not (ROOT / name).is_file()]
     assert not missing, 'BLOCKED: Tiger PR #3 runtime not integrated: ' + ', '.join(missing)
 
@@ -122,7 +123,9 @@ async def tiger_system(gate78_memory, gate78_database, monkeypatch):
         import controls
         import identity_oidc
         import agent_skills
+        import tiger_savings
         import tiger_watch_commands
+        from tenant_db import TenantContextMiddleware, TenantPool, bind_tenant_endpoints
         from trigger_signin_guard import TriggerSigninMiddleware
         from trigger_signin_fakes import Provider, install_registry
         room = load_room(monkeypatch)
@@ -149,7 +152,8 @@ async def tiger_system(gate78_memory, gate78_database, monkeypatch):
                     await conn.execute("INSERT INTO tank.policy(task_type,tenant_id,model,rung,max_tokens_out) VALUES('agent.tiger.think',$1,$2,1,100)", UUID(tenant), MODEL)
                     await conn.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,$2,'auto',$3)",
                                        UUID(tenant), paid_steps.model_step('agent.tiger.think', MODEL, agent='tiger'), USER_A)
-            monkeypatch.setattr(main, 'pool', lambda: pool)
+            scoped_pool = TenantPool(pool)
+            monkeypatch.setattr(main, 'pool', lambda: scoped_pool)
             monkeypatch.setattr(main, 'TANK_API_KEY', WORKSPACE_KEY)
             monkeypatch.setattr(main, 'TIGER_AGENT_URL', 'http://agent-tiger:8000')
             monkeypatch.setattr(main, 'LITELLM_URL', 'http://placeholder-model')
@@ -167,11 +171,13 @@ async def tiger_system(gate78_memory, gate78_database, monkeypatch):
             identity_oidc._cache.clear()
             tank = FastAPI()
             tank.add_middleware(TriggerSigninMiddleware)
+            tank.add_middleware(TenantContextMiddleware)
             tank.include_router(command_router)
             tank.include_router(agent_skills.build_router(main))
-            # Reuse the real registered Gate 6 receipt routes and dependencies.
-            tank.router.routes.extend(route for route in main.app.routes
-                                      if getattr(route, 'path', None) == '/v1/tiger/savings')
+            # The merged registry builds this router; FastAPI's included route
+            # groups are lazy, so filtering main.app.routes would omit it.
+            tank.include_router(tiger_savings.build_router(main))
+            bind_tenant_endpoints(tank)
             observed, sends, assertions = [], [], []
             system = TigerSystem(memory=memory, room=room, brain=brain, tank=tank, pool=pool, issuer=issuer,
                                  events=observed, sends=sends, assertions=assertions, outage=None,

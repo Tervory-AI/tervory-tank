@@ -33,6 +33,8 @@ def test_runtime_contract():
     assert callable(sign_assertion)
     client = MemoryClient(api_key=KEY, agent='tiger', user_id=USER_A)
     assert '/v1/memory' not in client._base
+    assert (ROOT / 'tank/task_contract.py').read_bytes() == (ROOT / 'agents/_chassis/chassis/task_contract.py').read_bytes()
+    assert (ROOT / 'tank/command_tools/_user_assertion.py').read_bytes() == (ROOT / 'agents/_chassis/chassis/user_assertion.py').read_bytes()
 
 
 @pytest.mark.asyncio
@@ -529,6 +531,10 @@ async def test_worker_receipt_prerequisite_is_real_and_tenant_scoped(tiger_syste
     from chassis.jobs import JobContext
     from chassis.tank import TankClient
     s = tiger_system
+    # Assert the actual transaction's SET LOCAL value at the storage boundary.
+    # An unscoped/foreign write fails in PostgreSQL, not a mocked pool.
+    async with s.pool.acquire() as conn:
+        await conn.execute("ALTER TABLE tank.tiger_savings ADD CONSTRAINT placeholder_verified_scope CHECK (tenant_id::text = current_setting('app.tenant_id',true))")
     ctx = JobContext('tiger', s.memory.tenant, str(uuid4()), 'ping', {}, None,
                      TankClient('http://placeholder-tank', KEY, 'tiger', s.room.state.http),
                      s.memory.client(USER_A), None)
@@ -540,6 +546,15 @@ async def test_worker_receipt_prerequisite_is_real_and_tenant_scoped(tiger_syste
     assert result['savings'] == repeated['savings']
     assert result['savings']['tenant_id'] == s.memory.tenant
     assert result['savings']['cost'] == result['savings']['model_tokens'] == 0
+    listed = ok(await s.http.get('/v1/tiger/savings', params={'tenant_id': s.memory.tenant},
+                                 headers={'X-Tank-Key': __import__('tiger_fixture').WORKSPACE_KEY}))
+    assert [row['id'] for row in listed['receipts']] == [ctx.job_id]
+    other = ok(await s.http.get('/v1/tiger/savings', params={'tenant_id': s.memory.other_tenant},
+                                headers={'X-Tank-Key': __import__('tiger_fixture').WORKSPACE_KEY}))
+    assert other == {'receipts': []}
+    assert (await s.http.get('/v1/tiger/savings', params={'tenant_id': s.memory.tenant},
+                            headers={'X-Tank-Key': __import__('tiger_fixture').WORKSPACE_KEY,
+                                     'X-Tenant-ID': s.memory.other_tenant})).status_code == 403
     async with s.pool.acquire() as conn:
         rows = await conn.fetch('SELECT tenant_id,id,receipt FROM tank.tiger_savings WHERE tenant_id=$1',
                                 UUID(s.memory.tenant))
@@ -547,3 +562,51 @@ async def test_worker_receipt_prerequisite_is_real_and_tenant_scoped(tiger_syste
         assert await conn.fetchval('SELECT count(*) FROM tank.tiger_savings WHERE tenant_id=$1',
                                    UUID(s.memory.other_tenant)) == 0
     assert not s.sends
+
+
+@pytest.mark.asyncio
+async def test_merged_extraction_cache_opt_in_and_actual_accounting(tiger_system, monkeypatch):
+    import main
+    import skala
+    from fastapi import HTTPException
+    from tenant_db import tenant_scope
+    from uuid import UUID
+    s = tiger_system
+    pkg = skala.load_packages(ROOT / 'tank/skills')[('tiger.price_extract', '1.1.0')]
+    monkeypatch.setattr(main, '_packages', {(pkg.id, pkg.version): pkg})
+    async with s.pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.skills(id,version,agent,state,present) VALUES($1,$2,'tiger','approved',true)", pkg.id, pkg.version)
+        await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('placeholder-priced','placeholder',.000001,.000002)")
+        await conn.execute("INSERT INTO tank.provider_standards(provider,model) VALUES('placeholder','placeholder-priced')")
+        await conn.execute("INSERT INTO tank.policy(task_type,model) VALUES('tiger.price_extract','placeholder-priced')")
+    payload = {'url': 'https://placeholder.example/item', 'html': '<script type="application/ld+json">{"@type":"Product","name":"placeholder-item","offers":{"price":"12.00","priceCurrency":"USD"}}</script>'}
+    async def run(tenant=s.memory.tenant, value=payload):
+        with tenant_scope(tenant):
+            return await main._run_one_skill(pkg.id, main.SkillRun(
+                tenant_id=tenant, version=pkg.version, input=value), 'tiger')
+    monkeypatch.delenv('TIGER_BRAIN_ENABLED')
+    for _ in range(2):
+        result = await run()
+        assert result['items'] and not result['_savings']['cache_hit']
+    async with s.pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.tiger_extract_cache') == 0
+    monkeypatch.setenv('TIGER_BRAIN_ENABLED', 'true')
+    first, repeat = await run(), await run()
+    changed = await run(value={**payload, 'html': payload['html'].replace('12.00', '13.00')})
+    foreign = await run(tenant=s.memory.other_tenant)
+    assert [r['_savings']['cache_hit'] for r in (first, repeat, changed, foreign)] == [False, True, False, False]
+    assert first['items'] == repeat['items'] and changed['items'] != first['items']
+    for result in (first, repeat, changed, foreign):
+        receipt = result['_savings']
+        assert receipt['cost'] == receipt['model_tokens'] == 0
+        assert receipt['would_have_cost'] > 0
+        assert receipt['ledger_ids'] == [result['_ledger_id']]
+    async with s.pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.ledger') == 6
+        assert await conn.fetchval('SELECT count(*) FROM tank.tiger_savings') == 6
+        assert await conn.fetchval('SELECT count(*) FROM tank.tiger_extract_cache WHERE tenant_id=$1', UUID(s.memory.tenant)) == 2
+        assert await conn.fetchval('SELECT count(*) FROM tank.tiger_extract_cache WHERE tenant_id=$1', UUID(s.memory.other_tenant)) == 1
+        await conn.execute("UPDATE tank.skills SET state='retired' WHERE id=$1 AND version=$2", pkg.id, pkg.version)
+    with pytest.raises(HTTPException, match='only approved'):
+        await run()
+    assert len(await s.ledger()) == 6 and not s.sends
