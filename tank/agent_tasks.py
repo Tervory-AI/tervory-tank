@@ -13,8 +13,8 @@ from uuid import UUID
 import httpx
 from fastapi import HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from chassis.task_contract import check_receipt, origin, paid_identity
-from chassis.user_assertion import PostgresNonces, signed_user
+from task_contract import check_receipt, origin, paid_identity
+from command_tools._user_assertion import PostgresNonces, signed_user
 from product_identity import actor_scope
 
 

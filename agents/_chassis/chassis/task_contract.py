@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 from uuid import UUID, uuid5
-from .user_assertion import SignedUser
+
+
+class TaskActor(Protocol):
+    tenant_id: str
+    user_id: str
 
 
 def origin(value: str) -> str:
@@ -18,7 +22,7 @@ def origin(value: str) -> str:
     return value.rstrip("/")
 
 
-def context(actor: SignedUser, run_id: str) -> tuple[str, str]:
+def context(actor: TaskActor, run_id: str) -> tuple[str, str]:
     if not isinstance(actor.user_id, str) or not actor.user_id.strip() or len(actor.user_id) > 200:
         raise ValueError("Verified user required")
     return str(UUID(actor.tenant_id)), str(UUID(str(run_id)))

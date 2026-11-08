@@ -119,9 +119,10 @@ async def cached_extract(tank, pkg, body, ctx):
             digest.update(str(path.relative_to(pkg.path)).encode())
             digest.update(path.read_bytes())
     key = digest.hexdigest()
+    lock_scope = str(body.tenant_id) + key
     async with tank.pool().acquire() as conn:
         async with conn.transaction():
-            await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', str(body.tenant_id)+key)
+            await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', lock_scope)
             old = await conn.fetchval('SELECT output FROM tank.tiger_extract_cache WHERE tenant_id=$1 AND key=$2', body.tenant_id, key)
             if old is not None:
                 ctx._tiger_cache_hit = True

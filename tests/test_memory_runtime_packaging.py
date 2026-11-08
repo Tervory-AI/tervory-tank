@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_assertion_helpers_and_deployed_adapters_match_sources():
+    assert (ROOT / 'tank/task_contract.py').read_bytes() == (
+        ROOT / 'agents/_chassis/chassis/task_contract.py').read_bytes()
     source = (ROOT / 'agents/_chassis/chassis/user_assertion.py').read_bytes()
     for path in ('hermes/user_assertion.py', 'tank/command_tools/_user_assertion.py'):
         assert (ROOT / path).read_bytes() == source
@@ -52,6 +54,32 @@ async def main():
         await client.records(tenant, user_id=user)
     assert len(seen) == 3
 asyncio.run(main())
+'''
+    result = subprocess.run([sys.executable, '-I', '-c', code, str(ROOT / 'tank')],
+        cwd=ROOT / 'tank', capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_tank_tasks_and_skala_actor_work_without_chassis():
+    code = r'''
+import asyncio, importlib.util, os, sys
+sys.path.insert(0, sys.argv[1])
+assert importlib.util.find_spec('chassis') is None
+os.environ['DATABASE_URL'] = 'postgresql://placeholder@127.0.0.1:9/placeholder'
+os.environ['TANK_API_KEY'] = 'placeholder-runtime-key'
+os.environ['LITELLM_MASTER_KEY'] = 'placeholder-runtime-key'
+import agent_tasks, main, skala_memory_api, task_contract
+from product_identity import User, actor_scope
+from starlette.requests import Request
+tenant, user = '11111111-1111-1111-1111-111111111111', 'placeholder-runtime-user'
+request = Request({'type':'http', 'method':'GET', 'path':'/v1/skala/memory',
+    'query_string':b'', 'headers':[(b'x-tank-key',b'placeholder-runtime-key')]})
+async def check():
+    with actor_scope(User(tenant, user, 'member')):
+        assert await skala_memory_api.verified_actor(request, tenant) == {
+            'tenant_id':tenant, 'user_id':user}
+    assert task_contract.context(User(tenant, user, 'member'), tenant) == (tenant, tenant)
+asyncio.run(check())
 '''
     result = subprocess.run([sys.executable, '-I', '-c', code, str(ROOT / 'tank')],
         cwd=ROOT / 'tank', capture_output=True, text=True, timeout=30)

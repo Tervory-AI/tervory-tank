@@ -39,7 +39,7 @@ async def require_service_key(request: Request) -> None:
 async def verified_actor(request: Request, tenant_id: str) -> dict[str, str]:
     from main import require_key, pool
     from product_identity import current
-    from chassis.user_assertion import signed_user, PostgresNonces
+    from command_tools._user_assertion import signed_user, PostgresNonces
     from skala_memory_client import skala_agent_key_from_env
     await require_key(request, request.headers.get("X-Tank-Key", ""))
     actor = current.get()  # Set only by actual TriggerSigninMiddleware.

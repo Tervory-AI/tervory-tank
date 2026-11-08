@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import sys
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -73,6 +74,7 @@ def _assert_headers(token: str) -> dict:
 
 @pytest.mark.asyncio
 async def test_oidc_ingress_to_hermes_full_personal_crud_list_publish(memory, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "agents"))
     from agents.opli import gates_memory
     from trigger.app import SignedInActor, refuse_scope_widen
 
