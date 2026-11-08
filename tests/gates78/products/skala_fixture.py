@@ -48,6 +48,19 @@ class SkalaEntry:
         headers=self.headers(user,tenant) if headers is None else headers
         return await self.client.get(path,params=body,headers=headers) if operation=='view' else await self.client.post(path,json=body,headers=headers)
 
+    async def founder(self, path, body, *, user=USER_A):
+        from hermes_lifecycle import personal_headers
+        headers,raw=personal_headers(WORKSPACE_KEY,'POST',path,tenant=body['tenant_id'],user=user,body=body)
+        headers['X-Tervory-Admin']=user
+        return await self.stack.http.post(path,headers=headers,content=raw)
+
+    async def enable_publication(self, tenant):
+        return await self.founder('/founder/publish-policy',{
+            'agent':'skala','tenant_id':tenant,'enabled':True,
+            'identifiers':{'reviewed':True,'names':[USER_A,USER_B],
+                           'emails':['placeholder@example.invalid'],'phones':[],
+                           'addresses':[],'client_domains':['placeholder.example.invalid']}})
+
     async def ledger(self, tenant=None):
         return [dict(row) for row in await self.stack.records.pool.fetch(
             'SELECT * FROM tank.ledger WHERE tenant_id=$1 ORDER BY ts,id',uuid.UUID(tenant or self.stack.tenant))]
@@ -60,6 +73,11 @@ class SkalaEntry:
 
 @pytest_asyncio.fixture
 async def skala_entry(gate78_memory, monkeypatch):
+    # A fresh canonical process must configure Tank before its first import.
+    monkeypatch.setenv('DATABASE_URL',os.environ['MEMORY_TEST_DATABASE_URL'])
+    monkeypatch.setenv('LITELLM_MASTER_KEY','placeholder-skala-model-key')
+    monkeypatch.setenv('TANK_API_KEY',WORKSPACE_KEY)
+    monkeypatch.setenv('TANK_REGION','us-east')
     import main
     import paid_steps
     import engine_ladder
@@ -87,6 +105,8 @@ async def skala_entry(gate78_memory, monkeypatch):
                 VALUES($1,$2,$3,'approved',now()) ON CONFLICT(id,version) DO UPDATE SET state='approved'""",ident,version,pkg.agent)
     monkeypatch.setattr(main,'_packages',packages)
     monkeypatch.setattr(main,'TANK_API_KEY',WORKSPACE_KEY)
+    monkeypatch.setattr(main,'LITELLM_MASTER_KEY','placeholder-skala-model-key')
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS',USER_A+','+USER_B)
     monkeypatch.setattr(main,'LITELLM_URL','http://placeholder-litellm')
     monkeypatch.setenv('TANK_API_KEY',WORKSPACE_KEY)
     monkeypatch.setenv('HERMES_URL','http://hermes')

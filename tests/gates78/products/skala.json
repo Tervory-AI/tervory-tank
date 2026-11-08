@@ -1,6 +1,6 @@
 {
   "product": "skala",
-  "source_sha": "8d3d86e82e3ab65782237e94da3bae925b30da6e",
+  "source_sha": "593ee0a313c50d5c69ffcc2bce2a2b39440940da",
   "entrypoints": [
     "POST /v1/skala/tier0.summarize/run -> make_ctx -> SkillContext.model -> Tank run_route",
     "POST /v1/skala/tier0.classify/run -> make_ctx -> SkillContext.model -> Tank run_route",
@@ -41,7 +41,8 @@
     ],
     "G7.same_tenant": [
       "tests/gates78/products/test_skala.py::test_negative_controls_preserve_state",
-      "tests/gates78/products/test_skala.py::test_no_foreign_content_in_responses_receipts_logs"
+      "tests/gates78/products/test_skala.py::test_no_foreign_content_in_responses_receipts_logs",
+      "tests/gates78/products/test_skala.py::test_same_run_cannot_change_verified_owner_or_input"
     ],
     "G7.other_tenant": [
       "tests/gates78/products/test_skala.py::test_negative_controls_preserve_state"
@@ -51,12 +52,14 @@
     ],
     "G7.required_owner": [
       "tests/gates78/products/test_skala.py::test_no_declared_tenant_wide_kind",
-      "tests/gates78/products/test_skala.py::test_signin_body_impersonation_and_plain_tasks"
+      "tests/gates78/products/test_skala.py::test_signin_body_impersonation_and_plain_tasks",
+      "tests/gates78/products/test_skala.py::test_same_run_cannot_change_verified_owner_or_input"
     ],
     "G7.signed_actor": [
       "tests/gates78/products/test_skala.py::test_signin_body_impersonation_and_plain_tasks",
       "tests/gates78/products/test_skala.py::test_signed_product_control_consumes_durable_nonce",
-      "tests/gates78/products/test_skala.py::test_invalid_real_issuer_signature_refuses_all_work"
+      "tests/gates78/products/test_skala.py::test_invalid_real_issuer_signature_refuses_all_work",
+      "tests/gates78/products/test_skala.py::test_same_run_cannot_change_verified_owner_or_input"
     ],
     "G7.assertion_rejection": [
       "tests/gates78/products/test_skala.py::test_assertion_rejection_on_shipped_client",
@@ -124,7 +127,8 @@
     ],
     "G8.retry_concurrency": [
       "tests/gates78/products/test_skala.py::test_same_run_concurrency_and_retry",
-      "tests/gates78/products/test_skala.py::test_outage_and_post_payment_retry"
+      "tests/gates78/products/test_skala.py::test_outage_and_post_payment_retry",
+      "tests/gates78/products/test_skala.py::test_same_run_cannot_change_verified_owner_or_input"
     ],
     "G8.product_regressions": [
       "tests/gates78/products/test_skala.py::test_runtime_contract",

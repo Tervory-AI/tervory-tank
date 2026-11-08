@@ -12,7 +12,6 @@ import httpx
 import pytest
 
 from skala_fixture import skala_entry, USER_A, USER_B, TEXT, WORKSPACE_KEY, SKILL, VERSION
-from hermes_lifecycle import personal_headers
 
 # Register the owned fixture without replacing any shared fixture.
 __all__ = ['skala_entry']
@@ -45,7 +44,8 @@ async def test_runtime_contract(skala_entry):
     for module in ('skala_gates_memory','skala_memory_api','skala_memory_client','skala_memory_wire'):
         spec = importlib.util.find_spec(module)
         assert spec and Path(spec.origin).parent == root, f'Missing integrated runtime: tank/{module}.py'
-    paths = {route.path for route in entry.runtime.app.routes}
+    from fastapi.routing import iter_route_contexts
+    paths = {route.path for route in iter_route_contexts(entry.runtime.app.routes)}
     assert {'/v1/skala/memory','/v1/skala/memory/edit','/v1/skala/memory/forget','/v1/skala/memory/off'} <= paths
     assert '/v1/skala/memory/bracket' not in paths, 'No fabricated paid-receipt shortcut'
     await remembered(entry)
@@ -63,7 +63,10 @@ async def test_owner_crud(skala_entry):
     assert [r['id'] for r in got] == [row['id']]
     ok(await entry.control('edit',memory_id=row['id'],text='placeholder corrected answer'))
     edited = ok(await entry.control(memory_id=row['id']))['memories'][0]
-    assert edited['text'] == 'placeholder corrected answer'
+    assert edited['claim'] == 'placeholder corrected answer'
+    assert edited['evidence'] == row['evidence']
+    assert edited['kind'] == row['kind']
+    assert edited['confidence'] == row['confidence']
     assert edited['meta']['user_id'] == USER_A
     ok(await entry.control('forget',memory_id=row['id']))
     assert row['id'] not in {r['id'] for r in ok(await entry.control())['memories']}
@@ -85,13 +88,21 @@ async def test_negative_controls_preserve_state(skala_entry,foreign,operation):
     assert before == await entry.rows()
     assert ledgers == await entry.ledger()
     assert not ok(await entry.control(user=USER_B,tenant=tenant))['memories']
-    # The real Hermes publish route must also refuse a guessed foreign row.
-    body={'tenant_id':tenant,'user_id':USER_B}
-    path=f"/records/{row['id']}/publish"
-    headers,raw=personal_headers(entry.stack.key,'POST',path,tenant=tenant,user=USER_B,body=body)
-    published=await entry.stack.http.post(path,headers=headers,content=raw)
-    assert published.status_code in (401,403,404)
+    # Valid founder authorization reaches the real publication ownership check.
+    ok(await entry.enable_publication(tenant))
+    body={'tenant_id':tenant,'agent':'skala','source_row':row['id']}
+    published=await entry.founder('/founder/publish',body,user=USER_B)
+    assert published.status_code == 409,published.text
+    assert published.json()['detail']['result'] == 'missing'
     assert before == await entry.rows()
+    # Positive owner publication proves that a wrong URL/auth refusal cannot pass.
+    ok(await entry.enable_publication(entry.stack.tenant))
+    positive=ok(await entry.founder('/founder/publish',{
+        **body,'tenant_id':entry.stack.tenant},user=USER_A))
+    assert positive['result']=='published'
+    assert positive['published_row']
+    assert before == await entry.rows()
+
 
 
 async def test_no_declared_tenant_wide_kind(skala_entry):
@@ -204,7 +215,11 @@ async def test_restricted_hermes_role(skala_entry,monkeypatch):
     await admin.execute(f'CREATE ROLE {role} NOSUPERUSER NOBYPASSRLS NOLOGIN')
     restricted=None
     try:
-        await admin.execute(f'GRANT USAGE ON SCHEMA {schema} TO {role}')
+        from hermes.user_assertion import PostgresNonces
+        await PostgresNonces(admin,schema.removeprefix('agent_')).setup()
+        # The deployed provisioner grants CREATE only in the product's own schema.
+        # Pre-provision the real nonce relation before assigning its table grants.
+        await admin.execute(f'GRANT USAGE,CREATE ON SCHEMA {schema} TO {role}')
         await admin.execute(f'GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA {schema} TO {role}')
         await admin.execute(f'GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA {schema} TO {role}')
         restricted=await asyncpg.create_pool(os.environ['MEMORY_TEST_DATABASE_URL'],min_size=1,max_size=1,
@@ -214,6 +229,8 @@ async def test_restricted_hermes_role(skala_entry,monkeypatch):
         monkeypatch.setattr(entry.stack.records,'pool',restricted)
         await remembered(entry)
         assert not ok(await entry.control(user=USER_B))['memories']
+        assert not ok(await entry.control(tenant=entry.stack.other_tenant))['memories']
+        assert await restricted.fetchval(f'SELECT count(*) FROM {schema}.user_assertion_nonces') > 0
     finally:
         monkeypatch.setattr(entry.stack.records,'pool',admin)
         if restricted:
@@ -349,7 +366,7 @@ async def test_off_is_per_user_and_disables_reuse(skala_entry):
 
 
 @pytest.mark.parametrize('operation',[('POST','/recall'),('GET','/records'),('POST','/memories')])
-async def test_outage_and_post_payment_retry(skala_entry,operation):
+async def test_outage_and_post_payment_retry(skala_entry,operation,record_property):
     entry=skala_entry
     await remembered(entry)
     entry.network.outage=operation
@@ -371,6 +388,11 @@ async def test_outage_and_post_payment_retry(skala_entry,operation):
         again=receipt(await entry.run(TEXT+' placeholder outage task',run_id=run_id))
         assert len(entry.provider_calls)==count+1
         assert again['ledger_id']==result['ledger_id']
+        metrics={'provider_calls':len(entry.provider_calls)-count,
+                 'first_ledger_id':result['ledger_id'],'retry_ledger_id':again['ledger_id'],
+                 'cost_usd':again['cost_usd'],'tokens_in':again['tokens_in'],'tokens_out':again['tokens_out']}
+        print('SKALA_REMEMBER_RETRY_METRICS '+json.dumps(metrics,sort_keys=True))
+        record_property('skala_remember_retry_metrics',json.dumps(metrics,sort_keys=True))
 
 
 @pytest.mark.parametrize('status',[401,403])
@@ -386,7 +408,7 @@ async def test_auth_failure_is_not_outage_or_cached_answer(skala_entry,status):
     assert len(entry.provider_calls)==count
 
 
-async def test_same_run_concurrency_and_retry(skala_entry):
+async def test_same_run_concurrency_and_retry(skala_entry,record_property):
     entry=skala_entry
     run_id=uuid.uuid4()
     results=await asyncio.gather(entry.run(run_id=run_id),entry.run(run_id=run_id))
@@ -394,9 +416,19 @@ async def test_same_run_concurrency_and_retry(skala_entry):
     assert any(r.status_code==200 for r in results)
     again=receipt(await entry.run(run_id=run_id))
     assert len(entry.provider_calls)==1
-    assert len(await entry.ledger())==1
+    ledgers=await entry.ledger()
+    assert len(ledgers)==1
+    successful=[receipt(response) for response in results if response.status_code==200]
+    assert all(row['ledger_id']==again['ledger_id'] for row in successful)
+    assert again['ledger_id']==str(ledgers[0]['id'])
     assert again['user_id']==USER_A
     assert all((json.loads(row['meta']) if isinstance(row['meta'],str) else row['meta'])['user_id']==USER_A for row in await entry.rows())
+    metrics={'provider_calls':len(entry.provider_calls),'ledger_count':len(ledgers),
+             'ledger_id':again['ledger_id'],'statuses':[response.status_code for response in results],
+             'cost_usd':sum(float(row['cost_usd']) for row in ledgers),
+             'tokens_in':sum(row['tokens_in'] for row in ledgers),'tokens_out':sum(row['tokens_out'] for row in ledgers)}
+    print('SKALA_CONCURRENCY_METRICS '+json.dumps(metrics,sort_keys=True))
+    record_property('skala_concurrency_metrics',json.dumps(metrics,sort_keys=True))
 
 
 async def test_signed_product_control_consumes_durable_nonce(skala_entry):
@@ -448,13 +480,39 @@ async def test_approval_evals_use_platform_receipts_without_personal_reuse(skala
     path=f'/v1/skala/{SKILL}/{VERSION}/evals'
     # This is the actual manual approval handler and its committed eval cases.
     # It must execute model-backed cases, even when personal memory is enabled.
-    result=ok(await entry.client.post(path,json={'by':'placeholder-reviewer'},headers=entry.headers()))
-    assert result['total'] > 0
-    assert entry.provider_calls
-    rows=await entry.ledger(str(entry.runtime.PLATFORM_TENANT))
-    assert sum(float(row['cost_usd']) for row in rows)==pytest.approx(.05*len(entry.provider_calls))
-    assert sum(row['tokens_in'] for row in rows)==10*len(entry.provider_calls)
-    assert sum(row['tokens_out'] for row in rows)==3*len(entry.provider_calls)
-    assert await entry.ledger()==[]
-    assert await entry.rows()==[]
-    assert entry.network.captured==[]
+    for invocation in range(2):
+        before={str(row['id']) for row in await entry.ledger(str(entry.runtime.PLATFORM_TENANT))}
+        provider_start=len(entry.provider_calls)
+        result=ok(await entry.client.post(path,json={'by':'placeholder-reviewer'},headers=entry.headers()))
+        assert result['total'] > 0
+        calls=entry.provider_calls[provider_start:]
+        assert calls
+        rows=[row for row in await entry.ledger(str(entry.runtime.PLATFORM_TENANT)) if str(row['id']) not in before]
+        assert rows
+        if invocation:
+            assert before, 'The second eval must run with prior platform receipts present'
+        assert sum(float(row['cost_usd']) for row in rows)==pytest.approx(.05*len(calls))
+        assert sum(row['tokens_in'] for row in rows)==10*len(calls)
+        assert sum(row['tokens_out'] for row in rows)==3*len(calls)
+        assert await entry.ledger()==[]
+        assert await entry.rows()==[]
+        assert entry.network.captured==[]
+
+
+@pytest.mark.parametrize('change',['user','input','unsigned'])
+async def test_same_run_cannot_change_verified_owner_or_input(skala_entry,change):
+    entry=skala_entry
+    run_id=uuid.uuid4()
+    first=receipt(await entry.run(run_id=run_id))
+    count=len(entry.provider_calls)
+    before=await entry.rows()
+    kwargs={'user':USER_B} if change=='user' else {'text':TEXT+' placeholder modified'} if change=='input' else {'headers':{'X-Tank-Key':WORKSPACE_KEY}}
+    denied=await entry.run(run_id=run_id,**kwargs)
+    assert denied.status_code==409,denied.text
+    assert len(entry.provider_calls)==count==1
+    assert before==await entry.rows()
+    assert len(await entry.ledger())==1
+    async with entry.runtime.pool().acquire() as conn:
+        approvals=await conn.fetch('SELECT user_id,run_id FROM tank.paid_step_approvals WHERE tenant_id=$1 AND run_id=$2',uuid.UUID(entry.stack.tenant),run_id)
+    assert approvals and all(row['user_id']==USER_A for row in approvals)
+    assert first['user_id']==USER_A
