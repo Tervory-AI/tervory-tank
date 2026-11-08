@@ -23,6 +23,7 @@ ROUTES = (
     ('early', 'case_studies', 'router', None, True),
     ('early', 'trigger_signin_config', 'router', None, True),
     ('early', 'event_bus', 'router', None, True),
+    ('early', 'tisan_tasks', 'build_router', ('tank',), True),
     ('early', 'agent_skills', 'build_router', ('tank',), True),
     ('early', 'base_product', 'build_router', ('tank',), True),
     ('early', 'base_lists', 'build_router', (), True),

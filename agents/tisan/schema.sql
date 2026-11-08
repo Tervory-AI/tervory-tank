@@ -138,6 +138,45 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+-- Run snapshots are separate from billed model ledger rows.
+CREATE TABLE IF NOT EXISTS agent_tisan.run_receipts (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    input_hash text NOT NULL,
+    kind text NOT NULL,
+    route_ids jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(route_ids)='array'),
+    uncertain boolean NOT NULL DEFAULT false,
+    cost_usd numeric,
+    baseline_model text,
+    baseline_cost_usd numeric,
+    baseline_tokens_in integer NOT NULL CHECK (baseline_tokens_in>=0),
+    baseline_tokens_out integer NOT NULL CHECK (baseline_tokens_out>=0),
+    tokens_in integer NOT NULL CHECK (tokens_in>=0),
+    tokens_out integer NOT NULL CHECK (tokens_out>=0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,id)
+);
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+               WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+        ALTER TABLE agent_tisan.run_receipts ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.run_receipts FORCE ROW LEVEL SECURITY;
+    ELSE
+        ALTER TABLE agent_tisan.run_receipts NO FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.run_receipts DISABLE ROW LEVEL SECURITY;
+    END IF;
+    IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan' AND tablename='run_receipts' AND policyname='tenant_scope') THEN
+        CREATE POLICY tenant_scope ON agent_tisan.run_receipts
+            USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+            WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+    END IF;
+END $$;
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan') THEN
+        GRANT SELECT,INSERT,UPDATE ON agent_tisan.run_receipts TO agent_tisan;
+    END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_tisan.memory_records (
     id uuid PRIMARY KEY,
@@ -187,3 +226,23 @@ CREATE TABLE IF NOT EXISTS agent_tisan.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+CREATE TABLE IF NOT EXISTS agent_tisan.job_actors (
+    tenant_id uuid NOT NULL,
+    job_id uuid NOT NULL REFERENCES agent_tisan.jobs(id),
+    user_id text,
+    PRIMARY KEY(tenant_id,job_id)
+);
+
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+               WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+        ALTER TABLE agent_tisan.job_actors ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.job_actors FORCE ROW LEVEL SECURITY;
+    END IF;
+    IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan' AND tablename='job_actors' AND policyname='tenant_scope') THEN
+        CREATE POLICY tenant_scope ON agent_tisan.job_actors
+            USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+            WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+    END IF;
+END $$;

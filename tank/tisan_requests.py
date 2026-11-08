@@ -25,6 +25,51 @@ class FeedbackArgs(RequestIdArgs):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class PlanArgs(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    run_id: UUID
+    brief: dict
+
+
+class MemorySettingArgs(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    enabled: bool
+
+
+class MemoryEditArgs(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    value: object
+
+
+@__import__('product_identity').bind_actor
+async def memory_request(actor, method, path, *, body=None):
+    """Forward only a verified actor through the shipped nonce-protected signer."""
+    from main import _http
+    from urllib.parse import urlencode
+    key = os.environ.get('TANK_KEY_TISAN', '')
+    if _http is None or not key:
+        refused('memory_unavailable', 503)
+    scope = {'tenant_id': str(actor.tenant_id), 'user_id': actor.user_id}
+    if not path.startswith('/memory'):
+        scope.pop('user_id')
+    content = json.dumps({**(body or {}), **scope}).encode() if body is not None else b''
+    target = path + '?' + urlencode(scope)
+    headers = {'X-Tank-Key': key, 'X-Tervory-Tenant': str(actor.tenant_id), 'Content-Type': 'application/json'}
+    if actor.founder:
+        headers['X-Tervory-Admin'] = actor.user_id
+    try:
+        # paid_http.Client already binds product_identity to exact origin,
+        # encoded query/body and a fresh nonce. No private signature protocol.
+        response = await _http.request(method, 'http://agent-tisan:8000' + target,
+            content=content, headers=headers, timeout=30, follow_redirects=False)
+    except httpx.HTTPError:
+        refused('memory_unavailable', 503)
+    if response.status_code != 200:
+        refused('not_found' if response.status_code in (401, 403, 404) else 'memory_unavailable',
+                404 if response.status_code in (401, 403, 404) else 503)
+    return response.json()
+
+
 def refused(code: str, status: int = 409):
     raise HTTPException(status, {'status': code})
 
@@ -197,6 +242,36 @@ def build_router():
     # Local annotation must be available to FastAPI's signature resolver.
     globals()['TisanRequestArgs'] = TisanRequestArgs
     globals()['Actor'] = Actor
+
+    @router.post('/plan')
+    async def plan_start(args: PlanArgs, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.preview')
+        return await memory_request(actor, 'POST', '/plan/start', body=args.model_dump(mode='json'))
+
+    @router.get('/memory')
+    async def memory_view(actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.preview')
+        return await memory_request(actor, 'GET', '/memory')
+
+    @router.post('/memory/setting')
+    async def memory_setting(args: MemorySettingArgs, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.preview')
+        return await memory_request(actor, 'POST', '/memory/setting', body=args.model_dump())
+
+    @router.post('/memory/{memory_id}')
+    async def memory_edit(memory_id: UUID, args: MemoryEditArgs, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.preview')
+        return await memory_request(actor, 'POST', '/memory/' + str(memory_id), body=args.model_dump())
+
+    @router.delete('/memory/{memory_id}')
+    async def memory_forget(memory_id: UUID, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.preview')
+        return await memory_request(actor, 'DELETE', '/memory/' + str(memory_id))
+
+    @router.delete('/memory')
+    async def memory_forget_all(actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.preview')
+        return await memory_request(actor, 'DELETE', '/memory')
 
     async def result(actor, tool, data):
         return {**data, 'ledger_id': str(await code_receipt(actor.tenant_id, tool, agent='tisan')), 'cost_usd': 0}

@@ -15,11 +15,9 @@ from fastapi.testclient import TestClient
 
 from agents.tisan import archive, gold_sources, promotion, promotion_api, publish
 from chassis.tenant_db import bind_tenant_endpoints, tenant_scope
-from test_tisan_quotes_designed import api as _quote_api, database as database, HEADERS, designed
-quote_api = _quote_api
+from test_tisan_quotes_designed import api as quote_api, database as database, HEADERS, designed
 from test_tisan_quotes import A, B
-from test_tisan_gold_sources import setup as _gold_setup, approve
-gold_setup = _gold_setup
+from test_tisan_gold_sources import setup as gold_setup, approve
 from test_tisan_publish import build, TENANT
 from test_command import command_pool as command_pool
 from test_tisan_finish_sources import wire_storage
@@ -237,7 +235,7 @@ async def test_empty_storage_returns_measured_zero_counts_and_no_objects(monkeyp
 
 def test_saturday_command_has_no_implicit_live_launch():
     for args in ([], ['--live'], ['--dry-run', '--live']):
-        result = subprocess.run([str(ROOT / 'scripts/tisan-saturday.sh'), *args], cwd=ROOT,
+        result = subprocess.run([str(ROOT / 'scripts/saturday.sh'), *args], cwd=ROOT,
                                 capture_output=True, text=True, timeout=10)
         assert result.returncode == 2
         assert result.stderr.strip() == 'Usage: scripts/saturday.sh --dry-run'

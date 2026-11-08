@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from email.headerregistry import Address
 from pathlib import Path
+from starlette.requests import Request
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -372,6 +373,17 @@ def mount(app: Any, guard) -> None:
     def store():
         return Quotes(app.state.pool)
 
+    async def remembered(tenant_id, request, row):
+        """Quote history: each live create/move outcome, with the stored values."""
+        try:
+            from agents.tisan import memory_api
+        except ModuleNotFoundError:
+            import memory_api
+        fields = ('state', 'quote_amount', 'quote_currency', 'valid_until', 'items', 'updated_at')
+        await memory_api.remember_value(app, tenant_id, request, memory_api.gates_memory.QUOTE, str(row['id']),
+                                  {key: row[key] for key in fields if key in row and row[key] is not None})
+        return row
+
     async def result(operation):
         try:
             return await operation
@@ -381,11 +393,11 @@ def mount(app: Any, guard) -> None:
             raise HTTPException(409, 'invalid_transition') from None
 
     @app.post('/quotes', status_code=201)
-    async def create_quote(body: Create, x_tank_key: str = Header(default=''),
+    async def create_quote(body: Create, request: Request, x_tank_key: str = Header(default=''),
                            x_tervory_admin: str = Header(default='')):
         guard(x_tank_key, x_tervory_admin)
-        return await result(store().create(body.tenant_id, x_tervory_admin,
-                            body.data.model_dump(mode='json', exclude_unset=True), submitted=True))
+        return await remembered(body.tenant_id, request, await result(store().create(body.tenant_id, x_tervory_admin,
+                            body.data.model_dump(mode='json', exclude_unset=True), submitted=True)))
 
     @app.get('/quotes')
     async def list_quotes(tenant_id: UUID, limit: int = Query(default=100, ge=1, le=200),
@@ -402,12 +414,12 @@ def mount(app: Any, guard) -> None:
         return await result(store().read(tenant_id, request_id))
 
     @app.post('/quotes/{request_id}/state')
-    async def move_quote(request_id: UUID, body: Move,
+    async def move_quote(request_id: UUID, body: Move, request: Request,
                          x_tank_key: str = Header(default=''),
                          x_tervory_admin: str = Header(default='')):
         guard(x_tank_key, x_tervory_admin)
-        return await result(store().move(body.tenant_id, request_id, x_tervory_admin, body.state,
-            **body.model_dump(exclude={'tenant_id', 'state'}, exclude_unset=True)))
+        return await remembered(body.tenant_id, request, await result(store().move(body.tenant_id, request_id,
+            x_tervory_admin, body.state, **body.model_dump(exclude={'tenant_id', 'state'}, exclude_unset=True))))
 
     @app.post('/quotes/{request_id}/email')
     async def email_quote(request_id: UUID, tenant_id: UUID,

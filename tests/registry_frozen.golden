@@ -8621,6 +8621,13 @@
         "name": "settle"
       },
       {
+        "path": "/v1/agents/tisan/delegate",
+        "methods": [
+          "POST"
+        ],
+        "name": "delegate"
+      },
+      {
         "path": "/v1/agents/{room}/skills",
         "methods": [
           "GET"
@@ -9011,6 +9018,48 @@
           "GET"
         ],
         "name": "alerts"
+      },
+      {
+        "path": "/v1/command/tisan/plan",
+        "methods": [
+          "POST"
+        ],
+        "name": "plan_start"
+      },
+      {
+        "path": "/v1/command/tisan/memory",
+        "methods": [
+          "GET"
+        ],
+        "name": "memory_view"
+      },
+      {
+        "path": "/v1/command/tisan/memory/setting",
+        "methods": [
+          "POST"
+        ],
+        "name": "memory_setting"
+      },
+      {
+        "path": "/v1/command/tisan/memory/{memory_id}",
+        "methods": [
+          "POST"
+        ],
+        "name": "memory_edit"
+      },
+      {
+        "path": "/v1/command/tisan/memory/{memory_id}",
+        "methods": [
+          "DELETE"
+        ],
+        "name": "memory_forget"
+      },
+      {
+        "path": "/v1/command/tisan/memory",
+        "methods": [
+          "DELETE"
+        ],
+        "name": "memory_forget_all"
       },
       {
         "path": "/v1/command/tisan/request",

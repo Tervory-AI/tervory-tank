@@ -16,7 +16,7 @@ from uuid import UUID, uuid5
 
 import httpx
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from chassis.tenant_db import tenant_path
 
@@ -123,7 +123,7 @@ class Pipeline:
                     supplied.get(key) != value for key, value in source.items())):
                 raise ValueError('approved frame changed')
             brief['figma'] = {**(supplied or {}), **source}
-            built = await self.build(tenant, ident, brief)
+            built = await self.build(tenant, ident, brief, payload.get('memory_user'))
             result.update({k: v for k, v in built.items() if k in
                 {'ok', 'slug', 'build', 'checks', 'results', 'detail', 'memory_id', 'copy_needed', 'media_needed'}})
             if built.get('ok') is not True:
@@ -175,8 +175,9 @@ def service(ctx, pool, loader, root):
         return await figma.execute({'file_key': approval['figma_file_id'], 'node_id': approval['figma_frame_id'],
                                     'allow_fixture': False}, tenant, live=True, data_root=root)
 
-    async def build(tenant, ident, brief):
-        child = SimpleNamespace(**{**vars(ctx), 'tenant_id': tenant, 'job_id': ident, 'input': brief})
+    async def build(tenant, ident, brief, actor=None):
+        # The actor was verified by the founder guard at ingress and again before the job ran.
+        child = SimpleNamespace(**{**vars(ctx), 'tenant_id': tenant, 'job_id': ident, 'input': brief, 'user_id': actor})
         return await builder.handle(child)
 
     async def stage(tenant, ident, built, actor):
@@ -272,13 +273,23 @@ def mount(app, loader):
 
     @app.post('/pipeline/start')
     @tenant_path('body')
-    async def start(body: Start, x_tank_key: str = Header(default=''), x_tervory_admin: str = Header(default='')):
+    async def start(body: Start, request: Request, x_tank_key: str = Header(default=''), x_tervory_admin: str = Header(default='')):
         gold.founder(x_tank_key, x_tervory_admin)
         payload = {'page_id': body.page_id, 'brief': body.brief, 'actor': x_tervory_admin}
-        async with app.state.pool.acquire() as conn:
+        try:
+            from agents.tisan import memory_api
+        except ModuleNotFoundError:
+            import memory_api
+        # Scoped memory only for a signed-in caller Tank bound to this tenant (never the admin header alone).
+        memory_user = await memory_api.caller(request, body.tenant_id)
+        if memory_user is not None:
+            payload['memory_user'] = memory_user
+        async with app.state.pool.acquire() as conn, conn.transaction():
             await conn.execute("INSERT INTO agent_tisan.jobs(id,tenant_id,kind,input,status,timeout_s,max_attempts) "
                 "VALUES($1,$2,'pipeline',$3::jsonb,'queued',2400,1) ON CONFLICT(id) DO NOTHING",
                 body.request_id, body.tenant_id, json.dumps(payload))
+            await conn.execute('INSERT INTO agent_tisan.job_actors(tenant_id,job_id,user_id) VALUES($1,$2,$3) '
+                               'ON CONFLICT DO NOTHING', body.tenant_id, body.request_id, memory_user)
             row = await conn.fetchrow('SELECT id,tenant_id,kind,input,status FROM agent_tisan.jobs '
                                      'WHERE tenant_id=$1 AND id=$2', body.tenant_id, body.request_id)
         stored = json.loads(row['input']) if row and isinstance(row['input'], str) else row['input'] if row else None
@@ -299,9 +310,20 @@ def mount(app, loader):
                                          "AND kind='pipeline'", tenant_id, request_id)
             if job is None:
                 raise HTTPException(404, 'not found')
-            return {'tenant_id': str(tenant_id), 'request_id': str(request_id), 'kind': 'pipeline',
+            result = {'tenant_id': str(tenant_id), 'request_id': str(request_id), 'kind': 'pipeline',
                     'status': 'done' if job['status'] == 'failed' else job['status'],
                     'ok': False, 'summary': 'blocked' if job['status'] == 'failed' else job['status']}
+        try:
+            from agents.tisan.savings import public, run_id
+        except ModuleNotFoundError:
+            from savings import public, run_id
+        identifier = run_id(tenant_id, request_id, 'pipeline')
+        async with app.state.pool.acquire() as conn:
+            # This is a server-owned run snapshot, never a request envelope.
+            if await conn.fetchval("SELECT to_regclass('agent_tisan.run_receipts')"):
+                receipt = await conn.fetchrow('SELECT * FROM agent_tisan.run_receipts WHERE tenant_id=$1 AND id=$2', tenant_id, identifier)
+                if receipt:
+                    result = {**result, 'ledger_id': str(identifier), 'receipt': public(receipt)}
         try:
             result = await refresh_staging(result, loader, root)
             return await refresh_production(result, loader, root)

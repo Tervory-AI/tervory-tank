@@ -1,6 +1,7 @@
 """Missing configuration starts a safe room, not a worker with ambient access."""
 from contextlib import asynccontextmanager
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 

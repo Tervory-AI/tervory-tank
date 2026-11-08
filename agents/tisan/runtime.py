@@ -148,12 +148,20 @@ def install(app, loader, *, preflight=None, secure=False):
 
             for kind, handler in original.items():
                 async def guarded(ctx, _kind=kind, _handler=handler):
-                    absent = missing((*CORE, *job_settings(_kind, ctx.input)))
-                    if absent:
-                        return blocked(absent)
-                    if _kind == 'figma':
-                        return await saved_figma(ctx, loader)
-                    return await _handler(ctx)
+                    async def execute(owned):
+                        absent = missing((*CORE, *job_settings(_kind, owned.input)))
+                        if absent:
+                            return blocked(absent)
+                        if _kind == 'figma':
+                            return await saved_figma(owned, loader)
+                        return await _handler(owned)
+                    if secure:
+                        try:
+                            from agents.tisan import savings
+                        except ModuleNotFoundError:
+                            import savings
+                        return await savings.run(execute, ctx, instance.state.pool, _kind, recorder=savings.remote)
+                    return await execute(ctx)
                 instance.state.handlers[kind] = guarded
             try:
                 absent_admin = await (preflight or missing_admin)(instance.state.agent)

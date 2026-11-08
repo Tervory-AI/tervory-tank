@@ -134,6 +134,8 @@ async def build(ctx: JobContext) -> dict:
 
 
 async def pipeline(ctx: JobContext) -> dict:
+    await _load_beside({}, 'tisan_job_owner', 'plan_jobs.py').owner(app.state.pool, ctx)
+    ctx.input = {**ctx.input, 'memory_user': ctx.user_id}
     module = _load_beside(_figma_cache(), 'tisan_pipeline_room', 'pipeline.py')
     root = Path(os.environ.get('DATA_DIR', '/data'))
     loader = lambda key, filename: _load_beside(_figma_cache(), key, filename)
@@ -212,6 +214,11 @@ _load_beside({}, 'tisan_quotes', 'quotes.py').mount(
 
 _load_beside(_figma_cache(), 'tisan_pipeline_room', 'pipeline.py').mount(
     app, lambda key, filename: _load_beside(_figma_cache(), key, filename))
+
+# Gates 7+8: every founder endpoint recalls and remembers; users view, edit, forget or switch off memory.
+_load_beside({}, 'tisan_memory_api', 'memory_api.py').mount(app, sys.modules['tisan_gold_sources'].founder)
+
+_load_beside({}, 'tisan_plan_jobs', 'plan_jobs.py').mount(app, sys.modules['tisan_gold_sources'].founder)
 
 # Install last so absent configuration also guards room-specific startup DDL.
 _load_beside({}, 'tisan_runtime', 'runtime.py').install(

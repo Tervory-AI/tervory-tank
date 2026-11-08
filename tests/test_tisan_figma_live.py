@@ -281,7 +281,10 @@ async def test_real_skala_eval_calls_room_endpoint_with_platform_tenant(tmp_path
     namespace = {'os': os, '_http': Bridge()}
     prefix = ast.parse('from __future__ import annotations').body
     exec(compile(ast.Module(body=prefix + [function], type_ignores=[]), str(ROOT / 'tank/main.py'), 'exec'), namespace)
-    package_path = SKILL.parent / version
+    import shutil
+    packages = tmp_path / 'tisan.figma'
+    shutil.copytree(SKILL.parent.resolve(), packages)
+    package_path = packages / version
     package = skala._parse_package(package_path / 'skill.yaml', package_path)
     result = await skala.run_evals(package, lambda: SimpleNamespace(tenant_id=platform, cost_usd=0, calls=0),
                                    execute=namespace['run_room_eval'])
@@ -290,7 +293,7 @@ async def test_real_skala_eval_calls_room_endpoint_with_platform_tenant(tmp_path
     if version != '1.0.0':
         assert result['eligible'] is True
     if version == '1.1.0':
-        assert package.cases[:6] == skala._parse_package(SKILL.parent / '1.0.1/skill.yaml', SKILL.parent / '1.0.1').cases
+        assert package.cases[:6] == skala._parse_package(packages / '1.0.1/skill.yaml', packages / '1.0.1').cases
     assert client.post('/evals/run', json={'skill_id': 'tisan.figma', 'version': version,
         'tenant_id': str(platform), 'input': {}}).status_code == 401
     assert list((tmp_path / 'readings' / str(platform)).rglob('*.json'))
