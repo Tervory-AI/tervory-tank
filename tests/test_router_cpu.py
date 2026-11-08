@@ -137,3 +137,24 @@ def test_unknown_interpreter_and_cpu_worker_are_rejected(tmp_path):
         cpu.run_worker('untrusted',tmp_path/'worker.py',tmp_path/'in.json',tmp_path/'out.json')
     with pytest.raises(ValueError,match='reviewed source'):
         cpu.run_worker('cpu',tmp_path/'worker.py',tmp_path/'in.json',tmp_path/'out.json')
+
+
+@pytest.mark.parametrize('tokens',[24,1025])
+def test_arch_batch_encoding_contract_and_token_limit(tokens):
+    import importlib.util
+    source=Path('scripts/router_cpu_worker.py')
+    spec=importlib.util.spec_from_file_location('cpu_worker_contract',source)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    ids=SimpleNamespace(shape=(1,tokens))
+    mask=object()
+    def encode(messages,**kwargs):
+        assert kwargs['return_dict'] is True and kwargs['return_tensors']=='pt'
+        assert messages==[{'role':'user','content':'placeholder route prompt'}]
+        return {'input_ids':ids,'attention_mask':mask}
+    tokenizer=SimpleNamespace(apply_chat_template=encode)
+    if tokens>1024:
+        with pytest.raises(ValueError,match='token budget'):
+            module.arch_inputs(tokenizer,'placeholder route prompt')
+    else:
+        assert module.arch_inputs(tokenizer,'placeholder route prompt')=={'input_ids':ids,'attention_mask':mask}

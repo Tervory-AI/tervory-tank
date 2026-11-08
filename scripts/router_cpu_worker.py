@@ -13,6 +13,15 @@ import sys
 from time import perf_counter
 
 
+def arch_inputs(tokenizer, prompt):
+    # Transformers 5 returns a BatchEncoding when return_dict is explicit.
+    encoded = tokenizer.apply_chat_template([{'role':'user','content':prompt}],
+        add_generation_prompt=True, return_tensors='pt', return_dict=True)
+    if encoded['input_ids'].shape[1] > 1024:
+        raise ValueError('Input exceeds CPU token budget')
+    return {'input_ids':encoded['input_ids'], 'attention_mask':encoded['attention_mask']}
+
+
 def main(request, output):
     resource.setrlimit(resource.RLIMIT_CPU, (600, 600))
     resource.setrlimit(resource.RLIMIT_AS, (24 * 1024 ** 3, 24 * 1024 ** 3))
@@ -64,11 +73,10 @@ def main(request, output):
                     + '2. You must analyze the route descriptions and find the best match route for user latest intent.\n'
                     + '3. You only response the name of the route that best matches the user\'s request, use the exact name in the <routes></routes>.\n\n'
                     + 'Based on your analysis, provide your response in the following JSON formats if you decide to match any route:\n{"route": "route_name"}\n')
-                ids = tokenizer.apply_chat_template([{'role':'user','content':prompt}], add_generation_prompt=True, return_tensors='pt')
-                if ids.shape[1] > 1024:
-                    raise ValueError('Input exceeds CPU token budget')
-                generated = model.generate(ids, max_new_tokens=32, do_sample=False, pad_token_id=tokenizer.eos_token_id)
-                value = tokenizer.decode(generated[0, ids.shape[1]:], skip_special_tokens=True)
+                inputs = arch_inputs(tokenizer,prompt)
+                generated = model.generate(**inputs,max_new_tokens=32,do_sample=False,
+                                           pad_token_id=tokenizer.eos_token_id)
+                value = tokenizer.decode(generated[0, inputs['input_ids'].shape[1]:], skip_special_tokens=True)
             else:
                 prompt = next(m['content'] for m in reversed(example['messages']) if m['role'] == 'user')
                 value = float(model.calculate_strong_win_rate(prompt))
