@@ -62,7 +62,9 @@ async def base_entry(gate78_memory, monkeypatch, tmp_path):
         await conn.execute('CREATE SCHEMA IF NOT EXISTS agent_base')
         await room.ensure_tables(conn, recover=False)
     room_app.app.state.pool = pool
-    room_app.app.state.memory = stack.client(USER_A)
+    from chassis.memory import MemoryClient
+    # Product clients must obtain the owner from each verified request/queued row.
+    room_app.app.state.memory = MemoryClient('http://hermes',stack.key,'base',stack.http)
     room_app.app.state.configuration_missing = []
     # Real package metadata and approval rows; no fake SkillClient/pipeline.
     import skala
@@ -99,6 +101,8 @@ async def base_entry(gate78_memory, monkeypatch, tmp_path):
             raise AssertionError('Unconfigured external boundary: ' + str(host))
 
     network = LocalNetwork()
+    # Storage faults must affect the real product client too, not just brain HTTP.
+    monkeypatch.setattr(stack.http, '_transport', network)
     def local_http(**kwargs):
         return REAL_HTTP(transport=network, **kwargs)
     # Change only the HTTP transport. The worker, brain and receipt code remain real.

@@ -172,6 +172,7 @@ async def test_sql_scope_before_vector_limit_and_restricted_role(base_entry,monk
     for _ in range(4):await seed(e,USER_B)
     row=await seed(e)
     assert row['id'] in json.dumps(await owner_view(e))
+    assert len(await owner_view(e,USER_B))>=4
     role='placeholder_base_'+uuid4().hex[:10]
     schema=e.stack.records.schema('base')
     await e.pool.execute(f'CREATE ROLE {role} NOSUPERUSER NOCREATEDB NOCREATEROLE')
