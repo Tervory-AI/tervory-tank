@@ -218,8 +218,6 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
     ('agents/base/sources/context_dev.py', 'model/paid endpoint', '7735a424ce9d0d3f'): (1, 'DEFERRED F2: direct paid Context.dev call; Base sources are outside this brief.'),
     ('agents/base/sources/context_dev.py', 'provider/brain setting', 'a5649e4d8387b5e8'): (1, 'DEFERRED F2: direct paid Context.dev call; Base sources are outside this brief.'),
     ('agents/rig/forge/gpu.py', 'paid compute reference', 'dc11d2a58a65cb92'): (1, 'DEFERRED F3: Tank reserves/claims spend, but Forge holds the HF key and submits directly.'),
-    ('agents/rig/forge/gpu.py', 'provider import', 'bb1b5c7642961828'): (1, 'DEFERRED F3: Tank reserves/claims spend, but Forge holds the HF key and submits directly.'),
-    ('agents/rig/forge/gpu.py', 'provider/brain setting', '4c4b6b6ca2b00df6'): (1, 'DEFERRED F3: Tank reserves/claims spend, but Forge holds the HF key and submits directly.'),
     ('agents/rig/forge/gpu/reconstruct.py', 'model invocation', '29597e63ca04bae9'): (1, 'Local Trellis weights inside the licensed GPU job; paid submission remains DEFERRED F3.'),
     ('agents/rig/forge/service.py', 'assembled endpoint', '96e439ee16a10ce8'): (1, 'Local Forge relay reaches Tank through the Rig brain, not a model endpoint.'),
     ('agents/rig/forge/service.py', 'model/paid endpoint', '7cf1d0b66e64bc02'): (1, 'Local Forge relay reaches Tank through the Rig brain, not a model endpoint.'),
