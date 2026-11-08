@@ -272,24 +272,48 @@ def _memory_unavailable_bracket(paid: dict, *, reason: str) -> dict:
     }
 
 
+def _engine_memory_scope():
+    from contextlib import nullcontext
+    try:
+        gates_memory, _ = _load_memory_bracket()
+    except _BracketImportError:
+        disabled = True
+    else:
+        disabled = gates_memory.memory_enabled_env() and gates_memory.ACTIVE_CONTROL.get() == 'off'
+    if not disabled:
+        return nullcontext()
+    try:
+        import engine_memory
+    except ModuleNotFoundError as exc:
+        # Split-era runtimes have no engine memory to suppress. The current
+        # Tank always imports this module and requires the proposed scope hook.
+        if exc.name != 'engine_memory':
+            raise
+        return nullcontext()
+    return engine_memory.memory_scope(False)
+
+
 async def _run_task_create_with_memory(actor, args, main_mod):
     """Task create: free steps then Tank agent. Auth/scope refuse; memory outage degrades."""
     async def tank_create(task):
-        created = await main_mod.create_task(main_mod.TaskCreate(
-            tenant_id=actor.tenant_id,
-            created_by=actor.user_id,
-            title=task['title'],
-            task_type=task.get('task_type') or args.task_type,
-            messages=[main_mod.Message(role='user', content=task['request'])],
-        ))
+        with _engine_memory_scope():
+            created = await main_mod.create_task(main_mod.TaskCreate(
+                tenant_id=actor.tenant_id,
+                created_by=actor.user_id,
+                title=task['title'],
+                task_type=task.get('task_type') or args.task_type,
+                messages=[main_mod.Message(role='user', content=task['request'])],
+            ))
         cost = float(getattr(created, 'cost_usd', None) or (created.get('cost_usd') if isinstance(created, dict) else 0) or 0)
         tokens_in = int(getattr(created, 'tokens_in', None) or (created.get('tokens_in') if isinstance(created, dict) else 0) or 0)
         tokens_out = int(getattr(created, 'tokens_out', None) or (created.get('tokens_out') if isinstance(created, dict) else 0) or 0)
-        payload = created if isinstance(created, dict) else dict(created)
+        from fastapi.encoders import jsonable_encoder
+        payload = jsonable_encoder(created if isinstance(created, dict) else dict(created))
         return {
             'cost_usd': cost,
             'tokens_in': tokens_in,
             'tokens_out': tokens_out,
+            'pending': payload.get('status') in {'queued', 'running'},
             'result': {
                 'conversations': [task['request'][:200]],
                 'projects': [task['title']],
@@ -320,7 +344,11 @@ async def _run_task_create_with_memory(actor, args, main_mod):
         tenant, user = gates_memory.require_authenticated_scope(
             tenant_id=tenant, user_id=user)
     except gates_memory.MemoryScopeError as exc:
-        raise HTTPException(401, str(exc)) from exc
+        raise HTTPException(getattr(exc, 'status_code', 401), str(exc)) from exc
+
+    if not gates_memory.memory_enabled_env():
+        paid = await tank_create(task)
+        return (paid.get('result') or {}).get('task') or paid.get('result') or {}
 
     if not gates_memory.memory_enabled_env():
         paid = await tank_create(task)
@@ -345,7 +373,7 @@ async def _run_task_create_with_memory(actor, args, main_mod):
             tank_create=tank_create,
         )
     except gates_memory.MemoryScopeError as exc:
-        raise HTTPException(401, str(exc)) from exc
+        raise HTTPException(getattr(exc, 'status_code', 401), str(exc)) from exc
     except gates_memory.MemoryOutageError as exc:
         # If a paid call already completed inside the bracket, never retry it.
         already = getattr(exc, 'paid_receipt', None)
@@ -372,17 +400,69 @@ async def _run_task_create_with_memory(actor, args, main_mod):
     }}
 
 
+async def _completed_task_memory(actor, task_id, main_mod):
+    gates_memory, request_path = _load_memory_bracket()
+    if not gates_memory.memory_enabled_env():
+        return None
+    row = await main_mod.pool().fetchrow(
+        "SELECT t.*,to_jsonb(l) AS paid FROM tank.tasks t JOIN tank.ledger l ON l.id=t.ledger_id AND l.tenant_id=t.tenant_id "
+        "WHERE t.id=$1 AND t.tenant_id=$2 AND t.created_by=$3 AND t.status='done' "
+        "AND t.agent='tier0' AND t.task_type IN ('tier0.answer','tier0.draft','reason.brief')",
+        UUID(str(task_id)), actor.tenant_id, actor.user_id)
+    if row is None:
+        return None
+    claimed = await main_mod.pool().fetchval(
+        "INSERT INTO tank.workspace_task_memory(task_id,tenant_id,user_id,state) VALUES($1,$2,$3,'pending') "
+        "ON CONFLICT(task_id) DO NOTHING RETURNING task_id", row['id'], actor.tenant_id, actor.user_id)
+    if claimed is None:
+        saved = await main_mod.pool().fetchrow(
+            'SELECT state,result FROM tank.workspace_task_memory WHERE task_id=$1 AND tenant_id=$2 AND user_id=$3',
+            row['id'], actor.tenant_id, actor.user_id)
+        if saved is None:
+            raise HTTPException(403, 'Task memory ownership does not match')
+        if saved['state'] == 'denied':
+            raise HTTPException(403, 'Memory authentication failed.')
+        if saved['state'] == 'pending':
+            return {'pending': True, 'memory_status': 'pending'}
+        return json.loads(saved['result']) if isinstance(saved['result'], str) else dict(saved['result'])
+    messages = json.loads(row['input']) if isinstance(row['input'], str) else row['input']
+    request = '\n'.join(message.get('content', '') for message in messages if isinstance(message, dict))
+    ledger = json.loads(row['paid']) if isinstance(row['paid'], str) else row['paid']
+    payload = json.loads(json.dumps({key: value for key, value in dict(row).items() if key != 'paid'}, default=str))
+    paid = {'cost_usd': float(ledger['cost_usd']), 'tokens_in': ledger['tokens_in'], 'tokens_out': ledger['tokens_out'],
+        'result': {'conversations': [request], 'projects': [row['title']], 'files': ['task-board'],
+                   'outcome': row['result'], 'task': payload}}
+    async def completed(task):
+        # Read an already-booked task result. Never create or execute work here.
+        return paid
+    try:
+        bracket = await request_path.run_task_request(_require_memory(main_mod), tenant_id=str(actor.tenant_id),
+            user_id=actor.user_id, title=row['title'], request=request, task_type=row['task_type'], tank_create=completed)
+    except gates_memory.MemoryScopeError as exc:
+        await main_mod.pool().execute("UPDATE tank.workspace_task_memory SET state='denied' "
+            'WHERE task_id=$1 AND tenant_id=$2 AND user_id=$3', row['id'], actor.tenant_id, actor.user_id)
+        raise HTTPException(getattr(exc, 'status_code', 401), 'Memory authentication failed.') from exc
+    except gates_memory.MemoryOutageError:
+        bracket = _memory_unavailable_bracket(paid, reason='Workspace memory is unavailable.')
+    await main_mod.pool().execute(
+        'UPDATE tank.workspace_task_memory SET state=$4,result=$5::jsonb WHERE task_id=$1 AND tenant_id=$2 AND user_id=$3',
+        row['id'], actor.tenant_id, actor.user_id, 'unavailable' if bracket.get('memory_unavailable') else 'done',
+        json.dumps(bracket, default=str))
+    return bracket
+
+
 async def _run_chat_with_memory(actor, args, main_mod):
     """Chat: free steps then Tank agent. Auth/scope refuse; memory outage degrades."""
     async def tank_route(task):
         messages = task.get('messages') or [{'role': 'user', 'content': task['request']}]
-        routed = await main_mod.route(
-            tenant_id=actor.tenant_id,
-            agent='tier0',
-            task_type=task.get('task_type') or args.task_type,
-            messages=messages,
-        )
-        payload = routed if isinstance(routed, dict) else dict(routed)
+        with _engine_memory_scope():
+            routed = await main_mod.route(main_mod.RouteRequest(
+                tenant_id=actor.tenant_id,
+                agent='tier0',
+                task_type=task.get('task_type') or args.task_type,
+                messages=[main_mod.Message(**message) for message in messages],
+            ), caller=None)
+        payload = routed if isinstance(routed, dict) else routed.model_dump(mode='json')
         return {
             'cost_usd': float(payload.get('cost_usd') or 0),
             'tokens_in': int(payload.get('tokens_in') or 0),
@@ -422,7 +502,10 @@ async def _run_chat_with_memory(actor, args, main_mod):
         tenant, user = gates_memory.require_authenticated_scope(
             tenant_id=tenant, user_id=user)
     except gates_memory.MemoryScopeError as exc:
-        raise HTTPException(401, str(exc)) from exc
+        error = HTTPException(getattr(exc, 'status_code', 401), str(exc))
+        paid = getattr(exc, 'paid_receipt', None) or {}
+        error.paid_ledger_id = ((paid.get('result') or {}).get('route') or {}).get('ledger_id')
+        raise error from exc
 
     if not gates_memory.memory_enabled_env():
         paid = await tank_route(task)
@@ -446,7 +529,10 @@ async def _run_chat_with_memory(actor, args, main_mod):
             tank_route=tank_route,
         )
     except gates_memory.MemoryScopeError as exc:
-        raise HTTPException(401, str(exc)) from exc
+        error = HTTPException(getattr(exc, 'status_code', 401), str(exc))
+        paid = getattr(exc, 'paid_receipt', None) or {}
+        error.paid_ledger_id = ((paid.get('result') or {}).get('route') or {}).get('ledger_id')
+        raise error from exc
     except gates_memory.MemoryOutageError as exc:
         already = getattr(exc, 'paid_receipt', None)
         if isinstance(already, dict) and int(already.get('paid_calls') or 0) >= 1:
@@ -458,6 +544,11 @@ async def _run_chat_with_memory(actor, args, main_mod):
 
     route_result = ((bracket.get('result') or {}).get('route') if isinstance(bracket.get('result'), dict) else None) or bracket.get('result') or {}
     unavailable = bool(bracket.get('memory_unavailable'))
+    if bracket.get('answered_from_memory'):
+        # Reused content is not a new model call or a reuse of another run's
+        # receipt identity. execute() gives this run its own $0 code receipt.
+        route_result = {**route_result, 'cost_usd': 0, 'tokens_in': 0, 'tokens_out': 0}
+        route_result.pop('ledger_id', None)
     return {**route_result, 'memory_bracket': {
         'steps': bracket.get('steps'),
         'paid_calls': bracket.get('paid_calls'),
@@ -496,10 +587,15 @@ async def _run_memory_view(actor, args, main_mod, *, raw: dict | None = None):
             memory_control=args.memory_control,
         )
     except gates_memory.MemoryScopeError as exc:
-        raise HTTPException(403, str(exc)) from exc
+        raise HTTPException(getattr(exc, 'status_code', 403), str(exc)) from exc
     except gates_memory.MemoryOutageError as exc:
         raise HTTPException(503, str(exc)) from exc
-    return result
+    # Reuse the approved Command card's Records/Status result fields.
+    return {**result, 'records': [
+        {'summary': row.get('claim') or row.get('text') or ''}
+        for row in result.get('memories', [])],
+        'count': len(result.get('memories', [])),
+        'status': result.get('memory_control', 'view')}
 
 
 async def _run_memory_control(actor, args, main_mod, *, raw: dict | None = None):
@@ -519,10 +615,10 @@ async def _run_memory_control(actor, args, main_mod, *, raw: dict | None = None)
             claimed_user_id=(raw or {}).get('user_id') or (raw or {}).get('created_by'),
         )
     except gates_memory.MemoryScopeError as exc:
-        raise HTTPException(403, str(exc)) from exc
+        raise HTTPException(getattr(exc, 'status_code', 403), str(exc)) from exc
     except gates_memory.MemoryOutageError as exc:
         raise HTTPException(503, str(exc)) from exc
-    return {'tenant_id': tenant, 'user_id': user, 'memory_control': args.control, 'saved': saved}
+    return {'tenant_id': tenant, 'user_id': user, 'memory_control': args.control, 'saved': saved, 'status': args.control}
 
 
 async def _run_memory_edit(actor, args, main_mod, *, raw: dict | None = None):
@@ -542,14 +638,14 @@ async def _run_memory_edit(actor, args, main_mod, *, raw: dict | None = None):
             memory_control=getattr(args, 'memory_control', None),
         )
     except gates_memory.MemoryControlError as exc:
-        raise HTTPException(403, str(exc)) from exc
+        raise HTTPException(getattr(exc, 'status_code', 403), str(exc)) from exc
     except gates_memory.MemoryScopeError as exc:
-        raise HTTPException(403, str(exc)) from exc
+        raise HTTPException(getattr(exc, 'status_code', 403), str(exc)) from exc
     except gates_memory.MemoryOutageError as exc:
         raise HTTPException(503, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    return {'tenant_id': tenant, 'user_id': user, **result}
+    return {'tenant_id': tenant, 'user_id': user, **result, 'summary': args.text, 'success': True}
 
 
 async def _run_memory_forget(actor, args, main_mod, *, raw: dict | None = None):
@@ -568,12 +664,12 @@ async def _run_memory_forget(actor, args, main_mod, *, raw: dict | None = None):
             memory_control=args.memory_control,
         )
     except gates_memory.MemoryControlError as exc:
-        raise HTTPException(403, str(exc)) from exc
+        raise HTTPException(getattr(exc, 'status_code', 403), str(exc)) from exc
     except gates_memory.MemoryScopeError as exc:
-        raise HTTPException(403, str(exc)) from exc
+        raise HTTPException(getattr(exc, 'status_code', 403), str(exc)) from exc
     except gates_memory.MemoryOutageError as exc:
         raise HTTPException(503, str(exc)) from exc
-    return {'tenant_id': tenant, 'user_id': user, 'memory_id': args.memory_id, 'forgotten': True}
+    return {'tenant_id': tenant, 'user_id': user, 'memory_id': args.memory_id, 'forgotten': True, 'success': True}
 
 
 async def execute(tool, data, actor, *, claims: dict | None = None):
@@ -592,7 +688,8 @@ async def execute(tool, data, actor, *, claims: dict | None = None):
         confirmation(actor, tool, args.model_dump(mode='json', exclude_none=True))
     # Code receipts are written before dispatch so lost acknowledgements cannot
     # erase evidence. Command's durable confirmation path prevents replaying writes.
-    source = tool + ' ' + args.model_dump_json(exclude_none=True)
+    # Memory-control audit records never include guessed IDs or edit contents.
+    source = tool if tool.startswith('workspace.memory.') else tool + ' ' + args.model_dump_json(exclude_none=True)
     output = None
     cached = False
     csv_error = None
@@ -609,7 +706,13 @@ async def execute(tool, data, actor, *, claims: dict | None = None):
             raise csv_error
         async with asyncio.timeout(30):
             if tool == 'workspace.tasks':
-                result = {'tasks': await main.list_tasks(actor.tenant_id, args.limit)}
+                tasks = await main.list_tasks(actor.tenant_id, args.limit)
+                for task in tasks:
+                    if task.get('created_by') == actor.user_id and task.get('status') == 'done':
+                        bracket = await _completed_task_memory(actor, task['id'], main)
+                        if bracket is not None:
+                            task['memory_bracket'] = bracket
+                result = {'tasks': tasks}
             elif tool == 'workspace.task.create':
                 result = await _run_task_create_with_memory(actor, args, main)
             elif tool == 'workspace.chat':
@@ -624,6 +727,9 @@ async def execute(tool, data, actor, *, claims: dict | None = None):
                 result = await _run_memory_forget(actor, args, main, raw=raw_claims)
             elif tool == 'workspace.task.receipt':
                 result = await command.task_receipts(args.task_id, actor)
+                bracket = await _completed_task_memory(actor, args.task_id, main)
+                if bracket is not None:
+                    result['memory_bracket'] = bracket
             elif tool == 'workspace.savings':
                 from proof import client_savings
                 result = await client_savings(actor.tenant_id)
@@ -642,17 +748,46 @@ async def execute(tool, data, actor, *, claims: dict | None = None):
                 result = json.loads(output)
     except BaseException as error:
         receipt = await finish_receipt(actor, receipt, {'status': 'failed'}, failed=True)
+        if tool.startswith('workspace.memory.') and isinstance(error, HTTPException) and error.status_code in {401, 403, 404}:
+            # Append only a caller-owned, status-only audit. No foreign record id,
+            # request text, response content or prior receipt is copied or changed.
+            await main.pool().execute(
+                'UPDATE tank.ledger SET error=$3 WHERE id=$1 AND tenant_id=$2',
+                UUID(receipt['id']), actor.tenant_id,
+                json.dumps({'action': tool, 'status': 'denied', 'actor_user_id': actor.user_id}, sort_keys=True))
         if not isinstance(error, Exception):
             raise
         status = error.status_code if isinstance(error, HTTPException) else 503
+        # The shipped chassis exposes these exact Hermes refusals as RuntimeError.
+        # Preserve authorization failure; never let the browser retry it as outage.
+        if isinstance(error, RuntimeError) and str(error) in {'hermes answered 401', 'hermes answered 403'}:
+            status = int(str(error).rsplit(' ', 1)[1])
         message = 'Workspace could not finish this action. Check its receipt before trying again.'
         if isinstance(error, HTTPException) and error.detail == 'Missing setting: TANK_KEY_BASE':
             message = error.detail
-        raise HTTPException(status, {'ledger_id': receipt['id'], 'message': message}) from None
+        detail = {'ledger_id': receipt['id'], 'message': message}
+        paid_id = getattr(error, 'paid_ledger_id', None)
+        if paid_id:
+            paid = await main.pool().fetchrow(
+                'SELECT id,cost_usd,tokens_in,tokens_out FROM tank.ledger WHERE id=$1 AND tenant_id=$2',
+                UUID(str(paid_id)), actor.tenant_id)
+            if paid is not None:
+                detail.update(ledger_id=str(paid['id']), action_ledger_id=receipt['id'],
+                    receipt={'cost_usd': float(paid['cost_usd']), 'tokens_in': paid['tokens_in'], 'tokens_out': paid['tokens_out']})
+        raise HTTPException(status, detail) from None
     receipt = await finish_receipt(actor, receipt, result)
+    action_ledger_id = receipt['id']
+    bracket = result.get('memory_bracket') or {}
+    if tool == 'workspace.chat' and int(bracket.get('paid_calls') or 0) and result.get('ledger_id'):
+        actual = await main.pool().fetchrow(
+            'SELECT id,cost_usd,baseline_cost_usd,baseline_status FROM tank.ledger WHERE id=$1 AND tenant_id=$2',
+            UUID(str(result['ledger_id'])), actor.tenant_id)
+        if actual is None:
+            raise HTTPException(409, 'Receipt evidence is missing or outside this tenant')
+        receipt = {**dict(actual), 'id': str(actual['id'])}
     if tool == 'workspace.task.receipt':
         result = {**result, 'ledger_ids': [row['ledger_id'] for row in result.get('rows', [])]}
-    return {**result, 'ledger_id': receipt['id'], 'receipt': {
+    return {**result, 'action_ledger_id': action_ledger_id, 'ledger_id': receipt['id'], 'receipt': {
         'cost_usd': receipt['cost_usd'], 'baseline_cost_usd': receipt['baseline_cost_usd'],
         'baseline_status': receipt['baseline_status']}}
 
