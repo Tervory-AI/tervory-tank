@@ -3910,7 +3910,7 @@ async def _run_one_skill(
         out["_ledger_id"] = str(receipt.ledger_id)
         out["_receipt"] = receipt.model_dump(mode="json")
     out["_cost_usd"] = round(ctx.cost_usd, 6)
-    if ctx.memory_receipts:
+    if getattr(ctx, "memory_receipts", None):
         out["_memory_receipts"] = ctx.memory_receipts
     return out
 

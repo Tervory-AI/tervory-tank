@@ -143,9 +143,15 @@ async def run_skill_with_identity(skill_id: str, body: Any, caller: str | None,
     outage; concurrent workers use the existing SQL claim, never process state.
     """
     import uuid
+    import os
     import paid_steps
     from fastapi import HTTPException
     from product_identity import current
+
+    # DECISION The opt-in memory wrapper must not add checkpoints or database
+    # access to the existing skill path when its setting is absent or false.
+    if os.environ.get("SKALA_MEMORY_ENABLED", "").lower() not in {"1", "true", "yes", "on"}:
+        return await invoke(skill_id, body, caller)
 
     actor = current.get()
     if actor is not None and actor.tenant_id != str(body.tenant_id):
