@@ -13,6 +13,8 @@ export type WeeklyReceipt = {
   site?: string;
   address?: string;
   url?: string;
+  cost_usd?: number;
+  would_have_cost_usd?: number;
 };
 
 export async function loadWeeklyReceipts(
@@ -57,6 +59,10 @@ export async function loadWeeklyReceipts(
         && item.kind !== "exercise" && item.control !== "fixture_edge"));
     }).map(row => {
       const clean: WeeklyReceipt = {};
+      for (const key of ["cost_usd", "would_have_cost_usd"] as const) {
+        const amount = row[key];
+        if (typeof amount === "number" && Number.isFinite(amount) && amount >= 0) clean[key] = amount;
+      }
       for (const key of ["id", "timestamp", "outcome", "severity", "site", "address"] as const) {
         if (typeof row[key] === "string") clean[key] = row[key].slice(0, 1000);
       }

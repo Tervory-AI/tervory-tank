@@ -14,7 +14,7 @@
     "repository_revision": "b13ddd632bde1fea7678386c345665ea5fa671af",
     "repository_license": "Apache-2.0",
     "model_license": "Katanemo Community License Agreement, April 2 2026; section 4 requires separate commercial licence",
-    "commercial_authorization": "not-established",
+    "commercial_authorization": "pending-counsel-review",
     "architecture": "Qwen2ForCausalLM",
     "base_model": "Qwen/Qwen2.5-1.5B-Instruct",
     "parameters": 1543714304,
@@ -23,8 +23,8 @@
     "context_tokens": 32768,
     "runtime_documentation": "transformers >=4.37.0; config records 4.51.3; example uses automatic device placement",
     "official_minimum_ram_or_vram": null,
-    "weights_downloaded": false,
-    "model_execution": "unrun"
+    "weights_downloaded": null,
+    "model_execution": "recorded separately by the opt-in CPU harness"
   },
   "routellm": {
     "existing_adapter": "tank/routellm_shadow.py:configuration,Configuration,score",

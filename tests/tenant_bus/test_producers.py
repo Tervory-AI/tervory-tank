@@ -108,7 +108,7 @@ async def test_radix_emits_once_after_finding_commit_without_text(database, bus,
         async def close():
             await database.release(conn)
             closed.append(True)
-        return SimpleNamespace(execute=conn.execute, close=close)
+        return SimpleNamespace(execute=conn.execute, transaction=conn.transaction, close=close)
     async def after_commit(tenant, event, ref, facts):
         assert closed
         async with database.acquire() as conn:
