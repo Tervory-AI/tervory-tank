@@ -10,11 +10,13 @@ const ts = require('../workspace/node_modules/typescript');
 const identity = {tenantId:'00000000-0000-4000-8000-000000000101',userId:'offline-client',orgId:'100'};
 const jobId = '00000000-0000-4000-8000-000000000201';
 const ledgerId = '00000000-0000-4000-8000-000000000301';
+const threadId = '00000000-0000-4000-8000-000000000501';
+const cardId = '00000000-0000-4000-8000-000000000601';
 const key = 'placeholder';
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-gate3-'));
 const amounts = {spent:'0.01234567',would_have_cost:'0.04200000',saved:'0.02965433',work_count:1,jobs_count:1,free_count:0,top_cost:'0.04200000',top_spent:'0.01234567',top_saved:'0.02965433',top_count:1,quality_pending:false};
 const savings = {as_of:'2026-11-06T00:00:00Z',revision:ledgerId,total:amounts,month:amounts,daily:[{...amounts,day:'2026-11-06',cumulative:amounts.saved}],members:[{...amounts,member:'Tank'}]};
-let task, taskPosts = 0, polls = 0, accepted = 0, baseRows = [], failLedger = false;
+let task, proposal, proposals = 0, taskPosts = 0, polls = 0, accepted = 0, baseRows = [], failLedger = false;
 const traffic = [], failures = [];
 const server = http.createServer(async (req, res) => {
   try {
@@ -30,10 +32,24 @@ const server = http.createServer(async (req, res) => {
       return json({tenant_id:identity.tenantId,home_region:'us-east'});
     }
     assert.equal(req.headers['x-tervory-home-region'], 'us-east');
-    if (!url.pathname.startsWith('/v1/command/workspace/')) {
+    if (!url.pathname.startsWith('/v1/command/')) {
       assert.equal(body?.tenant_id ?? url.searchParams.get('tenant_id'), identity.tenantId);
     } else {
       assert.equal(req.headers['x-tervory-tenant'], identity.tenantId);
+      assert.equal(req.headers['x-tervory-user'], identity.userId);
+    }
+    if (url.pathname === '/v1/command/threads' && req.method === 'POST') return json({thread_id:threadId});
+    if (url.pathname === `/v1/command/threads/${threadId}/actions` && req.method === 'POST') {
+      assert.equal(body.tool, 'workspace.task.create');
+      assert.equal(taskPosts, 0, 'a proposal must not start paid work');
+      proposal = body.arguments;proposals++;
+      return json({card_id:cardId,status:'pending'});
+    }
+    if (url.pathname === `/v1/command/cards/${cardId}` && req.method === 'POST') {
+      assert.equal(body.action, 'confirm');assert(proposal);
+      taskPosts++;
+      task = {id:jobId,title:proposal.title,task_type:proposal.task_type,status:'queued',result:null,error:null,ledger_id:null,created_at:'2026-11-06T00:00:00Z'};
+      return json({card_id:cardId,status:'confirmed',result:task});
     }
     if (url.pathname === '/v1/command/workspace/task.create' && req.method === 'POST') {
       assert.equal(req.headers['x-tervory-user'], identity.userId);
@@ -100,8 +116,12 @@ async function main() {
   const runtime = await require('../workspace/lib/trigger-signin-runtime.ts').signinRuntime();assert.equal(runtime.organisations['100'],identity.tenantId);
   const tasks = require('../workspace/app/api/tasks/route.ts');
   const request = {title:'Own source task',request:'Read the supplied source.',tenant_id:'untrusted-browser-tenant'};
-  const created = await tasks.POST(post(request));assert.equal(created.status,202);assert.equal((await created.json()).id,jobId);
-  assert.equal((await tasks.POST(post(request))).status,202);assert.equal(taskPosts,1);
+  const created = await tasks.POST(post(request));assert.equal(created.status,202);
+  const confirmation = await created.json();assert.deepEqual(confirmation,{confirmation_required:true,thread_id:threadId,card_id:cardId});
+  assert.equal((await tasks.POST(post(request))).status,202);assert.equal(proposals,1);assert.equal(taskPosts,0);
+  const tank = require('../workspace/lib/tank.ts');
+  const confirmed = await (await tank.commandRequest(identity,`cards/${cardId}`,{method:'POST',body:JSON.stringify({action:'confirm'})})).json();
+  assert.equal(confirmed.result.id,jobId);assert.equal(taskPosts,1);
   assert.equal((await (await tasks.GET()).json())[0].status,'running');
   const complete = (await (await tasks.GET()).json())[0];assert.equal(complete.status,'done');assert.equal(complete.ledger_id,ledgerId);assert.equal(complete.cost_usd,amounts.spent);
   const feedback = require('../workspace/app/api/feedback/route.ts');
@@ -109,7 +129,7 @@ async function main() {
   const ledger = require('../workspace/app/api/ledger/route.ts');
   const summary = await (await ledger.GET(new Request('https://app.tervory.com/api/ledger?tenant_id=untrusted-browser-tenant'))).json();
   assert.equal(summary.accepted,1);assert.equal(summary.by_model[0].tokens_in,120);assert.equal(summary.cost_usd,Number(amounts.spent));
-  const tank = require('../workspace/lib/tank.ts');assert.equal((await tank.readClientDashboard(identity.tenantId)).jobs_done,1);
+  assert.equal((await tank.readClientDashboard(identity.tenantId)).jobs_done,1);
   const actions = require('../workspace/app/tank/proof/savings-actions.ts');
   const report = await actions.readClientSavings();assert.equal(report.total.saved,amounts.saved);
   assert.equal((await actions.readSavingsRevision()).revision,ledgerId);
