@@ -34,7 +34,7 @@ async function backend(target, init = {}) {
  const gates = compiled.exports;
  const resources = new Map(bundle.outputFiles.map(file => ['/' + path.basename(file.path), file.contents]));
  const css = fs.readFileSync(path.join(base, 'app/globals.css'), 'utf8') + '\n' + new TextDecoder().decode(resources.get('/workspace-browser.css'));
- const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0}${css}</style></head><body><div class="app-shell product"><div class="shell-main"><main id="root"></main></div></div><script src="/workspace-browser.js"></script></body></html>`;
+ const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@font-face{font-family:Inter;src:url('/fonts/Inter-latin.woff2')}@font-face{font-family:Jost;src:url('/fonts/Jost-300-latin.woff2');font-weight:300}@font-face{font-family:Mono;src:url('/fonts/JetBrainsMono-latin.woff2')}body{margin:0;--font-inter:Inter;--font-jost:Jost;--font-mono:Mono}${css}</style></head><body><div class="app-shell product"><div class="shell-main"><main id="root"></main></div></div><script src="/workspace-browser.js"></script></body></html>`;
  const server = createServer(async (req, res) => {
   try {
    const url = new URL(req.url, 'http://localhost');
@@ -77,6 +77,7 @@ async function backend(target, init = {}) {
   await page.getByRole('button', {name: 'Send', exact: true}).click();
   await page.getByRole('button', {name: 'Confirm', exact: true}).click();
   await page.getByText(expected, {exact: true}).first().waitFor();
+  await page.evaluate(() => document.fonts.ready);
   if (output) await page.screenshot({path: path.join(output, tool.replaceAll('.', '-') + '-' + expected.replace(/[^a-z0-9]/gi, '_') + '.png')});
  }
  try {
