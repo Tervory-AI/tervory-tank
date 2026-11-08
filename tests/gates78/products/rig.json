@@ -1,6 +1,6 @@
 {
   "product": "rig",
-  "source_sha": "70b4ce877f0e5ba43b1d1f9e89728e0cfce847e0",
+  "source_sha": "85b4935c713261c4b587bca290d131778dd28f58",
   "entrypoints": [
     "agents/rig/app.py::_room_read /v1/rig/search and /v1/rig/ask",
     "agents/rig/memory_api.py::attach_memory_routes /memory/records /memory/edit /memory/forget /memory/switch",
