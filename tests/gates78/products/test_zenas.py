@@ -4,19 +4,33 @@ Missing runtime is BLOCKED/FAIL, never skipped and never supplied by a local
 overlay. Fixture prices describe the external gateway boundary, not billing.
 """
 import asyncio
+import base64
 import importlib
 import json
 import os
+import subprocess
+import sys
 import time
 from uuid import uuid4
 
 import asyncpg
 import httpx
 import pytest
+from zenas_harness import (
+    FIXTURE_COST,
+    FIXTURE_INPUT,
+    FIXTURE_OUTPUT,
+    ROOT,
+    SOURCE_SHA,
+    USER_A,
+    USER_B,
+    USER_C,
+    receipt,
+    require_runtime,
+    zenas,
+)
 
-from zenas_harness import (FIXTURE_COST, FIXTURE_INPUT, FIXTURE_OUTPUT, ROOT,
-                           SOURCE_SHA, USER_A, USER_B, USER_C, receipt,
-                           require_runtime, zenas as zenas)
+__all__ = ['zenas']
 
 
 async def first_answer(entry, **kwargs):
@@ -113,6 +127,13 @@ async def test_real_signin_and_shared_assertion_bind_user_tenant_and_role(zenas)
     await owned_result(zenas)
     assert zenas.provider.calls, "Local signed issuer discovery/JWKS must really be verified"
     assert any("x-tervory-user-assertion" in headers for _, _, _, headers in zenas.raw_assertions)
+    assertion = next(headers['x-tervory-user-assertion'] for _,_,_,headers in zenas.raw_assertions
+                     if 'x-tervory-user-assertion' in headers)
+    encoded = assertion.split('.')[0]
+    claims = json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+    assert claims['tenant_id'] == zenas.stack.tenant and claims['user_id'] == USER_A
+    assert claims['role'] == 'org:admin' and claims['aud'] == 'zenas'
+
     # Lifecycle HMAC alone is deliberately not sufficient after fixed core #765.
     from agents.zenas.request_signing import sign_request
     raw = json.dumps({"tenant_id": zenas.stack.tenant, "enabled": False}).encode()
@@ -246,6 +267,9 @@ async def test_unset_memory_and_brain_switches_add_no_work(zenas, monkeypatch):
     for filename in ("docker-compose.yml", "docker-compose.za.yml"):
         import yaml
         compose = yaml.safe_load((ROOT/"agents/zenas"/filename).read_text())
+        room_env = compose['services']['agent-zenas']['environment']
+        assert room_env['ZENAS_MEMORY_ENABLED'] == '${ZENAS_MEMORY_ENABLED:-false}'
+        assert room_env['ZENAS_BRAIN_ENABLED'] == '${ZENAS_BRAIN_ENABLED:-false}'
         brains = [service for name,service in compose["services"].items() if "brain" in name]
         assert brains and all("brain" in service.get("profiles", []) for service in brains)
 
@@ -291,9 +315,9 @@ async def test_exact_repeat_new_run_id_has_zero_actual_paid_calls(zenas):
 async def test_meaningful_changes_and_other_owners_do_not_hit(zenas,change):
     await first_answer(zenas)
     kwargs = {}
-    if change == "question": kwargs["changes"] = {"question":"What remedies follow a written commercial breach?"}
+    if change == "question": kwargs["changes"] = {"question":"What remedies follow breach of a written supply agreement?"}
     if change == "facts": kwargs["changes"] = {"features":{**zenas.body["features"],"written":False}}
-    if change == "jurisdiction": kwargs["changes"] = {"jurisdiction":"za"}
+    if change == "jurisdiction": kwargs["changes"] = {"jurisdiction":"both"}
     if change == "user": kwargs["user"] = USER_B
     if change == "tenant": kwargs.update(user=USER_C,tenant=zenas.stack.other_tenant)
     response = await zenas.answer(**kwargs)
@@ -415,10 +439,11 @@ async def test_same_tenant_run_id_cannot_replay_another_users_private_response(z
 
 @pytest.mark.asyncio
 async def test_stateful_moot_ai_turns_never_reuse_a_legal_answer(zenas,monkeypatch):
-    from agents.zenas.core.moot.hearing import Actor, change
-    from agents.zenas.core.moot.hearing_store import HearingStore
     from moot_hearing.test_hearing import problem
     from trigger_signin_fakes import set_founders
+
+    from agents.zenas.core.moot.hearing import Actor, change
+    from agents.zenas.core.moot.hearing_store import HearingStore
     set_founders(monkeypatch,USER_A)
     owner=Actor(zenas.stack.tenant,USER_A,zenas.body['home_region'],True)
     store=HearingStore(zenas.stack.records.pool)
@@ -454,6 +479,24 @@ async def test_region_jurisdiction_and_draft_entry_paths(zenas):
     assert first.status_code == 201
     again = await zenas.request("POST","/drafts",body=draft)
     assert again.status_code == 201 and receipt(again).get("answered_from_memory")
+    for key in ('text', 'sentences', 'docx_base64', 'document_id', 'state'):
+        assert again.json()[key] == first.json()[key]
+    book = await zenas.request('POST', '/playbooks', body={
+        'tenant_id': zenas.stack.tenant, 'home_region': zenas.body['home_region'],
+        'name': 'placeholder review positions', 'template': 'nda',
+        'positions': [{'kind': 'confidentiality', 'text': 'Keep the information confidential.'}]})
+    assert book.status_code == 201, book.text
+    review = {'tenant_id': zenas.stack.tenant, 'home_region': zenas.body['home_region'],
+        'playbook_id': book.json()['playbook']['id'], 'text': 'Keep the information confidential.',
+        'matter_id': zenas.matters[zenas.stack.tenant]}
+    first = await zenas.request('POST', '/contract-reviews', body=review)
+    assert first.status_code == 200 and first.json()['ok'], first.text
+    calls = len(zenas.model.calls)
+    again = await zenas.request('POST', '/contract-reviews', body=review)
+    assert again.status_code == 200 and receipt(again)['answered_from_memory'], again.text
+    assert len(zenas.model.calls) == calls
+    for key in ('findings', 'deviations', 'docx_base64', 'document_id', 'state'):
+        assert again.json()[key] == first.json()[key]
 
 
 def test_original_gate_nodes_are_preserved_in_manifest():
@@ -463,3 +506,86 @@ def test_original_gate_nodes_are_preserved_in_manifest():
     assert any("gates_7_8_memory.py::" in node for node in nodes)
     assert any("gates_7_8_hermes_contract.py::" in node for node in nodes)
     assert len(nodes) == 32 and len(nodes) == len(set(nodes))
+    targets = sorted({node.split('::')[0] for node in nodes})
+    missing = [target for target in targets if not (ROOT / target).is_file()]
+    assert not missing, 'BLOCKED: original regression modules not integrated: ' + ', '.join(missing)
+    path = ROOT / '.tmp/gates78' / ('zenas-legacy-' + uuid4().hex + '.json')
+    env = {**os.environ, 'PYTHONPATH':os.pathsep.join(str(ROOT/part) for part in ('','tank','agents','agents/_chassis','tests','tests/gates78'))}
+    result = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
+        '-p', 'gate78_result', '--gate78-result', str(path), '--disable-socket', '--allow-unix-socket',
+        '--allow-hosts=localhost,127.0.0.1,::1', '--timeout=120', *targets],
+        check=False, cwd=ROOT, env=env, capture_output=True, text=True, timeout=180)
+    assert result.returncode == 0, result.stdout + result.stderr
+    evidence = json.loads(path.read_text())
+    assert evidence['exit_code'] == 0 and not evidence['collection_errors']
+    assert evidence['cases'] and all(value == 'PASS' for value in evidence['cases'].values())
+    executed = {node.split('[', 1)[0] for node in evidence['cases']}
+    assert set(nodes) <= executed, 'An original regression was not executed'
+    print(result.stdout.strip().splitlines()[-1], str(path.relative_to(ROOT)))
+
+
+@pytest.mark.asyncio
+async def test_real_ledger_reconciliation_and_first_repeat_changed_evidence(zenas):
+    from uuid import UUID
+    measurements = []
+    for label, changes in [('first', {}), ('exact_repeat', {}),
+            ('changed_input', {'question': 'What notice does a written supply agreement require?'})]:
+        before = len(zenas.model.calls)
+        response = await first_answer(zenas, changes=changes)
+        bill = receipt(response)
+        rows = await zenas.stack.records.pool.fetch("""SELECT id,cost_usd,tokens_in,tokens_out,model,rung
+            FROM tank.ledger WHERE tenant_id=$1 AND agent='zenas' AND id=ANY($2::uuid[])""",
+            UUID(zenas.stack.tenant), [UUID(ident) for ident in bill['ledger_ids']])
+        charged = [row for row in rows if row['rung'] != 3]
+        assert all(row['cost_usd'] == 0 and row['tokens_in'] == row['tokens_out'] == 0 for row in rows if row['rung'] == 3)
+        calls = len(zenas.model.calls)-before
+        assert len(charged) == calls
+        assert bill['cost'] == sum(float(row['cost_usd']) for row in charged)
+        assert bill['tokens_in'] == sum(row['tokens_in'] for row in charged)
+        assert bill['tokens_out'] == sum(row['tokens_out'] for row in charged)
+        measurements.append({'scenario':label,'provider_calls':calls,'cost':bill['cost'],
+            'would_have_cost':bill['would have cost'],'tokens_in':bill['tokens_in'],'tokens_out':bill['tokens_out']})
+    assert measurements[0]['provider_calls'] > 0 and measurements[2]['provider_calls'] > 0
+    assert measurements[1]['provider_calls'] == 0 and measurements[1]['tokens_in'] == measurements[1]['tokens_out'] == 0
+    view = await zenas.request('GET','/receipts')
+    assert view.status_code == 200 and len(view.json()['receipts']) == 3
+    empty = await zenas.request('GET','/receipts',user=USER_C,tenant=zenas.stack.other_tenant)
+    assert empty.status_code == 200 and empty.json()['receipts'] == []
+    print('ZENAS_GATE78_COSTS=' + json.dumps(measurements, sort_keys=True))
+
+
+@pytest.mark.asyncio
+async def test_forget_and_correction_tombstone_private_command_replays(zenas):
+    initial_id = str(uuid4())
+    await first_answer(zenas, run_id=initial_id)
+    row = next(row for row in await zenas.records() if row['kind'] == 'zenas.result')
+    private = 'placeholder corrected confidential position'
+    edited = await zenas.request('POST','/memory/edit',body={'tenant_id':zenas.stack.tenant,
+        'memory_id':row['id'],'value':{'memo':{'text':private}}})
+    assert edited.status_code == 200
+    calls = len(zenas.model.calls)
+    old = await zenas.answer(run_id=initial_id)
+    assert old.status_code == 409 and private not in old.text and len(zenas.model.calls) == calls
+    ident = str(uuid4())
+    corrected = await first_answer(zenas, run_id=ident)
+    assert private in corrected.text and len(zenas.model.calls) == calls
+    forgotten = await zenas.request('POST','/memory/forget',body={'tenant_id':zenas.stack.tenant,
+        'memory_id':edited.json()['memory']['id']})
+    assert forgotten.status_code == 200
+    replay = await zenas.answer(run_id=ident)
+    assert replay.status_code == 409 and private not in replay.text and len(zenas.model.calls) == calls
+
+
+@pytest.mark.asyncio
+async def test_completed_code_brain_gap_never_falls_through_to_paid_provider(zenas,monkeypatch):
+    from zenas_harness import QUOTE
+    monkeypatch.setenv('ZENAS_BRAIN_ENABLED','true')
+    card={'elements':[{'id':'written','test':'The agreement is written.','citation':'Fixture section 1','quote':QUOTE}],
+        'exceptions':[],'defences':[],'remedies':[],'decision_table':[
+            {'element_id':'written','when':{'written':True},'finding':'met'}]}
+    zenas.model.brain_reply={'status':'done','summary':json.dumps(card),'model':'code',
+                            'cost_usd':0,'tokens_in':0,'tokens_out':0}
+    response=await first_answer(zenas)
+    assert '/tasks' in zenas.model.brain_calls and zenas.model.calls == []
+    bill=receipt(response)
+    assert bill['cost']==0 and bill['tokens_in']==bill['tokens_out']==0
