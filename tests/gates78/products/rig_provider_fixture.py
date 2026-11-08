@@ -2,17 +2,17 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 import importlib.util
 import json
-from pathlib import Path
 import socket
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 import pytest
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-import uvicorn
 
 
 @asynccontextmanager
@@ -20,11 +20,15 @@ async def worker_corridor(wire, monkeypatch, root: Path):
     if importlib.util.find_spec('run_agent') is None:
         pytest.fail('BLOCKED: install the existing Dockerfile.brain HERMES_COMMIT in the cloud '
                     'Python toolchain; never replace AIAgent or fabricate its child receipt.', pytrace=False)
+    import subprocess
+    sdk = Path(importlib.util.find_spec('run_agent').origin).parent
+    pinned = (root / 'agents/rig/Dockerfile.brain').read_text().split('ARG HERMES_COMMIT=', 1)[1].splitlines()[0]
+    assert subprocess.check_output(['git', '-C', str(sdk), 'rev-parse', 'HEAD'], text=True).strip() == pinned
     import main as tank
     import paid_http
     import skala
-    from savings_defaults import initialize
     from paid_steps_fixtures import configure_paid_auto
+    from savings_defaults import initialize
     pool = wire.pool
     await pool.execute((root / 'tank/schema.sql').read_text())
     async with pool.acquire() as conn:
@@ -48,12 +52,12 @@ async def worker_corridor(wire, monkeypatch, root: Path):
     async def roster():
         return {'data': [{'model_name': name, 'litellm_params': {'model': name},
                          'model_info': {'input_cost_per_token': 0.001, 'output_cost_per_token': 0.002}}
-                        for name in ('placeholder-recorded', 'placeholder-baseline')]}
+                        for name in ('llama-small', 'gpt-oss-small', 'qwen-small', 'gpt-oss', 'llama', 'placeholder-recorded', 'placeholder-baseline')]}
 
     @fake.post('/v1/chat/completions')
     async def completion(request: Request):
         body = await request.json()
-        assert body['model'] == 'placeholder-recorded'
+        assert body['model'] == 'llama-small'
         # The real Rig protocol adapter parses this JSON, then the real Hermes
         # worker calls the approved skill. No skill or receipt is fabricated here.
         conversation = json.loads(body['messages'][-1]['content'])['conversation']
@@ -61,13 +65,16 @@ async def worker_corridor(wire, monkeypatch, root: Path):
         answer = {'content': 'placeholder catalogue result', 'tool_calls': []} if ran_skill else {
             'content': None, 'tool_calls': [{'name': 'skala_run', 'arguments': {
                 'skill_id': 'rig.search', 'version': '1.0.0', 'input': {'query': 'placeholder'}}}]}
-        wire.provider_calls.append({'cost_usd': 0.05, 'tokens_in': 10, 'tokens_out': 3,
+        if getattr(wire, 'provider_mode', '') == 'malformed':
+            answer = {'invalid': 'placeholder invalid model contract'}
+        cost = getattr(wire, 'provider_cost', 0.05)
+        wire.provider_calls.append({'cost_usd': cost, 'tokens_in': 10, 'tokens_out': 3,
                                     'model': body['model']})
         return JSONResponse({'id': 'placeholder-completion', 'object': 'chat.completion',
             'model': body['model'], 'choices': [{'index': 0, 'finish_reason': 'stop',
             'message': {'role': 'assistant', 'content': json.dumps(answer)}}],
             'usage': {'prompt_tokens': 10, 'completion_tokens': 3, 'total_tokens': 13}},
-            headers={'x-litellm-response-cost': '0.05'})
+            headers={'x-litellm-response-cost': str(cost)})
 
     app = FastAPI()
 
@@ -97,6 +104,9 @@ async def worker_corridor(wire, monkeypatch, root: Path):
     async def outbound(request):
         if request.url.host == '127.0.0.1' and request.url.port == listener.getsockname()[1]:
             return await actual_http.handle_async_request(request)
+        if request.url.host == 'rig-brain':
+            import rig_brain.service as brain
+            return await httpx.ASGITransport(app=brain.app).handle_async_request(request)
         if request.url.host == 'agent-rig':
             return await httpx.ASGITransport(app=wire.product).handle_async_request(request)
         raise AssertionError('Unrecorded external network destination')

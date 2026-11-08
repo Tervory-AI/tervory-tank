@@ -1,13 +1,13 @@
 {
   "product": "rig",
-  "source_sha": "815b7bbef0c7aea4e00b1dba10e16fed9ccd2af8",
+  "source_sha": "70b4ce877f0e5ba43b1d1f9e89728e0cfce847e0",
   "entrypoints": [
     "agents/rig/app.py::_room_read /v1/rig/search and /v1/rig/ask",
     "agents/rig/memory_api.py::attach_memory_routes /memory/records /memory/edit /memory/forget /memory/switch",
     "agents/rig/rig_brain/service.py::start /tasks and poll /tasks/{task_id}",
     "agents/rig/rigbox/three_d/command.py::main --dry-run",
-    "tank/ghost_routes.py::call_room + paid_http.Client + TriggerSigninMiddleware",
-    "tank/rig_savings.py receipt router"
+    "tank/rig_savings.py receipt router",
+    "tank/rig_user_routes.py::build_router via main.app, TriggerSigninMiddleware, command.identity/require_tool, paid_http.Client"
   ],
   "legacy_tests": [
     "tests/test_rig_gates_7_8.py::test_product_request_brain_route_receipt_then_memory",
@@ -54,7 +54,8 @@
       "tests/gates78/products/test_rig.py::test_declared_store_preference_shared_but_owned_preference_private"
     ],
     "G7.required_owner": [
-      "tests/gates78/products/test_rig.py::test_required_owner_body_and_header_impersonation"
+      "tests/gates78/products/test_rig.py::test_required_owner_body_and_header_impersonation",
+      "tests/gates78/products/test_rig.py::test_tank_grants_deny_controls_and_build_without_product_access"
     ],
     "G7.signed_actor": [
       "tests/gates78/products/test_rig.py::test_owner_crud_persists_and_forget_removes_vector",
@@ -64,7 +65,8 @@
       "tests/gates78/products/test_rig.py::test_product_assertion_rejects_each_binding"
     ],
     "G7.replay": [
-      "tests/gates78/products/test_rig.py::test_nonce_concurrency_restart_and_forgotten_write_replay"
+      "tests/gates78/products/test_rig.py::test_nonce_concurrency_restart_and_forgotten_write_replay",
+      "tests/gates78/products/test_rig.py::test_worker_owner_survives_retry_restart_and_foreign_poll"
     ],
     "G7.sql_before_vector": [
       "tests/gates78/products/test_rig.py::test_sql_scope_before_vector_and_limit"
@@ -100,7 +102,8 @@
       "tests/gates78/products/test_rig.py::test_changed_owner_tenant_and_ineligible_action_never_reuses"
     ],
     "G8.correction": [
-      "tests/gates78/products/test_rig.py::test_correction_and_forget_invalidate_derived_repeats"
+      "tests/gates78/products/test_rig.py::test_correction_and_forget_invalidate_derived_repeats",
+      "tests/gates78/products/test_rig.py::test_editing_owned_result_replaces_it_and_invalidates_reuse"
     ],
     "G8.forget": [
       "tests/gates78/products/test_rig.py::test_owner_crud_persists_and_forget_removes_vector",
@@ -116,10 +119,14 @@
       "tests/gates78/products/test_rig.py::test_auth_errors_never_return_private_cached_answers"
     ],
     "G8.receipts": [
-      "tests/gates78/products/test_rig.py::test_build_task_recall_execution_receipt_remember_and_exact_repeat"
+      "tests/gates78/products/test_rig.py::test_build_task_recall_execution_receipt_remember_and_exact_repeat",
+      "tests/gates78/products/test_rig.py::test_worker_failure_keeps_actual_bill_and_retry_never_fabricates_success",
+      "tests/gates78/products/test_rig.py::test_observed_zero_worker_cost_is_not_replaced_with_a_fixture_price"
     ],
     "G8.retry_concurrency": [
-      "tests/gates78/products/test_rig.py::test_concurrent_task_identity_preserves_one_payment_and_receipt"
+      "tests/gates78/products/test_rig.py::test_concurrent_task_identity_preserves_one_payment_and_receipt",
+      "tests/gates78/products/test_rig.py::test_worker_owner_survives_retry_restart_and_foreign_poll",
+      "tests/gates78/products/test_rig.py::test_worker_failure_keeps_actual_bill_and_retry_never_fabricates_success"
     ],
     "G8.product_regressions": [
       "tests/gates78/products/test_rig.py::test_forge_one_command_offline_no_database_and_cli_contract",

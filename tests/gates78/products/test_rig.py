@@ -15,7 +15,6 @@ from uuid import uuid4
 import httpx
 import pytest
 import yaml
-
 from products.rig_fixture import ROOT, USER_A, USER_B, USER_C, require_runtime, rig_wire
 
 __all__ = ['rig_wire']
@@ -137,14 +136,14 @@ async def test_nonce_concurrency_restart_and_forgotten_write_replay(rig_wire):
     assert captured.headers.get(HEADER), 'Tank must attach the current nonce-protected assertion'
     raw, headers = captured.content, dict(captured.headers)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=wire.product), base_url='http://agent-rig:8000') as direct:
-        answers = await asyncio.gather(*(direct.post('/memory/edit', content=raw, headers=headers) for _ in range(4)))
+        answers = await asyncio.gather(*(direct.post(captured.url.raw_path.decode(), content=raw, headers=headers) for _ in range(4)))
         assert all(answer.status_code == 401 for answer in answers)
         forgotten = await wire.request('POST', '/memory/forget', body={'memory_id': identity})
         assert forgotten.status_code == 200
         restarted = PostgresNonces(wire.pool, 'rig')
         restarted.schema = wire.stack.records.schema('rig')
         wire.product.state.product_nonce_stores = {'rig': restarted}
-        replay = await direct.post('/memory/edit', content=raw, headers=headers)
+        replay = await direct.post(captured.url.raw_path.decode(), content=raw, headers=headers)
         assert replay.status_code == 401
     assert await wire.rows() == []
 
@@ -293,8 +292,17 @@ async def test_build_task_recall_execution_receipt_remember_and_exact_repeat(rig
     assert repeat['answered_from_memory'] is True
     rows = await wire.rows()
     assert any('placeholder' in row['text'] and row['meta'].get('outcome') for row in rows)
-    for field in ('past_builds', 'store_preferences', 'approved_parts', 'approved_fits', 'quotes', 'rejected_designs'):
-        assert any((row.get('meta') or {}).get('outcome', {}).get(field) for row in rows), field
+    # Each product memory category is written by a real owner control, then
+    # positively recalled by the actual worker; unrelated invented output fields
+    # are not evidence of a successful catalogue build.
+    kinds = ('rig.build', 'rig.store_preference', 'rig.part', 'rig.fit', 'rig.quote', 'rig.rejected_design')
+    evidence = []
+    for kind in kinds:
+        evidence.append(created(await wire.edit('placeholder ' + kind, kind=kind)))
+    await wire.build('placeholder recall approved catalogue evidence')
+    requests = [json.loads(p.read_text()) for p in wire.root.rglob('request.json')]
+    assert any(set(evidence) <= {row['id'] for row in item['memories']} for item in requests)
+
 
 
 @pytest.mark.asyncio
@@ -323,9 +331,7 @@ async def test_correction_and_forget_invalidate_derived_repeats(rig_wire):
     assert 'placeholder prefer low stand' not in json.dumps(peer)
     response = await wire.request('POST', '/memory/forget', body={'memory_id': correction})
     assert response.status_code == 200
-    for row in await wire.rows():
-        if row.get('kind') == 'rig.receipt':
-            assert (await wire.request('POST', '/memory/forget', body={'memory_id': row['id']})).status_code == 200
+    assert not any((row.get('meta') or {}).get('outcome') for row in await wire.rows())
     after = await wire.build()
     assert 'placeholder prefer low stand' not in json.dumps(after)
     assert not after['answered_from_memory']
@@ -391,3 +397,80 @@ def test_forge_one_command_offline_no_database_and_cli_contract():
     # Keep the original offline-box requirement visible; its private demo class
     # cannot substitute for this shipped product command or authenticated path.
     assert (ROOT / 'tests/test_rig_offline_box_journey.py').is_file()
+
+
+@pytest.mark.asyncio
+async def test_tank_grants_deny_controls_and_build_without_product_access(rig_wire):
+    wire = rig_wire
+    await wire.pool.execute("DELETE FROM tank.tenant_squad WHERE tenant_id=$1::uuid AND agent='rig'", wire.stack.tenant)
+    before = await wire.persistent()
+    response = await wire.edit()
+    assert response.status_code == 403
+    response = await wire.request('POST', '/tasks', body={
+        'task_id': str(uuid4()), 'home_region': 'us-east', 'question': 'placeholder denied build'})
+    assert response.status_code == 403
+    assert await wire.persistent() == before and not wire.provider_calls
+    assert not list(wire.root.rglob('submitted.json'))
+
+
+@pytest.mark.asyncio
+async def test_worker_owner_survives_retry_restart_and_foreign_poll(rig_wire):
+    wire = rig_wire
+    task_id = str(uuid4())
+    first = await wire.build(task_id=task_id)
+    assert first['status'] == 'done'
+    count = len(wire.provider_calls)
+    foreign = await wire.ingress.get('/v1/rig/tasks/' + task_id,
+        params={'tenant_id': wire.stack.tenant, 'home_region': 'us-east'}, headers=wire.headers(USER_B))
+    assert foreign.status_code == 404
+    import rig_brain.service as brain
+    assert not brain.jobs
+    retried = await wire.build(task_id=task_id)
+    assert retried == first and len(wire.provider_calls) == count
+    submitted = next(wire.root.rglob('submitted.json'))
+    assert json.loads(submitted.read_text())['user_id'] == USER_A
+
+
+@pytest.mark.asyncio
+async def test_worker_failure_keeps_actual_bill_and_retry_never_fabricates_success(rig_wire):
+    wire = rig_wire
+    wire.provider_mode = 'malformed'
+    identity = str(uuid4())
+    first = await wire.build(task_id=identity)
+    assert first['status'] == 'failed' and first['model_receipts']
+    actual = sum(row['cost_usd'] for row in wire.provider_calls)
+    assert actual > 0 and first['cost_usd'] == actual
+    assert first['tokens_in'] == sum(row['tokens_in'] for row in wire.provider_calls)
+    assert first['tokens_out'] == sum(row['tokens_out'] for row in wire.provider_calls)
+    count = len(wire.provider_calls)
+    wire.provider_mode = ''
+    retry = await wire.build(task_id=identity)
+    assert retry['status'] == 'failed' and retry['cost_usd'] == actual
+    assert len(wire.provider_calls) == count
+    assert not any((row.get('meta') or {}).get('outcome') for row in await wire.rows())
+
+
+@pytest.mark.asyncio
+async def test_observed_zero_worker_cost_is_not_replaced_with_a_fixture_price(rig_wire):
+    wire = rig_wire
+    wire.provider_cost = 0
+    result = await wire.build()
+    assert result['status'] == 'done' and len(wire.provider_calls) == 2
+    assert result['cost_usd'] == 0 and result['would_have_cost']['cost_usd'] == 0
+    assert all(row['cost_usd'] == 0 for row in result['model_receipts'])
+
+
+@pytest.mark.asyncio
+async def test_editing_owned_result_replaces_it_and_invalidates_reuse(rig_wire):
+    wire = rig_wire
+    first = await wire.build()
+    assert first['status'] == 'done'
+    row = next(row for row in await wire.rows() if (row.get('meta') or {}).get('outcome'))
+    identity = created(await wire.edit('placeholder corrected result', kind='rig.correction', memory_id=row['id']))
+    assert identity == row['id']
+    rows = await wire.rows()
+    assert any(item['id'] == identity and item['text'] == 'placeholder corrected result' for item in rows)
+    assert not any((item.get('meta') or {}).get('outcome') for item in rows)
+    corrected = await wire.build()
+    assert corrected['summary'] == 'placeholder corrected result'
+    assert len(wire.provider_calls) == 2

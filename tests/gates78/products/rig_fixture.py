@@ -1,25 +1,20 @@
 """Rig's wire harness: real sign-in, Tank client, product routes and Hermes.
 
-The ASGI relay only transports a request through shipped call_room/paid_http.
-It implements no product route, ownership check, memory or receipt behavior.
+Requests enter the actual Tank app, grant checks and explicit Rig routes.
+The transport switches local app destinations without implementing routes.
 The issuer and external providers are offline; SQL and Qdrant are real.
 """
 from __future__ import annotations
 
-from contextlib import AsyncExitStack
-
 import importlib.util
-import json
-from pathlib import Path
 import sys
-from types import SimpleNamespace
+from contextlib import AsyncExitStack
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
 import pytest
 import pytest_asyncio
-from starlette.requests import Request
-from starlette.responses import Response
 
 ROOT = Path(__file__).resolve().parents[3]
 USER_A = 'placeholder-rig-owner'
@@ -51,6 +46,8 @@ class RigWire:
         self.provider_calls = []
         self.memory_failure = None
         self.worker_open = False
+        import asyncio
+        self.worker_lock = asyncio.Lock()
 
     def headers(self, user=USER_A, tenant=None):
         return {'X-Tank-Key': PLACEHOLDER_WORKSPACE_KEY, **self.provider.workspace_headers(
@@ -61,7 +58,8 @@ class RigWire:
         data = dict(body or {})
         if method != 'GET':
             data.setdefault('tenant_id', tenant)
-        return await self.ingress.request(method, path,
+        target = '/v1/rig' + path if path.startswith(('/memory/', '/tasks')) else path
+        return await self.ingress.request(method, target,
             params={'tenant_id': tenant} if method == 'GET' else None,
             json=data if method != 'GET' else None,
             headers=headers if headers is not None else self.headers(user, tenant))
@@ -84,37 +82,39 @@ class RigWire:
     async def build(self, question='placeholder build a display stand', *, user=USER_A,
                     tenant=None, task_id=None):
         tenant = tenant or self.stack.tenant
-        if not self.worker_open:
-            from products.rig_provider_fixture import worker_corridor
-            await self.resources.enter_async_context(worker_corridor(self, self.monkeypatch, ROOT))
-            self.worker_open = True
+        async with self.worker_lock:
+            if not self.worker_open:
+                from products.rig_provider_fixture import worker_corridor
+                await self.resources.enter_async_context(worker_corridor(self, self.monkeypatch, ROOT))
+                self.worker_open = True
         identity = str(task_id or uuid4())
         answer = await self.request('POST', '/tasks', user=user, tenant=tenant, body={
             'task_id': identity, 'home_region': 'us-east', 'question': question})
         assert answer.status_code in (200, 202), answer.text
         # Execute the shipped worker, never a fabricated child receipt.
         import asyncio
+
         import rig_brain.service as brain
         job = brain.jobs.get((tenant, identity))
         if job is not None:
             await asyncio.wait_for(asyncio.shield(job), timeout=90)
-        result = await self.ingress.get('/tasks/' + identity,
+        result = await self.ingress.get('/v1/rig/tasks/' + identity,
             params={'tenant_id': tenant, 'home_region': 'us-east'}, headers=self.headers(user, tenant))
         assert result.status_code == 200, result.text
         return result.json()
 
 
 @pytest_asyncio.fixture
-async def rig_wire(gate78_memory, monkeypatch, tmp_path):
+async def rig_wire(gate78_memory, gate78_database, monkeypatch, tmp_path, request):
     require_runtime()
+    monkeypatch.setenv("DATABASE_URL", gate78_database)
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "placeholder-provider-key")
     stack = await gate78_memory('rig')
-    from chassis.memory import MemoryClient
-    from chassis.user_assertion import PostgresNonces
     import identity_oidc
     import paid_http
-    import ghost_routes
+    from chassis.memory import MemoryClient
+    from chassis.user_assertion import PostgresNonces
     from trigger_signin_fakes import Provider, install_registry
-    from trigger_signin_guard import TriggerSigninMiddleware
 
     # No mutable product or core overlay: imports must resolve inside this Tank checkout.
     monkeypatch.syspath_prepend(str(ROOT / 'agents/rig'))
@@ -125,7 +125,7 @@ async def rig_wire(gate78_memory, monkeypatch, tmp_path):
     monkeypatch.setenv('TANK_KEY', stack.key)
     monkeypatch.setenv('TANK_KEY_RIG', stack.key)
     monkeypatch.setenv('TANK_API_KEY', PLACEHOLDER_WORKSPACE_KEY)
-    monkeypatch.setenv('RIG_ROOM_TENANT', stack.tenant)
+    monkeypatch.delenv('RIG_ROOM_TENANT', raising=False)
     monkeypatch.setenv('DATA_DIR', str(tmp_path))
     monkeypatch.setenv('RIG_MEMORY_ENABLED', 'true')
     monkeypatch.setenv('RIG_BRAIN_ENABLED', 'true')
@@ -150,6 +150,9 @@ async def rig_wire(gate78_memory, monkeypatch, tmp_path):
                         lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
     identity_oidc._cache.clear()
 
+    (tmp_path / 'brain').symlink_to(ROOT / 'agents/_brain', target_is_directory=True)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setenv('PYTHONPATH', ':'.join([str(tmp_path), str(ROOT / 'agents/rig'), str(ROOT / 'agents/_chassis'), str(ROOT / 'tank'), str(ROOT)]))
     import rig_brain.service as brain
     brain.app.state.pool = stack.records.pool
     brain.app.state.product_nonce_stores = {'rig': nonces}
@@ -165,30 +168,36 @@ async def rig_wire(gate78_memory, monkeypatch, tmp_path):
 
     async with paid_http.Client(transport=httpx.MockTransport(room),
                                 event_hooks={'request': [observe]}, follow_redirects=False) as relay:
-        runtime = SimpleNamespace(_http=relay, TANK_API_KEY=PLACEHOLDER_WORKSPACE_KEY, box_region=lambda: 'us-east')
-        monkeypatch.setattr(ghost_routes, 'runtime', lambda: runtime)
-        # Only the existing OIDC middleware's configuration read is supplied here.
+        import command
         import main
         monkeypatch.setattr(main, 'TANK_API_KEY', PLACEHOLDER_WORKSPACE_KEY)
-
-        async def handoff(scope, receive, send):
-            request = Request(scope, receive)
-            raw = await request.body()
-            body = json.loads(raw) if raw else None
-            response = await ghost_routes.call_room(request.method, 'rig', request.url.path,
-                body=body, params=list(request.query_params.multi_items()),
-                tenant=(body or {}).get('tenant_id') or request.query_params.get('tenant_id'))
-            await Response(response.content, status_code=response.status_code,
-                           media_type='application/json')(scope, receive, send)
-
-        async with original_client(transport=httpx.ASGITransport(app=TriggerSigninMiddleware(handoff)),
+        monkeypatch.setattr(main, '_pool', stack.records.pool)
+        monkeypatch.setattr(main, '_admin_pool', stack.records.pool)
+        monkeypatch.setattr(main, '_http', relay)
+        monkeypatch.setattr(command, 'db', lambda pool=stack.records.pool: pool)
+        await stack.records.pool.execute((ROOT / 'tank/schema.sql').read_text())
+        for tenant in (stack.tenant, stack.other_tenant):
+            await stack.records.pool.execute("INSERT INTO tank.tenant_squad(tenant_id,agent,enabled_by) VALUES($1::uuid,'rig','placeholder-founder') ON CONFLICT DO NOTHING", tenant)
+        async with original_client(transport=httpx.ASGITransport(app=main.app),
                                    base_url='http://placeholder-tank') as ingress:
             wire = RigWire(stack, provider, ingress, product, relay, stack.records.pool, tmp_path)
             wire.captured = captured
             wire.monkeypatch = monkeypatch
             async with AsyncExitStack() as resources:
                 wire.resources = resources
-                yield wire
+                try:
+                    yield wire
+                finally:
+                    import json
+                    output = ROOT / '.tmp/gates78/rig-observed'
+                    output.mkdir(parents=True, exist_ok=True)
+                    runs = []
+                    for path in tmp_path.rglob('receipt.json'):
+                        row = json.loads(path.read_text())
+                        runs.append({key: row.get(key) for key in ('status', 'paid_calls', 'cost_usd',
+                            'tokens_in', 'tokens_out', 'would_have_cost', 'answered_from_memory', 'memory_status')})
+                    (output / (request.node.name + '.json')).write_text(json.dumps({
+                        'test': request.node.nodeid, 'provider_calls': wire.provider_calls, 'runs': runs}, indent=2))
     for task in list(brain.jobs.values()):
         task.cancel()
     if brain.jobs:
