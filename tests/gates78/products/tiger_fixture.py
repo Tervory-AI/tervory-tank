@@ -170,6 +170,7 @@ async def tiger_system(gate78_memory, gate78_database, monkeypatch):
                                                     '10002': memory.other_tenant})
             identity_oidc._cache.clear()
             tank = FastAPI()
+            monkeypatch.setattr(main, 'app', tank)
             tank.add_middleware(TriggerSigninMiddleware)
             tank.add_middleware(TenantContextMiddleware)
             tank.include_router(command_router)

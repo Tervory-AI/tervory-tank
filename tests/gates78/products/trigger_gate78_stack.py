@@ -9,6 +9,7 @@ from uuid import UUID
 import asyncpg
 import httpx
 import pytest_asyncio
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 ROOT = Path(__file__).resolve().parents[3]
 USER_A = 'placeholder-user-a'
@@ -48,7 +49,7 @@ class TriggerNetwork(httpx.AsyncBaseTransport):
                     for name in (*OPEN, 'placeholder-fixture')]})
             if path == '/router/settings':
                 return httpx.Response(200, json={'current_values': {'fallbacks': []}})
-            assert request.method == 'POST' and path == '/v1/chat/completions'
+            assert request.method == 'POST' and path == COMPLETIONS_PATH
             self.providers.append(json.loads(request.content))
             return httpx.Response(200, headers={'x-litellm-response-cost': str(COST)}, json={
                 'choices': [{'message': {'content': 'A placeholder reliable product.'}, 'finish_reason': 'stop'}],

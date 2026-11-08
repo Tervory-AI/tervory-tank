@@ -68,7 +68,8 @@
     "G7.runtime_contract": [
       "tests/gates78/products/test_tiger.py::test_runtime_contract",
       "tests/gates78/products/test_tiger.py::test_runtime_imports_restore_foreign_modules",
-      "tests/gates78/products/test_tiger.py::test_typed_adapter_verified_scope_run_and_replay"
+      "tests/gates78/products/test_tiger.py::test_typed_adapter_verified_scope_run_and_replay",
+      "tests/gates78/products/test_tiger.py::test_room_router_does_not_mutate_started_global_app"
     ],
     "G8.default_off": [
       "tests/gates78/products/test_tiger.py::test_default_off_and_unauthenticated_plain_free_path",

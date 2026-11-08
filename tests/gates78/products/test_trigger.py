@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from decimal import Decimal
 
 import pytest
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 from trigger_gate78_stack import trigger_stack as trigger_stack_fixture, control, write, rows, signed_request, headers, ROOT, USER_A, USER_B, COST, TOKENS
 
@@ -241,7 +242,7 @@ async def test_paid_write_recall_execute_receipt_remember_order_and_meaningful_f
     assert result['cost_usd'] == COST and (result['tokens_in'], result['tokens_out']) == TOKENS
     calls = b.net.calls
     recall = next(i for i, item in enumerate(calls) if item[:2] == ('hermes', 'POST') and item[2] == '/recall')
-    provider = next(i for i, item in enumerate(calls) if item[0] == 'placeholder-gateway' and item[2] == '/v1/chat/completions')
+    provider = next(i for i, item in enumerate(calls) if item[0] == 'placeholder-gateway' and item[2] == COMPLETIONS_PATH)
     remember = next(i for i, item in enumerate(calls) if item == ('hermes', 'POST', '/memories'))
     assert recall < provider < remember
     saved = (await control(b)).json()['memories']

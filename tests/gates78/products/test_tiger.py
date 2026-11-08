@@ -14,6 +14,25 @@ from tiger_fixture import (KEY, ROOT, USER_A, USER_B, runtime_dependencies,
 tiger_system = tiger_fixture
 
 
+@pytest.fixture
+def started_global_tank(monkeypatch):
+    import main
+    from fastapi import FastAPI
+    app = FastAPI()
+    app.middleware_stack = app.build_middleware_stack()
+    monkeypatch.setattr(main, 'app', app)
+    return app
+
+
+@pytest.mark.usefixtures('started_global_tank')
+@pytest.mark.asyncio
+async def test_room_router_does_not_mutate_started_global_app(tiger_system, started_global_tank):
+    from base_public_http import BaseBlockResponse
+    assert tiger_system.tank is not started_global_tank
+    assert any(middleware.cls is BaseBlockResponse for middleware in tiger_system.tank.user_middleware)
+    assert started_global_tank.user_middleware == []
+
+
 def ok(response):
     assert response.status_code == 200, response.text
     return response.json()
