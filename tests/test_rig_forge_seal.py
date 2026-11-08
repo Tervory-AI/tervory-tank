@@ -18,7 +18,10 @@ def test_compose_only_brain_controls_forge_and_only_proxy_has_egress():
     services = data["services"]
     assert {name for name,spec in services.items() if "forge-control" in spec["networks"]} == {"rig-forge","rig-brain"}
     assert services["rig-forge"]["networks"] == ["forge-control","forge-egress"]
-    assert {name for name,spec in services.items() if "HF_JOBS_TOKEN" in spec.get("environment",{})} == {"rig-forge"}
+    assert not any("HF_JOBS_TOKEN" in spec.get("environment", {}) for spec in services.values())
+    tank_services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
+    assert {name for name, spec in tank_services.items()
+            if "HF_JOBS_TOKEN" in spec.get("environment", {})} == {"tank"}
     for name in ("rig-forge","rig-forge-egress"):
         assert not any("TANK" in k for k in services[name]["environment"])
         assert not services[name].get("ports") and not services[name].get("labels")
