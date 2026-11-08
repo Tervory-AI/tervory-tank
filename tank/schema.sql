@@ -3545,6 +3545,27 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+-- One completion-memory attempt per real task, independent of deletable memory.
+CREATE TABLE IF NOT EXISTS tank.workspace_task_memory (
+    task_id uuid PRIMARY KEY REFERENCES tank.tasks(id) ON DELETE CASCADE,
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL CHECK(length(btrim(user_id)) > 0),
+    state text NOT NULL CHECK(state IN ('pending','done','unavailable','denied')),
+    result jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+DO $$ BEGIN
+    IF EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+        ALTER TABLE tank.workspace_task_memory ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.workspace_task_memory FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='tank' AND tablename='workspace_task_memory' AND policyname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.workspace_task_memory FOR ALL TO PUBLIC
+            USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+            WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END $$;
+
 -- END workspace
 
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)

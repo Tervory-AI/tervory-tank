@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from contextvars import ContextVar
 from copy import deepcopy
 from typing import Any, Awaitable, Callable
 
@@ -59,6 +60,7 @@ try:
 except ImportError:  # pragma: no cover - offline FakeMemory path
     TENANT_WIDE_KINDS = frozenset({"workspace.project"})
 CONTROL_SOURCE = "workspace:memory_control"
+ACTIVE_CONTROL: ContextVar[str | None] = ContextVar('workspace_memory_control', default=None)
 
 
 class MemoryControlError(PermissionError):
@@ -67,6 +69,21 @@ class MemoryControlError(PermissionError):
 
 class MemoryScopeError(ValueError):
     """Raised when authenticated tenant/user scope is missing for memory use."""
+
+
+class MemoryAuthenticationError(MemoryScopeError):
+    def __init__(self, status: int):
+        super().__init__('Memory authentication failed.')
+        self.status_code = status
+
+
+def refuse_memory_auth_failure(exc: BaseException, paid_receipt: dict | None = None) -> None:
+    # The shipped chassis returns this fixed status-only error. Never expose
+    # transport bodies or treat denied credentials as availability failures.
+    if str(exc) in {'hermes answered 401', 'hermes answered 403'}:
+        error = MemoryAuthenticationError(int(str(exc).rsplit(' ', 1)[1]))
+        error.paid_receipt = paid_receipt
+        raise error from exc
 
 
 class MemoryOutageError(RuntimeError):
@@ -126,6 +143,7 @@ def is_memory_service_outage(exc: BaseException) -> bool:
 
 
 def _raise_if_memory_outage(exc: BaseException, *, context: str) -> None:
+    refuse_memory_auth_failure(exc)
     if is_memory_service_outage(exc):
         if isinstance(exc, MemoryOutageError):
             raise exc
@@ -442,6 +460,10 @@ def corrections_from_memories(rows: list[dict[str, Any]]) -> list[str]:
     found: list[str] = []
     for row in rows:
         text = str(row.get("text", ""))
+        meta = row.get('meta') or {}
+        if meta.get('edited') and meta.get('correction'):
+            found.append(str(meta['correction']))
+            continue
         marker = "correction="
         if marker in text:
             found.append(text.split(marker, 1)[1].split(";")[0].strip())
@@ -495,6 +517,10 @@ def apply_corrections(task: dict[str, Any], corrections: list[str]) -> dict[str,
         if item and item not in applied:
             applied.append(item)
     result["applied_corrections"] = applied
+    # The latest explicit owner edit is the corrected answer, not metadata only.
+    result["content"] = applied[-1]
+    result["text"] = applied[-1]
+    result["outcome"] = applied[-1]
     result["answered_from_memory"] = True
     return result
 
@@ -529,7 +555,7 @@ async def resolve_memory_control(
     if override is not None:
         return normalize_memory_control(override)
     try:
-        recalled = await memory.recall(str(tenant_id), "memory_control", user_id=str(user_id), kind=CONTROL_KIND, limit=16)
+        recalled = await memory.records(str(tenant_id), user_id=str(user_id))
     except MemoryOutageError:
         raise
     except Exception as exc:
@@ -741,6 +767,7 @@ async def apply_memory_edit(
     if row.get("kind") in {"workspace.receipt", "workspace.task", "workspace.outcome"}:
         meta["invalidated"] = True
         meta["reusable_result"] = None
+        meta['correction'] = str(text).strip()
     saved = await memory.remember(
         tenant,
         str(text).strip(),
@@ -872,6 +899,15 @@ async def run_with_memory(
     }
 
     # Free step: deterministic code skill (optional).
+    original_paid = paid_call
+    async def scoped_paid(task):
+        token = ACTIVE_CONTROL.set(control)
+        try:
+            return await original_paid(task)
+        finally:
+            ACTIVE_CONTROL.reset(token)
+    paid_call = scoped_paid
+
     if code_free is not None:
         free = await code_free(task)
         receipt["steps"].append({"action": "code_skill", "hit": bool(free)})
@@ -884,6 +920,11 @@ async def run_with_memory(
     if control == "off":
         receipt["steps"].append({"action": "memory_off"})
         paid = await paid_call(task)
+        if paid.get('pending'):
+            receipt['result'] = paid.get('result', paid)
+            receipt['pending'] = True
+            receipt['steps'].append({'action': 'task_queued'})
+            return receipt
         receipt["paid_calls"] = 1
         receipt["cost_usd"] = float(paid.get("cost_usd") or 0)
         receipt["tokens_in"] = int(paid.get("tokens_in") or 0)
@@ -957,6 +998,11 @@ async def run_with_memory(
         receipt["steps"].append({"action": "cache_eligible", "task_type": task.get("task_type") or task_key})
 
     paid = await paid_call(task)
+    if paid.get('pending'):
+        receipt['result'] = paid.get('result', paid)
+        receipt['pending'] = True
+        receipt['steps'].append({'action': 'task_queued'})
+        return receipt
     receipt["paid_calls"] = 1
     receipt["cost_usd"] = float(paid.get("cost_usd") or 0)
     receipt["tokens_in"] = int(paid.get("tokens_in") or 0)
@@ -1011,6 +1057,7 @@ async def run_with_memory(
             )
         except Exception as exc:
             # Paid call already completed — never raise outage (handler would re-pay).
+            refuse_memory_auth_failure(exc, receipt)
             if is_memory_service_outage(exc):
                 reason = str(exc)
                 receipt["memory_unavailable"] = True
@@ -1042,6 +1089,7 @@ async def run_with_memory(
         )
     except Exception as exc:
         # Paid call already happened — never raise outage (handler would re-pay).
+        refuse_memory_auth_failure(exc, receipt)
         if is_memory_service_outage(exc):
             reason = str(exc)
             receipt["memory_unavailable"] = True

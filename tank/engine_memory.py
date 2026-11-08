@@ -1,4 +1,6 @@
 """Recall before selection, remember after the receipt; Hermes remains authoritative."""
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import json
 import logging
@@ -8,6 +10,16 @@ import httpx
 
 log = logging.getLogger('tank.engine_memory')
 HTTP = httpx.AsyncClient
+ENABLED: ContextVar[bool] = ContextVar('engine_memory_enabled', default=True)
+
+
+@contextmanager
+def memory_scope(enabled: bool):
+    token = ENABLED.set(enabled)
+    try:
+        yield
+    finally:
+        ENABLED.reset(token)
 
 
 async def send(path, body):
@@ -32,6 +44,8 @@ async def send(path, body):
 
 
 async def recall(rt, req):
+    if not ENABLED.get():
+        return req, {'hits': 0, 'status': 'off'}
     from product_identity import current
     if current.get() is None:
         return req, {'hits': 0, 'status': 'unsigned'}
@@ -66,6 +80,8 @@ async def recall(rt, req):
 
 
 async def remember(req, answer):
+    if not ENABLED.get():
+        return False
     from product_identity import current
     if current.get() is None:
         return False
