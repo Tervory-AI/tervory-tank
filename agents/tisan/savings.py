@@ -23,6 +23,8 @@ def encoding():
     from tiktoken.load import load_tiktoken_bpe
     vocabulary = Path(__file__).with_name('cl100k_base.tiktoken')
     if not vocabulary.is_file():
+        vocabulary = Path(__file__).resolve().parents[2] / 'tank/cl100k_base.tiktoken'
+    if not vocabulary.is_file():
         vocabulary = Path(__file__).resolve().parents[2] / 'vendor/tervory-tank/tank/cl100k_base.tiktoken'
     ranks = load_tiktoken_bpe(str(vocabulary),
         expected_hash='223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7')

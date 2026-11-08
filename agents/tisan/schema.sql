@@ -177,6 +177,26 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+CREATE TABLE IF NOT EXISTS agent_tisan.job_actors (
+    tenant_id uuid NOT NULL,
+    job_id uuid NOT NULL REFERENCES agent_tisan.jobs(id),
+    user_id text,
+    PRIMARY KEY(tenant_id,job_id)
+);
+
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+               WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+        ALTER TABLE agent_tisan.job_actors ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.job_actors FORCE ROW LEVEL SECURITY;
+    END IF;
+    IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan' AND tablename='job_actors' AND policyname='tenant_scope') THEN
+        CREATE POLICY tenant_scope ON agent_tisan.job_actors
+            USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+            WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+    END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_tisan.memory_records (
     id uuid PRIMARY KEY,
@@ -226,23 +246,3 @@ CREATE TABLE IF NOT EXISTS agent_tisan.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
-
-CREATE TABLE IF NOT EXISTS agent_tisan.job_actors (
-    tenant_id uuid NOT NULL,
-    job_id uuid NOT NULL REFERENCES agent_tisan.jobs(id),
-    user_id text,
-    PRIMARY KEY(tenant_id,job_id)
-);
-
-DO $$ BEGIN
-    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-               WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
-        ALTER TABLE agent_tisan.job_actors ENABLE ROW LEVEL SECURITY;
-        ALTER TABLE agent_tisan.job_actors FORCE ROW LEVEL SECURITY;
-    END IF;
-    IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan' AND tablename='job_actors' AND policyname='tenant_scope') THEN
-        CREATE POLICY tenant_scope ON agent_tisan.job_actors
-            USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
-            WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
-    END IF;
-END $$;

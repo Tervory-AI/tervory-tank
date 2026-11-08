@@ -220,7 +220,7 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
             assert handlers == {"ping", "scan", "watch_tick"}
         else:
             # Wave 4 adds the orchestration job; existing heartbeat and handlers remain.
-            assert handlers == {"ping", "scaffold", "figma", "build", "pipeline", "archive"}
+            assert handlers == {"ping", "scaffold", "figma", "build", "pipeline", "archive", "plan"}
             # The R5 scan and staging poll are bounded inside the pipeline allowance.
             assert module.app.state.job_timeouts == {"scaffold": 1200, "build": 1200, "pipeline": 2400, "archive": 1200}
         heartbeat = {
