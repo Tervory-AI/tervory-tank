@@ -4162,6 +4162,27 @@ def zenas_timeout(path: str, method: str = "GET") -> float:
     return ZENAS_TIMEOUT
 
 
+
+async def _moot_media_hearing_gate(tenant_id: str, user_id: str, hearing_id: str, *, headers: dict[str, str], home_region: str) -> bool:
+    """Confirm the attested actor can read the hearing via the Zenas room."""
+    if _http is None:
+        return False
+    try:
+        target = zenas_upstream(f"moot/hearings/{hearing_id}")
+    except HTTPException:
+        return False
+    try:
+        resp = await _http.get(
+            target,
+            params={"home_region": home_region},
+            headers=headers,
+            timeout=ZENAS_TIMEOUT,
+        )
+    except httpx.HTTPError:
+        return False
+    return resp.status_code == 200
+
+
 @app.api_route("/v1/zenas/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_key)])
 async def zenas_proxy(path: str, request: Request) -> Response:
     """Forward /v1/zenas/* to the Zenas room on this server only.
@@ -4174,6 +4195,81 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     foreign = home_region_refusal(_request_home(raw, request.query_params.get("home_region")), box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
+    # Tank-native Mux door for confidential Moot media (credentials never leave Tank).
+    # Actor/tenant come only from verified Trigger sign-in (OIDC/mobile/PAT), never
+    # from untrusted X-Moot / body / caller identity headers alone.
+    import moot_media as _moot_media
+    media_match = _moot_media.match_media_path(path)
+    if media_match is not None:
+        import hmac
+        import json as _json
+        supplied_key = request.headers.get("x-tank-key", "")
+        workspace_key = os.environ.get("TANK_API_KEY", "")
+        if not workspace_key or not hmac.compare_digest(supplied_key.encode(), workspace_key.encode()):
+            raise HTTPException(404, "not_found")
+        verified = getattr(request.state, "trigger_signin", None) or {}
+        actor = verified.get("user_id") if isinstance(verified, dict) else None
+        tenant_raw = verified.get("tenant_id") if isinstance(verified, dict) else None
+        if not actor or tenant_raw is None:
+            raise HTTPException(401, "not_signed_in")
+        tenant = str(tenant_raw)
+        try:
+            uuid.UUID(tenant)
+        except ValueError:
+            raise HTTPException(404, "not_found") from None
+        # Optional X-Moot assertions must match the verified principal (forged/mismatched -> refuse).
+        claimed_actor = request.headers.get("x-moot-actor", "")
+        claimed_tenant = request.headers.get("x-moot-tenant", "")
+        if claimed_actor and claimed_actor != actor:
+            raise HTTPException(403, "trigger_signin_context_refused")
+        if claimed_tenant:
+            try:
+                if uuid.UUID(claimed_tenant) != uuid.UUID(tenant):
+                    raise HTTPException(403, "trigger_signin_context_refused")
+            except ValueError:
+                raise HTTPException(403, "trigger_signin_context_refused") from None
+        # Body cannot choose another user/tenant/hearing owner.
+        body = None
+        if raw:
+            try:
+                parsed = _json.loads(raw)
+            except _json.JSONDecodeError:
+                raise HTTPException(422, "invalid_request") from None
+            if not isinstance(parsed, dict):
+                raise HTTPException(422, "invalid_request")
+            if any(k in parsed for k in ("user_id", "tenant_id", "actor", "hearing_id", "playback_id", "asset_id", "upload_id")):
+                raise HTTPException(422, "invalid_request")
+            body = parsed
+        founder = __import__("admin").founder_allowed(supplied_key, actor)
+        room_headers = {
+            "X-Tank-Key": os.environ.get("TANK_KEY_ZENAS", ""),
+            "X-Moot-Actor": actor,
+            "X-Moot-Tenant": tenant,
+            "X-Moot-Founder": "1" if founder else "0",
+        }
+        home = request.query_params.get("home_region") or box
+
+        async def _gate(tenant_id: str, user_id: str, hearing_id: str) -> bool:
+            return await _moot_media_hearing_gate(
+                tenant_id, user_id, hearing_id, headers=room_headers, home_region=home
+            )
+
+        idem = request.headers.get("idempotency-key")
+        if idem is not None and not idem.strip():
+            idem = None
+        from moot_media_store import PostgresOwnershipStore
+        status, payload = await _moot_media.handle_media_request(
+            method=request.method,
+            path=path,
+            actor=_moot_media.MootActor(tenant_id=tenant, user_id=actor, founder=founder),
+            body=body,
+            store=PostgresOwnershipStore(pool),
+            hearing_allowed=_gate,
+            environ=os.environ,
+            allow_test_uploads=False,
+            idempotency_key=idem,
+        )
+        return Response(content=_json.dumps(payload), status_code=status, media_type="application/json")
     target = zenas_upstream(path)
     if _http is None:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable")
