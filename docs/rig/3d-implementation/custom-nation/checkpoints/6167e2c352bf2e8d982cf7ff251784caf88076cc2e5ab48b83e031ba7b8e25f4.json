@@ -1,0 +1,107 @@
+{
+  "assets": [
+    {
+      "bytes": 291476,
+      "paths": [
+        "public/images/brand-photography/grayboe/phoenix-hero.jpg"
+      ],
+      "sha256": "54f6b93b6140dcba3865bfdc10ea339c1ecd72666924f564ceccb83230b81a4c"
+    },
+    {
+      "bytes": 144471,
+      "paths": [
+        "public/images/brand-photography/hardy/hybrid-studio.jpg"
+      ],
+      "sha256": "cca4b070def6e0aa352000af8a57f42f58c8b031a15c9d27ec647c364939e112"
+    },
+    {
+      "bytes": 1739439,
+      "paths": [
+        "public/images/brand-photography/falcon/falcon-t50i-plus-custom-nation.jpg"
+      ],
+      "sha256": "cce6a257801d2bdd213e9d4ad7d00f8a7c7feffa6938edd1316a083a5c185642"
+    }
+  ],
+  "contract": "rig-case-study-intake/1",
+  "execution": "offline_intake_only",
+  "products": [
+    {
+      "appearance": "reference_only",
+      "approval": "not_reviewed",
+      "blockers": [
+        "authoritative_sku_mapping",
+        "measured_scan_and_units",
+        "measured_dimensions_and_anchors",
+        "human_review"
+      ],
+      "catalogue_pointer": "/collection/0",
+      "geometry": "missing",
+      "name": "The Hybrid",
+      "photo_path": "public/images/brand-photography/hardy/hybrid-studio.jpg",
+      "photo_sha256": "cca4b070def6e0aa352000af8a57f42f58c8b031a15c9d27ec647c364939e112",
+      "public_photo_url": "https://customnation.co.za/images/brand-photography/hardy/hybrid-studio.jpg",
+      "sku": null,
+      "source_slug": "hardy-hybrid",
+      "training": {
+        "evidence": [],
+        "status": "not_authorized"
+      }
+    },
+    {
+      "appearance": "reference_only",
+      "approval": "not_reviewed",
+      "blockers": [
+        "authoritative_sku_mapping",
+        "measured_scan_and_units",
+        "measured_dimensions_and_anchors",
+        "human_review"
+      ],
+      "catalogue_pointer": "/collection/20",
+      "geometry": "missing",
+      "name": "Phoenix 2",
+      "photo_path": "public/images/brand-photography/grayboe/phoenix-hero.jpg",
+      "photo_sha256": "54f6b93b6140dcba3865bfdc10ea339c1ecd72666924f564ceccb83230b81a4c",
+      "public_photo_url": "https://customnation.co.za/images/brand-photography/grayboe/phoenix-hero.jpg",
+      "sku": null,
+      "source_slug": "grayboe-phoenix-2",
+      "training": {
+        "evidence": [],
+        "status": "not_authorized"
+      }
+    },
+    {
+      "appearance": "reference_only",
+      "approval": "not_reviewed",
+      "blockers": [
+        "authoritative_sku_mapping",
+        "measured_scan_and_units",
+        "measured_dimensions_and_anchors",
+        "human_review"
+      ],
+      "catalogue_pointer": "/collection/22",
+      "geometry": "missing",
+      "name": "T50i+",
+      "photo_path": "public/images/brand-photography/falcon/falcon-t50i-plus-custom-nation.jpg",
+      "photo_sha256": "cce6a257801d2bdd213e9d4ad7d00f8a7c7feffa6938edd1316a083a5c185642",
+      "public_photo_url": "https://customnation.co.za/images/brand-photography/falcon/falcon-t50i-plus-custom-nation.jpg",
+      "sku": null,
+      "source_slug": "falcon-t50i",
+      "training": {
+        "evidence": [],
+        "status": "not_authorized"
+      }
+    }
+  ],
+  "rights_evidence": [
+    "Source repository docs/handoffs/TASK-2-PROVENANCE.md: owner review required; media availability does not establish use rights.",
+    "https://customnation.co.za/robots.txt observed 2026-11-08 UTC: search=yes, ai-train=no, use=reference. No training or generative-model authorization is inferred.",
+    "Founder selected Custom Nation for case-study preparation; production writes and approvals remain coordinator operations."
+  ],
+  "source": {
+    "branch": "recover/launch-now-20260915-evening",
+    "catalogue": "src/lib/catalogue-data.json",
+    "catalogue_sha256": "5a3f18d1884cfa1df5aefd6623fdae019ab22fa1f316c1653d91f2fcf2676c86",
+    "repository": "zenascapetown-code/custom-nation-preview",
+    "revision": "beca4673a51f33b464dd8dad6c947c65032b6dc8"
+  }
+}

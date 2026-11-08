@@ -1,5 +1,6 @@
 """M26 offline: real standing-record logic, fake SQL/Hermes/Tank and signed events."""
 from trigger_signin_fakes import set_founders
+from hermes_lifecycle import personal_headers
 import json
 import time
 import uuid
@@ -44,6 +45,8 @@ class FakeMemory:
 
     async def remember(self, tenant, text, kind, source, **options):
         assert options['index'] is False
+        assert options['tenant_wide'] is True
+        assert not options.get('user_id') and 'user_id' not in options['meta']
         self.writes.append((text, source, options))
         row = {'id': options['row_id'], 'claim': text, 'kind': kind, 'last_verified': options['last_verified']}
         self.client.setdefault(tenant, {})[row['id']] = row
@@ -192,16 +195,28 @@ async def test_withdraw_is_founder_only_platform_only_and_logged(monkeypatch):
     r = records(sql)
     app = FastAPI()
     register_record_routes(app, lambda: r, lambda *args, **kwargs: 'ghost')
+    used = set()
+    async def consume_nonce(tenant, nonce, expires):
+        assert tenant == A
+        if nonce in used:
+            return False
+        used.add(nonce)
+        return True
+    app.state.hermes_nonces = SimpleNamespace(pool=sql, claim=consume_nonce)
     path = '/founder/records/' + str(sql.target) + '/withdraw'
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as client:
         body = {'tenant_id': A, 'agent': 'ghost'}
         assert (await client.post(path, json=body)).status_code == 404
         assert (await client.post(path, json=body, headers={'X-Tank-Key': 'placeholder-ghost-key', 'X-Tervory-Admin': 'placeholder-founder'})).status_code == 404
         headers = {'X-Tank-Key': 'placeholder-workspace-key', 'X-Tervory-Admin': 'placeholder-founder'}
-        assert (await client.post(path, json=body, headers=headers)).status_code == 409
+        async def signed_post():
+            signed, raw = personal_headers(headers['X-Tank-Key'], 'POST', path,
+                tenant=A, user=headers['X-Tervory-Admin'], body=body, extra=headers)
+            return await client.post(path, content=raw, headers=signed)
+        assert (await signed_post()).status_code == 409
         assert sql.row['tier'] == 'client' and not sql.log
         sql.row['tier'] = 'platform'
-        assert (await client.post(path, json=body, headers=headers)).status_code == 200
+        assert (await signed_post()).status_code == 200
         assert sql.row is None and sql.log == ['withdrawn']
 
 
@@ -371,3 +386,15 @@ async def test_existing_memory_client_pages_without_recall():
         memory = MemoryClient(base_url='http://placeholder', api_key='placeholder-memory-key', http=http)
         assert len(await memory.records(A)) == 201
     assert offsets == [0, 200]
+
+
+@pytest.mark.asyncio
+async def test_standing_block_supports_the_pinned_legacy_client_signature(standing):
+    s = standing
+    current = s.memory.remember
+    async def legacy(tenant, text, kind, source, *, evidence, row_id, last_verified, meta, index):
+        return await current(tenant,text,kind,source,evidence=evidence,row_id=row_id,
+                             last_verified=last_verified,meta=meta,index=index,tenant_wide=True)
+    s.memory.remember = legacy
+    assert len(await s.service.reconcile(A)) == 1
+    assert s.memory.writes[0][2]['index'] is False

@@ -1,0 +1,131 @@
+# Standalone, opt-in Moot media plane. Never include in the Zenas stack.
+name: moot-${MOOT_REGION:?set MOOT_REGION}
+services:
+  redis:
+    image: redis:7.2.12-bookworm@sha256:16623900b6ddd58e8bac04ccb6b611b9a5d1aed165453e28bcaed251d549d62c
+    user: redis
+    command: [redis-server, --save, '', --appendonly, 'no', --maxmemory, 128mb, --maxmemory-policy, noeviction]
+    networks: [control]
+    read_only: true
+    tmpfs: [/data]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 192m
+    cpus: 0.5
+    pids_limit: 64
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 2s
+      retries: 6
+  livekit:
+    image: livekit/livekit-server:v1.13.11@sha256:25cd902de7cacbd5f1f779f6a6ac1eae20ba8f56b0935934ce6b0ab80d1e3d20
+    user: '10001:10001'
+    group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
+    command: [--config, /run/moot/livekit.json]
+    volumes:
+      - type: bind
+        source: ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/livekit.json
+        target: /run/moot/livekit.json
+        read_only: true
+    networks: [control, media]
+    ports:
+      - '127.0.0.1:7881:7881/tcp'
+      - '127.0.0.1:7882:7882/udp'
+    depends_on:
+      redis: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 256
+  livekit-tls:
+    image: nginx:1.30.6-alpine@sha256:583b7f2fce1cdb8da5ad5c39ebd3c33b98b87d493190e548bdee1fa8c619c311
+    user: '10004:10004'
+    group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
+    entrypoint: [nginx]
+    command: [-c, /run/moot/nginx.conf, -g, 'daemon off;']
+    volumes:
+      - type: bind
+        source: ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/nginx.conf
+        target: /run/moot/nginx.conf
+        read_only: true
+      - type: bind
+        source: ${MOOT_TLS_CERT_FILE:?set MOOT_TLS_CERT_FILE}
+        target: /run/moot/tls.crt
+        read_only: true
+      - type: bind
+        source: ${MOOT_TLS_KEY_FILE:?set MOOT_TLS_KEY_FILE}
+        target: /run/moot/tls.key
+        read_only: true
+    networks: [control]
+    ports: ['127.0.0.1:8443:8443']
+    depends_on:
+      livekit: {condition: service_started}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 32
+  boundary:
+    build: {context: ., dockerfile: Dockerfile.boundary}
+    user: '10002:10002'
+    group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
+    environment:
+      MOOT_REGION: ${MOOT_REGION:?set MOOT_REGION}
+      SSL_CERT_FILE: /run/moot/tls-ca.crt
+    volumes:
+      - type: bind
+        source: ${MOOT_TLS_CA_FILE:?set MOOT_TLS_CA_FILE}
+        target: /run/moot/tls-ca.crt
+        read_only: true
+    networks: [control]
+    ports: ['127.0.0.1:8090:8090']
+    depends_on:
+      redis: {condition: service_healthy}
+      livekit-tls: {condition: service_started}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 32
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/readyz',timeout=3)"]
+      interval: 10s
+      timeout: 4s
+      retries: 6
+  egress:
+    profiles: [recording]
+    image: livekit/egress:v1.15.0@sha256:ac244a40268ce1dd1510fbff6eb529609ec68aceff1602343f79be8ca08c355b
+    group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
+    environment:
+      EGRESS_CONFIG_FILE: /run/moot/egress.json
+      SSL_CERT_FILE: /run/moot/tls-ca.crt
+    volumes:
+      - type: bind
+        source: ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/egress.json
+        target: /run/moot/egress.json
+        read_only: true
+      - type: bind
+        source: ${MOOT_TLS_CA_FILE:?set MOOT_TLS_CA_FILE}
+        target: /run/moot/tls-ca.crt
+        read_only: true
+      - recordings:/out
+    networks: [control, media]
+    depends_on:
+      boundary: {condition: service_healthy}
+    mem_limit: 4g
+    cpus: 4
+    pids_limit: 1024
+    shm_size: 1g
+    security_opt: [no-new-privileges:true]
+networks:
+  control: {internal: true}
+  media: {}
+volumes:
+  recordings: {}

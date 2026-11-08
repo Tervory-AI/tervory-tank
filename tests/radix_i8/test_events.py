@@ -176,7 +176,9 @@ async def pool():
     if not url:
         pytest.skip('set RADIX_I8_TEST_DATABASE_URL to a disposable loopback database')
     from urllib.parse import urlsplit
-    assert urlsplit(url).hostname == '127.0.0.1' and urlsplit(url).path == '/radix_passive_test'
+    worker = os.environ.get('PYTEST_XDIST_WORKER')
+    expected = '/radix_passive_test' + (f'_{worker}' if worker else '')
+    assert urlsplit(url).hostname == '127.0.0.1' and urlsplit(url).path == expected and not urlsplit(url).password
     pool = await asyncpg.create_pool(url, min_size=1, max_size=5)
     async with pool.acquire() as conn:
         await conn.execute('CREATE SCHEMA IF NOT EXISTS agent_radix')

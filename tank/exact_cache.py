@@ -99,7 +99,9 @@ async def record(rt, req, policy, answer):
               || jsonb_build_object('cache_layers', coalesce(tank.engine_receipts.detail->'cache_layers','{}'::jsonb)
                 || (EXCLUDED.detail->'cache_layers'))''',
             req.tenant_id, rt.box_region(), req.task_type, answer.ledger_id, json.dumps(detail))
-    return answer.model_copy(update={'engine': {**(answer.engine or {}), **detail}})
+    engine = {**(answer.engine or {}), **detail}
+    engine['cache_layers'] = {**(answer.engine or {}).get('cache_layers', {}), **detail['cache_layers']}
+    return answer.model_copy(update={'engine': engine})
 
 
 async def status(rt, tenant_id):

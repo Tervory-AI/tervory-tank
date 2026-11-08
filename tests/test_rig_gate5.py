@@ -31,7 +31,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.asyncio
-async def test_new_store_first_import_search_quote_receipt_failure_and_retry(monkeypatch):
+async def test_new_store_first_import_search_quote_receipt_failure_and_retry(monkeypatch, tmp_path):
+    monkeypatch.setenv('DATA_DIR', str(tmp_path))
     monkeypatch.setenv('RIG_RETAILER_KEY', 'placeholder-control')
     monkeypatch.setenv('RIG_QUOTE_FLOWS', '{}')
     store = MemoryStore()
@@ -48,7 +49,9 @@ async def test_new_store_first_import_search_quote_receipt_failure_and_retry(mon
         panel = await admin('panel')
         assert panel['products'] == 0 and panel['receipts'] == []
         assert (await client.post('/internal/retailer/settings', json={'tenant_id': TENANT})).status_code == 401
+        assert not (tmp_path / 'rig-3d-page.json').exists()
         await admin('settings', {'name': 'Placeholder shop', 'email': 'placeholder@example.com'})
+        assert (tmp_path / 'rig-3d-page.json').is_file()
         await admin('price-rule', {'freight': '1', 'duty_percent': '10', 'margin_percent': '20'})
         # Reuse the existing fixed-rate fixture; no currency provider is contacted.
         from rigbox.retailer import Retailer

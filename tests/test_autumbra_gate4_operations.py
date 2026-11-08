@@ -65,6 +65,12 @@ async def room(monkeypatch, tmp_path):
                 return httpx.Response(200, json={"target": body["target"], "signal": body["signal"], "failing": False})
             if path == "/v1/ledger/vendor":
                 return httpx.Response(200, json={"recorded": True, "ledger_id": json.loads(request.content)["id"]})
+            if path == "/v1/ghost/autumbra/savings":
+                body = json.loads(request.content)
+                assert body["tenant_id"] == PLATFORM_TENANT
+                assert set(body["reference"]) <= {"step", "outcome"}
+                return httpx.Response(200, json={"tenant_id": body["tenant_id"], "receipt_id": body["receipt_id"],
+                    "would_have_cost_usd": 0.0001, "baseline_status": "priced"})
             if path == "/v1/market-lab/intel":
                 return httpx.Response(200, json={"schema_version": "market_lab.ioc.v1", "paid": False,
                     "sources": [{"id": "nvd", "name": "NVD"}],
@@ -107,7 +113,7 @@ JOBS = {
     "watch": watch.watch, "inventory": watch.nightly, "advisories": advisories.watch,
     "standing_blocks": watch._standing_blocks_loop, "weekly_mail": watch._weekly_owner_email_loop,
     "action_mail": watch._act_owner_email_loop, "market_lab": watch._market_lab_intel_loop,
-    "exercises": watch._exercise_loop,
+    "exercises": watch._exercise_loop, "savings": watch._receipt_savings_loop,
 }
 
 
@@ -151,6 +157,9 @@ async def test_scheduled_job_one_cycle_offline(job, room, monkeypatch):
         assert len(rows) == len(red_team.EXERCISES) * len(red_team.OWN_SITES)
         assert all(r["result"] != "failed" for r in rows)
         assert room.queue.list_receipts() == []
+    elif job == "savings":
+        assert room.app.state.savings_status == {"priced": 0, "unavailable": 0}
+        assert room.queue.list_receipts() == []
 
 
 def test_dry_run_registry_covers_every_watch_schedule():
@@ -160,7 +169,8 @@ def test_dry_run_registry_covers_every_watch_schedule():
                  if isinstance(node, ast.Call) and ast.unparse(node.func) == "asyncio.create_task"}
     assert scheduled == {"watch", "nightly", "advisory_watch.watch", "_standing_blocks_loop",
         "_weekly_owner_email_loop", "_act_owner_email_loop", "_market_lab_intel_loop", "_exercise_loop"}
-    assert len(JOBS) == len(scheduled)
+    assert "_receipt_savings_loop" not in scheduled  # Deploy must not start new work.
+    assert len(JOBS) == len(scheduled) + 1  # Savings remains explicitly exercisable offline.
 
 
 @pytest.mark.asyncio

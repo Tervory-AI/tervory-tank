@@ -610,4 +610,6 @@ def build_router(tank: Any) -> APIRouter:
             return StreamingResponse(stream_completion(result), media_type="text/event-stream")
         return result
 
+    from agent_tasks import install
+    install(router, tank)
     return router

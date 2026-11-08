@@ -1,0 +1,19 @@
+{
+  "name": "@tervory/moot-media",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "esbuild harness.ts --bundle --format=iife --outfile=dist/client.js"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "commonjs",
+  "dependencies": {
+    "esbuild": "0.28.2",
+    "livekit-client": "2.23.0"
+  },
+  "private": true,
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

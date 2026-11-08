@@ -436,6 +436,9 @@ def model_call_refusal(
     skip the rule. model=None asks the early question: is there any
     permitted SA model at all? Pure-code skills do not call this.
     """
+    refusal = __import__("command_tools.autumbra", fromlist=["brain_refusal"]).brain_refusal(task_type)
+    if refusal:
+        return refusal
     here = normalize_box(box)
     build = build_model_refusal(model, tenant_id) if model is not None else None
     if build:
@@ -674,9 +677,10 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     # Its own queued background calls only; route_job checks the caller.
     job_route = request.method == "GET" and path.startswith("/v1/route/jobs/") and path.count("/") == 4
     event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle", "/v1/mobile/notify"}
+    tiger_savings = matched == "tiger" and request.method == "POST" and path == "/v1/tiger/savings"
     paid_status = request.method == "GET" and re.fullmatch(r"/v1/paid-steps/approvals/[0-9a-fA-F-]{36}", path)
     paid_admit = matched == "base" and request.method == "POST" and path == "/v1/paid-steps/admit"
-    if path not in {"/health", "/v1/route"} and not paid_status and not paid_admit and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
+    if path not in {"/health", "/v1/route"} and not tiger_savings and not paid_status and not paid_admit and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -1172,6 +1176,7 @@ async def _preflight_mask(req: RouteRequest, policy: dict[str, Any], messages: l
 
 
 async def _check_route_task(req: RouteRequest, task_id: uuid.UUID | None) -> None:
+    __import__("command_tools.autumbra", fromlist=["require_brain_enabled"]).require_brain_enabled(req.task_type)
     if task_id is None:
         return
     async with pool().acquire() as conn:
@@ -2937,6 +2942,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 @app.post("/v1/route", response_model=RouteResponse | priority_queue.QueuedResponse, response_model_exclude_none=True)
 @tenant_path("body")
 async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
+    __import__("command_tools.autumbra", fromlist=["require_brain_enabled"]).require_brain_enabled(body.task_type)
     if caller:
         body = body.model_copy(update={"agent": caller})
     foreign = home_region_refusal(await __import__("tenant_regions").resolve_home(__import__("sys").modules[__name__], body.tenant_id, body.home_region), box_region())
@@ -3480,9 +3486,9 @@ async def list_tasks(tenant_id: uuid.UUID, limit: int = 50) -> list[dict[str, An
     async with pool().acquire() as conn:
         rows = await conn.fetch(
             f"""
-            SELECT t.*, l.model, l.rung, l.cost_usd, l.latency_ms, l.feedback
+            SELECT t.*, l.model, l.rung, l.cost_usd, l.baseline_cost_usd, l.baseline_status, l.latency_ms, l.feedback
             FROM (SELECT {TASK_COLUMNS} FROM tank.tasks WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2) t
-            LEFT JOIN tank.ledger l ON l.id = t.ledger_id
+            LEFT JOIN tank.ledger l ON l.id = t.ledger_id AND l.tenant_id = t.tenant_id
             ORDER BY t.created_at DESC
             """,
             tenant_id, limit,
@@ -3495,9 +3501,9 @@ async def get_task(task_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
     async with pool().acquire() as conn:
         row = await conn.fetchrow(
             f"""
-            SELECT t.*, l.model, l.rung, l.cost_usd, l.latency_ms, l.feedback
+            SELECT t.*, l.model, l.rung, l.cost_usd, l.baseline_cost_usd, l.baseline_status, l.latency_ms, l.feedback
             FROM (SELECT {TASK_COLUMNS} FROM tank.tasks WHERE id=$1 AND tenant_id=$2) t
-            LEFT JOIN tank.ledger l ON l.id = t.ledger_id
+            LEFT JOIN tank.ledger l ON l.id = t.ledger_id AND l.tenant_id = t.tenant_id
             """,
             task_id, tenant_id,
         )
@@ -3599,10 +3605,12 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
 
     async def _model(**kw: Any) -> dict[str, Any]:
         kw["home_region"] = chosen
-        return await _model_for_skill(**kw)
+        from skala_memory_wire import model_through_memory
+        return await model_through_memory(__import__("sys").modules[__name__], ctx, _model_for_skill, **kw)
 
-    return skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
+    ctx = skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
                               _model=_model, http=TigerOcrHTTP(_http) if pkg.id == "tiger.price_ocr" else _http, env=dict(SKILL_ENV))
+    return ctx
 
 
 # Evals and previews run under the platform tenant so their model spend never lands on a client.
@@ -3846,7 +3854,8 @@ async def run_one_skill(
         raise HTTPException(status_code=403, detail=foreign)
     token = _skill_home.set(home)
     try:
-        return await _run_one_skill(skill_id, body, caller)
+        from skala_memory_wire import run_skill_with_identity
+        return await run_skill_with_identity(skill_id, body, caller, _run_one_skill)
     finally:
         _skill_home.reset(token)
 
@@ -3880,6 +3889,16 @@ async def _run_one_skill(
     if state != "approved" and not body.preview:
         raise HTTPException(status_code=409, detail=f"{pkg.ref} is {state!r}; only approved versions run for clients")
     ctx = make_ctx(pkg, body.tenant_id, preview=body.preview)
+    if caller == 'tiger':
+        ctx._tiger_run_id = uuid.uuid4()
+        ctx._tiger_ledger_ids = []
+        routed_model = ctx._model
+        async def metered_model(**kwargs):
+            result = await routed_model(**kwargs)
+            if result.get('ledger_id'):
+                ctx._tiger_ledger_ids.append(result['ledger_id'])
+            return result
+        ctx._model = metered_model
     if caller:
         ctx.agent = caller
     if caller == "base":
@@ -3895,18 +3914,25 @@ async def _run_one_skill(
         receipt_policy = {"priority": "standard", "acceptance_window_s": 86400}
     await _preflight_mask(request, receipt_policy, [m.model_dump() for m in request.messages], ctx.task_id)
     try:
-        out = await skala.run_skill(pkg, body.input, ctx)
+        if caller == "tiger":
+            out = await __import__('tiger_savings').cached_extract(__import__('sys').modules[__name__], pkg, body, ctx)
+        else:
+            out = await skala.run_skill(pkg, body.input, ctx)
     except Exception:
         if pkg.task_type is None and not ctx.calls and not ctx.cost_usd:
             await _record_local(request, receipt_policy, model="skill:"+pkg.ref, rung=3,
                                 content="", outcome="failed", error="skill_error", task_id=ctx.task_id)
         raise
     if not ctx.calls and not ctx.cost_usd:
-        receipt = await _record_local(request, receipt_policy, model="skill:"+pkg.ref, rung=3,
+        receipt = await _record_local(request, receipt_policy, model="skill:"+pkg.ref, rung=4 if getattr(ctx, "_tiger_cache_hit", False) else 3,
                                       content=json.dumps(out), outcome="unverified" if body.preview else "delivered", task_id=ctx.task_id)
         out["_ledger_id"] = str(receipt.ledger_id)
         out["_receipt"] = receipt.model_dump(mode="json")
     out["_cost_usd"] = round(ctx.cost_usd, 6)
+    if caller == "tiger" and not body.preview:
+        out['_savings'] = await __import__('tiger_savings').skill_receipt(__import__('sys').modules[__name__], pkg, body, ctx, out)
+    if getattr(ctx, "memory_receipts", None):
+        out["_memory_receipts"] = ctx.memory_receipts
     return out
 
 
@@ -4136,6 +4162,27 @@ def zenas_timeout(path: str, method: str = "GET") -> float:
     return ZENAS_TIMEOUT
 
 
+
+async def _moot_media_hearing_gate(tenant_id: str, user_id: str, hearing_id: str, *, headers: dict[str, str], home_region: str) -> bool:
+    """Confirm the attested actor can read the hearing via the Zenas room."""
+    if _http is None:
+        return False
+    try:
+        target = zenas_upstream(f"moot/hearings/{hearing_id}")
+    except HTTPException:
+        return False
+    try:
+        resp = await _http.get(
+            target,
+            params={"home_region": home_region},
+            headers=headers,
+            timeout=ZENAS_TIMEOUT,
+        )
+    except httpx.HTTPError:
+        return False
+    return resp.status_code == 200
+
+
 @app.api_route("/v1/zenas/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_key)])
 async def zenas_proxy(path: str, request: Request) -> Response:
     """Forward /v1/zenas/* to the Zenas room on this server only.
@@ -4148,6 +4195,81 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     foreign = home_region_refusal(_request_home(raw, request.query_params.get("home_region")), box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
+    # Tank-native Mux door for confidential Moot media (credentials never leave Tank).
+    # Actor/tenant come only from verified Trigger sign-in (OIDC/mobile/PAT), never
+    # from untrusted X-Moot / body / caller identity headers alone.
+    import moot_media as _moot_media
+    media_match = _moot_media.match_media_path(path)
+    if media_match is not None:
+        import hmac
+        import json as _json
+        supplied_key = request.headers.get("x-tank-key", "")
+        workspace_key = os.environ.get("TANK_API_KEY", "")
+        if not workspace_key or not hmac.compare_digest(supplied_key.encode(), workspace_key.encode()):
+            raise HTTPException(404, "not_found")
+        verified = getattr(request.state, "trigger_signin", None) or {}
+        actor = verified.get("user_id") if isinstance(verified, dict) else None
+        tenant_raw = verified.get("tenant_id") if isinstance(verified, dict) else None
+        if not actor or tenant_raw is None:
+            raise HTTPException(401, "not_signed_in")
+        tenant = str(tenant_raw)
+        try:
+            uuid.UUID(tenant)
+        except ValueError:
+            raise HTTPException(404, "not_found") from None
+        # Optional X-Moot assertions must match the verified principal (forged/mismatched -> refuse).
+        claimed_actor = request.headers.get("x-moot-actor", "")
+        claimed_tenant = request.headers.get("x-moot-tenant", "")
+        if claimed_actor and claimed_actor != actor:
+            raise HTTPException(403, "trigger_signin_context_refused")
+        if claimed_tenant:
+            try:
+                if uuid.UUID(claimed_tenant) != uuid.UUID(tenant):
+                    raise HTTPException(403, "trigger_signin_context_refused")
+            except ValueError:
+                raise HTTPException(403, "trigger_signin_context_refused") from None
+        # Body cannot choose another user/tenant/hearing owner.
+        body = None
+        if raw:
+            try:
+                parsed = _json.loads(raw)
+            except _json.JSONDecodeError:
+                raise HTTPException(422, "invalid_request") from None
+            if not isinstance(parsed, dict):
+                raise HTTPException(422, "invalid_request")
+            if any(k in parsed for k in ("user_id", "tenant_id", "actor", "hearing_id", "playback_id", "asset_id", "upload_id")):
+                raise HTTPException(422, "invalid_request")
+            body = parsed
+        founder = __import__("admin").founder_allowed(supplied_key, actor)
+        room_headers = {
+            "X-Tank-Key": os.environ.get("TANK_KEY_ZENAS", ""),
+            "X-Moot-Actor": actor,
+            "X-Moot-Tenant": tenant,
+            "X-Moot-Founder": "1" if founder else "0",
+        }
+        home = request.query_params.get("home_region") or box
+
+        async def _gate(tenant_id: str, user_id: str, hearing_id: str) -> bool:
+            return await _moot_media_hearing_gate(
+                tenant_id, user_id, hearing_id, headers=room_headers, home_region=home
+            )
+
+        idem = request.headers.get("idempotency-key")
+        if idem is not None and not idem.strip():
+            idem = None
+        from moot_media_store import PostgresOwnershipStore
+        status, payload = await _moot_media.handle_media_request(
+            method=request.method,
+            path=path,
+            actor=_moot_media.MootActor(tenant_id=tenant, user_id=actor, founder=founder),
+            body=body,
+            store=PostgresOwnershipStore(pool),
+            hearing_allowed=_gate,
+            environ=os.environ,
+            allow_test_uploads=False,
+            idempotency_key=idem,
+        )
+        return Response(content=_json.dumps(payload), status_code=status, media_type="application/json")
     target = zenas_upstream(path)
     if _http is None:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable")
@@ -4369,6 +4491,33 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
 # The Workspace is not on Tiger's corridor. These routes forward to the Tiger
 # agent and stamp the caller's tenant_id on the way. Rows for any other tenant
 # are dropped before the response leaves Tank.
+
+async def tiger_savings_record(request: Request, caller: str | None = Depends(require_key)):
+    if caller != 'tiger':
+        raise HTTPException(403, 'Tiger room credential required')
+    from tiger_savings import Run, record
+    from pydantic import ValidationError
+    try:
+        body = Run.model_validate(await request.json())
+    except (ValidationError, ValueError):
+        raise HTTPException(422, 'Invalid Tiger receipt') from None
+    if request.headers.get('x-tenant-id') not in (None, str(body.tenant_id)):
+        raise HTTPException(403, 'tenant mismatch')
+    with tenant_scope(body.tenant_id):
+        async with pool().acquire() as conn:
+            async with conn.transaction():
+                return await record(conn, body)
+
+
+async def tiger_savings_list(request: Request):
+    from tiger_savings import listed
+    tenant = _tiger_tenant(request)
+    if request.headers.get('x-tenant-id') not in (None, str(tenant)):
+        raise HTTPException(403, 'tenant mismatch')
+    with tenant_scope(tenant):
+        async with pool().acquire() as conn:
+            return {'receipts': await listed(conn, tenant)}
+
 
 TIGER_AGENT_URL = "http://agent-tiger:8000"
 _TIGER_LIST_KEYS = ("watches", "observations", "alerts")
