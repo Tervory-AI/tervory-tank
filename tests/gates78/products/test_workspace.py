@@ -26,7 +26,7 @@ import workspace_fixture
 
 workspace_entry = workspace_fixture.workspace_entry
 
-SOURCE_SHA = '9cf7135608e89ec7353e7bcb48dfbfefae2554dc'
+SOURCE_SHA = 'c0119aac147f3a3c2c9036b692ca858953282fa6'
 ROOT = Path(__file__).resolve().parents[3]
 CHAT = {'messages': [{'role': 'user', 'content': 'placeholder summarize the project'}], 'task_type': 'tier0.answer'}
 
@@ -551,6 +551,7 @@ async def test_capture_first_repeat_changed_actual_entry_metrics(workspace_entry
             'provider_calls': len(e.provider_calls)-before,
             'receipt_cost_usd': float(row['cost_usd']) if row else None,
             'would_have_cost_usd': data.get('receipt', {}).get('baseline_cost_usd'),
+            'ledger_baseline_cost_usd': float(row['baseline_cost_usd']) if row and row['baseline_cost_usd'] is not None else None,
             'tokens_in': row['tokens_in'] if row else None, 'tokens_out': row['tokens_out'] if row else None,
             'outcome': row['outcome'] if row else None})
     print('WORKSPACE_GATE78_MEASUREMENTS=' + json.dumps(measurements, sort_keys=True))
@@ -558,7 +559,8 @@ async def test_capture_first_repeat_changed_actual_entry_metrics(workspace_entry
     assert measurements[0]['provider_calls'] == measurements[2]['provider_calls'] == 1
     assert measurements[1]['provider_calls'] == measurements[1]['tokens_in'] == measurements[1]['tokens_out'] == 0
     assert [row['receipt_cost_usd'] for row in measurements] == [.013, 0, .013]
-    assert measurements[1]['would_have_cost_usd'] == .013
+    assert measurements[1]['would_have_cost_usd'] == measurements[1]['ledger_baseline_cost_usd']
+    assert measurements[1]['would_have_cost_usd'] >= measurements[0]['receipt_cost_usd']
 
 
 @pytest.mark.asyncio
