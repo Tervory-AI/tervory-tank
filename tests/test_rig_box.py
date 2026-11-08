@@ -8,11 +8,12 @@ from pathlib import Path
 import httpx
 import pytest
 import yaml
-from fastapi import HTTPException
+from chassis.user_assertion import SignedUser
 
 from test_agent1_isolation import runner as shared_runner
 
 ROOT = Path(__file__).resolve().parents[1]
+PRIVATE_ORIGIN = "http://rig-brain:8001"
 sys.path.insert(0, str(ROOT / "agents/rig"))
 from rig_brain import room, service  # noqa: E402
 
@@ -117,11 +118,11 @@ async def test_private_brain_tasks_require_room_key_and_local_region(monkeypatch
     params = {"tenant_id": str(body.tenant_id), "home_region": "us-east"}
     path = f"/tasks/{body.task_id}"
 
-    async def perform(body):
+    async def perform(body, actor=None):
         await asyncio.Event().wait()
 
     monkeypatch.setattr(service, "perform", perform)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=service.app), base_url="http://rig-brain:8001") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=service.app), base_url=PRIVATE_ORIGIN) as client:
         for headers in ({}, {"X-Rig-Key": uuid.uuid4().hex}, {"X-Tank-Key": uuid.uuid4().hex}):
             assert (await client.post("/tasks", json=payload, headers=headers)).status_code == 401
             for method in ("GET", "DELETE"):
@@ -134,7 +135,7 @@ async def test_private_brain_tasks_require_room_key_and_local_region(monkeypatch
             assert (await client.get(path, params={**params, "tenant_id": str(uuid.uuid4())}, headers=headers)).status_code == 404
             assert (await client.delete(path, params=params, headers=headers)).json() == {"cancelled": True}
         finally:
-            await service.cancel(body.task_id, body.tenant_id, "us-east", key)
+            await client.delete(path, params=params, headers={"X-Tank-Key": key})
 
 
 @pytest.mark.asyncio
@@ -143,16 +144,23 @@ async def test_recall_work_remember_and_tank_receipts(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("TANK_KEY", uuid.uuid4().hex)
     monkeypatch.setenv("R2_SECRET_ACCESS_KEY_RIG", uuid.uuid4().hex)
+    monkeypatch.setenv("RIG_MEMORY_ENABLED", "true")
+    actor = SignedUser(str(body.tenant_id), "placeholder-rig-owner", "member")
     events, receipts = [], []
     original = httpx.AsyncClient
     def remote(request):
+        if request.url.path == "/records":
+            assert request.url.params["user_id"] == actor.user_id
+            return httpx.Response(200, json={"memories": []})
         if request.url.path == "/recall":
             events.append("recall")
-            assert json.loads(request.content)["kind"] == "rig.task"
-            return httpx.Response(200, json={"memories": [{"id": str(uuid.uuid4()), "tenant_id": str(body.tenant_id), "text": "old evidence"}]})
+            assert json.loads(request.content)["query"] == "rig.build"
+            assert json.loads(request.content)["user_id"] == actor.user_id
+            return httpx.Response(200, json={"memories": [{"id": str(uuid.uuid4()), "tenant_id": str(body.tenant_id), "text": "old evidence", "meta": {"user_id": actor.user_id}}]})
         if request.url.path == "/memories":
             events.append("remember")
             assert json.loads(request.content)["tenant_id"] == str(body.tenant_id)
+            assert json.loads(request.content)["meta"]["user_id"] == actor.user_id
             return httpx.Response(200, json={"id": str(uuid.uuid4())})
         if request.url.path.endswith("/steps"):
             data = json.loads(request.content)
@@ -172,11 +180,14 @@ async def test_recall_work_remember_and_tank_receipts(monkeypatch, tmp_path):
         assert "DATABASE_URL" not in kwargs["env"]
         assert str(body.tenant_id) in kwargs["env"]["HERMES_HOME"]
         work = Path(args[-1])
+        task = json.loads((work / "request.json").read_text())
+        assert task["user_id"] == actor.user_id
+        assert task["memories"][0]["text"] == "old evidence"
         (work / "child-receipt.json").write_text(json.dumps({"tenant_id": str(body.tenant_id),
             "task_id": str(body.task_id), "steps": [], "model_receipts": [], "summary": "The sample lamp is available."}))
         return Child()
     monkeypatch.setattr(asyncio, "create_subprocess_exec", child)
-    result = await service.run_task(body)
+    result = await service.run_task(body, actor)
     assert events == ["recall", "work", "remember"]
     assert result["status"] == "done"
     assert [r["action"] for r in result["tank_receipts"]] == ["recall", "remember"]
@@ -184,17 +195,33 @@ async def test_recall_work_remember_and_tank_receipts(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_foreign_memory_fails_before_starting_hermes(monkeypatch, tmp_path):
+@pytest.mark.parametrize("foreign_scope", ["tenant", "user"])
+async def test_foreign_memory_fails_before_starting_hermes(monkeypatch, tmp_path, foreign_scope):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    async def memory(*args):
-        return {"memories": [{"id": str(uuid.uuid4()), "tenant_id": str(uuid.uuid4()), "text": "foreign"}]}
+    monkeypatch.setenv("TANK_KEY", "placeholder-rig-memory-key")
+    monkeypatch.setenv("RIG_MEMORY_ENABLED", "true")
+    body = room.Question(tenant_id=uuid.uuid4(), task_id=uuid.uuid4(), home_region="us-east", question="Question")
+    actor = SignedUser(str(body.tenant_id), "placeholder-rig-owner", "member")
+    recalled = []
+    def remote(request):
+        if request.url.path == "/records":
+            return httpx.Response(200, json={"memories": []})
+        if request.url.path == "/recall":
+            recalled.append(json.loads(request.content))
+            return httpx.Response(200, json={"memories": [{"id": str(uuid.uuid4()),
+                "tenant_id": str(uuid.uuid4()) if foreign_scope == "tenant" else actor.tenant_id,
+                "meta": {"user_id": "placeholder-other-owner" if foreign_scope == "user" else actor.user_id},
+                "text": "foreign"}]})
+        if request.url.path.endswith("/receipts"):
+            return httpx.Response(200, json={"receipts": []})
+        raise AssertionError("Unexpected request")
     async def child(*args, **kwargs):
         pytest.fail("Foreign memory reached Hermes")
-    monkeypatch.setattr(service, "memory", memory)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", child)
     original = httpx.AsyncClient
-    monkeypatch.setattr(service.httpx, "AsyncClient", lambda **kw: original(transport=httpx.MockTransport(lambda r: httpx.Response(503))))
-    result = await service.run_task(room.Question(tenant_id=uuid.uuid4(), task_id=uuid.uuid4(), home_region="us-east", question="Question"))
+    monkeypatch.setattr(service.httpx, "AsyncClient", lambda **kw: original(transport=httpx.MockTransport(remote)))
+    result = await service.run_task(body, actor)
+    assert len(recalled) == 1 and recalled[0]["user_id"] == actor.user_id
     assert result["status"] == "failed" and "foreign" not in json.dumps(result)
 
 
@@ -206,22 +233,25 @@ async def test_tasks_are_durable_deduplicated_and_tenant_scoped(monkeypatch, tmp
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     body = room.Question(tenant_id=uuid.uuid4(), task_id=uuid.uuid4(), home_region="us-east", question="Catalogue question")
     started = []
-    async def perform(body):
+    async def perform(body, actor=None):
         started.append(body.task_id)
         await asyncio.Event().wait()
     monkeypatch.setattr(service, "perform", perform)
-    try:
-        assert (await service.start(body, key)).status_code == 202
-        await asyncio.sleep(0)
-        assert (await service.start(body, key)).status_code == 202
-        with pytest.raises(HTTPException) as conflict:
-            await service.start(body.model_copy(update={"question": "different"}), key)
-        assert conflict.value.status_code == 409 and len(started) == 1
-        with pytest.raises(HTTPException) as missing:
-            await service.poll(body.task_id, uuid.uuid4(), "us-east", key)
-        assert missing.value.status_code == 404
-    finally:
-        await service.cancel(body.task_id, body.tenant_id, "us-east", key)
-    assert (await service.poll(body.task_id, body.tenant_id, "us-east", key))["status"] == "failed"
-    assert (await service.start(body, key))["status"] == "failed"
-    assert len(started) == 1  # A restart never automatically repeats billed work.
+    payload = body.model_dump(mode="json")
+    params = {"tenant_id": str(body.tenant_id), "home_region": "us-east"}
+    path = f"/tasks/{body.task_id}"
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=service.app),
+                                base_url=PRIVATE_ORIGIN, headers={"X-Tank-Key": key}) as client:
+        try:
+            assert (await client.post("/tasks", json=payload)).status_code == 202
+            await asyncio.sleep(0)
+            assert (await client.post("/tasks", json=payload)).status_code == 202
+            conflict = await client.post("/tasks", json={**payload, "question": "different"})
+            assert conflict.status_code == 409 and len(started) == 1
+            missing = await client.get(path, params={**params, "tenant_id": str(uuid.uuid4())})
+            assert missing.status_code == 404
+        finally:
+            await client.delete(path, params=params)
+        assert (await client.get(path, params=params)).json()["status"] == "failed"
+        assert (await client.post("/tasks", json=payload)).json()["status"] == "failed"
+        assert len(started) == 1  # A restart never automatically repeats billed work.

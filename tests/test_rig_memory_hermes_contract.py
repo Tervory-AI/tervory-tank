@@ -27,9 +27,9 @@ from gates78.conftest import gate78_database, gate78_memory, sql_memory
 
 __all__ = ["gate78_memory", "gate78_database", "sql_memory"]
 
-RIG_AGENT_KEY = "placeholder-rig-" + hashlib.sha256(b"rig-contract").hexdigest()[:24]
-OTHER_AGENT_KEY = "placeholder-tiger-" + hashlib.sha256(b"tiger-contract").hexdigest()[:24]
-WORKSPACE_KEY = "placeholder-workspace-" + hashlib.sha256(b"workspace-contract").hexdigest()[:24]
+PLACEHOLDER_RIG_AGENT_KEY = "placeholder-rig-" + hashlib.sha256(b"rig-contract").hexdigest()[:24]
+PLACEHOLDER_OTHER_AGENT_KEY = "placeholder-tiger-" + hashlib.sha256(b"tiger-contract").hexdigest()[:24]
+PLACEHOLDER_WORKSPACE_KEY = "placeholder-workspace-" + hashlib.sha256(b"workspace-contract").hexdigest()[:24]
 
 HERMES_BASE = "http://hermes-contract"
 TENANT_A = "11111111-1111-1111-1111-111111111111"
@@ -54,22 +54,22 @@ def _clear_agent_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in list(os.environ):
         if name.startswith("TANK_KEY_"):
             monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("TANK_KEY_RIG", RIG_AGENT_KEY)
-    monkeypatch.setenv("TANK_KEY_TIGER", OTHER_AGENT_KEY)
-    monkeypatch.setenv("TANK_API_KEY", WORKSPACE_KEY)
+    monkeypatch.setenv("TANK_KEY_RIG", PLACEHOLDER_RIG_AGENT_KEY)
+    monkeypatch.setenv("TANK_KEY_TIGER", PLACEHOLDER_OTHER_AGENT_KEY)
+    monkeypatch.setenv("TANK_API_KEY", PLACEHOLDER_WORKSPACE_KEY)
 
 
 @pytest_asyncio.fixture
 async def hermes_memory(monkeypatch: pytest.MonkeyPatch, gate78_memory):
     _clear_agent_keys(monkeypatch)
     stack = await gate78_memory("rig")
-    monkeypatch.setenv("TANK_KEY_RIG", RIG_AGENT_KEY)
+    monkeypatch.setenv("TANK_KEY_RIG", PLACEHOLDER_RIG_AGENT_KEY)
     app = stack.app
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url=HERMES_BASE) as http:
         client = MemoryClient(
             base_url=HERMES_BASE,
-            api_key=RIG_AGENT_KEY,
+            api_key=PLACEHOLDER_RIG_AGENT_KEY,
             agent="rig",
             http=http,
         )
@@ -138,7 +138,7 @@ async def test_hermes_contract_write_recall_forget_with_agent_key(hermes_memory)
 async def test_hermes_contract_refuses_workspace_shared_key_for_write(hermes_memory):
     _client, http, _app = hermes_memory
     shared = MemoryClient(
-        base_url=HERMES_BASE, api_key=WORKSPACE_KEY, agent="rig", http=http
+        base_url=HERMES_BASE, api_key=PLACEHOLDER_WORKSPACE_KEY, agent="rig", http=http
     )
     with pytest.raises(RuntimeError, match="hermes answered 403"):
         await shared.remember(TENANT_A, "should fail", PERSONAL_KIND, "rig:task:x", user_id=USER_A)
@@ -156,7 +156,7 @@ async def test_hermes_contract_kind_format_and_tenant_scope(hermes_memory):
         assert saved.get("id")
     bad = await http.post(
         "/memories",
-        headers={"X-Tank-Key": RIG_AGENT_KEY},
+        headers={"X-Tank-Key": PLACEHOLDER_RIG_AGENT_KEY},
         json={
             "tenant_id": TENANT_A,
             "text": "bad kind",

@@ -165,7 +165,9 @@ async def test_forge_missing_storage_and_gpu_settings_never_launch(monkeypatch, 
     async with service.lifespan(service.app):
         result = await service.configuration()
         assert result['storage']['missing_settings'] == list(GROUPS['storage'])
-        assert result['gpu']['missing_settings'] == list(GROUPS['gpu'])
+        # Provider credentials live in Tank; Forge only receives its namespace.
+        assert result['gpu']['missing_settings'] == ['HF_JOBS_NAMESPACE']
+        assert 'HF_JOBS_TOKEN' not in json.dumps(result)
         with pytest.raises(HTTPException) as error:
             await service.submit(job())
         assert error.value.status_code == 503
