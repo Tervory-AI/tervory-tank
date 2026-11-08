@@ -1392,6 +1392,20 @@ async def tiger_link(tenant, match: dict) -> bool:
 
 @router.post('/rig/tiger/match-page')
 async def tiger_match_page(body: TigerMatchPage, request: Request):
+    result = await _tiger_match_page(body, request)
+    from tiger_savings import Run, record, packed
+    from tenant_db import tenant_scope
+    import hashlib
+    identity = uuid.uuid5(body.job_id or uuid.uuid4(), hashlib.sha256(packed(body.model_dump(mode='json')).encode()).hexdigest())
+    with tenant_scope(str(body.tenant_id)):
+        async with db().acquire() as conn:
+            async with conn.transaction():
+                receipt = await record(conn, Run(tenant_id=body.tenant_id, id=identity, action='tiger.match',
+                    input=body.model_dump(mode='json'), output=result), component=True)
+    return {**result, '_savings': receipt}
+
+
+async def _tiger_match_page(body: TigerMatchPage, request: Request):
     require_tiger(request)
     from tenant_db import tenant_scope
     with tenant_scope(str(body.tenant_id)):

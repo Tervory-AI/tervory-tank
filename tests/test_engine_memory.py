@@ -12,6 +12,7 @@ from qdrant_client import QdrantClient
 import engine_memory
 import product_identity
 from trigger_signin_fakes import set_founders
+from hermes_lifecycle import personal_headers
 from hermes.record_index import RecordIndex
 from hermes.records import Records
 from hermes.service import create_app
@@ -78,8 +79,11 @@ async def test_correction_changes_next_local_answer_only_for_its_tenant(remember
     req = req.model_copy(update={'task_type': 'engine.answer', 'messages': [b.tank.Message(role='user', content='What is our office city?')]})
     calls = local_gateway(b, monkeypatch)
     async def fact(claim):
-        response = await b.memory_client.post('/founder/memories', headers={'X-Tervory-Admin': 'placeholder-founder'},
-            json={'id': str(uuid.uuid4()), 'tenant_id': str(req.tenant_id), 'agent': 'tank', 'claim': claim})
+        body = {'id': str(uuid.uuid4()), 'tenant_id': str(req.tenant_id), 'agent': 'tank', 'claim': claim}
+        headers, raw = personal_headers(b.key, 'POST', '/founder/memories',
+            tenant=str(req.tenant_id), user='placeholder-founder', body=body,
+            extra={'X-Tervory-Admin': 'placeholder-founder'})
+        response = await b.memory_client.post('/founder/memories', headers=headers, content=raw)
         assert response.status_code == 200, response.text
     await fact('Our office city is Paris.')
     recalled, evidence = await engine_memory.recall(b.tank, req)
@@ -120,7 +124,11 @@ async def test_engine_corridor_uses_the_same_sql_user_wall(remembered):
         body = {'tenant_id': tenant, 'task_type': 'engine.answer', 'query': 'placeholder query'}
         if user:
             body['user_id'] = user
-        response = await b.memory_client.post('/engine/recall', json=body)
+        if user:
+            headers, raw = personal_headers(b.key, 'POST', '/engine/recall', tenant=tenant, user=user, body=body)
+            response = await b.memory_client.post('/engine/recall', headers=headers, content=raw)
+        else:
+            response = await b.memory_client.post('/engine/recall', json=body)
         assert response.status_code == 200
         assert [row['claim'] for row in response.json()['memories']] == expected
 

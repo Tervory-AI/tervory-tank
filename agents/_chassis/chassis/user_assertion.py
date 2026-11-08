@@ -21,6 +21,31 @@ class SignedUser:
     role: str
 
 
+def sign_assertion(product: str, user: SignedUser, method: str, target: str, body: bytes, *,
+                   key: str, now: int | None = None, nonce: str | None = None) -> str:
+    """The existing Tank v1 assertion wire format, shared by shipped clients."""
+    if not key:
+        raise ValueError("Product key unavailable")
+    payload = {"v": 1, "aud": product, "tenant_id": str(uuid.UUID(user.tenant_id)),
+               "user_id": user.user_id, "role": user.role, "iat": int(time.time()) if now is None else now,
+               "nonce": nonce or uuid.uuid4().hex, "method": method.upper(), "target": target,
+               "body_sha256": hashlib.sha256(body).hexdigest()}
+    encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()).rstrip(b"=")
+    digest = hmac.new(key.encode(), DOMAIN + encoded, hashlib.sha256).hexdigest()
+    return encoded.decode() + "." + digest
+
+
+def bind_personal_headers(key: str, method: str, path: str, *, tenant: str, user: str,
+                          body: bytes = b"") -> dict[str, str]:
+    """Bind the full encoded path/query and exact body; every call gets a nonce."""
+    tenant = str(uuid.UUID(str(tenant)))
+    if not isinstance(user, str) or not user.strip() or len(user) > 200:
+        raise ValueError("Personal memory requires user")
+    actor = SignedUser(tenant, user, "member")
+    return {HEADER: sign_assertion("hermes", actor, method, path, body, key=key),
+            "X-Tervory-Tenant": tenant, "X-Tervory-User": user}
+
+
 async def verify_assertion(assertion: str, *, key: str, product: str, tenant_id: str,
                            method: str, target: str, body: bytes, consume_nonce,
                            now: float | None = None) -> SignedUser:
@@ -62,8 +87,9 @@ async def verify_assertion(assertion: str, *, key: str, product: str, tenant_id:
 class PostgresNonces:
     """Durable atomic replay wall shared by all workers of a product."""
     def __init__(self, pool, product: str):
-        from chassis.db import schema_for
-        self.pool, self.schema = pool, schema_for(product)
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,40}", product):
+            raise ValueError("Invalid product")
+        self.pool, self.schema = pool, "agent_" + product
         self.ready = False
 
     async def setup(self):
@@ -80,6 +106,8 @@ class PostgresNonces:
                 PRIMARY KEY(nonce_hash))""")
             # Match the existing staged tenant-RLS rollout, never enable it early.
             guarded = await conn.fetchval("SELECT relrowsecurity FROM pg_class WHERE oid=to_regclass(quote_ident($1) || '.jobs')", self.schema)
+            if self.schema == "agent_tank":
+                guarded = await conn.fetchval("SELECT relrowsecurity FROM pg_class WHERE oid=to_regclass('tank.command_threads')")
             if guarded:
                 await conn.execute("ALTER TABLE user_assertion_nonces ENABLE ROW LEVEL SECURITY")
                 policy = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname=$1 AND tablename='user_assertion_nonces' AND policyname='user_assertion_tenant')", self.schema)

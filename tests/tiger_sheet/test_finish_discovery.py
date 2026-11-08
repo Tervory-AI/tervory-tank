@@ -67,7 +67,12 @@ async def test_discovery_reuses_sitemaps_checkpoint_and_real_extractor(database,
     results = []
     while ident:
         body = json.loads(await database.fetchval('SELECT input FROM agent_tiger.jobs WHERE id=$1', UUID(ident)))
-        ctx = SimpleNamespace(tenant_id=TENANT_A, job_id=ident, input=body, tank=SimpleNamespace(run_skill=skill))
+        from chassis.jobs import JobContext
+        async def post(path, payload):
+            assert path == '/v1/tiger/savings' and payload['tenant_id'] == TENANT_A
+            return {'id': payload['id'], 'tenant_id': TENANT_A, 'cost': 0, 'would_have_cost': None}
+        ctx = JobContext('tiger', TENANT_A, ident, 'competitor_match', body, None,
+                         SimpleNamespace(run_skill=skill, _post=post), None, None)
         result = await agent.app.state.handlers['competitor_match'](ctx)
         count = len(calls)
         assert await agent.app.state.handlers['competitor_match'](ctx) == result

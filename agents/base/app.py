@@ -14,7 +14,7 @@ import asyncpg
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import Header, HTTPException, Query
+from fastapi import Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse
 from configuration import missing_settings, not_configured
@@ -396,15 +396,21 @@ def _http_skill(exc: SkillError) -> HTTPException:
 
 
 @app.post("/v1/base/run", status_code=202)
-async def base_run(body: BaseRun) -> dict[str, Any]:
+async def base_run(body: BaseRun, request: Request) -> dict[str, Any]:
     try:
         async with asyncio.timeout(120):
-            return await _submit_batch(body)
+            from chassis.user_assertion import signed_user
+            actor = await signed_user(request, tenant_id=str(body.tenant_id), product='base',
+                                      required=body.created_by is not None)
+            if actor is not None and body.created_by not in (None, actor.user_id):
+                raise HTTPException(403, 'Base owner mismatch')
+            body.created_by = actor.user_id if actor else None
+            return await _submit_batch(body, verified_user=body.created_by)
     except TimeoutError:
         raise HTTPException(503, "The batch could not be confirmed. Check States done before retrying.") from None
 
 
-async def _submit_batch(body: BaseRun) -> dict[str, Any]:
+async def _submit_batch(body: BaseRun, *, verified_user: str | None = None) -> dict[str, Any]:
     """Retry-safe tenant-scoped submission, atomic across all state groups."""
     if body.preview and os.environ.get("BASE_BRAIN_URL"):
         raise HTTPException(403, "Base's brain may use only approved skills.")
@@ -425,9 +431,11 @@ async def _submit_batch(body: BaseRun) -> dict[str, Any]:
         locked = await conn.fetchval("SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))", str(root))
         if not locked:
             raise HTTPException(409, "The batch could not be confirmed. Check States done before retrying.")
-        previous = await conn.fetchval("SELECT input FROM agent_base.tasks WHERE tenant_id=$1 AND id=$2", body.tenant_id, root)
+        previous = await conn.fetchrow("SELECT input,created_by FROM agent_base.tasks WHERE tenant_id=$1 AND id=$2", body.tenant_id, root)
         if previous is not None:
-            saved = json.loads(previous) if isinstance(previous, str) else previous
+            if previous['created_by'] != verified_user:
+                raise HTTPException(403, 'Base owner mismatch')
+            saved = json.loads(previous['input']) if isinstance(previous['input'], str) else previous['input']
             if saved.get("submission_hash") != digest:
                 raise HTTPException(409, "This request already belongs to another batch.")
             return saved["submission_response"]
@@ -443,6 +451,10 @@ async def _submit_batch(body: BaseRun) -> dict[str, Any]:
                 f" · {number + 1}/{len(ordered)}" if body.split_by_state else "",
                 body.preview, body.engine, body.concurrency, body.registry,
                 task_id=root if number == 0 else uuid.uuid5(root, state))
+            if verified_user is not None:
+                await conn.execute("UPDATE agent_base.tasks SET input=input || $3::jsonb WHERE tenant_id=$1 AND id=$2",
+                    body.tenant_id, row['id'], json.dumps({'created_by': verified_user,
+                        'user_id': verified_user, 'verified_user_id': verified_user}))
             tasks.append(task_dict(row))
             labels.append(label)
         response = {"task": tasks[0], "tasks": tasks, "labels": labels,

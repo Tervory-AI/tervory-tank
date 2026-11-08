@@ -1,3 +1,12 @@
+## 0.12.0 — 2026-11-08
+
+- Expose the existing tenant- and user-scoped Tank memory view, edit, forget, off and control commands in standalone OPLI.
+- Requires the Gates 7/8 Tank memory runtime. Memory remains subject to deployment opt-in; unavailable or refused operations do not report success.
+
+## 0.11.1 — 2026-11-07
+
+- Add authenticated memory controls and route code requests through Tank’s optional memory path.
+
 ## 0.11.0 — 2026-11-05
 
 - Add day-zero terminal states, local run dry runs and named missing-configuration recovery.
