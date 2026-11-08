@@ -1,6 +1,9 @@
 """Offline Rig unit-test memory and provider tariff; never shipped in the room."""
 from copy import deepcopy
 from typing import Any
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents/rig"))
 from rig_memory import memory_kinds, _text_has_secret
 
 FIXED_FAKE_PER_CALL = {"cost_usd": 0.05, "tokens_in": 10, "tokens_out": 3}
