@@ -213,6 +213,10 @@ def install(command, router=None) -> None:
             )
         except gates_memory.MemoryScopeError as exc:
             raise HTTPException(403, str(exc)) from exc
+        except RuntimeError as exc:
+            if gates_memory.is_memory_outage(exc):
+                raise HTTPException(503, "Memory is unavailable") from None
+            raise
 
     @target_router.post("/opli/memory.control")
     async def opli_memory_control(body: MemoryControlSet, actor: Any = Depends(command.identity)):
@@ -229,6 +233,10 @@ def install(command, router=None) -> None:
             )
         except gates_memory.MemoryScopeError as exc:
             raise HTTPException(403, str(exc)) from exc
+        except RuntimeError as exc:
+            if gates_memory.is_memory_outage(exc):
+                raise HTTPException(503, "Memory is unavailable") from None
+            raise
         return {"memory_control": body.control, "id": saved.get("id")}
 
     @target_router.post("/opli/memory.edit")
@@ -252,6 +260,12 @@ def install(command, router=None) -> None:
             raise HTTPException(403, str(exc)) from exc
         except gates_memory.MemoryScopeError as exc:
             raise HTTPException(403, str(exc)) from exc
+        except RuntimeError as exc:
+            if gates_memory.is_memory_outage(exc):
+                raise HTTPException(503, "Memory is unavailable") from None
+            raise
+        except ValueError:
+            raise HTTPException(422, "Memory input is invalid") from None
 
     @target_router.post("/opli/memory.forget")
     async def opli_memory_forget(body: MemoryForget, actor: Any = Depends(command.identity)):
@@ -273,6 +287,10 @@ def install(command, router=None) -> None:
             raise HTTPException(403, str(exc)) from exc
         except gates_memory.MemoryScopeError as exc:
             raise HTTPException(403, str(exc)) from exc
+        except RuntimeError as exc:
+            if gates_memory.is_memory_outage(exc):
+                raise HTTPException(503, "Memory is unavailable") from None
+            raise
         return {"forgotten": body.memory_id}
 
 

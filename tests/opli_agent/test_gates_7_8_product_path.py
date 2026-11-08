@@ -122,6 +122,7 @@ async def product_api(proposed, runtime, monkeypatch):
         runtime.pool = lambda: pool
         monkeypatch.setattr(proposed, "db", lambda: pool)
 
+
         edge = HermesEdge()
         # Chassis MemoryClient; only Hermes HTTP is faked at the edge.
         memory = MemoryClient(
@@ -174,11 +175,24 @@ async def _fixed_route_code(proposed, pool, monkeypatch):
 async def test_live_opli_code_turn_uses_tank_agent_then_memory_repeat(product_api, monkeypatch):
     client, pool, proposed, edge, memory = product_api
     assert memory is not None
+    runtime = sys.modules["main"]
+    # The legacy command fixture stubs main. Keep the cache receipt on the
+    # actual Tank SQL writer, without initializing global main at collection.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("placeholder_opli_receipt_runtime", ROOT / "tank/main.py")
+    tank_runtime = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, tank_runtime)
+    spec.loader.exec_module(tank_runtime)
+    monkeypatch.setattr(tank_runtime, "pool", lambda: pool)
+    runtime.Message = tank_runtime.Message
+    runtime.RouteRequest = tank_runtime.RouteRequest
+    runtime._record_local = tank_runtime._record_local
 
     thread = (await client.post("/v1/command/threads", json={})).json()["thread_id"]
     stub = await _fixed_route_code(proposed, pool, monkeypatch)
     body = {
         "thread_id": thread,
+        "prompt_id": str(uuid.uuid4()),
         "text": "Summarize the repo map",
         "model": "placeholder-allowed",
         "repo": "acme/app",
@@ -196,8 +210,10 @@ async def test_live_opli_code_turn_uses_tank_agent_then_memory_repeat(product_ap
     assert any(s["action"] == "tank_route" for s in bracket["steps"])
     assert any(s["action"] == "recall" for s in bracket["steps"])
 
-    # Exact repeat: memory short-circuit, Tank agent not called again.
-    second = await client.post("/v1/command/opli/code-turn", json=body)
+    # A completed prompt cannot execute again; a fresh prompt may reuse memory.
+    assert (await client.post("/v1/command/opli/code-turn", json=body)).status_code == 409
+    repeat = {**body, "prompt_id": str(uuid.uuid4())}
+    second = await client.post("/v1/command/opli/code-turn", json=repeat)
     assert second.status_code == 200, second.text
     bracket2 = second.json()["memory_bracket"]
     assert bracket2["paid_calls"] == 0
@@ -206,6 +222,7 @@ async def test_live_opli_code_turn_uses_tank_agent_then_memory_repeat(product_ap
     assert bracket2["answered_from_memory"] is True
     assert stub.await_count == 1
     assert any(s["action"] == "identical_reuse" for s in bracket2["steps"])
+    assert (await client.post("/v1/command/opli/code-turn", json=repeat)).status_code == 409
 
 
 @pytest.mark.asyncio
