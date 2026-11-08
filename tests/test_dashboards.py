@@ -232,11 +232,20 @@ async def test_http_hook_stops_paid_transport_without_stopping_public_sources(co
     assert calls == ['example.org']
 
 
-def test_frontend_access_sources_and_banned_copy():
+def test_frontend_access_sources_and_banned_copy(tmp_path):
     import subprocess
     if not (ROOT / 'workspace/node_modules/typescript').exists():
         pytest.skip('workspace dependencies are required for the offline component render')
-    subprocess.run(['node', 'tests/dashboards-ui.cjs'], cwd=ROOT, check=True, capture_output=True, text=True)
+    snapshots = [ROOT / 'tests/artifacts/dash-1' / f'{name}.html' for name in ('client', 'founder')]
+    before = [snapshot.read_bytes() for snapshot in snapshots]
+    subprocess.run(
+        ['node', 'tests/dashboards-ui.cjs'], cwd=ROOT, check=True,
+        capture_output=True, text=True,
+        env={**os.environ, 'DASHBOARD_TEST_OUTPUT': str(tmp_path)},
+    )
+    assert [snapshot.read_bytes() for snapshot in snapshots] == before
+    for name in ('client', 'founder'):
+        assert '<!doctype html>' in (tmp_path / f'{name}.html').read_text()
 
 
 @pytest.mark.asyncio

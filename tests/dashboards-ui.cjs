@@ -96,7 +96,7 @@ async function render() {
   await assert.rejects(()=>payingSource(),/not connected/);
   assert.equal((await signupSource()).total,1);
   assert.equal((await signupSource()).recent[0].name,'Alex Example');
-  const dir=path.join(root,'tests/artifacts/dash-1');fs.mkdirSync(dir,{recursive:true});
+  const dir=process.env.DASHBOARD_TEST_OUTPUT || path.join(root,'tests/artifacts/dash-1');fs.mkdirSync(dir,{recursive:true});
   const css=fs.readFileSync(path.join(root,'workspace/app/globals.css'),'utf8') + fs.readFileSync(path.join(root,'workspace/app/control/dashboard.css'),'utf8');
   const fonts=`@font-face{font-family:Jost;src:url('/fonts/Jost-300-latin.woff2')}@font-face{font-family:Inter;src:url('/fonts/Inter-latin.woff2')}@font-face{font-family:Mono;src:url('/fonts/JetBrainsMono-latin.woff2')}html,body{margin:0}:root{--font-jost:Jost;--font-inter:Inter;--font-mono:Mono}`;
   for (const [name,html] of [['client',client],['founder',control]]) fs.writeFileSync(path.join(dir,`${name}.html`),`<!doctype html><html lang="en"><meta charset="utf-8"><title>DASH-1 offline fixture · ${name}</title><style>${fonts}${css}</style><body><div class="app-shell product"><aside class="shell-side">Shared shell (must be hidden)</aside><div class="shell-main"><main>${html}</main></div></div></body></html>`);
