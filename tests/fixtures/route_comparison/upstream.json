@@ -1,0 +1,37 @@
+{
+  "verified_on": "2026-11-08",
+  "arch": {
+    "model": "katanemo/Arch-Router-1.5B",
+    "model_revision": "5b156890a91b1035a86f82faf1a651debf309009",
+    "model_url": "https://huggingface.co/katanemo/Arch-Router-1.5B/tree/5b156890a91b1035a86f82faf1a651debf309009",
+    "files_sha256": {
+      "README.md": "3b2daa5c898626e2b4d1279d57cad8cb61dcb850a4af8aabac032de2ce70a7dd",
+      "LICENSE": "9db8f114ce84e3eba181a98edb3034cef64ee09de8b1b2af765c7433554491c9",
+      "config.json": "7ed22a56c438dafe194cfaaa8557c6d0fc900bbd0ce7161e5cde6894f90eb7b3"
+    },
+    "linked_repository": "https://github.com/katanemo/arch",
+    "resolved_repository": "https://github.com/katanemo/plano",
+    "repository_revision": "b13ddd632bde1fea7678386c345665ea5fa671af",
+    "repository_license": "Apache-2.0",
+    "model_license": "Katanemo Community License Agreement, April 2 2026; section 4 requires separate commercial licence",
+    "commercial_authorization": "not-established",
+    "architecture": "Qwen2ForCausalLM",
+    "base_model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "parameters": 1543714304,
+    "dtype": "float16",
+    "weight_bytes_estimate": 3087428608,
+    "context_tokens": 32768,
+    "runtime_documentation": "transformers >=4.37.0; config records 4.51.3; example uses automatic device placement",
+    "official_minimum_ram_or_vram": null,
+    "weights_downloaded": false,
+    "model_execution": "unrun"
+  },
+  "routellm": {
+    "existing_adapter": "tank/routellm_shadow.py:configuration,Configuration,score",
+    "package_version": "0.2.0",
+    "model": "routellm/bert_gpt4_augmented",
+    "model_revision": "86237e3df400762178ea98379477b8296e66d5e4",
+    "weights_sha256": "e2a92240bad1c7fb9befbf021a62fad5feb1e2a3990d53a28d160a39bb1cac7b",
+    "model_execution": "unrun"
+  }
+}
