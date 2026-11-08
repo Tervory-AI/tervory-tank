@@ -2,9 +2,13 @@
 import hashlib
 import json
 import subprocess
+import sys
+from pathlib import Path
 from uuid import UUID
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents" / "rig"))
 
 from rigbox.three_d.batch import plan, CommandError
 from rigbox.three_d.command import write_file
