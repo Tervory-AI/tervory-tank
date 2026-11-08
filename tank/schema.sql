@@ -3625,6 +3625,12 @@ END;
 $$;
 -- END tervor
 
+-- BEGIN autumbra
+CREATE SCHEMA IF NOT EXISTS agent_ghost;
+-- Counterfactual tokens reuse the shared comparison columns, never billed usage.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS autumbra_reference_hash text;
+-- END autumbra
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
