@@ -3,7 +3,7 @@ import { submitOnce } from "@/lib/submission";
 import { NextResponse } from "next/server";
 import { listTasks } from "@/lib/tank";
 import { currentTenant } from "@/lib/tenant";
-import { createTaskWithMemory } from "@/lib/workspace-gates";
+import { createTaskWithMemory, listTasksWithMemory } from "@/lib/workspace-gates";
 
 export const runtime = "nodejs";
 
@@ -12,8 +12,10 @@ const ALLOWED_TASK_TYPES = new Set(["tier0.answer", "tier0.draft", "reason.brief
 // GET: the board for the signed-in tenant.
 export async function GET() {
   try {
-    const { tenantId } = await currentTenant();
-    return NextResponse.json(await listTasks(tenantId, 50));
+    const { tenantId, userId } = await currentTenant();
+    const tasks = process.env.WORKSPACE_MEMORY_ENABLED === "true"
+      ? await listTasksWithMemory(tenantId, userId) : await listTasks(tenantId, 50);
+    return NextResponse.json(tasks);
   } catch (err) {
     return routeFailure(err);
   }
