@@ -45,7 +45,8 @@ def main():
                             "-e", "LANGFUSE_ENABLED=true", "-e", "LANGFUSE_TENANT_PROJECTS=not-json",
                             "-v", f"{temp / 'litellm.yml'}:/tmp/offline.yml:ro",
                             "-v", f"{ROOT / 'tests/tenant_rls/engine_gateway_smoke.py'}:/tmp/engine_gateway_smoke.py:ro",
-                            "-v", f"{ROOT / 'tests/tank_routing/litellm_probe.py'}:/tmp/litellm_probe.py:ro"]
+                            "-v", f"{ROOT / 'tests/tank_routing/litellm_probe.py'}:/tmp/litellm_probe.py:ro",
+                            "-v", f"{ROOT / 'tank/gateway_contracts/maker_headers.py'}:/tmp/maker_headers.py:ro"]
             if service == "searxng":
                 options += ["-v", f"{temp / 'searxng.yml'}:/etc/searxng/settings.yml:ro"]
             if service == "tiger":
@@ -76,6 +77,7 @@ def main():
                         raise RuntimeError(service + " failed its offline non-root health check")
                     time.sleep(0.5)
                 if service == "litellm":
+                    command("docker", "exec", name, "python", "/tmp/maker_headers.py")
                     command("docker", "exec", name, "python", "/tmp/engine_gateway_smoke.py", "http://127.0.0.1:4000")
                     assert "local rung offline" in command("docker", "logs", name, capture=True)
             finally:
