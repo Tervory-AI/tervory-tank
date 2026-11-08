@@ -1,0 +1,172 @@
+{
+  "policy": {
+    "model": "placeholder-strong",
+    "routellm_weak_model": "placeholder-weak",
+    "routellm_threshold": 0.5,
+    "rung": 1
+  },
+  "routes": [
+    {
+      "name": "weak",
+      "description": "Straightforward extraction, short summarisation or translation."
+    },
+    {
+      "name": "strong",
+      "description": "Complex analysis, conflicting constraints or multi-step reasoning."
+    }
+  ],
+  "examples": [
+    {
+      "id": "fixture-1",
+      "tenant_id": "placeholder-tenant-a",
+      "split": "development",
+      "messages": [
+        {
+          "role": "user",
+          "content": "List the three colours in this sentence: blue, green, red."
+        }
+      ],
+      "reference_route": "weak",
+      "provenance": {
+        "kind": "authored-synthetic",
+        "source_id": "authored-1",
+        "author": "codex/job3-arch-router-comparison",
+        "gold": false,
+        "review_status": "fixture-only-not-quality-gold"
+      }
+    },
+    {
+      "id": "fixture-2",
+      "tenant_id": "placeholder-tenant-a",
+      "split": "holdout",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Extract the date from: the meeting is on 12 November 2026."
+        }
+      ],
+      "reference_route": "weak",
+      "provenance": {
+        "kind": "authored-synthetic",
+        "source_id": "authored-2",
+        "author": "codex/job3-arch-router-comparison",
+        "gold": false,
+        "review_status": "fixture-only-not-quality-gold"
+      }
+    },
+    {
+      "id": "fixture-3",
+      "tenant_id": "placeholder-tenant-a",
+      "split": "development",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Compare recovery strategies for a replicated database after network partition."
+        }
+      ],
+      "reference_route": "strong",
+      "provenance": {
+        "kind": "authored-synthetic",
+        "source_id": "authored-3",
+        "author": "codex/job3-arch-router-comparison",
+        "gold": false,
+        "review_status": "fixture-only-not-quality-gold"
+      }
+    },
+    {
+      "id": "fixture-4",
+      "tenant_id": "placeholder-tenant-a",
+      "split": "holdout",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Assess conflicting consistency guarantees in this distributed payment design."
+        }
+      ],
+      "reference_route": "strong",
+      "provenance": {
+        "kind": "authored-synthetic",
+        "source_id": "authored-4",
+        "author": "codex/job3-arch-router-comparison",
+        "gold": false,
+        "review_status": "fixture-only-not-quality-gold"
+      }
+    },
+    {
+      "id": "fixture-5",
+      "tenant_id": "placeholder-tenant-b",
+      "split": "development",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Translate good morning into Spanish."
+        }
+      ],
+      "reference_route": "weak",
+      "provenance": {
+        "kind": "authored-synthetic",
+        "source_id": "authored-5",
+        "author": "codex/job3-arch-router-comparison",
+        "gold": false,
+        "review_status": "fixture-only-not-quality-gold"
+      }
+    },
+    {
+      "id": "fixture-6",
+      "tenant_id": "placeholder-tenant-b",
+      "split": "holdout",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Summarise this notice: The office closes at noon on Friday."
+        }
+      ],
+      "reference_route": "weak",
+      "provenance": {
+        "kind": "authored-synthetic",
+        "source_id": "authored-6",
+        "author": "codex/job3-arch-router-comparison",
+        "gold": false,
+        "review_status": "fixture-only-not-quality-gold"
+      }
+    },
+    {
+      "id": "fixture-7",
+      "tenant_id": "placeholder-tenant-b",
+      "split": "development",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Resolve incompatible requirements across these security policies."
+        }
+      ],
+      "reference_route": "strong",
+      "provenance": {
+        "kind": "authored-synthetic",
+        "source_id": "authored-7",
+        "author": "codex/job3-arch-router-comparison",
+        "gold": false,
+        "review_status": "fixture-only-not-quality-gold"
+      }
+    },
+    {
+      "id": "fixture-8",
+      "tenant_id": "placeholder-tenant-b",
+      "split": "holdout",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Goodbye, that answers everything."
+        }
+      ],
+      "reference_route": "other",
+      "provenance": {
+        "kind": "authored-synthetic",
+        "source_id": "authored-8",
+        "author": "codex/job3-arch-router-comparison",
+        "gold": false,
+        "review_status": "fixture-only-not-quality-gold"
+      }
+    }
+  ]
+}
