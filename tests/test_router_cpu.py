@@ -69,7 +69,7 @@ def test_timeout_kills_only_own_worker(tmp_path,monkeypatch):
     worker.write_text('import time\ntime.sleep(10)\n')
     monkeypatch.setattr(cpu,'WALL_SECONDS',.2)
     with pytest.raises(TimeoutError,match='wall budget'):
-        cpu.run_worker(sys.executable,worker,tmp_path/'request.json',tmp_path/'output.json')
+        cpu.run_worker('current',worker,tmp_path/'request.json',tmp_path/'output.json')
     assert not (tmp_path/'output.json').exists()
 
 
@@ -77,7 +77,7 @@ def test_failed_worker_does_not_disclose_exception_details(tmp_path):
     worker=tmp_path/'worker.py'
     worker.write_text('raise RuntimeError("placeholder private details")\n')
     with pytest.raises(RuntimeError,match='CPU worker failed') as stopped:
-        cpu.run_worker(sys.executable,worker,tmp_path/'request.json',tmp_path/'output.json')
+        cpu.run_worker('current',worker,tmp_path/'request.json',tmp_path/'output.json')
     assert 'private' not in str(stopped.value)
 
 
@@ -121,11 +121,19 @@ def test_server_ignoring_range_overwrites_prefix(tmp_path,disk):
     assert (folder/'config.json').read_bytes()==body
 
 
-def test_worker_preserves_virtual_environment_identity(tmp_path):
+def test_worker_preserves_virtual_environment_identity(tmp_path,monkeypatch):
     import subprocess
     environment=tmp_path/'venv'
     subprocess.run([sys.executable,'-m','venv','--without-pip',str(environment)],check=True,timeout=30)
     worker=tmp_path/'worker.py'
     worker.write_text('import json,sys\nfrom pathlib import Path\nPath(sys.argv[2]).write_text(json.dumps({"prefix":sys.prefix}))\n')
-    result=cpu.run_worker(environment/'bin/python',worker,tmp_path/'request.json',tmp_path/'output.json')
+    monkeypatch.setitem(cpu.INTERPRETERS,'current',str(environment/'bin/python'))
+    result=cpu.run_worker('current',worker,tmp_path/'request.json',tmp_path/'output.json')
     assert Path(result['prefix'])==environment
+
+
+def test_unknown_interpreter_and_cpu_worker_are_rejected(tmp_path):
+    with pytest.raises(ValueError,match='allowlisted'):
+        cpu.run_worker('untrusted',tmp_path/'worker.py',tmp_path/'in.json',tmp_path/'out.json')
+    with pytest.raises(ValueError,match='reviewed source'):
+        cpu.run_worker('cpu',tmp_path/'worker.py',tmp_path/'in.json',tmp_path/'out.json')

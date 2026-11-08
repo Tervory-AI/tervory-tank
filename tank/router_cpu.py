@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import time
 import urllib.request
 
@@ -13,6 +14,8 @@ MAX_DOWNLOAD = 5 * GIB
 MAX_RSS = 12 * GIB
 WALL_SECONDS = 600
 DOWNLOAD_SECONDS = 1800
+ROOT = Path(__file__).resolve().parents[1]
+INTERPRETERS = {'cpu':str(ROOT/'.venv/bin/python'), 'current':sys.executable}
 
 
 def sha256(path):
@@ -85,14 +88,18 @@ def download(specs, root, *, opener=urllib.request.urlopen):
         (folder / 'REVISION').write_text(spec['revision'] + '\n')
 
 
-def run_worker(python, worker, request, output):
+def run_worker(runtime, worker, input_path, output):
+    if runtime not in INTERPRETERS:
+        raise ValueError('CPU interpreter must be allowlisted')
+    if runtime == 'cpu' and Path(worker).resolve() != ROOT/'scripts/router_cpu_worker.py':
+        raise ValueError('CPU worker must be the reviewed source')
     env = {**os.environ, 'HF_HUB_OFFLINE':'1', 'TRANSFORMERS_OFFLINE':'1',
            'CUDA_VISIBLE_DEVICES':'', 'OMP_NUM_THREADS':'2', 'MKL_NUM_THREADS':'2',
            'TOKENIZERS_PARALLELISM':'false', 'PYTHONDONTWRITEBYTECODE':'1'}
     started, peak = time.monotonic(), 0
     # Logs remain task-local; reports never include prompts or exception values.
     with Path(output).with_suffix('.log').open('w') as log:
-        process = subprocess.Popen([str(python), str(worker), str(request), str(output)],
+        process = subprocess.Popen([INTERPRETERS[runtime], str(worker), str(input_path), str(output)],
                                    env=env, stdout=log, stderr=log)
         try:
             while process.poll() is None:
