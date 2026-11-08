@@ -35,8 +35,9 @@ def test_zenas_uses_allowlisted_smallest_a10g_that_fits():
     mod = load('run')
     assert mod.HARDWARE == frozenset({'a10g-small', 'a10g-large'})
     assert mod.training_hardware('zenas') == 'a10g-small'
+    assert mod.training_hardware('base') == 'a10g-small'
     with pytest.raises(ValueError, match='Unsupported training agent'):
-        mod.training_hardware('base')
+        mod.training_hardware('unsupported')
     trainer = load('train')
     assert trainer.context_length('') == 1024
     assert trainer.context_length('zenas') == 4096
