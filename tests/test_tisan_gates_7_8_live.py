@@ -485,7 +485,6 @@ def test_unverified_identity_makes_no_memory_request(monkeypatch, variant):
 
 def test_own_signed_control_fails_closed_until_shared_contract_exists(monkeypatch):
     """CURRENT source: the verified owner reaches the handler, which refuses explicitly (503) without reading."""
-    from chassis.memory import MemoryClient
     import inspect
     hermes, client, key, ident, seen = _seeded_counting(monkeypatch)
     http = httpx.AsyncClient(transport=httpx.MockTransport(hermes.handler))

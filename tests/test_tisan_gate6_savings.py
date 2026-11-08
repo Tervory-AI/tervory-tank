@@ -9,7 +9,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
+from uuid import UUID, uuid4
 
 import httpx
 from fastapi import FastAPI, HTTPException

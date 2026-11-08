@@ -92,7 +92,7 @@ async def test_coolify_writes_keep_the_existing_unknown_outcome_without_retry():
     assert len(calls) == 1
 
 
-@pytest.mark.parametrize('path,method', [('/jobs','POST'), ('/jobs/'+str(uuid4()),'GET'),
+@pytest.mark.parametrize('path,method', [('/jobs','POST'), ('/jobs/00000000-0000-4000-8000-000000000001','GET'),
     ('/evals/run','POST'), ('/gold/pages','GET'), ('/gold/approve','POST'), ('/gold/candidates','GET'),
     ('/pipeline/start','POST'), ('/quotes','POST'), ('/publish/build','POST'), ('/promotion/promote','POST'),
     ('/storage/usage','GET'), ('/openapi.json','GET')])
