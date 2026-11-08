@@ -1,0 +1,186 @@
+{
+  "product": "trigger",
+  "source_sha": "8b87af712b510c259eaf4dc0cbd0f6dc13ef63f4",
+  "entrypoints": [
+    "Tank OIDC middleware -> Command confirm -> trigger_routes.room -> POST /write",
+    "GET /memory/records",
+    "GET /memory/records/{id}",
+    "POST /memory/edit",
+    "POST /memory/forget",
+    "POST /memory/switch",
+    "POST /check; POST /voice/show; POST /skala/languagetool",
+    "Hermes POST /founder/publish for an owned Trigger record and signed foreign-user/tenant refusal"
+  ],
+  "legacy_tests": [
+    "tests/test_trigger_gates_7_8.py::test_product_request_brain_route_receipt_then_memory",
+    "tests/test_trigger_gates_7_8.py::test_correction_applies_next_time_with_no_paid_call",
+    "tests/test_trigger_gates_7_8.py::test_second_user_and_second_tenant_see_nothing",
+    "tests/test_trigger_gates_7_8.py::test_same_task_twice_reports_cost_and_tokens_each_run",
+    "tests/test_trigger_gates_7_8.py::test_recall_cap_never_dearer_than_budget",
+    "tests/test_trigger_gates_7_8.py::test_apply_corrections_and_secret_refusal",
+    "tests/test_trigger_gates_7_8.py::test_brain_switch_defaults_on_and_url",
+    "tests/test_trigger_gates_7_8.py::test_categories_populated_from_memory_on_paid_path",
+    "tests/test_trigger_gates_7_8.py::test_categories_from_memories_parses_markers",
+    "tests/test_trigger_gates_7_8.py::test_brain_then_route_free_first_then_tasks_then_tank",
+    "tests/test_trigger_gates_7_8.py::test_ask_brain_tasks_standby_404",
+    "tests/test_trigger_gates_7_8.py::test_write_passes_memory_and_user_populates_categories",
+    "tests/test_trigger_gates_7_8.py::test_memory_controls_view_edit_forget_and_off",
+    "tests/test_trigger_gates_7_8.py::test_memory_controls_refuse_foreign_scope_unchanged",
+    "tests/test_trigger_gates_7_8.py::test_memory_controls_refuse_bad_signatures_unchanged",
+    "tests/test_trigger_gates_7_8.py::test_memory_edit_refuses_other_users_memory_id_same_tenant",
+    "tests/test_trigger_gates_7_8.py::test_memory_controls_signed_own_identity_succeeds",
+    "tests/test_trigger_gates_7_8.py::test_memory_switch_off_is_per_signed_in_user",
+    "tests/test_trigger_gates_7_8.py::test_per_user_memory_off_blocks_exact_repeat_other_user_unaffected",
+    "tests/test_trigger_gates_7_8.py::test_owned_memory_row_requires_tenant_and_user",
+    "tests/test_trigger_gates_7_8.py::test_post_write_uses_signed_in_actor_not_body_user",
+    "tests/test_trigger_gates_7_8.py::test_memory_outage_on_recall_pays_and_never_serves_stored_repeat",
+    "tests/test_trigger_gates_7_8.py::test_memory_outage_on_switch_check_does_not_read_as_memory_on",
+    "tests/test_trigger_gates_7_8.py::test_memory_outage_on_remember_keeps_the_paid_answer_and_receipt",
+    "tests/test_trigger_gates_7_8.py::test_memory_programming_errors_and_scope_errors_are_not_outages",
+    "tests/test_trigger_gates_7_8.py::test_post_write_memory_outage_still_drafts_and_flags_it",
+    "tests/test_trigger_memory_hermes_contract.py::test_hermes_contract_write_recall_forget_with_agent_key",
+    "tests/test_trigger_memory_hermes_contract.py::test_hermes_contract_refuses_workspace_shared_key_for_write",
+    "tests/test_trigger_memory_hermes_contract.py::test_hermes_contract_agent_key_cannot_write_other_agent_collection",
+    "tests/test_trigger_memory_hermes_contract.py::test_hermes_contract_kind_format_and_trigger_kinds",
+    "tests/test_trigger_memory_hermes_contract.py::test_hermes_contract_tenant_scope_isolation",
+    "tests/test_trigger_memory_hermes_contract.py::test_hermes_contract_user_id_preserved_in_meta",
+    "tests/test_trigger_memory_hermes_contract.py::test_hermes_contract_missing_key_refused",
+    "tests/test_trigger_memory_hermes_contract.py::test_hermes_contract_wrong_key_refused_and_nothing_stored",
+    "tests/test_trigger_memory_hermes_contract.py::test_hermes_contract_bad_kind_refused_through_client",
+    "tests/test_trigger_memory_hermes_contract.py::test_product_memory_refuses_kinds_outside_trigger_list",
+    "tests/test_trigger_memory_t51_user_scope.py::test_t51_two_users_personal_isolation_and_own_positive",
+    "tests/test_trigger_memory_t51_user_scope.py::test_t51_missing_user_id_on_personal_kind_refused",
+    "tests/test_trigger_memory_t51_user_scope.py::test_t51_tenant_isolation_holds",
+    "tests/test_trigger_memory_t51_user_scope.py::test_t51_shared_key_write_refused",
+    "tests/test_trigger_memory_t51_user_scope.py::test_t51_v1_memory_base_banned"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_trigger.py::test_owner_controls_use_real_hermes",
+      "tests/gates78/products/test_trigger.py::test_owner_get_single_record_and_foreign_guessed_ids",
+      "tests/gates78/products/test_trigger.py::test_shared_fixture_preserves_product_agent_for_owner_recall",
+      "tests/gates78/products/test_trigger.py::test_edit_roundtrip_reads_the_authored_current_version"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_trigger.py::test_foreign_users_cannot_read_or_mutate_personal_records[user]",
+      "tests/gates78/products/test_trigger.py::test_foreign_records_cannot_be_published_or_shared"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_trigger.py::test_foreign_users_cannot_read_or_mutate_personal_records[tenant]",
+      "tests/gates78/products/test_trigger.py::test_foreign_records_cannot_be_published_or_shared"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_trigger.py::test_no_tenant_wide_kind_or_unverified_owner_is_invented"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_trigger.py::test_no_tenant_wide_kind_or_unverified_owner_is_invented",
+      "tests/gates78/products/test_trigger.py::test_plain_write_runs_without_identity_but_memory_controls_refuse"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_trigger.py::test_signin_verification_refuses_body_and_header_impersonation",
+      "tests/gates78/products/test_trigger.py::test_paid_write_recall_execute_receipt_remember_order_and_meaningful_fields"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_trigger.py::test_product_assertions_reject_tampering_without_mutation"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_trigger.py::test_concurrent_and_restarted_product_workers_reject_replay",
+      "tests/gates78/products/test_trigger.py::test_forget_invalidates_reusable_outcome_and_replay_cannot_restore",
+      "tests/gates78/products/test_trigger.py::test_replayed_create_cannot_restore_a_forgotten_personal_record"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_trigger.py::test_sql_owner_candidates_precede_vector_search_and_limit"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_trigger.py::test_restricted_database_role_uses_product_schema_and_ownership"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_trigger.py::test_owner_controls_use_real_hermes",
+      "tests/gates78/products/test_trigger.py::test_plain_write_runs_without_identity_but_memory_controls_refuse",
+      "tests/gates78/products/test_trigger.py::test_memory_switch_is_per_owner_and_reenable_deletes_only_own_switch"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_trigger.py::test_foreign_content_and_secrets_do_not_enter_receipts_or_logs",
+      "tests/gates78/products/test_trigger.py::test_foreign_users_cannot_read_or_mutate_personal_records[user]",
+      "tests/gates78/products/test_trigger.py::test_foreign_users_cannot_read_or_mutate_personal_records[tenant]"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_trigger.py::test_shared_fixture_preserves_product_agent_for_owner_recall",
+      "tests/gates78/products/test_trigger.py::test_paid_write_recall_execute_receipt_remember_order_and_meaningful_fields",
+      "tests/gates78/products/test_trigger.py::test_shared_workspace_key_cannot_write_hermes",
+      "tests/gates78/products/test_trigger.py::test_forbidden_tank_memory_base_is_never_used",
+      "tests/gates78/products/test_trigger.py::test_bad_kind_refused_through_product_and_real_hermes",
+      "tests/gates78/products/test_trigger.py::test_trigger_key_cannot_select_another_agents_collection",
+      "tests/gates78/products/test_trigger.py::test_missing_and_wrong_hermes_keys_refuse_without_persistence",
+      "tests/gates78/products/test_trigger.py::test_other_products_valid_kind_is_refused_by_trigger"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_trigger.py::test_default_off_preserves_original_write_and_opt_in_profiles"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_trigger.py::test_paid_write_recall_execute_receipt_remember_order_and_meaningful_fields",
+      "tests/gates78/products/test_trigger.py::test_paid_endpoints_and_original_product_flows_remain_real"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_trigger.py::test_free_check_and_voice_and_language_paths_make_no_provider_calls",
+      "tests/gates78/products/test_trigger.py::test_paid_endpoints_and_original_product_flows_remain_real"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_trigger.py::test_first_repeat_changed_input_receipts_and_provider_counts"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_trigger.py::test_other_user_tenant_and_changed_input_miss_real_provider_cache",
+      "tests/gates78/products/test_trigger.py::test_free_check_and_voice_and_language_paths_make_no_provider_calls"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_trigger.py::test_owner_correction_changes_next_answer_only_for_owner"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_trigger.py::test_forget_invalidates_reusable_outcome_and_replay_cannot_restore",
+      "tests/gates78/products/test_trigger.py::test_forgetting_original_invalidates_any_derived_repeat",
+      "tests/gates78/products/test_trigger.py::test_superseding_an_approved_source_invalidates_cached_derivatives"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_trigger.py::test_memory_switch_is_per_owner_and_reenable_deletes_only_own_switch"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_trigger.py::test_outages_are_truthful_and_never_repeat_paid_writing"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_trigger.py::test_memory_auth_failures_are_not_storage_outages",
+      "tests/gates78/products/test_trigger.py::test_product_assertions_reject_tampering_without_mutation"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_trigger.py::test_paid_write_recall_execute_receipt_remember_order_and_meaningful_fields",
+      "tests/gates78/products/test_trigger.py::test_first_repeat_changed_input_receipts_and_provider_counts",
+      "tests/gates78/products/test_trigger.py::test_remembered_contact_categories_are_meaningful_and_recall_is_bounded"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_trigger.py::test_retry_concurrency_and_foreign_card_preserve_single_payment",
+      "tests/gates78/products/test_trigger.py::test_concurrent_and_restarted_product_workers_reject_replay"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_trigger.py::test_paid_endpoints_and_original_product_flows_remain_real",
+      "tests/gates78/products/test_trigger.py::test_free_check_and_voice_and_language_paths_make_no_provider_calls",
+      "tests/gates78/products/test_trigger.py::test_remembered_contact_categories_are_meaningful_and_recall_is_bounded"
+    ]
+  },
+  "runtime_reference": {
+    "product_pr": "Tervory-AI/tervory-trigger#1",
+    "previous_product_sha": "2eb63f0a52dd6190584c41edec7551e44abfa307",
+    "integrated_tank_runtime_sha": "ea9f0d0418951ae7215a165e9df1e590902002fd",
+    "foundation_sha": "514a539d933faf37857097f800ad55196a84614a",
+    "proposed_product_port_not_integrated": false,
+    "shared_fixture_corrections_sha": "373bc179e57c6230673058fa4c41a2325ea3d71a",
+    "runtime_integration_pr": "Tervory-AI/tervory-tank#767 (merged)",
+    "product_vendor_source_sha": "92baaca846829bc640461c44b430b173b56ba865"
+  },
+  "fixture_boundaries": [
+    "Local signed OIDC issuer; production verifier, middleware and nonce assertions unchanged",
+    "Real product handlers, Command confirmation, TankClient, Tank routing and ledger",
+    "Real shared Hermes/SQL/Qdrant-local fixture; deterministic embedding encoder",
+    "HTTP fake only at provider/catalogue and LanguageTool network edges; fixture paid seats explicitly Auto through real admission",
+    "Restricted role granted only the isolated product schema and nonce table; no superuser-only read proof"
+  ],
+  "blocked_dependencies": []
+}
