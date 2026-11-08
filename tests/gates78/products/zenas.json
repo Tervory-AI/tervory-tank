@@ -1,13 +1,13 @@
 {
   "product": "zenas",
-  "source_sha": "25840393d75c1bccddc67997c68783957ec37c2a",
+  "source_sha": "80c72ab1f1c1881959e672aa45924026723b1786",
   "entrypoints": [
     "Tank TriggerSigninMiddleware -> zenas_proxy -> POST /answers",
     "Tank TriggerSigninMiddleware -> zenas_proxy -> POST /drafts",
     "GET /memory/records and /memory/records/{id}",
     "POST /memory/edit, /memory/forget, /memory/switch",
     "POST /moot/hearings/{id}/ai",
-    "Shared TankClient room_task/delegate_task -> real Tank agent_tasks -> signed private worker and SQL ledger reconciliation",
+    "Shared TankClient room_task/delegate_task -> real Tank agent_tasks -> configured shipped Zenas ASGI worker (real signed identity/nonces), approved scope code or existing policy, and canonical SQL receipt reconciliation",
     "Shared TankClient law_embeddings -> same-region fixed local encoder and real Tank code receipt"
   ],
   "legacy_tests": [

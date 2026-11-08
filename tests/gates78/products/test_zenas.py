@@ -263,7 +263,7 @@ async def test_unset_memory_and_brain_switches_add_no_work(zenas, monkeypatch):
     count = len(zenas.stack.calls)
     response = await first_answer(zenas)
     assert not response.json().get("memory_hit")
-    assert not zenas.model.brain_calls and len(zenas.stack.calls) == count
+    assert not zenas.worker.calls and len(zenas.stack.calls) == count
     assert await zenas.snapshot() == before
     assert not importlib.import_module("agents.zenas.zenas_brain").brain_enabled()
     for filename in ("docker-compose.yml", "docker-compose.za.yml"):
@@ -282,7 +282,7 @@ async def test_actual_task_recall_receipt_then_remember_order(zenas,monkeypatch)
     response = await first_answer(zenas)
     stages = [kind for kind,_ in zenas.events]
     assert "memory" in stages and "tank" in stages and stages.index("memory") < stages.index("tank")
-    assert any(path == "/tasks" for path in zenas.model.brain_calls)
+    assert any(path == "/tasks" for path in zenas.worker.calls)
     last_tank = max(i for i,(kind,_) in enumerate(zenas.events) if kind == "tank")
     assert any(kind == "memory" and path == "/memories" for kind,path in zenas.events[last_tank+1:])
     bill = receipt(response)
@@ -294,7 +294,7 @@ async def test_code_first_refusal_never_calls_brain_or_paid_gateway(zenas,monkey
     monkeypatch.setenv("ZENAS_BRAIN_ENABLED","true")
     response = await zenas.answer(changes={"question":"How can I defend a criminal prosecution?"})
     assert response.status_code in {200,403,422}
-    assert not zenas.model.calls and not zenas.model.brain_calls
+    assert not zenas.model.calls and not zenas.worker.calls
 
 
 @pytest.mark.asyncio
@@ -580,81 +580,61 @@ async def test_forget_and_correction_tombstone_private_command_replays(zenas):
 
 @pytest.mark.asyncio
 async def test_completed_code_brain_gap_never_falls_through_to_paid_provider(zenas,monkeypatch):
-    from zenas_harness import QUOTE
+    from chassis.user_assertion import SignedUser
+    from agents.zenas.zenas_brain import brain_then_route
     monkeypatch.setenv('ZENAS_BRAIN_ENABLED','true')
-    card={'elements':[{'id':'written','test':'The agreement is written.','citation':'Fixture section 1','quote':QUOTE}],
-        'exceptions':[],'defences':[],'remedies':[],'decision_table':[
-            {'element_id':'written','when':{'written':True},'finding':'met'}]}
-    async def completed(request, actor):
-        return await private_code_reply(zenas, request, actor, json.dumps(card))
-    zenas.model.brain_reply = completed
-    response=await first_answer(zenas)
-    assert '/tasks' in zenas.model.brain_calls and zenas.model.calls == []
-    bill=receipt(response)
-    assert bill['cost']==0 and bill['tokens_in']==bill['tokens_out']==0
-
-
-async def private_code_reply(entry, request, actor, content):
-    """The external code worker uses Tank's real free-work receipt writer."""
-    from uuid import UUID
-
-    from task_contract import paid_identity
-    from tenant_db import tenant_scope
-    from trigger_routes import code_receipt
-    identity = UUID(paid_identity(actor.tenant_id, actor.user_id, json.loads(request.content)['run_id']))
-    with tenant_scope(actor.tenant_id):
-        ident = await code_receipt(UUID(actor.tenant_id), 'agent.zenas.think', task_id=identity, agent='zenas')
-        row = await entry.stack.records.pool.fetchrow('SELECT * FROM tank.ledger WHERE tenant_id=$1 AND id=$2', UUID(actor.tenant_id), ident)
-    bill = {key: row[key] for key in ('model','region','tokens_in','tokens_out','task_type')}
-    bill.update(ledger_id=str(ident), tenant_id=str(row['tenant_id']), task_id=str(row['task_id']),
-                room='zenas', cost_usd=float(row['cost_usd']))
-    with tenant_scope(actor.tenant_id):
-        await entry.stack.records.pool.execute("""INSERT INTO tank.agent_receipts(ledger_id,tenant_id,room,receipt)
-            VALUES($1,$2,'zenas',$3::jsonb)""", ident, UUID(actor.tenant_id), json.dumps(bill))
-    return {'result': {'content': content}, 'receipt': bill}
-
-
-async def private_paid_reply(entry, request, actor):
-    from chassis.tank import TankClient
-    body = json.loads(request.content)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=entry.tank.app)) as http:
-        client = TankClient('http://tank:8000', entry.stack.key, 'zenas', http)
-        data = await client.room_task(actor, body['run_id'], body['input']['messages'])
-    return {'result': {'content': data['choices'][0]['message']['content']}, 'receipt': data['receipt']}
+    actor = SignedUser(zenas.stack.tenant, USER_A, 'org:admin')
+    ident = str(uuid4())
+    # The real free rung is the approved scope classifier, not an invented legal rule card.
+    response = await brain_then_route(None, zenas.room.app.state.tank, tenant_id=actor.tenant_id,
+        task_type='zenas.scope', messages=[{'role':'user','content':'Review a written supply agreement.'}],
+        actor=actor, run_id=ident)
+    assert '/tasks' in zenas.worker.calls and zenas.model.calls == []
+    assert json.loads(response['content'])['in_scope'] is True
+    assert response['model'] == 'code' and response['cost_usd'] == 0
+    assert response['tokens_in'] == response['tokens_out'] == 0
+    again = await brain_then_route(None, zenas.room.app.state.tank, tenant_id=actor.tenant_id,
+        task_type='zenas.scope', messages=[{'role':'user','content':'Review a written supply agreement.'}],
+        actor=actor, run_id=ident)
+    assert again['ledger_id'] == response['ledger_id'] and zenas.model.calls == []
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("zenas", ["us-east", "za"], indirect=True)
 async def test_private_brain_dispatch_preserves_real_policy_identity_and_receipts(zenas, monkeypatch):
     monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
-    async def paid(request, actor):
-        return await private_paid_reply(zenas, request, actor)
-    zenas.model.brain_reply = paid
     response = await first_answer(zenas)
-    assert zenas.model.brain_calls[:2] == ['/health', '/tasks']
+    assert zenas.worker.calls[:2] == ['/health', '/tasks']
     assert len(zenas.model.calls) > 0
     bill = receipt(response)
     assert bill['cost'] == len(zenas.model.calls) * FIXTURE_COST
     assert bill['tokens_in'] == len(zenas.model.calls) * FIXTURE_INPUT
     assert bill['tokens_out'] == len(zenas.model.calls) * FIXTURE_OUTPUT
-    assert all(a.tenant_id == zenas.stack.tenant and a.user_id == USER_A and a.role == 'org:admin' for a in zenas.model.brain_actors)
-    assert all(r.extensions['timeout']['read'] == 5 for r in zenas.model.brain_requests)
+    assert zenas.worker.actors
+    assert all(a.tenant_id == zenas.stack.tenant and a.user_id == USER_A and a.role == 'org:admin' for a in zenas.worker.actors)
+    assert all(r.extensions['timeout']['read'] == 5 for r in zenas.worker.requests)
     assert response.json()['memory']['status'] == 'ok'
+    # A second real worker shares the durable replay wall; tests never verify the token themselves.
+    from agents.zenas.core.brain_service import create_app
+    forwarded = next(r for r in zenas.worker.requests if r.url.path == '/tasks')
+    second = create_app(pool=zenas.stack.records.pool, http=zenas.room.app.state.tank._http)
+    count = len(zenas.model.calls)
+    async with second.router.lifespan_context(second):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=second)) as http:
+            replay = await http.post(str(forwarded.url), content=forwarded.content, headers=forwarded.headers)
+            assert replay.status_code == 401
+    assert len(zenas.model.calls) == count
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status', [302, 401, 403, 503, 'timeout'])
 async def test_private_brain_failures_never_redirect_or_pay_fallback(zenas, monkeypatch, status):
     monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
-    async def failed(request, actor):
-        if status == 'timeout':
-            raise httpx.ReadTimeout('placeholder private response timeout', request=request)
-        return httpx.Response(status, headers={'location': 'https://placeholder.invalid'})
-    zenas.model.brain_reply = failed
+    zenas.worker.fault = status
     response = await zenas.answer()
     assert response.status_code == (status if status in {401,403} else 503)
     assert not zenas.model.calls
-    assert zenas.model.brain_calls == ['/health', '/tasks']
+    assert zenas.worker.calls == ['/health', '/tasks']
     assert not response.json().get('memory_hit')
 
 
@@ -662,16 +642,14 @@ async def test_private_brain_failures_never_redirect_or_pay_fallback(zenas, monk
 @pytest.mark.parametrize('field', ['tenant_id','task_id','room','ledger_id','cost_usd','tokens_in'])
 async def test_private_brain_forged_receipts_fail_closed_without_second_payment(zenas, monkeypatch, field):
     monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
-    async def forged(request, actor):
-        data = await private_paid_reply(zenas, request, actor)
+    def forged(data):
         data['receipt'][field] = (str(uuid4()) if field in {'tenant_id','task_id','ledger_id'} else
                                   'placeholder-other-room' if field == 'room' else 999)
-        return data
-    zenas.model.brain_reply = forged
+    zenas.worker.corrupt = forged
     response = await zenas.answer()
     assert response.status_code == 503
     assert len(zenas.model.calls) == 1
-    assert zenas.model.brain_calls == ['/health', '/tasks']
+    assert zenas.worker.calls == ['/health', '/tasks']
     assert not response.json().get('memory_hit')
 
 
@@ -765,23 +743,21 @@ async def test_tank_task_adapter_rejects_scope_and_nonce_before_private_dispatch
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=zenas.tank.app)) as http:
         first = await http.post('http://tank'+path,content=raw,headers=headers)
         if bad == 'replay':
-            assert first.status_code == 404 and zenas.model.brain_calls == ['/health','/tasks']
+            assert first.status_code == 422 and zenas.worker.calls == ['/health','/tasks']
             second = await http.post('http://tank'+path,content=raw,headers=headers)
-            assert second.status_code == 401 and zenas.model.brain_calls == ['/health','/tasks']
+            assert second.status_code == 401 and zenas.worker.calls == ['/health','/tasks']
         else:
             assert first.status_code in {401,403}, first.text
-            assert not zenas.model.brain_calls
+            assert not zenas.worker.calls
     assert not zenas.model.calls
 
 
 @pytest.mark.asyncio
 async def test_completed_private_task_without_output_never_pays_fallback(zenas, monkeypatch):
     monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
-    async def empty(request, actor):
-        data = await private_paid_reply(zenas, request, actor)
+    def empty(data):
         data['result'] = {'content': ''}
-        return data
-    zenas.model.brain_reply = empty
+    zenas.worker.corrupt = empty
     response = await zenas.answer()
     assert response.status_code == 503 and len(zenas.model.calls) == 1
     rows = await zenas.request('GET', '/receipts')
@@ -798,9 +774,6 @@ async def test_private_receipt_reconciliation_preserves_provider_precision(zenas
     from chassis.user_assertion import SignedUser
     monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
     zenas.model.response_cost = 0.002400004
-    async def paid(request, actor):
-        return await private_paid_reply(zenas, request, actor)
-    zenas.model.brain_reply = paid
     actor = SignedUser(zenas.stack.tenant, USER_A, 'org:admin')
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=zenas.tank.app)) as http:
         client = TankClient('http://tank:8000', zenas.stack.key, 'zenas', http)

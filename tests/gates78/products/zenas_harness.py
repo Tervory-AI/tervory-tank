@@ -1,12 +1,11 @@
 """Zenas entry-path wiring; Hermes, SQL, assertions and handlers stay real.
 
-Only the external Tank/brain HTTP edge and the shared encoder are fixtures.
+Only the external model/encoder responses are fixtures. The private worker is shipped ASGI.
 Do not load runtime from a product checkout or apply its proposed core patches.
 """
 from __future__ import annotations
 
 import importlib
-import inspect
 import json
 import os
 from dataclasses import dataclass, field
@@ -19,14 +18,14 @@ import pytest_asyncio
 from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 ROOT = Path(__file__).resolve().parents[3]
-SOURCE_SHA = "25840393d75c1bccddc67997c68783957ec37c2a"
+SOURCE_SHA = "80c72ab1f1c1881959e672aa45924026723b1786"
 USER_A, USER_B, USER_C = ("placeholder-user-a", "placeholder-user-b", "placeholder-user-c")
 WORKSPACE_KEY = "placeholder-gate78-workspace-key"
 QUOTE = "A written supply agreement requires notice before cancellation and remedies for breach."
 FIXTURE_COST = .0024
 FIXTURE_INPUT = 1200
 FIXTURE_OUTPUT = 300
-REQUIRED_RUNTIME = ("app", "gates_memory", "memory_api", "request_signing", "zenas_brain")
+REQUIRED_RUNTIME = ("app", "gates_memory", "memory_api", "request_signing", "zenas_brain", "core/brain_service")
 
 
 def require_runtime():
@@ -49,41 +48,14 @@ def receipt(response):
 
 @dataclass
 class ExternalProvider:
-    """Only the LiteLLM/brain network boundary is recorded. Tank stays real."""
+    """Only external LiteLLM responses are recorded. All internal handlers stay real."""
     events: list
     calls: list[dict] = field(default_factory=list)
-    brain_calls: list[str] = field(default_factory=list)
-    brain_reply: dict | None = None
-    brain_status: int = 404
     response_cost: float = FIXTURE_COST
-    brain_actors: list = field(default_factory=list)
-    brain_requests: list = field(default_factory=list)
-    nonces: object = None
 
     async def send(self, request):
         body = json.loads(request.content) if request.content else {}
         path = request.url.path
-        if request.url.host == "zenas-brain":
-            self.brain_calls.append(path)
-            self.brain_requests.append(request)
-            self.events.append(("brain", path))
-            if path == "/health":
-                return httpx.Response(200, json={"ok": True, "room": "zenas"})
-            if path == "/tasks":
-                from chassis.user_assertion import HEADER, verify_assertion
-                actor = await verify_assertion(request.headers[HEADER], key=os.environ['TANK_KEY_ZENAS'],
-                    product='zenas', tenant_id=request.url.params['tenant_id'],
-                    method=request.method, target=request.url.raw_path.decode(), body=request.content,
-                    consume_nonce=self.nonces.claim)
-                assert actor.user_id == request.url.params['user_id']
-                self.brain_actors.append(actor)
-                if self.brain_reply is not None:
-                    reply = self.brain_reply(request, actor) if callable(self.brain_reply) else self.brain_reply
-                    if inspect.isawaitable(reply):
-                        reply = await reply
-                    return reply if isinstance(reply, httpx.Response) else httpx.Response(200, json=reply)
-                return httpx.Response(self.brain_status, json={"detail": "placeholder standby brain"})
-            raise AssertionError("Unexpected brain path")
         assert request.url.host == "placeholder-litellm", "Unexpected external request: " + request.url.host
         if path == '/router/settings':
             import yaml
@@ -118,6 +90,52 @@ class ExternalProvider:
 
 
 @dataclass
+class ShippedWorker:
+    """Actual configured ASGI worker; faults only corrupt/interrupt its wire."""
+    app: object
+    events: list
+    calls: list = field(default_factory=list)
+    actors: list = field(default_factory=list)
+    requests: list = field(default_factory=list)
+    fault: object = None
+    corrupt: object = None
+
+    async def send(self, request):
+        self.calls.append(request.url.path)
+        self.requests.append(request)
+        self.events.append(("brain", request.url.path))
+        if request.url.path == '/tasks' and self.fault is not None:
+            if self.fault == 'timeout':
+                raise httpx.ReadTimeout('placeholder private response timeout', request=request)
+            return httpx.Response(self.fault, headers={'location': 'https://placeholder.invalid'})
+        response = await httpx.ASGITransport(app=self.app).handle_async_request(request)
+        if request.url.path == '/tasks' and response.status_code == 200 and self.corrupt is not None:
+            # Negative proof: corrupt a completed REAL worker response, never execute its work here.
+            data = json.loads(await response.aread())
+            self.corrupt(data)
+            return httpx.Response(200, json=data)
+        return response
+
+
+def configured_worker():
+    """Use the entry point selected by the explicit, separately reviewed runtime proposal."""
+    import yaml
+    compose = yaml.safe_load((ROOT/'agents/zenas/docker-compose.yml').read_text())
+    service = compose['services']['zenas-brain']
+    entry = service['command'][1]
+    if entry != 'agents.zenas.core.brain_service:app':
+        pytest.fail('BLOCKED: configured Zenas worker is standby; opt-in runtime proposal is not integrated', pytrace=False)
+    assert service['profiles'] == ['brain']
+    assert service['environment']['ZENAS_BRAIN_ENABLED'] == '${ZENAS_BRAIN_ENABLED:-false}'
+    assert service['build'] == {'context': '..', 'dockerfile': 'zenas/Dockerfile'}
+    assert 'COPY zenas/core /app/agents/zenas/core' in (ROOT/'agents/zenas/Dockerfile').read_text()
+    module, attribute = entry.split(':')
+    runtime = importlib.import_module(module)
+    assert getattr(runtime, attribute) is not None
+    return runtime
+
+
+@dataclass
 class ZenasEntry:
     stack: object
     room: object
@@ -126,6 +144,7 @@ class ZenasEntry:
     product_http: httpx.AsyncClient
     provider: object
     model: ExternalProvider
+    worker: ShippedWorker
     events: list
     body: dict
     raw_assertions: list = field(default_factory=list)
@@ -204,8 +223,6 @@ async def zenas(gate78_memory, monkeypatch, request):
     doc, _ = await save(pool, region=region, text=QUOTE + ' ' + salt)
     events = []
     model = ExternalProvider(events)
-    from chassis.user_assertion import PostgresNonces
-    model.nonces = PostgresNonces(pool, 'zenas')
     tank = importlib.import_module("main")
     for key, value in {'TANK_API_KEY': WORKSPACE_KEY, 'LITELLM_URL': 'http://placeholder-litellm',
                        'LITELLM_MASTER_KEY':'placeholder-provider-key'}.items():
@@ -239,6 +256,8 @@ async def zenas(gate78_memory, monkeypatch, request):
                 return await httpx.ASGITransport(app=room.app).handle_async_request(req)
             if req.url.host == 'tank':
                 return await httpx.ASGITransport(app=tank.app).handle_async_request(req)
+            if req.url.host == 'zenas-brain':
+                return await worker.send(req)
             if req.url.host == 'hermes':
                 return await httpx.ASGITransport(app=stack.app).handle_async_request(req)
             return await model.send(req)
@@ -252,10 +271,19 @@ async def zenas(gate78_memory, monkeypatch, request):
     monkeypatch.setattr(engine_memory, 'HTTP', ProviderClient)
     edge_http = ProviderClient()
     async def tank_trace(req):
-        if req.url.path == '/v1/route':
+        if req.url.path in {'/v1/route', '/v1/agents/zenas/tasks'}:
             events.append(('tank', req.url.path))
     outbound = base_client(transport=httpx.ASGITransport(app=tank.app),
                            event_hooks={'request': [tank_trace]})
+    worker_app = configured_worker().create_app(pool=pool, http=outbound)
+    worker = ShippedWorker(worker_app, events)
+    @worker_app.middleware('http')
+    async def observe_verified_actor(req, call_next):
+        response = await call_next(req)
+        actor = getattr(req.state, 'verified_product_user', None)
+        if actor is not None:
+            worker.actors.append(actor)
+        return response
     room.app.state.pool = pool
     room.app.state.http = edge_http
     room.app.state.configuration = {"ok": True}
@@ -289,7 +317,11 @@ async def zenas(gate78_memory, monkeypatch, request):
     monkeypatch.setattr(tank, "_http", product_http)
     http = httpx.AsyncClient(transport=httpx.ASGITransport(app=tank.app), base_url="http://tank")
     try:
-        yield ZenasEntry(stack, room, tank, http, product_http, provider, model, events, body, assertions, matters)
+        monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
+        async with worker_app.router.lifespan_context(worker_app):
+            monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'false')
+            # Start while enabled solely in the offline fixture; the source defaults remain off.
+            yield ZenasEntry(stack, room, tank, http, product_http, provider, model, worker, events, body, assertions, matters)
     finally:
         await http.aclose()
         await product_http.aclose()
