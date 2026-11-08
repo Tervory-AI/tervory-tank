@@ -196,7 +196,10 @@ async def test_product_memory_path_under_restricted_database_role(radix_stack, m
     restricted = None
     await admin.execute(f"CREATE ROLE {role} NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE")
     try:
-        await admin.execute(f"GRANT USAGE ON SCHEMA {schema} TO {role}")
+        from hermes.user_assertion import PostgresNonces
+        await PostgresNonces(admin, schema.removeprefix("agent_")).setup()
+        # Match the provisioned role, only in its own disposable product schema.
+        await admin.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema} TO {role}")
         await admin.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema} TO {role}")
         restricted = await asyncpg.create_pool(os.environ["MEMORY_TEST_DATABASE_URL"], min_size=1, max_size=1,
                                               server_settings={"role": role})
@@ -242,6 +245,11 @@ async def test_worker_first_repeat_changed_accounting(radix_stack, enabled):
     assert receipt["status"] == "completed"
     assert (receipt["cost_usd"], receipt["tokens_in"], receipt["tokens_out"]) == (.05, 10, 3)
     assert len(s.provider_calls) == 1
+    assert [r.url.path for r in s.task_requests] == ["/v1/agents/radix/delegate", "/v1/agents/radix/tasks"]
+    assert len(s.brain_requests) == 1
+    assert receipt["tank_receipt"]["room"] == "radix"
+    assert receipt["tank_receipt"]["region"] == "us-east"
+    assert receipt["tank_receipt"]["outcome"] == "delivered"
     assert [step["action"] for step in receipt["steps"]] == ["code_skill", "recall", "brain_route", "remember"]
     assert first["findings"] and receipt["result"]["findings"]
     second = await scan(s)
@@ -253,7 +261,7 @@ async def test_worker_first_repeat_changed_accounting(radix_stack, enabled):
     third = await scan(s, changed=True)
     assert not third["receipt"]["answered_from_memory"] and len(s.provider_calls) == 2
     assert (third["receipt"]["cost_usd"], third["receipt"]["tokens_in"], third["receipt"]["tokens_out"]) == (.05, 10, 3)
-    ledger = await s.pool.fetch("SELECT cost_usd,tokens_in,tokens_out FROM tank.ledger WHERE tenant_id=$1 AND task_type='radix.site_risk'", uuid.UUID(s.memory.tenant))
+    ledger = await s.pool.fetch("SELECT cost_usd,tokens_in,tokens_out FROM tank.ledger WHERE tenant_id=$1 AND task_type='agent.radix.think'", uuid.UUID(s.memory.tenant))
     assert len(ledger) == len(s.provider_calls) == 2
     assert sum(float(row["cost_usd"]) for row in ledger) == .10
     rows = await s.pool.fetch("SELECT user_id,receipt FROM agent_radix.task_context")
@@ -407,6 +415,8 @@ async def test_provider_failure_is_unknown_and_never_recharged(radix_stack, enab
     result = await work_next(s)
     assert result["receipt"]["status"] == "failed" and result["receipt"]["cost_usd"] is None
     assert result["receipt"]["result"]["status"] == "unknown"
+    assert result["receipt"]["tank_receipt"]["cost_status"] == "unknown_upper_bound"
+    assert result["receipt"]["tank_receipt"]["cost_usd"] > 0
     assert "none-reported" not in json.dumps(result)
     calls = len(s.provider_calls)
     await s.pool.execute("UPDATE agent_radix.jobs SET status='queued',run_at=now() WHERE id=$1", job)
@@ -485,3 +495,99 @@ async def test_uncertain_execution_is_never_reissued(radix_stack, enabled):
     assert result["receipt"]["status"] == "uncertain"
     assert result["receipt"]["cost_usd"] is None and result["receipt"]["paid_calls"] is None
     assert not s.provider_calls
+
+
+@pytest.mark.parametrize("operation", ["tasks", "delegate"])
+@pytest.mark.parametrize("fault", ["missing", "wrong-key", "user", "tenant", "target", "expired", "body", "run", "region", "other-room", "off", "squad"])
+@pytest.mark.asyncio
+async def test_private_task_boundary_denials(radix_stack, enabled, monkeypatch, operation, fault):
+    s = radix_stack
+    path = "/v1/agents/radix/" + operation
+    body = {"tenant_id": s.memory.tenant, "user_id": USER_A, "run_id": str(uuid.uuid4())}
+    body.update({"messages": [{"role": "user", "content": "placeholder"}]} if operation == "tasks" else
+                {"task_key": "radix.site_risk", "input": {}, "recall": []})
+    actor = SignedUser(s.memory.tenant, USER_A, "member")
+    if fault == "user": body["user_id"] = USER_B
+    if fault == "tenant": body["tenant_id"] = s.memory.other_tenant
+    if fault == "other-room": path = path.replace("/radix/", "/base/")
+    if fault == "off": monkeypatch.delenv("RADIX_BRAIN_ENABLED", raising=False)
+    if fault == "squad":
+        await s.pool.execute("DELETE FROM tank.tenant_squad WHERE tenant_id=$1", uuid.UUID(s.memory.tenant))
+    raw = json.dumps(body).encode()
+    headers = {"X-Tank-Key": s.memory.key, "Content-Type": "application/json", "X-Home-Region": "za" if fault == "region" else "us-east"}
+    headers[HEADER] = sign_assertion("radix", actor, "POST", path + ("/wrong" if fault == "target" else ""), raw,
+                                   key="placeholder-wrong-key" if fault == "wrong-key" else s.memory.key,
+                                   now=int(time.time()) - 120 if fault == "expired" else None)
+    if fault == "missing": headers.pop(HEADER)
+    if fault == "body":
+        body["messages" if operation == "tasks" else "input"] = [{"role": "user", "content": "altered"}] if operation == "tasks" else {"altered": True}
+        raw = json.dumps(body).encode()
+    if fault == "run":
+        body["run_id"] = str(uuid.uuid4())
+        raw = json.dumps(body).encode()
+    before = await s.snapshot()
+    response = await s.tank.post(path, headers=headers, content=raw)
+    expected = 409 if fault == "off" else 403 if fault in {"user", "region", "other-room", "squad"} else 401
+    assert response.status_code == expected, response.text
+    assert await s.snapshot() == before and not s.provider_calls and not s.brain_requests
+
+
+@pytest.mark.parametrize("fault", ["missing", "service-key", "wrong-key", "user", "tenant", "target", "expired", "run", "region", "off"])
+@pytest.mark.asyncio
+async def test_private_service_requires_signed_scoped_actor(radix_stack, enabled, monkeypatch, fault):
+    import httpx
+    s = radix_stack
+    tenant = s.memory.other_tenant if fault == "tenant" else s.memory.tenant
+    user = USER_B if fault == "user" else USER_A
+    path = f"/tasks?tenant_id={tenant}&user_id={user}"
+    body = {"task_key": "radix.site_risk", "input": {}, "recall": [], "run_id": str(uuid.uuid4())}
+    raw = json.dumps(body).encode()
+    headers = {"X-Tank-Key": "placeholder-wrong-key" if fault == "service-key" else s.memory.key,
+               "Content-Type": "application/json", "X-Home-Region": "za" if fault == "region" else "us-east"}
+    headers[HEADER] = sign_assertion("radix", SignedUser(s.memory.tenant, USER_A, "member"), "POST",
+                                   path + ("&altered=1" if fault == "target" else ""), raw,
+                                   key="placeholder-wrong-key" if fault == "wrong-key" else s.memory.key,
+                                   now=int(time.time()) - 120 if fault == "expired" else None)
+    if fault == "missing": headers.pop(HEADER)
+    if fault == "off": monkeypatch.delenv("RADIX_BRAIN_ENABLED", raising=False)
+    if fault == "run":
+        body["run_id"] = str(uuid.uuid4())
+        raw = json.dumps(body).encode()
+    before = await s.snapshot()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(s.room.brain.app), base_url="http://placeholder") as client:
+        response = await client.post(path, headers=headers, content=raw)
+    expected = 409 if fault == "off" else 403 if fault in {"user", "region"} else 401
+    assert response.status_code == expected, response.text
+    assert await s.snapshot() == before and not s.provider_calls and not s.task_requests
+
+
+@pytest.mark.asyncio
+async def test_private_task_replay_and_real_receipt(radix_stack, enabled):
+    s = radix_stack
+    result = await scan(s)
+    receipt = result["receipt"]["tank_receipt"]
+    from chassis.task_contract import paid_identity
+    assert receipt["task_id"] == paid_identity(s.memory.tenant, USER_A, result["scan_id"])
+    raw = await s.pool.fetchval("SELECT receipt FROM tank.agent_receipts WHERE tenant_id=$1 AND ledger_id=$2",
+                               uuid.UUID(s.memory.tenant), uuid.UUID(receipt["ledger_id"]))
+    assert (json.loads(raw) if isinstance(raw, str) else raw) == receipt
+    before = await s.snapshot()
+    for request in list(s.task_requests):
+        response = await s.tank.post(request.url.path, headers=dict(request.headers), content=request.content)
+        assert response.status_code == 401
+    request = s.brain_requests[0]
+    import httpx
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(s.room.brain.app), base_url="http://placeholder") as client:
+        response = await client.post(request.url.raw_path.decode(), headers=dict(request.headers), content=request.content)
+    assert response.status_code == 401
+    assert await s.snapshot() == before and len(s.provider_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_private_task_keeps_paid_admission(radix_stack, enabled):
+    s = radix_stack
+    await s.pool.execute("UPDATE tank.paid_step_settings SET mode='ask' WHERE tenant_id=$1", uuid.UUID(s.memory.tenant))
+    result = await scan(s)
+    assert result["receipt"]["status"] == "failed" and not s.provider_calls
+    assert not await s.pool.fetchval("SELECT 1 FROM tank.agent_receipts WHERE tenant_id=$1", uuid.UUID(s.memory.tenant))
+    assert await s.pool.fetchval("SELECT count(*) FROM tank.paid_step_approvals WHERE tenant_id=$1", uuid.UUID(s.memory.tenant)) == 1

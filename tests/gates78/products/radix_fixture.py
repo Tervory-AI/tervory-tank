@@ -22,6 +22,7 @@ import pytest_asyncio
 
 from chassis.memory import MemoryClient
 from test_command import command_pool
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 
 radix_sql_pool = command_pool
 
@@ -37,12 +38,12 @@ WORKSPACE_KEY = "placeholder-gate78-workspace"
 def radix_runtime(monkeypatch):
     required = ["agents/radix/memory_api.py", "agents/radix/gates_memory.py",
                 "agents/radix/radix_brain.py", "agents/radix/readiness.py",
-                "agents/radix/task_runtime.py"]
+                "agents/radix/task_runtime.py", "agents/radix/radix_brain_service.py"]
     missing = [name for name in required if not (ROOT / name).is_file()]
     assert not missing, "BLOCKED: integrate the authoritative Radix PR and fixed-core corridor: " + ", ".join(missing)
     monkeypatch.syspath_prepend(str(ROOT / "agents/radix"))
     # Load the shipped application, not a replacement route around its helpers.
-    for name in ("gold_sources", "gates_memory", "memory_api", "radix_brain"):
+    for name in ("gold_sources", "gates_memory", "memory_api", "radix_brain", "task_runtime"):
         spec = importlib.util.spec_from_file_location(name, ROOT / "agents/radix" / (name + ".py"))
         module = importlib.util.module_from_spec(spec)
         monkeypatch.setitem(sys.modules, name, module)
@@ -50,6 +51,10 @@ def radix_runtime(monkeypatch):
     spec = importlib.util.spec_from_file_location("placeholder_radix_gate78_app", ROOT / "agents/radix/app.py")
     room = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(room)
+    spec = importlib.util.spec_from_file_location("placeholder_radix_brain_service", ROOT / "agents/radix/radix_brain_service.py")
+    brain = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(brain)
+    room.brain = brain
     import main
     return main, room
 
@@ -105,17 +110,20 @@ async def radix_stack(radix_runtime, gate78_memory, radix_sql_pool, monkeypatch,
     identity_oidc._cache.clear()
     from chassis.tenant_db import TenantPool
     room.app.state.pool = TenantPool(pool)
+    room.brain.app.state.pool = TenantPool(pool)
     room.app.state.memory = MemoryClient("http://hermes", memory.key, "radix", memory.http)
     room.app.state.product_nonce_stores = {"radix": PostgresNonces(pool, "radix")}
     for tenant in (memory.tenant, memory.other_tenant):
-        await pool.execute("INSERT INTO tank.policy(tenant_id,task_type,model,shadow_rate,cache_scope) VALUES($1,'radix.site_risk','llama-small',0,'none')", UUID(tenant))
+        await pool.execute("INSERT INTO tank.policy(tenant_id,task_type,model,shadow_rate,cache_scope) VALUES($1,'agent.radix.think','llama-small',0,'none')", UUID(tenant))
         for model in engine_models.OPEN:
-            step = paid_steps.model_step("radix.site_risk", model, agent="radix")
+            step = paid_steps.model_step("agent.radix.think", model, agent="radix")
             async with pool.acquire() as conn:
-                await paid_steps.register(conn, step, "radix", "model", "tank.policy", task="radix.site_risk", model=model)
+                await paid_steps.register(conn, step, "radix", "model", "tank.policy", task="agent.radix.think", model=model)
                 await conn.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,$2,'auto',$3)", UUID(tenant), step, USER_A)
     forwarded = []
     provider_calls = []
+    task_requests = []
+    brain_requests = []
     network = SimpleNamespace(fail_provider=False)
     raw_client = httpx.AsyncClient
     transport = httpx.ASGITransport(room.app)
@@ -124,7 +132,12 @@ async def radix_stack(radix_runtime, gate78_memory, radix_sql_pool, monkeypatch,
         if request.url.host == "agent-radix":
             forwarded.append((request.method, request.url.raw_path.decode(), dict(request.headers), request.content))
             return await transport.handle_async_request(request)
+        if request.url.host == "radix-brain":
+            brain_requests.append(request)
+            return await httpx.ASGITransport(room.brain.app).handle_async_request(request)
         if request.url.host in {"tank", "placeholder-tank"}:
+            if request.url.path.startswith("/v1/agents/"):
+                task_requests.append(request)
             return await httpx.ASGITransport(main.app).handle_async_request(request)
         if request.url.host == "placeholder-provider":
             if request.url.path == "/router/settings":
@@ -134,12 +147,12 @@ async def radix_stack(radix_runtime, gate78_memory, radix_sql_pool, monkeypatch,
                     "litellm_params": {"model": "placeholder/" + model},
                     "model_info": {"input_cost_per_token": .001, "output_cost_per_token": .001}}
                     for model in engine_models.OPEN]})
-            assert request.url.path == "/v1/chat/completions"
+            assert request.url.path == COMPLETIONS_PATH
             # A different checkout must see the checkpoint before the paid edge.
             assert await pool.fetchval("SELECT EXISTS(SELECT 1 FROM agent_radix.task_context WHERE stage='executing' AND execution IS NULL)")
             provider_calls.append(json.loads(request.content))
             if network.fail_provider:
-                return httpx.Response(503, json={"error": "placeholder-provider-unavailable"})
+                raise httpx.ReadTimeout("placeholder response lost after send", request=request)
             return httpx.Response(200, headers={"x-litellm-response-cost": "0.05"}, json={
                 "choices": [{"message": {"content": "placeholder review: use bound parameters; runtime exposure is unknown."}, "finish_reason": "stop"}],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 3}})
@@ -153,7 +166,9 @@ async def radix_stack(radix_runtime, gate78_memory, radix_sql_pool, monkeypatch,
     async with AsyncExitStack() as opened:
         wire = await opened.enter_async_context(paid_http.Client(transport=httpx.MockTransport(room_edge)))
         monkeypatch.setattr(main, "_http", wire)
-        room.app.state.tank = TankClient("http://tank", memory.key, "radix", wire)
+        room_wire = await opened.enter_async_context(raw_client(transport=httpx.MockTransport(room_edge)))
+        room.app.state.tank = TankClient("http://tank", memory.key, "radix", room_wire)
+        room.brain.app.state.tank = TankClient("http://tank", memory.key, "radix", room_wire)
         room.app.state.files = SimpleNamespace()
         room.app.state.browser = SimpleNamespace()
         tank = await opened.enter_async_context(httpx.AsyncClient(transport=httpx.ASGITransport(main.app), base_url="http://placeholder-tank"))
@@ -176,7 +191,7 @@ async def radix_stack(radix_runtime, gate78_memory, radix_sql_pool, monkeypatch,
 
         yield SimpleNamespace(main=main, room=room, memory=memory, pool=pool, tank=tank, product=product,
                               headers=headers, forwarded=forwarded, snapshot=snapshot, provider=provider,
-                              provider_calls=provider_calls, network=network)
+                              provider_calls=provider_calls, network=network, task_requests=task_requests, brain_requests=brain_requests)
 
 
 async def owner_record(stack):

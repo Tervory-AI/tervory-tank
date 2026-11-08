@@ -1,9 +1,9 @@
 {
   "product": "radix",
-  "source_sha": "d4036e39fd63babb22a23ee300cf774540170d65",
+  "source_sha": "57062aed454fce4d4a65f32217e1b10a22526db3",
   "entrypoints": [
     "Tank main.app + TriggerSigninMiddleware -> registered Command threads/attachments/actions/card confirmation -> radix.repo.scan -> signed POST /jobs",
-    "agents/radix/task_runtime.attach -> atomic actor/job enqueue -> chassis.worker.claim_next/run_claimed -> app.scan -> code scanners -> task_runtime.finish_scan -> signed MemoryClient + real TankClient.route + durable task_context receipt",
+    "agents/radix/task_runtime.attach -> atomic actor/job enqueue -> chassis.worker -> app.scan -> code scanners -> signed MemoryClient -> typed TankClient.delegate_task -> Tank Radix adapter -> signed private coordinator -> typed TankClient.room_task -> existing Radix room policy/paid admission/ledger/agent_receipts -> durable task_context receipt",
     "Tank /v1/command/radix/repo/findings -> signed GET /jobs/{job_id} -> owner-only result",
     "Tank registered /v1/radix/memory GET and POST /control,/edit,/forget (unapplied corridor dependency) -> memory_api -> shared assertion verifier -> signed MemoryClient -> real Hermes/PostgreSQL/Qdrant"
   ],
@@ -44,7 +44,8 @@
       "tests/gates78/products/test_radix.py::test_default_off_and_unsigned_plain_scan"
     ],
     "G8.task_path": [
-      "tests/gates78/products/test_radix.py::test_worker_first_repeat_changed_accounting"
+      "tests/gates78/products/test_radix.py::test_worker_first_repeat_changed_accounting",
+      "tests/gates78/products/test_radix.py::test_private_task_keeps_paid_admission"
     ],
     "G8.free_first": [
       "tests/gates78/products/test_radix.py::test_code_first_and_incomplete_scan_never_uses_brain"
@@ -76,7 +77,8 @@
     "G8.receipts": [
       "tests/gates78/products/test_radix.py::test_worker_first_repeat_changed_accounting",
       "tests/gates78/products/test_radix.py::test_job_receipt_is_owner_scoped_through_tank",
-      "tests/gates78/products/test_radix.py::test_tank_receipt_view_matches_worker"
+      "tests/gates78/products/test_radix.py::test_tank_receipt_view_matches_worker",
+      "tests/gates78/products/test_radix.py::test_private_task_replay_and_real_receipt"
     ],
     "G8.retry_concurrency": [
       "tests/gates78/products/test_radix.py::test_concurrent_runs_share_owner_cache_and_keep_two_receipts",
@@ -110,10 +112,13 @@
       "tests/gates78/products/test_radix.py::test_owner_controls_use_signed_route_and_real_hermes"
     ],
     "G7.assertion_rejection": [
-      "tests/gates78/products/test_radix.py::test_product_assertion_rejections_do_not_mutate"
+      "tests/gates78/products/test_radix.py::test_product_assertion_rejections_do_not_mutate",
+      "tests/gates78/products/test_radix.py::test_private_task_boundary_denials",
+      "tests/gates78/products/test_radix.py::test_private_service_requires_signed_scoped_actor"
     ],
     "G7.replay": [
-      "tests/gates78/products/test_radix.py::test_nonce_replay_after_restart_and_forget"
+      "tests/gates78/products/test_radix.py::test_nonce_replay_after_restart_and_forget",
+      "tests/gates78/products/test_radix.py::test_private_task_replay_and_real_receipt"
     ],
     "G7.sql_before_vector": [
       "tests/gates78/products/test_radix.py::test_sql_candidates_are_scoped_before_vector"
