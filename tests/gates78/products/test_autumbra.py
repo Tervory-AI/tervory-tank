@@ -26,7 +26,8 @@ def query(tenant, user):
 async def test_runtime_contract():
     import ghost_routes
     routes = {(method, route.path) for route in ghost_routes.router.routes for method in route.methods}
-    expected = {('POST','/v1/ghost/autumbra/memory/recall'), ('PATCH','/v1/ghost/autumbra/memory/memories/{id}')}
+    expected = {('POST','/v1/ghost/autumbra/memory/recall'), ('PATCH','/v1/ghost/autumbra/memory/memories/{id}'),
+                ('POST','/v1/ghost/autumbra/personal/{path:path}')}
     missing = sorted(expected - routes)
     modules = [name for name in ('agents.ghost.brain','agents.ghost.brain_service','agents.ghost.brain_state')
                if importlib.util.find_spec(name) is None]
@@ -120,7 +121,7 @@ async def test_real_oidc_signed_actor_and_header_impersonation(autumbra):
     bad_role = await b.request('GET','/memory'+query(b.stack.tenant,A),headers={'X-Tervory-Role':'founder'})
     assert bad_role.status_code == 403
     response = await b.request('GET','/memory'+query(b.stack.tenant,A),headers={'x-trigger-signin-token':'placeholder-invalid-jwt'})
-    assert response.status_code == 403
+    assert response.status_code == 401 and response.json() == {'detail':'Trigger sign-in required'}
     assert len(await b.rows()) == 1
 
 
@@ -223,12 +224,59 @@ async def test_default_off_no_memory_checkpoint_model_or_reschedule(autumbra, mo
     b = autumbra
     monkeypatch.delenv('GHOST_BRAIN_ENABLED')
     before_calls = list(b.stack.calls)
-    result = await b.task()
-    assert result['status'] == 'paused' and result['source'] == 'brain_off'
+    result = await b.request('POST','/brain/tasks',body={'task_type':TASK,'text':TEXT})
+    assert result.status_code == 503 and 'GHOST_BRAIN_ENABLED' in result.text
     assert b.stack.calls == before_calls and b.state.provider_calls == []
+    assert b.state.network == []
     assert b.store.db.execute('SELECT count(*) FROM ghost_brain_runs').fetchone()[0] == 0
     assert (await b.request('POST','/memory',body={'tenant_id':b.stack.tenant,'user_id':A,'kind':'incident',
             'text':'should not save','evidence':['urn:fixture']})).status_code == 503
+
+
+@pytest.mark.parametrize('setting', [None, 'false'])
+async def test_direct_tank_route_default_off_has_no_work(autumbra, monkeypatch, setting):
+    b = autumbra
+    if setting is None:
+        monkeypatch.delenv('GHOST_BRAIN_ENABLED')
+    else:
+        monkeypatch.setenv('GHOST_BRAIN_ENABLED',setting)
+    payload = {'tenant_id':b.stack.tenant,'task_type':TASK,'messages':[{'role':'user','content':TEXT}]}
+    async with b.tank.pool().acquire() as conn:
+        policies = await conn.fetch("SELECT semantic_cache,cache_scope,matter_matching FROM tank.policy WHERE task_type LIKE 'ghost.brain.%'")
+        assert len(policies) == 4
+        assert all(not p['semantic_cache'] and p['cache_scope'] == 'none' and p['matter_matching'] for p in policies)
+        tables = ('ledger','engine_state','engine_evals','route_cache')
+        before = [await conn.fetchval('SELECT count(*) FROM tank.'+table) for table in tables]
+    response = await b.client.post('/v1/route',json=payload,headers={'X-Tank-Key':b.stack.key})
+    assert response.status_code == 503 and 'GHOST_BRAIN_ENABLED' in response.text
+    # Internal calls without a task id have the same gate as HTTP calls.
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException, match='GHOST_BRAIN_ENABLED'):
+        await b.tank._check_route_task(b.tank.RouteRequest(**payload),None)
+    assert b.tank.model_call_refusal(TEXT,'luna',box='us-east',tenant_id=b.stack.tenant,task_type=TASK) == 'GHOST_BRAIN_ENABLED is off.'
+    async with b.tank.pool().acquire() as conn:
+        assert before == [await conn.fetchval('SELECT count(*) FROM tank.'+table) for table in tables]
+    assert not b.state.network and not b.state.provider_calls and not b.stack.calls
+    assert b.store.db.execute('SELECT count(*) FROM ghost_brain_runs').fetchone()[0] == 0
+
+
+@pytest.mark.parametrize('refusal', ['service_key','signin','grant','path','method'])
+async def test_shipped_ingress_auth_grant_and_allowlist(autumbra, refusal):
+    b = autumbra
+    if refusal == 'service_key':
+        response = await b.request('GET','/memory',headers={'X-Tank-Key':'placeholder-wrong-key'})
+    elif refusal == 'signin':
+        response = await b.client.get('/v1/ghost/autumbra/personal/memory',
+                    headers={'X-Tank-Key':b.tank.TANK_API_KEY,'X-Tervory-Tenant':b.stack.tenant,'X-Tervory-User':A})
+    elif refusal == 'grant':
+        response = await b.request('GET','/memory',role='member')
+    elif refusal == 'path':
+        response = await b.request('POST','/enforce/create',body={})
+    else:
+        response = await b.request('DELETE','/brain/tasks')
+    assert response.status_code in {401,403,404}, response.text
+    assert not b.state.network and not b.state.provider_calls
+    assert b.store.db.execute('SELECT count(*) FROM ghost_brain_runs').fetchone()[0] == 0
 
 
 async def test_opt_in_deployment_and_existing_boundaries():
@@ -248,6 +296,9 @@ async def test_actual_task_receipt_remember_and_exact_business_repeat(autumbra):
     changed = await b.task(text=TEXT + ' after rollback')
     assert first['status'] == repeat['status'] == changed['status'] == 'done'
     assert first_calls == 1 and len(b.state.provider_calls) == 2
+    import engine_ladder
+    assert b.state.catalogue == engine_ladder.order({'model':'luna'})
+    assert all(call['model'] == b.state.catalogue[0] for call in b.state.provider_calls)
     assert first['task_id'] != repeat['task_id'] != changed['task_id']
     assert (first['cost_usd'],first['tokens_in'],first['tokens_out']) == (COST,TOKENS_IN,TOKENS_OUT)
     assert (repeat['cost_usd'],repeat['tokens_in'],repeat['tokens_out']) == (0,0,0)
@@ -263,6 +314,15 @@ async def test_actual_task_receipt_remember_and_exact_business_repeat(autumbra):
         receipts = await conn.fetch('SELECT cost_usd,tokens_in,tokens_out FROM tank.ledger WHERE tenant_id=$1 AND task_type=$2',uuid.UUID(b.stack.tenant),TASK)
     assert len(receipts) == 2 and sum(float(r['cost_usd']) for r in receipts) == 2*COST
     print(f'FAKE provider: first calls=1 cost={COST} tokens={TOKENS_IN}/{TOKENS_OUT}; exact repeat calls=0 cost=0 tokens=0/0; changed calls=1 cost={COST} tokens={TOKENS_IN}/{TOKENS_OUT}')
+
+
+async def test_missing_serving_rung_does_not_bypass_ladder(autumbra):
+    b = autumbra
+    missing = b.state.catalogue.pop(0)
+    response = await b.client.post('/v1/route',headers={'X-Tank-Key':b.stack.key},
+        json={'tenant_id':b.stack.tenant,'task_type':TASK,'messages':[{'role':'user','content':TEXT}]})
+    assert response.status_code == 503 and 'Engine rung unavailable: ' + missing in response.text
+    assert not b.state.provider_calls
 
 
 async def test_free_code_before_model(autumbra):

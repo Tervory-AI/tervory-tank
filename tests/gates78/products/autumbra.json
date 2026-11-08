@@ -1,15 +1,16 @@
 {
   "product": "autumbra",
-  "source_sha": "da82c0b1e79e405fffc936825f27a6a363af4934",
+  "source_sha": "992931b09e0565ea634ac3e45c10ab4c38882f02",
   "entrypoints": [
-    "TriggerSigninMiddleware -> paid_http.Client/product_identity.attach -> Watch",
+    "Tank app TriggerSigninMiddleware -> /v1/ghost/autumbra/personal/{path} -> command.identity/require_tool -> call_room/product_identity.attach -> Watch",
     "POST /brain/tasks -> ghost.brain.Brain.run -> ghost.brain_service POST /tasks -> Tank POST /v1/route",
     "POST /brain/corrections",
     "GET/POST /memory",
     "GET/PATCH/DELETE /memory/{record_id}",
     "POST /memory/recall",
     "PUT /memory/settings",
-    "Watch MemoryClient -> Tank /v1/ghost/autumbra/memory/{records,recall,memories} -> Hermes create_app / Records / Qdrant"
+    "Watch MemoryClient -> Tank /v1/ghost/autumbra/memory/{records,recall,memories} -> Hermes create_app / Records / Qdrant",
+    "Tank POST /v1/route and _check_route_task reject ghost.brain.* unless GHOST_BRAIN_ENABLED is explicitly enabled"
   ],
   "legacy_tests": [
     "tests/test_autumbra_gates_7_8.py::test_1_request_brain_tank_route_receipt_memory",
@@ -43,7 +44,8 @@
       "tests/gates78/products/test_autumbra.py::test_required_owner_unsigned_and_body_impersonation"
     ],
     "G7.signed_actor": [
-      "tests/gates78/products/test_autumbra.py::test_real_oidc_signed_actor_and_header_impersonation"
+      "tests/gates78/products/test_autumbra.py::test_real_oidc_signed_actor_and_header_impersonation",
+      "tests/gates78/products/test_autumbra.py::test_shipped_ingress_auth_grant_and_allowlist"
     ],
     "G7.assertion_rejection": [
       "tests/gates78/products/test_autumbra.py::test_assertion_rejection"
@@ -68,16 +70,19 @@
     ],
     "G7.runtime_contract": [
       "tests/gates78/products/test_autumbra.py::test_runtime_contract",
-      "tests/gates78/products/test_autumbra.py::test_owner_crud_and_meaningful_kinds"
+      "tests/gates78/products/test_autumbra.py::test_owner_crud_and_meaningful_kinds",
+      "tests/gates78/products/test_autumbra.py::test_shipped_ingress_auth_grant_and_allowlist"
     ],
     "G8.default_off": [
       "tests/gates78/products/test_autumbra.py::test_default_off_no_memory_checkpoint_model_or_reschedule",
-      "tests/gates78/products/test_autumbra.py::test_opt_in_deployment_and_existing_boundaries"
+      "tests/gates78/products/test_autumbra.py::test_opt_in_deployment_and_existing_boundaries",
+      "tests/gates78/products/test_autumbra.py::test_direct_tank_route_default_off_has_no_work"
     ],
     "G8.task_path": [
       "tests/gates78/products/test_autumbra.py::test_actual_task_receipt_remember_and_exact_business_repeat",
       "tests/gates78/products/test_autumbra.py::test_free_code_before_model",
-      "tests/gates78/products/test_autumbra.py::test_scope_input_and_ineligible_misses"
+      "tests/gates78/products/test_autumbra.py::test_scope_input_and_ineligible_misses",
+      "tests/gates78/products/test_autumbra.py::test_missing_serving_rung_does_not_bypass_ladder"
     ],
     "G8.free_first": [
       "tests/gates78/products/test_autumbra.py::test_free_code_before_model"

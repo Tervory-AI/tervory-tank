@@ -12,8 +12,6 @@ import asyncpg
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI, Request
-from fastapi.responses import Response
 
 ROOT = Path(__file__).resolve().parents[3]
 A, B = 'placeholder-alice', 'placeholder-bob'
@@ -41,7 +39,8 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
     from agents.ghost.store import Store
     from chassis.memory import MemoryClient
     from trigger_signin_fakes import Provider, install_registry
-    from trigger_signin_guard import TriggerSigninMiddleware
+    import engine_ladder
+    import engine_models
     import identity_oidc
     import main as tank
     import paid_http
@@ -60,17 +59,25 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
                        'TANK_URL':'http://tank:8000', 'LITELLM_MASTER_KEY':'placeholder-offline-provider'}.items():
         monkeypatch.setenv(key, value)
     monkeypatch.setattr(tank, 'TANK_API_KEY', WORKSPACE_KEY)
+    # No live local runtime: catalogue and approvals mirror the available ladder.
+    monkeypatch.delenv('ENGINE_LOCAL_URL', raising=False)
+    monkeypatch.delenv('ENGINE_LARGE_URL', raising=False)
+    models = engine_ladder.order({'model':'luna'})
+    state.catalogue = list(models)
     # A private DB for actual policy/admission/ledger code. No fake SQL or receipts.
     admin = await asyncpg.connect(os.environ['MEMORY_TEST_DATABASE_URL'])
     dbname = 'autumbra_gate78_' + uuid.uuid4().hex
     await admin.execute(f'CREATE DATABASE "{dbname}"')
     url = urlunsplit(urlsplit(os.environ['MEMORY_TEST_DATABASE_URL'])._replace(path='/' + dbname))
+    monkeypatch.setattr(tank, 'DATABASE_URL', url)
+    monkeypatch.setattr(tank, 'LITELLM_MASTER_KEY', 'placeholder-offline-provider')
     raw = restricted = old_pool = role = None
     try:
         raw = await asyncpg.create_pool(url, min_size=1, max_size=5)
         monkeypatch.setattr(tank, '_pool', TenantPool(raw))
         monkeypatch.setattr(tank, '_admin_pool', None)
         monkeypatch.setattr(tank, '_redis', None)
+        monkeypatch.setattr(tank, '_roster_cache', None)
         monkeypatch.setattr(tank, '_agent_keys_synced', False)
         async with raw.acquire() as conn:
             await conn.execute((ROOT/'tank/schema.sql').read_text())
@@ -78,10 +85,11 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
             assert set(TASK_TYPES) <= {row['task_type'] for row in policies}, 'BLOCKED: apply PR #3 policy/corridor patches to Tank before acceptance'
             for tenant in (stack.tenant, stack.other_tenant):
                 for task in TASK_TYPES:
-                    step = paid_steps.model_step(task, 'luna', agent='ghost')
-                    await paid_steps.register(conn, step, 'autumbra', 'model', 'tank.policy', task=task, model='luna')
-                    await conn.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,$2,'auto','placeholder-offline-owner')",
-                                       uuid.UUID(tenant), step)
+                    for model in models:
+                        step = paid_steps.model_step(task, model, agent='ghost')
+                        await paid_steps.register(conn, step, 'autumbra', 'model', 'tank.policy', task=task, model=model)
+                        await conn.execute("INSERT INTO tank.paid_step_settings(tenant_id,step_id,mode,updated_by) VALUES($1,$2,'auto','placeholder-offline-owner')",
+                                           uuid.UUID(tenant), step)
 
         # Real non-superuser SQL, with the same schema privileges used by agent roles.
         schema = stack.records.schema('ghost')
@@ -113,13 +121,15 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
                 return response
             if request.url.host == 'litellm':
                 if request.url.path == '/model/info':
-                    return httpx.Response(200, json={'data':[{'model_name':'luna','litellm_params':{'model':'placeholder/luna'},
-                        'model_info':{'input_cost_per_token':.000001,'output_cost_per_token':.000001}}]})
+                    return httpx.Response(200, json={'data':[{'model_name':model,
+                        'litellm_params':{'model':engine_models.SELECTED.get(model, 'placeholder/' + model)},
+                        'model_info':{'input_cost_per_token':.000001,'output_cost_per_token':.000001}}
+                        for model in state.catalogue]})
                 if request.url.path == '/router/settings':
                     return httpx.Response(200, json={'current_values':{'fallbacks':[]}})
                 assert request.url.path == '/v1/chat/completions', request.url
                 state.provider_calls.append(json.loads(request.content))
-                return httpx.Response(200, headers={'x-litellm-response-cost':str(COST), 'x-litellm-model-group':'luna'},
+                return httpx.Response(200, headers={'x-litellm-response-cost':str(COST), 'x-litellm-model-group':state.provider_calls[-1]['model']},
                     json={'choices':[{'message':{'content':f'Fixture analysis {len(state.provider_calls)}: inspect the deployment rule.'}}],
                           'usage':{'prompt_tokens':TOKENS_IN,'completion_tokens':TOKENS_OUT}})
             raise AssertionError('Unexpected network edge: ' + str(request.url))
@@ -141,27 +151,13 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
             apps['autumbra-brain'] = brain_app(network)
             watch.state.user_memory = UserMemory(MemoryClient('http://tank:8000/v1/ghost/autumbra/memory', stack.key, 'ghost', network), store)
             watch.state.brain = Brain(watch.state.user_memory, _brain_service(network), [classify_alert_code])
-            ingress = FastAPI()
-            ingress.add_middleware(TriggerSigninMiddleware)
-
-            @ingress.api_route('/entry/{path:path}', methods=['GET','POST','PUT','PATCH','DELETE'])
-            async def entry(path: str, request: Request):
-                await tank.require_key(request, request.headers.get('X-Tank-Key',''))
-                target = 'http://agent-ghost:8000/' + path
-                if request.url.query:
-                    target += '?' + request.url.query
-                async with paid() as client:
-                    answer = await client.request(request.method, target, content=await request.body(),
-                                                  headers={'X-Tank-Key':stack.key, 'Content-Type':'application/json'})
-                return Response(answer.content, answer.status_code, media_type='application/json')
-
-            client = await cleanup.enter_async_context(original_http(transport=httpx.ASGITransport(app=ingress), base_url='http://entry'))
+            client = await cleanup.enter_async_context(original_http(transport=httpx.ASGITransport(app=tank.app), base_url='http://tank'))
             direct = await cleanup.enter_async_context(original_http(transport=httpx.ASGITransport(app=watch), base_url='http://agent-ghost',
                                                                     headers={'X-Tank-Key':stack.key}))
-            async def request(method, path, *, user=A, tenant=None, body=None, headers=None):
+            async def request(method, path, *, user=A, tenant=None, body=None, headers=None, role="org_admin"):
                 tenant = tenant or stack.tenant
-                identity = {'X-Tank-Key':WORKSPACE_KEY, **provider.workspace_headers(user, tenant), **(headers or {})}
-                return await client.request(method, '/entry' + path, headers=identity, **({'json':body} if body is not None else {}))
+                identity = {'X-Tank-Key':WORKSPACE_KEY, **provider.workspace_headers(user, tenant, role=role), **(headers or {})}
+                return await client.request(method, '/v1/ghost/autumbra/personal' + path, headers=identity, **({'json':body} if body is not None else {}))
 
             async def task(*, user=A, tenant=None, text=TEXT, task_type=TASK, run_id=None):
                 tenant = tenant or stack.tenant
