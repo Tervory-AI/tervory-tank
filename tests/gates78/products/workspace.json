@@ -1,6 +1,6 @@
 {
   "product": "workspace",
-  "source_sha": "5ec069d50e929745845a19142356593dc3bd7f80",
+  "source_sha": "9cf7135608e89ec7353e7bcb48dfbfefae2554dc",
   "entrypoints": [
     "POST /v1/command/workspace/chat",
     "POST /v1/command/workspace/task.create",
@@ -67,12 +67,14 @@
     "G7.same_tenant": [
       "tests/gates78/products/test_workspace.py::test_foreign_reads_mutations_and_receipt_leaks",
       "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls",
-      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged"
+      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart"
     ],
     "G7.other_tenant": [
       "tests/gates78/products/test_workspace.py::test_foreign_reads_mutations_and_receipt_leaks",
       "tests/gates78/products/test_workspace.py::test_owner_crud_and_controls",
-      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged"
+      "tests/gates78/products/test_workspace.py::test_denied_control_keeps_memory_settings_and_receipts_unchanged",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart"
     ],
     "G7.tenant_wide": [
       "tests/gates78/products/test_workspace.py::test_declared_tenant_wide_and_personal_owner"
@@ -88,7 +90,9 @@
       "tests/gates78/products/test_workspace.py::test_assertion_binding_is_real_and_fail_closed"
     ],
     "G7.replay": [
-      "tests/gates78/products/test_workspace.py::test_nonce_replay_concurrent_restart_and_forget"
+      "tests/gates78/products/test_workspace.py::test_nonce_replay_concurrent_restart_and_forget",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart",
+      "tests/gates78/products/test_workspace.py::test_completed_task_remember_failure_checkpoint_survives_restart"
     ],
     "G7.sql_before_vector": [
       "tests/gates78/products/test_workspace.py::test_sql_candidates_are_owned_before_vector_limit"
@@ -118,7 +122,8 @@
     ],
     "G8.task_path": [
       "tests/gates78/products/test_workspace.py::test_paid_entry_runs_real_tank_lifecycle",
-      "tests/gates78/products/test_workspace.py::test_confirm_replay_does_not_enqueue_or_pay_twice"
+      "tests/gates78/products/test_workspace.py::test_confirm_replay_does_not_enqueue_or_pay_twice",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart"
     ],
     "G8.free_first": [
       "tests/gates78/products/test_workspace.py::test_code_free_action_uses_real_receipt_before_any_provider",
@@ -138,18 +143,22 @@
     "G8.forget": [
       "tests/gates78/products/test_workspace.py::test_correction_forget_and_off_invalidate_reusable_answers",
       "tests/gates78/products/test_workspace.py::test_nonce_replay_concurrent_restart_and_forget",
-      "tests/gates78/products/test_workspace.py::test_legacy_requirements_and_product_browser_entrypoints_are_retained"
+      "tests/gates78/products/test_workspace.py::test_legacy_requirements_and_product_browser_entrypoints_are_retained",
+      "tests/gates78/products/test_workspace.py::test_completed_task_memory_is_owned_and_forget_survives_restart"
     ],
     "G8.memory_off": [
-      "tests/gates78/products/test_workspace.py::test_memory_off_is_per_user_and_does_not_recall_or_remember"
+      "tests/gates78/products/test_workspace.py::test_memory_off_is_per_user_and_does_not_recall_or_remember",
+      "tests/gates78/products/test_workspace.py::test_memory_off_propagates_to_worker_and_resets_for_next_actor"
     ],
     "G8.outage": [
       "tests/gates78/products/test_workspace.py::test_memory_network_outage_is_truthful_and_no_double_payment",
-      "tests/gates78/products/test_workspace.py::test_post_payment_remember_failure_returns_existing_receipt_once"
+      "tests/gates78/products/test_workspace.py::test_post_payment_remember_failure_returns_existing_receipt_once",
+      "tests/gates78/products/test_workspace.py::test_completed_task_remember_failure_checkpoint_survives_restart"
     ],
     "G8.auth_not_outage": [
       "tests/gates78/products/test_workspace.py::test_auth_failure_is_not_a_memory_outage",
-      "tests/gates78/products/test_workspace.py::test_post_payment_auth_refusal_preserves_model_receipt_without_retry"
+      "tests/gates78/products/test_workspace.py::test_post_payment_auth_refusal_preserves_model_receipt_without_retry",
+      "tests/gates78/products/test_workspace.py::test_completed_task_remember_failure_checkpoint_survives_restart"
     ],
     "G8.receipts": [
       "tests/gates78/products/test_workspace.py::test_first_repeat_changed_input_receipts_reconcile",
@@ -161,7 +170,8 @@
     "G8.retry_concurrency": [
       "tests/gates78/products/test_workspace.py::test_retry_and_concurrent_paid_requests_keep_accounting",
       "tests/gates78/products/test_workspace.py::test_nonce_replay_concurrent_restart_and_forget",
-      "tests/gates78/products/test_workspace.py::test_confirm_replay_does_not_enqueue_or_pay_twice"
+      "tests/gates78/products/test_workspace.py::test_confirm_replay_does_not_enqueue_or_pay_twice",
+      "tests/gates78/products/test_workspace.py::test_completed_task_remember_failure_checkpoint_survives_restart"
     ],
     "G8.product_regressions": [
       "tests/gates78/products/test_workspace.py::test_legacy_requirements_and_product_browser_entrypoints_are_retained"

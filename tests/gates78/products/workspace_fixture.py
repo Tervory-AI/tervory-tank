@@ -15,6 +15,7 @@ from fastapi import FastAPI
 import engine_models
 import paid_steps
 
+from tank_routing.litellm_probe import COMPLETIONS_PATH
 from command_tools import workspace
 from command_tools._workspace.memory_client import build_workspace_memory_client
 from trigger_signin_fakes import native_provider
@@ -89,6 +90,7 @@ async def workspace_entry(gate78_memory, monkeypatch):
                 'litellm_params': {'model': 'placeholder/' + name},
                 'model_info': {'input_cost_per_token': .001, 'output_cost_per_token': .001}}
                 for name in names]})
+        assert request.method == 'POST' and request.url.path == COMPLETIONS_PATH
         timeline.append(('PAID', request.url.path))
         calls.append(json.loads(request.content))
         return httpx.Response(200, headers={'x-litellm-response-cost': '0.013'}, json={'id': 'placeholder-completion', 'model': calls[-1]['model'],
@@ -171,8 +173,21 @@ async def workspace_entry(gate78_memory, monkeypatch):
         reply = await client.post(f"/v1/command/cards/{card.json()['card_id']}", json={'action': 'confirm'}, headers=signed)
         assert reply.status_code == 200, reply.text
         return reply
+    async def restart():
+        nonlocal app, client
+        await client.aclose()
+        # Recreate the serving application and adapter; SQL checkpoints and the
+        # existing Hermes service survive, as they do across a Tank restart.
+        importlib.reload(workspace)
+        app = FastAPI()
+        app.add_middleware(TriggerSigninMiddleware)
+        app.include_router(command.router)
+        app.include_router(workspace.build_router())
+        app.add_middleware(paid_steps.ApprovalMiddleware)
+        monkeypatch.setattr(main, 'app', app)
+        client = actual_client(transport=httpx.ASGITransport(app=app), base_url='http://placeholder-workspace')
     entry = SimpleNamespace(stack=stack, pool=pool, main=main, client=client, request=request,
-        app=app, records=records, engine_schema=engine_schema, headers=headers, provider=provider, memory=memory, provider_calls=calls, requests=requests,
+        app=app, restart=restart, records=records, engine_schema=engine_schema, headers=headers, provider=provider, memory=memory, provider_calls=calls, requests=requests,
         fault=fault, snapshot=snapshot, seed=seed, originals=originals, timeline=timeline, confirmed_task=confirmed_task, statuses=statuses)
     try:
         yield entry

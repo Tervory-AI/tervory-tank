@@ -26,7 +26,7 @@ import workspace_fixture
 
 workspace_entry = workspace_fixture.workspace_entry
 
-SOURCE_SHA = '5ec069d50e929745845a19142356593dc3bd7f80'
+SOURCE_SHA = '9cf7135608e89ec7353e7bcb48dfbfefae2554dc'
 ROOT = Path(__file__).resolve().parents[3]
 CHAT = {'messages': [{'role': 'user', 'content': 'placeholder summarize the project'}], 'task_type': 'tier0.answer'}
 
@@ -550,12 +550,15 @@ async def test_capture_first_repeat_changed_actual_entry_metrics(workspace_entry
         measurements.append({'run': label, 'http_status': response.status_code,
             'provider_calls': len(e.provider_calls)-before,
             'receipt_cost_usd': float(row['cost_usd']) if row else None,
+            'would_have_cost_usd': data.get('receipt', {}).get('baseline_cost_usd'),
             'tokens_in': row['tokens_in'] if row else None, 'tokens_out': row['tokens_out'] if row else None,
             'outcome': row['outcome'] if row else None})
     print('WORKSPACE_GATE78_MEASUREMENTS=' + json.dumps(measurements, sort_keys=True))
     assert all(row['http_status'] == 200 for row in measurements), 'BLOCKED: no successful paid-path fixture measurement'
     assert measurements[0]['provider_calls'] == measurements[2]['provider_calls'] == 1
     assert measurements[1]['provider_calls'] == measurements[1]['tokens_in'] == measurements[1]['tokens_out'] == 0
+    assert [row['receipt_cost_usd'] for row in measurements] == [.013, 0, .013]
+    assert measurements[1]['would_have_cost_usd'] == .013
 
 
 @pytest.mark.asyncio
@@ -651,3 +654,98 @@ async def test_confirm_replay_does_not_enqueue_or_pay_twice(workspace_entry):
         await task
     assert await e.pool.fetchval('SELECT count(*) FROM tank.tasks WHERE tenant_id=$1', UUID(e.stack.tenant)) == 1
     assert len(e.provider_calls) == 1
+
+
+async def completed_task(e, **changes):
+    body = {'title': 'placeholder checkpoint task', 'request': 'placeholder checkpoint request', **changes}
+    await e.confirmed_task(body)
+    async with asyncio.timeout(10):
+        while True:
+            row = await e.pool.fetchrow('SELECT * FROM tank.tasks WHERE tenant_id=$1 AND title=$2',
+                                        UUID(e.stack.tenant), body['title'])
+            if row and row['status'] in {'done', 'failed'}:
+                break
+            await asyncio.sleep(.01)
+    assert row['status'] == 'done', row['error']
+    assert len(e.provider_calls) == 1
+    assert not await e.pool.fetchval('SELECT count(*) FROM tank.workspace_task_memory WHERE task_id=$1', row['id'])
+    return row
+
+
+@pytest.mark.asyncio
+async def test_completed_task_memory_is_owned_and_forget_survives_restart(workspace_entry):
+    e = workspace_entry
+    task = await completed_task(e)
+    for scope in ({'user': USER_B}, {'tenant': e.stack.other_tenant}):
+        before = await e.snapshot()
+        denied = await e.request('task.receipt', {'task_id': str(task['id'])}, method='GET', **scope)
+        assert denied.status_code in {403, 404}, denied.text
+        assert await e.snapshot() == before
+        assert not await e.pool.fetchval('SELECT count(*) FROM tank.workspace_task_memory WHERE task_id=$1', task['id'])
+    result = await e.request('task.receipt', {'task_id': str(task['id'])}, method='GET')
+    assert result.status_code == 200, result.text
+    marker = await e.pool.fetchrow('SELECT * FROM tank.workspace_task_memory WHERE task_id=$1', task['id'])
+    assert marker['state'] == 'done' and marker['user_id'] == USER_A and str(marker['tenant_id']) == e.stack.tenant
+    memories = await e.snapshot()
+    assert memories
+    for row in memories:
+        forgotten = await e.request('memory.forget', {'memory_id': str(row['id'])})
+        assert forgotten.status_code == 200, forgotten.text
+    await e.restart()
+    e.stack.calls.clear()
+    for route, body in [('tasks', {}), ('task.receipt', {'task_id': str(task['id'])})]:
+        polled = await e.request(route, body, method='GET')
+        assert polled.status_code == 200, polled.text
+    assert not await e.snapshot() and not e.stack.calls
+    assert dict(await e.pool.fetchrow('SELECT * FROM tank.workspace_task_memory WHERE task_id=$1', task['id'])) == dict(marker)
+    assert len(e.provider_calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [503, 401, 403])
+async def test_completed_task_remember_failure_checkpoint_survives_restart(workspace_entry, status):
+    e = workspace_entry
+    task = await completed_task(e)
+    e.fault.update(method='POST', path='/memories', status=status)
+    result = await e.request('task.receipt', {'task_id': str(task['id'])}, method='GET')
+    assert result.status_code == (200 if status == 503 else status), result.text
+    assert e.fault['hits'] == 1
+    if status == 503:
+        bracket = result.json()['memory_bracket']
+        assert bracket['memory_unavailable'] and bracket['paid_calls'] == 1
+        assert bracket['cost_usd'] == .013 and bracket['tokens_in'] == 10 and bracket['tokens_out'] == 3
+    marker = await e.pool.fetchrow('SELECT * FROM tank.workspace_task_memory WHERE task_id=$1', task['id'])
+    assert marker['state'] == ('unavailable' if status == 503 else 'denied')
+    assert marker['user_id'] == USER_A and str(marker['tenant_id']) == e.stack.tenant
+    paid_before = dict(await e.pool.fetchrow('SELECT * FROM tank.ledger WHERE id=$1', task['ledger_id']))
+    await e.restart()
+    e.fault.update(method=None, path=None)
+    e.stack.calls.clear()
+    for _ in range(2):
+        polled = await e.request('task.receipt', {'task_id': str(task['id'])}, method='GET')
+        assert polled.status_code == (200 if status == 503 else 403), polled.text
+    assert not e.stack.calls and not await e.snapshot()
+    assert dict(await e.pool.fetchrow('SELECT * FROM tank.workspace_task_memory WHERE task_id=$1', task['id'])) == dict(marker)
+    assert dict(await e.pool.fetchrow('SELECT * FROM tank.ledger WHERE id=$1', task['ledger_id'])) == paid_before
+    assert len(e.provider_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_memory_off_propagates_to_worker_and_resets_for_next_actor(workspace_entry):
+    e = workspace_entry
+    assert (await e.request('memory.control', {'control': 'off'})).status_code == 200
+    e.stack.calls.clear()
+    await completed_task(e)
+    assert e.stack.calls and all(method == 'GET' and path == '/records' for method, path in e.stack.calls)
+    assert not await e.pool.fetchval(f'SELECT count(*) FROM {e.engine_schema}.memory_records')
+    e.stack.calls.clear()
+    await chat(e, user=USER_B)
+    assert ('POST', '/engine/recall') in e.stack.calls and ('POST', '/engine/remember') in e.stack.calls
+    rows = await e.pool.fetch(f'SELECT meta FROM {e.engine_schema}.memory_records')
+    assert rows and all(json.loads(row['meta'])['user_id'] == USER_B for row in rows)
+    assert (await e.request('memory.control', {'control': 'edit'})).status_code == 200
+    e.stack.calls.clear()
+    await chat(e)
+    assert ('POST', '/engine/recall') in e.stack.calls and ('POST', '/engine/remember') in e.stack.calls
+    owners = {json.loads(row['meta'])['user_id'] for row in await e.pool.fetch(f'SELECT meta FROM {e.engine_schema}.memory_records')}
+    assert owners == {USER_A, USER_B}
