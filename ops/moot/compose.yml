@@ -42,7 +42,7 @@ services:
     cpus: 2
     pids_limit: 256
   livekit-tls:
-    image: nginx:stable-alpine@sha256:583b7f2fce1cdb8da5ad5c39ebd3c33b98b87d493190e548bdee1fa8c619c311
+    image: nginx:1.30.6-alpine@sha256:583b7f2fce1cdb8da5ad5c39ebd3c33b98b87d493190e548bdee1fa8c619c311
     user: '10004:10004'
     group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
     entrypoint: [nginx]
@@ -74,6 +74,7 @@ services:
   boundary:
     build: {context: ., dockerfile: Dockerfile.boundary}
     user: '10002:10002'
+    group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
     environment:
       MOOT_REGION: ${MOOT_REGION:?set MOOT_REGION}
       SSL_CERT_FILE: /run/moot/tls-ca.crt
