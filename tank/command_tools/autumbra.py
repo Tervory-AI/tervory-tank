@@ -89,8 +89,8 @@ CLIENT_ACTIONS = {'settings': NoArgs, 'settings.set': Modes, 'receipts': NoArgs,
                   'shield.approve': OwnerAction, 'shield.undo': OwnerAction, 'hands': NoArgs, 'hands.set': HandArgs}
 WATCH_ACTIONS = {'look': LookArgs, 'incidents': NoArgs, 'resolve': ResolveArgs,
                  'shields': NoArgs, 'shields.raise': ShieldArgs, 'shields.undo': ShieldArgs}
-TENANT_ADMIN_TOOLS += ['autumbra.' + name for name in CLIENT_ACTIONS]
-FOUNDER_TOOLS += ['autumbra.' + name for name in CLIENT_ACTIONS | WATCH_ACTIONS]
+TENANT_ADMIN_TOOLS += ['autumbra.settings', 'autumbra.settings.set', 'autumbra.receipts', 'autumbra.shield.approve', 'autumbra.shield.undo', 'autumbra.hands', 'autumbra.hands.set']
+FOUNDER_TOOLS += ['autumbra.settings', 'autumbra.settings.set', 'autumbra.receipts', 'autumbra.shield.approve', 'autumbra.shield.undo', 'autumbra.hands', 'autumbra.hands.set', 'autumbra.look', 'autumbra.incidents', 'autumbra.resolve', 'autumbra.shields', 'autumbra.shields.raise', 'autumbra.shields.undo']
 REQUEST_BODY_TOOLS |= frozenset('autumbra.' + name for name in CLIENT_ACTIONS | WATCH_ACTIONS)
 CONFIRMED |= frozenset('autumbra.' + name for name in
                       ('hands.set', 'settings.set', 'shield.approve', 'shield.undo', 'resolve', 'shields.raise', 'shields.undo'))
