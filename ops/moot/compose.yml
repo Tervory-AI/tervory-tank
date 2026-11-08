@@ -24,7 +24,10 @@ services:
     group_add: ['${MOOT_CONFIG_GID:?set MOOT_CONFIG_GID}']
     command: [--config, /run/moot/livekit.json]
     volumes:
-      - ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/livekit.json:/run/moot/livekit.json:ro
+      - type: bind
+        source: ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/livekit.json
+        target: /run/moot/livekit.json
+        read_only: true
     networks: [control, media]
     ports:
       - '127.0.0.1:7880:7880/tcp'
@@ -67,7 +70,10 @@ services:
     environment:
       EGRESS_CONFIG_FILE: /run/moot/egress.json
     volumes:
-      - ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/egress.json:/run/moot/egress.json:ro
+      - type: bind
+        source: ${MOOT_CONFIG_DIR:?set MOOT_CONFIG_DIR}/egress.json
+        target: /run/moot/egress.json
+        read_only: true
       - recordings:/out
     networks: [control, media]
     depends_on:
