@@ -8,7 +8,8 @@
     "POST /memory/edit",
     "POST /memory/forget",
     "POST /memory/switch",
-    "POST /check; POST /voice/show; POST /skala/languagetool"
+    "POST /check; POST /voice/show; POST /skala/languagetool",
+    "Hermes POST /founder/publish for an owned Trigger record and signed foreign-user/tenant refusal"
   ],
   "legacy_tests": [
     "tests/test_trigger_gates_7_8.py::test_product_request_brain_route_receipt_then_memory",
@@ -167,10 +168,11 @@
   "runtime_reference": {
     "product_pr": "Tervory-AI/tervory-trigger#1",
     "previous_product_sha": "f769d18f5da475a7c858e24fb00d5646a28a44e0",
-    "integrated_tank_runtime_sha": "e7d108e6fd5e8d00501e9e1309fa5264b1743613",
+    "integrated_tank_runtime_sha": "ea9f0d0418951ae7215a165e9df1e590902002fd",
     "foundation_sha": "514a539d933faf37857097f800ad55196a84614a",
-    "proposed_product_port_not_integrated": true,
-    "shared_fixture_corrections_sha": "373bc179e57c6230673058fa4c41a2325ea3d71a"
+    "proposed_product_port_not_integrated": false,
+    "shared_fixture_corrections_sha": "373bc179e57c6230673058fa4c41a2325ea3d71a",
+    "runtime_integration_pr": "Tervory-AI/tervory-tank#767 (merged)"
   },
   "fixture_boundaries": [
     "Local signed OIDC issuer; production verifier, middleware and nonce assertions unchanged",
@@ -179,7 +181,5 @@
     "HTTP fake only at provider/catalogue and LanguageTool network edges; fixture paid seats explicitly Auto through real admission",
     "Restricted role granted only the isolated product schema and nonce table; no superuser-only read proof"
   ],
-  "blocked_dependencies": [
-    "Proposed product runtime port and fixed-core vendor dependency await Head integration; no temporary patch is applied"
-  ]
+  "blocked_dependencies": []
 }

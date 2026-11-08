@@ -434,14 +434,59 @@ async def test_owner_get_single_record_and_foreign_guessed_ids(trigger_stack):
 
 @pytest.mark.asyncio
 async def test_foreign_records_cannot_be_published_or_shared(trigger_stack):
+    from chassis.user_assertion import bind_personal_headers
+    from hermes.publishing import Publisher
+    from hermes.record_schema import PLATFORM_TENANT
+    from test_agent_memory_records import inventory
+    from trigger_gate78_stack import actor
+
     b = trigger_stack
-    saved = await control(b, 'edit', body={'kind': 'trigger.tone', 'text': 'placeholder private publishing refusal', 'source': 'urn:placeholder:publish'})
+    private = 'placeholder private publishing refusal'
+    saved = await control(b, 'edit', user=USER_B, body={
+        'kind': 'trigger.tone', 'text': private, 'source': 'urn:placeholder:publish'})
     assert saved.status_code == 200
+    ident = saved.json()['memory']['id']
+    own = await b.http.send(await signed_request(b, 'GET',
+        '/memory/records/' + ident + '?tenant_id=' + b.tenant, user=USER_B))
+    assert own.status_code == 200 and own.json()['memory']['claim'] == private
+    assert own.json()['memory']['meta']['user_id'] == USER_B
+
+    # Exercise the real publisher with a usable policy in both isolated tenants.
+    publisher = Publisher(b.stack.records)
+    for tenant in (b.tenant, b.other):
+        await publisher.set_policy('trigger', tenant, USER_B, True, inventory())
+
+    async def publish(user, tenant):
+        who = await actor(b, user, tenant)
+        body = {'agent': 'trigger', 'tenant_id': tenant, 'source_row': ident}
+        raw = json.dumps(body, sort_keys=True, separators=(',', ':')).encode()
+        key = 'placeholder-workspace-key'
+        signed = bind_personal_headers(key, 'POST', '/founder/publish',
+            tenant=str(who.tenant_id), user=who.user_id, body=raw)
+        return await b.stack.http.post('/founder/publish', content=raw, headers={
+            **signed, 'X-Tank-Key': key, 'X-Tervory-Admin': who.user_id,
+            'Content-Type': 'application/json'})
+
     before = await rows(b)
-    for user, tenant in ((USER_B, b.tenant), (USER_A, b.other)):
-        body = {'tenant_id': tenant, 'memory_id': saved.json()['memory']['id'], 'scope': 'tenant'}
-        response = await b.http.send(await signed_request(b, 'POST', '/memory/publish', user=user, tenant=tenant, body=body))
-        assert response.status_code in {403, 404} and await rows(b) == before
+    for user, tenant in ((USER_A, b.tenant), (USER_B, b.other)):
+        response = await publish(user, tenant)
+        assert response.status_code == 409
+        assert response.json()['detail'] == {'result': 'missing', 'published_row': None}
+        assert private not in response.text and await rows(b) == before
+    schema = b.stack.records.schema('trigger')
+    audit = await b.pool.fetch('SELECT actor,source_row,result,published_row FROM ' +
+                              schema + '.memory_publish_log ORDER BY happened_at')
+    assert [(r['actor'], str(r['source_row']), r['result'], r['published_row']) for r in audit] == [
+        (USER_A, ident, 'missing', None), (USER_B, ident, 'missing', None)]
+
+    # A positive owner publish rules out a disabled policy or an absent route/row.
+    published = await publish(USER_B, b.tenant)
+    assert published.status_code == 200, published.text
+    assert published.json()['result'] == 'published'
+    public = await b.stack.records.get('trigger', PLATFORM_TENANT,
+        published.json()['published_row'], tier='platform')
+    assert public is not None and public['claim'] == private
+    assert not b.net.providers
 
 
 @pytest.mark.asyncio
