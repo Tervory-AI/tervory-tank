@@ -466,10 +466,15 @@ async def test_editing_owned_result_replaces_it_and_invalidates_reuse(rig_wire):
     first = await wire.build()
     assert first['status'] == 'done'
     row = next(row for row in await wire.rows() if (row.get('meta') or {}).get('outcome'))
-    identity = created(await wire.edit('placeholder corrected result', kind='rig.correction', memory_id=row['id']))
+    before = await wire.persistent()
+    refused = await wire.edit('placeholder corrected result', kind='rig.correction', memory_id=row['id'])
+    assert refused.status_code == 422
+    assert await wire.persistent() == before
+    text = 'correction=placeholder corrected result'
+    identity = created(await wire.edit(text, kind=row['kind'], memory_id=row['id']))
     assert identity == row['id']
     rows = await wire.rows()
-    assert any(item['id'] == identity and item['text'] == 'placeholder corrected result' for item in rows)
+    assert any(item['id'] == identity and item['text'] == text for item in rows)
     assert not any((item.get('meta') or {}).get('outcome') for item in rows)
     corrected = await wire.build()
     assert corrected['summary'] == 'placeholder corrected result'
