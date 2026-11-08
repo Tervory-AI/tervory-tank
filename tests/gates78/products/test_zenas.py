@@ -446,6 +446,21 @@ async def test_stateful_moot_ai_turns_never_reuse_a_legal_answer(zenas,monkeypat
 
     from agents.zenas.core.moot.hearing import Actor, change
     from agents.zenas.core.moot.hearing_store import HearingStore
+    from agents.zenas.core import memory_task
+    monkeypatch.setenv('ZENAS_MEMORY_ENABLED', 'true')
+    monkeypatch.setenv('ZENAS_BRAIN_ENABLED', 'true')
+    await first_answer(zenas)
+    assert any(path == '/memories' for _, path in zenas.stack.calls)
+    memories = await zenas.snapshot()
+    memory_calls = list(zenas.stack.calls)
+    brain_calls = list(zenas.worker.calls)
+    prepare = memory_task.prepare
+    prepared = []
+    async def observe_prepare(request, payload):
+        prepared.append(request.url.path)
+        assert not request.url.path.startswith('/moot')
+        return await prepare(request, payload)
+    monkeypatch.setattr(memory_task, 'prepare', observe_prepare)
     set_founders(monkeypatch,USER_A)
     owner=Actor(zenas.stack.tenant,USER_A,zenas.body['home_region'],True)
     store=HearingStore(zenas.stack.records.pool)
@@ -457,13 +472,27 @@ async def test_stateful_moot_ai_turns_never_reuse_a_legal_answer(zenas,monkeypat
             state=await store.mutate(owner,state['id'],str(uuid4()),state['revision'],action,{},
                 lambda s,a,r,p,op=action:change(s,a,r,op,p))
         headers={**zenas.headers(),'X-Moot-Actor':USER_A,'X-Moot-Tenant':zenas.stack.tenant}
+        command = str(uuid4())
+        body = {'request_id':str(uuid4()),'revision':state['revision']}
         response=await zenas.request('POST',f"/moot/hearings/{state['id']}/ai",headers=headers,
-            body={'request_id':str(uuid4()),'revision':state['revision']})
+            body=body, run_id=command)
         assert response.status_code==200,response.text
         assert response.json()['hearing']['receipts']
+        assert response.json()['savings_receipt']['cost'] == FIXTURE_COST
+        replay=await zenas.request('POST',f"/moot/hearings/{state['id']}/ai",headers=headers,
+            body=body, run_id=command)
+        assert replay.status_code == 200 and replay.json() == response.json()
     assert len(zenas.model.calls)==before+2
+    assert not prepared
+    assert zenas.stack.calls == memory_calls and await zenas.snapshot() == memories
+    assert zenas.worker.calls == brain_calls
+    assert any(path.startswith('/moot/') and 'x-tervory-user-assertion' in headers
+               for _, path, _, headers in zenas.raw_assertions)
     assert not any((row.get('meta') or {}).get('task_key','').startswith('moot.')
                    for row in await zenas.records() if row['kind']=='zenas.result')
+    await first_answer(zenas, changes={'features': {**zenas.body['features'],
+        'facts': {'delivery':'placeholder updated civil delivery fact'}}})
+    assert '/answers' in prepared and len(await zenas.snapshot()) > len(memories)
 
 
 @pytest.mark.asyncio
