@@ -3939,7 +3939,8 @@ async def _run_one_skill(
 # ---------- Base: the room owns the worker; Tank only proxies ----------
 
 BASE_AGENT_URL = os.environ.get("BASE_AGENT_URL", "http://agent-base:8000")
-_BASE_ROUTES = {"run", "retry", "rerun", "batches", "engines", "records"}
+_BASE_ROUTES = {"run", "retry", "rerun", "batches", "engines", "records",
+                "memory", "memory/edit", "memory/forget", "memory/control"}
 
 
 @app.post("/v1/base/context-dev/trial", dependencies=[Depends(__import__("admin").require_admin)])
