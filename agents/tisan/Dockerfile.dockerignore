@@ -14,6 +14,9 @@
 !ops/
 !ops/live_check.mjs
 !ops/live_check_banned.txt
+!tank/
+tank/**
+!tank/cl100k_base.tiktoken
 **/.env*
 **/node_modules
 **/__pycache__
