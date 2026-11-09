@@ -2,7 +2,6 @@
 
 from trigger_signin_fakes import set_founders
 import copy
-import importlib.util
 import json
 import socket
 import sys
@@ -42,10 +41,10 @@ async def runtime(monkeypatch):
     monkeypatch.setenv("TANK_API_KEY", "placeholder-tank-key")
     set_founders(monkeypatch, "placeholder-founder")
     import main
-    spec = importlib.util.spec_from_file_location("placeholder_tg1_room", ROOT / "agents/tiger/app.py")
-    agent = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, spec.name, agent)
-    spec.loader.exec_module(agent)
+    from test_tiger import _load
+    name = "placeholder_tg1_room"
+    monkeypatch.setitem(sys.modules, name, None)
+    agent = _load(name, ROOT / "agents/tiger/app.py")
     store = MemoryStore()
     monkeypatch.setattr(agent, "_store", lambda: store)
     rt = SimpleNamespace(main=main, store=store, calls=[], race=False,
