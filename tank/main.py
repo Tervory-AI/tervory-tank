@@ -1356,7 +1356,9 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
             if policy.get('_router'):  # ENGINE ROUTER: decision and its time on the receipt
                 answer = await __import__('request_router').receipt(engine_rt, req, policy, answer)
             answer = await __import__('exact_cache').record(engine_rt, req, policy, answer)
-            return await prompt_cache.receipt(engine_rt, req, answer)
+            answer = await prompt_cache.receipt(engine_rt, req, answer)
+            # Savings ledger: returns the same answer; off unless ENGINE_LEDGER_ENABLED=true.
+            return await __import__('savings_ledger').record(engine_rt, req, answer)
         attempted.add(policy["model"])
         if policy["model"].startswith("skill:") and policy.get("escalation_model"):
             attempted.add(policy["escalation_model"])

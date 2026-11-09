@@ -581,6 +581,8 @@ main:has(.rig) {
 .ask h2 { margin: 0; font-size: 26px; }
 .ask .intro { margin: -12px 0 0; font-size: 13px; }
 .rig .thread { display: flex; flex-direction: column; gap: 16px; }
+.answer-topics h3 { margin: 0 0 6px; font-size: 14px; }
+.answer-topics ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 21px; }
 .you {
   background: var(--paper);
   border-radius: 12px;

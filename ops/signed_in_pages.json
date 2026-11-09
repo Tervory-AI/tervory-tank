@@ -1,0 +1,23 @@
+{
+  "signIn": "https://app.tervory.com/sign-in?callbackUrl=%2F",
+  "pages": [
+    {"id": "workspace-chats", "url": "https://app.tervory.com/chats"},
+    {"id": "tank-chats", "url": "https://tank.tervory.com/chats"},
+    {"id": "base", "url": "https://base.tervory.com/", "expect": ["Base"]},
+    {"id": "rig-overview", "url": "https://app.tervory.com/rig", "click": "Overview", "expect": ["What's built", "Next step"]},
+    {"id": "rig-search", "url": "https://app.tervory.com/rig", "expect": ["Ask Rig"],
+     "required": [{"name": "Ask Rig answers", "selector": "[aria-label=\"Ask Rig\"] .thread"}]},
+    {"id": "trigger", "url": "https://app.tervory.com/trigger", "expect": ["Trigger"]},
+    {"id": "tiger", "url": "https://tiger.tervory.com/", "expect": ["Tiger"]},
+    {"id": "skala", "url": "https://skala.tervory.com/", "expect": ["Skala"]},
+    {"id": "autumbra", "url": "https://autumbra.tervory.com/", "expect": ["Autumbra"]},
+    {"id": "radix", "url": "https://radix.tervory.com/", "expect": ["Radix"]},
+    {"id": "tisan", "url": "https://tisan.tervory.com/", "expect": ["Tisan"]},
+    {"id": "zenas", "url": "https://zenas.tervory.com/zenas", "expect": ["Zenas"]},
+    {"id": "zenas-moot", "url": "https://zenas.tervory.com/moot", "expect": ["Moot"]},
+    {"id": "opli", "url": "https://opli.tervory.com/"},
+    {"id": "opli-cli-sign-ins", "url": "https://app.tervory.com/cli/sign-ins", "expect": ["CLI sign-ins"]},
+    {"id": "market-lab", "url": "https://market-lab.tervory.com/", "expect": ["Market Lab"]},
+    {"id": "savings", "url": "https://app.tervory.com/tank/proof", "expect": ["Client savings"]}
+  ]
+}

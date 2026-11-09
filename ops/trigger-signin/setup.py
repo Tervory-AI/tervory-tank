@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 
@@ -44,6 +45,49 @@ LOGIN_FIELDS = set(LOGIN) | {
 
 class SetupError(ValueError):
     pass
+
+
+# The provider gives a first-instance admin created without a name the given name
+# "ZITADEL" and family name "Admin", which the hosted login shows as "Welcome ZITADEL Admin!".
+PROVIDER_DEFAULT = re.compile('zitadel', re.IGNORECASE)
+NEUTRAL_PROFILE = {'firstName': 'Tervory', 'lastName': 'Admin', 'displayName': 'Tervory'}
+PROFILE_FIELDS = ('firstName', 'lastName', 'nickName', 'displayName', 'preferredLanguage', 'gender')
+
+
+def admin_profile(value: str) -> dict | None:
+    """TRIGGER_SIGNIN_ADMIN_DISPLAY_NAME (founder-set) as a profile, or None when unset."""
+    name = ' '.join(value.split())
+    if not name:
+        return None
+    if len(name) > 200 or PROVIDER_DEFAULT.search(name):
+        raise SetupError('Trigger sign-in admin display name refused')
+    given, _, family = name.partition(' ')
+    return {'firstName': given, 'lastName': family or given, 'displayName': name}
+
+
+def configure_admin_name(api, email: str, value: str) -> bool:
+    """Set the first admin's name idempotently. True when the founder's display name is set."""
+    found = api.request('POST', '/management/v1/users/_search', json={
+        'query': {'limit': 2}, 'queries': [{'emailQuery': {
+            'emailAddress': email, 'method': 'TEXT_QUERY_METHOD_EQUALS_IGNORE_CASE'}}],
+    }).get('result', [])
+    if not isinstance(found, list) or len(found) != 1 or not isinstance(found[0].get('human'), dict):
+        raise SetupError('Trigger sign-in admin user not found')
+    user = found[0]
+    current = user['human'].get('profile', {})
+    wanted = admin_profile(value)
+    if wanted is None:
+        shown = ' '.join(str(current.get(key, '')) for key in ('firstName', 'lastName', 'nickName', 'displayName'))
+        if not PROVIDER_DEFAULT.search(shown):
+            return False
+        # Unset: never leave the provider's default name; the welcome line carries no name.
+        wanted = {**NEUTRAL_PROFILE, 'nickName': ''}
+    desired = {**{key: current[key] for key in PROFILE_FIELDS if key in current}, **wanted}
+    if PROVIDER_DEFAULT.search(str(desired.get('nickName', ''))):
+        desired['nickName'] = ''
+    if any(current.get(key, '') != desired.get(key, '') for key in PROFILE_FIELDS if key in desired):
+        api.request('PUT', '/management/v1/users/' + str(user['id']) + '/profile', json=desired)
+    return admin_profile(value) is not None
 
 
 class Configure:
@@ -170,8 +214,11 @@ def main(bootstrap: Path = Path('/bootstrap')):
         api = Configure(client)
         result = api.run()
         print('Trigger sign-in applications configured', flush=True)
+        admin_named = configure_admin_name(api, os.environ['TRIGGER_SIGNIN_ADMIN_EMAIL'],
+                                           os.environ.get('TRIGGER_SIGNIN_ADMIN_DISPLAY_NAME', ''))
+        print('Trigger sign-in admin name configured', flush=True)
         from branding import configure_branding
-        configure_branding(api, bootstrap, Path('/app/brand'), issuer)
+        configure_branding(api, bootstrap, Path('/app/brand'), issuer, admin_named)
         print('Trigger sign-in branding configured', flush=True)
         from email_setup import configure_email
         configure_email(api, bootstrap)

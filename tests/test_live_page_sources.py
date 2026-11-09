@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,6 +42,16 @@ def match_row(**updates):
         **updates,
     }
 
+
+
+def _own_market_packages(monkeypatch) -> None:
+    """Skill runs in the same worker can leave another top-level feeds/engines/core in sys.modules
+    (market.series_fetch ships its own). Market Lab's app must import its own; restored after the test."""
+    room = str(ROOT / "agents" / "market_lab")
+    monkeypatch.syspath_prepend(room)
+    for name, module in list(sys.modules.items()):
+        if name.split(".", 1)[0] in {"feeds", "engines", "core"} and not str(getattr(module, "__file__", "") or "").startswith(room):
+            monkeypatch.delitem(sys.modules, name)
 
 @pytest.mark.asyncio
 async def test_moot_published_route_scopes_reads_and_excludes_offline_content(monkeypatch):
@@ -91,6 +102,7 @@ async def test_market_quarantine_route_uses_existing_catalogue_name_and_state(mo
     monkeypatch.syspath_prepend(str(ROOT / 'agents' / '_chassis'))
     monkeypatch.syspath_prepend(str(ROOT / 'agents' / 'market_lab'))
     # Other room tests share a top-level core package. Load this route in its own test command.
+    _own_market_packages(monkeypatch)
     spec = importlib.util.spec_from_file_location('market_live_page_sources', ROOT / 'agents/market_lab/app.py')
     room = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(room)
@@ -130,6 +142,7 @@ async def test_market_quarantine_route_uses_existing_catalogue_name_and_state(mo
 async def test_market_quarantine_skips_only_unlabelled_row(monkeypatch, caplog, bad_fields, reason):
     monkeypatch.syspath_prepend(str(ROOT / 'agents' / '_chassis'))
     monkeypatch.syspath_prepend(str(ROOT / 'agents' / 'market_lab'))
+    _own_market_packages(monkeypatch)
     spec = importlib.util.spec_from_file_location('market_quarantine_mixed_rows', ROOT / 'agents/market_lab/app.py')
     room = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(room)
