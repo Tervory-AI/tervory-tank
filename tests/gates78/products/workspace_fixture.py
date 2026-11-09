@@ -173,11 +173,14 @@ async def workspace_entry(gate78_memory, monkeypatch):
         reply = await client.post(f"/v1/command/cards/{card.json()['card_id']}", json={'action': 'confirm'}, headers=signed)
         assert reply.status_code == 200, reply.text
         return reply
+    workspace_namespace = None
     async def restart():
-        nonlocal app, client
+        nonlocal app, client, workspace_namespace
         await client.aclose()
         # Recreate the serving application and adapter; SQL checkpoints and the
         # existing Hermes service survive, as they do across a Tank restart.
+        if workspace_namespace is None:
+            workspace_namespace = vars(workspace).copy()
         importlib.reload(workspace)
         app = FastAPI()
         app.add_middleware(TriggerSigninMiddleware)
@@ -192,18 +195,25 @@ async def workspace_entry(gate78_memory, monkeypatch):
     try:
         yield entry
     finally:
-        for task in tuple(main._background):
-            await task
-        for task in tuple(command._background):
-            await task
-        await client.aclose()
-        await app_pool.close()
-        await http.aclose()
-        await pool.execute(f'DROP SCHEMA {engine_schema} CASCADE')
-        await pool.execute('DELETE FROM tank.proof_prices WHERE model=ANY($1::text[])', list(names))
-        for row in old_prices:
-            await pool.execute('INSERT INTO tank.proof_prices SELECT * FROM jsonb_populate_record(NULL::tank.proof_prices,$1::jsonb)', json.dumps(dict(row), default=str))
-        await pool.execute("DELETE FROM tank.provider_standards WHERE provider='placeholder'")
-        if old_standard:
-            await pool.execute('INSERT INTO tank.provider_standards SELECT * FROM jsonb_populate_record(NULL::tank.provider_standards,$1::jsonb)', json.dumps(dict(old_standard), default=str))
-        await pool.execute('DELETE FROM tank.policy WHERE tenant_id=ANY($1::uuid[])', [UUID(stack.tenant), UUID(stack.other_tenant)])
+        try:
+            for task in tuple(main._background):
+                await task
+            for task in tuple(command._background):
+                await task
+            await client.aclose()
+            await app_pool.close()
+            await http.aclose()
+            await pool.execute(f'DROP SCHEMA {engine_schema} CASCADE')
+            await pool.execute('DELETE FROM tank.proof_prices WHERE model=ANY($1::text[])', list(names))
+            for row in old_prices:
+                await pool.execute('INSERT INTO tank.proof_prices SELECT * FROM jsonb_populate_record(NULL::tank.proof_prices,$1::jsonb)', json.dumps(dict(row), default=str))
+            await pool.execute("DELETE FROM tank.provider_standards WHERE provider='placeholder'")
+            if old_standard:
+                await pool.execute('INSERT INTO tank.provider_standards SELECT * FROM jsonb_populate_record(NULL::tank.provider_standards,$1::jsonb)', json.dumps(dict(old_standard), default=str))
+            await pool.execute('DELETE FROM tank.policy WHERE tenant_id=ANY($1::uuid[])', [UUID(stack.tenant), UUID(stack.other_tenant)])
+        finally:
+            if workspace_namespace is not None:
+                # command.ADAPTERS retains the original classes. Restore those
+                # exact objects, even when another fixture cleanup step fails.
+                vars(workspace).clear()
+                vars(workspace).update(workspace_namespace)

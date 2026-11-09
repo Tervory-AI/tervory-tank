@@ -1,5 +1,7 @@
 # Maker first-party LiteLLM keys (2026-11-07)
 
+2026-11-08 correction: the earlier “config costs = 0” and “ledger costs zeroed” wording is superseded. Unknown USD prices remain unknown. Sarvam and Arcee are non-serving candidates outside `model_list`; generated gateway configuration excludes them even when keys exist. The dated pricing research below is historical context, not live provider acceptance. The installed gateway proof verifies configuration/auth-header resolution only.
+
 ## Env names (LiteLLM only, US + ZA compose)
 
 `MINIMAX_API_KEY`, `ZAI_API_KEY`, `DASHSCOPE_API_KEY`, `STEPFUN_API_KEY`, `ARCEE_API_KEY`, `TINKER_API_KEY`, `SARVAM_API_KEY`
@@ -20,8 +22,8 @@ Empty Coolify slots only until filled. No redeploy required by this note.
 | qwen3.5-397b-a17b-direct | qwen3.5-397b-a17b | same | DASHSCOPE_API_KEY | 0.6→3.6 |
 | step-3.5-flash-direct | step-3.5-flash | https://api.stepfun.ai/v1 | STEPFUN_API_KEY | 0.10→0.30 ([pricing](https://platform.stepfun.ai/docs/en/pricing/details)) |
 | step-3.7-flash-direct | step-3.7-flash | same | STEPFUN_API_KEY | 0.20→1.15 |
-| trinity-large-thinking-direct | trinity-large-thinking | https://api.arcee.ai/api/v1 | ARCEE_API_KEY | UNVERIFIED for Tank USD ledger — blog $0.25→$0.80 ([blog](https://www.arcee.ai/blog/open-models-api-beta)); not on [docs pricing](https://docs.arcee.ai/get-started/pricing) as of 2026-11-07; config costs = 0 |
-| sarvam-105b-direct | sarvam-105b | https://api.sarvam.ai/v1 | SARVAM_API_KEY (+ `api-subscription-key` header via `extra_headers`) | Official INR ₹15→₹60 /1M ([pricing](https://docs.sarvam.ai/api/pricing)); Tank USD ledger omitted (no invented FX); config costs = 0 |
+| trinity-large-thinking-direct | trinity-large-thinking | https://api.arcee.ai/api/v1 | ARCEE_API_KEY | UNVERIFIED for Tank USD ledger — blog $0.25→$0.80 ([blog](https://www.arcee.ai/blog/open-models-api-beta)); not on [docs pricing](https://docs.arcee.ai/get-started/pricing) as of 2026-11-07; USD price unverified; serving unavailable |
+| sarvam-105b-direct | sarvam-105b | https://api.sarvam.ai/v1 | SARVAM_API_KEY (+ `api-subscription-key` header via `extra_headers`) | Official INR ₹15→₹60 /1M ([pricing](https://docs.sarvam.ai/api/pricing)); Tank USD ledger omitted (no invented FX); USD price unverified; serving unavailable |
 
 Existing aliases (`glm`, `glm-small`, `kimi`, `deepseek-*`, HF open-weight seats) are unchanged.
 
@@ -38,4 +40,4 @@ Do not invent a fixed OpenAI model id for Inkling.
 ## Soft-spot verification (offline, 2026-11-07 correction)
 
 - **Sarvam `extra_headers`**: nested `api-subscription-key: os.environ/SARVAM_API_KEY` is resolved by LiteLLM **proxy** `ProxyConfig._check_for_os_environ_vars` recursive walk (pinned image `ghcr.io/berriai/litellm:v1.106.4`). Router top-level-only init does **not** expand nested dict values; Tank serves via the proxy path. Covered by `tests/test_maker_direct_routes.py` (no live inference).
-- **Prices**: Sarvam USD FX conversion removed from config/docs. Arcee blog USD marked UNVERIFIED; ledger costs zeroed until docs pricing lists the model.
+- **Prices**: Sarvam USD FX conversion removed from config/docs. Arcee blog USD remains UNVERIFIED. Neither candidate has an invented zero price; both remain unavailable for serving pending verified USD pricing.
