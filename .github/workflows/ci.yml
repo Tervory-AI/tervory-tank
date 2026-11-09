@@ -406,6 +406,8 @@ jobs:
         # remain INCOMPLETE. Head uses the default (all twelve required) for signoff.
         env:
           MEMORY_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          # Radix enters the real command corridor using the shared SQL fixture.
+          POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
         run: |
           test "$RUNNER_ENVIRONMENT" = github-hosted || { echo "Gate 7/8 runs only on disposable GitHub-hosted infrastructure"; exit 1; }
           python scripts/gates_7_8.py --submitted
