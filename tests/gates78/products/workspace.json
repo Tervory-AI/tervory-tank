@@ -194,8 +194,15 @@
     "workspace/app/tasks/page.tsx": "d1b4636184704f7eefbd502639fc42095a544483",
     "workspace/app/tasks/receipt.tsx": "28f3c6f5e500e0c5e613f1c27125dc35f947b64e",
     "workspace/app/tasks/tasks.css": "1459fa99f2376190a5dbb335bb0392ee53c51530",
-    "workspace/lib/request.ts": "60f9497e0d9135e8661cf86329fc892e7542b432",
+    "workspace/lib/request.ts": "d21da86c0539d335dc9faa2972a38da107de6ed7",
     "workspace/lib/route-input.ts": "d1ffed1d60baf0e674d8510240bed50b6851972c",
     "workspace/lib/workspace-gates.ts": "cca7c5e818f6e69f6ddaa6aac85708831f6ad25e"
+  },
+  "browser_source_reviews": {
+    "workspace/lib/request.ts": {
+      "tank_commit": "ae18ce56f37138233a627b27b3c34354064be886",
+      "reason": "Preserve upstream 401 by cancelling the reader before aborting; genuine cancellation errors still propagate.",
+      "proof": "tests/test_workspace_request_cancel.py and all three tests/test_gate5.py contracts"
+    }
   }
 }
