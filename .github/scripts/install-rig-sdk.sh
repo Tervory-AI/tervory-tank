@@ -22,10 +22,7 @@ test "$(git -C "$sdk_dir" rev-parse HEAD)" = "$sdk_commit"
 
 # Upstream marks its dependencies Python >=3.14; Tank's tested runtime is 3.12.
 # Install the bounded import closure beside Tank's existing HTTP/OpenAI pins.
-python -m pip install fire==0.7.1 ruamel.yaml==0.18.16 ruamel.yaml.clib==0.2.15 \
-    snowballstemmer==3.1.1 termcolor==3.3.0 tomli-w==1.2.0 truststore==0.10.4 \
-    python-dotenv==1.2.4 psutil==7.2.2 rich==14.3.3 prompt-toolkit==3.0.52 \
-    croniter==6.0.0 tenacity==9.1.4
+python -m pip install --require-hashes -r tests/rig_sdk/requirements.lock
 python - "$sdk_dir" <<'PY'
 import site
 import sys
