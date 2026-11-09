@@ -38,9 +38,10 @@ async def reference(tank, body):
               (SELECT override_model FROM tank.baseline_settings WHERE task_type='market.research'),
               p.baseline_model,tank.standard_model_for(serving.family)) AND rate.active
             ''',body.tenant_id)
+        task_type = 'market_lab.' + body.operation
         await conn.execute('''INSERT INTO tank.ledger(id,tenant_id,region,agent,task_type,rung,model,cost_usd,tokens_in,tokens_out)
             VALUES($1,$2,$3,'market_lab',$4,3,'code',0,0,0) ON CONFLICT(id) DO NOTHING''',
-            body.run_id,body.tenant_id,tank.box_region(),'market_lab.'+body.operation)
+            body.run_id,body.tenant_id,tank.box_region(),task_type)
         own=await conn.fetchval("SELECT id FROM tank.ledger WHERE id=$1 AND tenant_id=$2 AND agent='market_lab'",body.run_id,body.tenant_id)
         if own is None:
             raise HTTPException(409,'Receipt identity is not available')

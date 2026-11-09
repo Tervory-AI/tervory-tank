@@ -530,8 +530,8 @@ class PostgresLedger:
 
     async def save_report(self, row: dict[str, Any]) -> None:
         await self.conn.execute(
-            f"""
-            INSERT INTO {SCHEMA}.reports (id, tenant_id, made_at, question, answer, citations, receipts)
+            """
+            INSERT INTO agent_market_lab.reports (id, tenant_id, made_at, question, answer, citations, receipts)
             VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
             """,
             uuid.UUID(str(row["id"])),
