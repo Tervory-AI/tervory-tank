@@ -25,6 +25,8 @@ ROUTES = (
     ('early', 'event_bus', 'router', None, True),
     ('early', 'tisan_tasks', 'build_router', ('tank',), True),
     ('early', 'agent_skills', 'build_router', ('tank',), True),
+    ('early', 'zenas_savings', 'install', ('tank',), False),
+    ('early', 'zenas_law', 'install', ('tank',), False),
     ('early', 'base_product', 'build_router', ('tank',), True),
     ('early', 'base_lists', 'build_router', (), True),
     ('early', 'base_compare', 'build_router', (), True),

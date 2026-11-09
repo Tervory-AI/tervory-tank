@@ -1,0 +1,155 @@
+{
+  "product": "zenas",
+  "source_sha": "5ce6834f0fd278a328a1adf1ba25582da8232795",
+  "entrypoints": [
+    "Tank TriggerSigninMiddleware -> zenas_proxy -> POST /answers",
+    "Tank TriggerSigninMiddleware -> zenas_proxy -> POST /drafts",
+    "GET /memory/records and /memory/records/{id}",
+    "POST /memory/edit, /memory/forget, /memory/switch",
+    "POST /moot/hearings/{id}/ai",
+    "Shared TankClient room_task/delegate_task -> real Tank agent_tasks -> configured shipped Zenas ASGI worker (real signed identity/nonces), approved scope code or existing policy, and canonical SQL receipt reconciliation",
+    "Shared TankClient law_embeddings -> same-region fixed local encoder and real Tank code receipt"
+  ],
+  "legacy_tests": [
+    "tests/test_zenas_gates_7_8_memory.py::test_request_routes_through_tank_records_receipt_and_remembers",
+    "tests/test_zenas_gates_7_8_memory.py::test_first_run_pays_once_and_exact_repeat_pays_nothing",
+    "tests/test_zenas_gates_7_8_memory.py::test_changed_input_misses_and_pays",
+    "tests/test_zenas_gates_7_8_memory.py::test_second_user_tenant_firm_attorney_client_matter_never_reuse",
+    "tests/test_zenas_gates_7_8_memory.py::test_correction_overrides_stale_result_without_paid_call",
+    "tests/test_zenas_gates_7_8_memory.py::test_memory_off_edit_and_forget_are_honoured",
+    "tests/test_zenas_gates_7_8_memory.py::test_approved_worked_law_recalled_before_paid_path",
+    "tests/test_zenas_gates_7_8_memory.py::test_switch_off_keeps_the_previous_path",
+    "tests/test_zenas_gates_7_8_memory.py::test_remembered_kinds_defined_and_brain_defaults_off_like_main",
+    "tests/test_zenas_gates_7_8_memory.py::test_gate_memory_uses_the_chassis_client_not_a_second_store",
+    "tests/test_zenas_gates_7_8_memory.py::test_brain_then_route_free_first_then_tasks_then_tank",
+    "tests/test_zenas_gates_7_8_memory.py::test_ask_brain_tasks_standby_404",
+    "tests/test_zenas_gates_7_8_memory.py::test_no_secrets_in_memory_kinds",
+    "tests/test_zenas_gates_7_8_memory.py::test_memory_controls_refuse_foreign_scope_unchanged",
+    "tests/test_zenas_gates_7_8_memory.py::test_memory_controls_refuse_bad_signatures_unchanged",
+    "tests/test_zenas_gates_7_8_memory.py::test_memory_controls_own_positive_view_edit_forget_switch",
+    "tests/test_zenas_gates_7_8_memory.py::test_memory_controls_refuse_missing_or_forged_actor",
+    "tests/test_zenas_gates_7_8_memory.py::test_request_signing_binds_tenant_user_not_room_key_alone",
+    "tests/test_zenas_gates_7_8_memory.py::test_memory_service_outage_answers_without_memory",
+    "tests/test_zenas_gates_7_8_memory.py::test_invalid_tenant_or_user_refused",
+    "tests/test_zenas_gates_7_8_memory.py::test_brain_off_still_serves_exact_repeat_from_memory",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_memory_client_write_recall_forget_against_real_hermes",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_hermes_tenant_scope_hides_other_tenant",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_user_id_filtered_within_meta_not_hermes_auth",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_workspace_shared_key_cannot_write_memories",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_other_agent_key_cannot_write_zenas_collection",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_v1_memory_prefix_is_not_chassis_contract",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_agent_key_is_not_signed_in_user_proof",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_kind_format_matches_hermes_and_product",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_pinned_hermes_contract_lacks_central_user_id_param",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_v1_memory_get_also_absent_on_hermes",
+    "tests/test_zenas_gates_7_8_hermes_contract.py::test_zenas_kinds_match_hermes_regex_and_none_hardcoded_empty"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_zenas.py::test_owner_crud_through_legal_and_memory_handlers"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_zenas.py::test_foreign_scope_cannot_read_or_mutate"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_zenas.py::test_foreign_scope_cannot_read_or_mutate"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_zenas.py::test_empty_tenant_wide_declaration_does_not_permit_unowned_rows"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_zenas.py::test_verified_owner_cannot_be_replaced_by_body_or_headers",
+      "tests/gates78/products/test_zenas.py::test_empty_tenant_wide_declaration_does_not_permit_unowned_rows"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_zenas.py::test_real_signin_and_shared_assertion_bind_user_tenant_and_role",
+      "tests/gates78/products/test_zenas.py::test_private_brain_dispatch_preserves_real_policy_identity_and_receipts"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_zenas.py::test_invalid_product_assertions_fail_closed",
+      "tests/gates78/products/test_zenas.py::test_tank_task_adapter_rejects_scope_and_nonce_before_private_dispatch"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_zenas.py::test_nonce_replay_across_workers_cannot_restore_forgotten_data",
+      "tests/gates78/products/test_zenas.py::test_tank_task_adapter_rejects_scope_and_nonce_before_private_dispatch"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_zenas.py::test_owner_sql_filter_precedes_vector_limit"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_zenas.py::test_restricted_database_role_keeps_same_scope"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_zenas.py::test_controls_need_identity_but_plain_authorised_ask_can_run",
+      "tests/gates78/products/test_zenas.py::test_owner_crud_through_legal_and_memory_handlers"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_zenas.py::test_no_foreign_content_in_results_receipts_or_logs",
+      "tests/gates78/products/test_zenas.py::test_same_tenant_run_id_cannot_replay_another_users_private_response"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_zenas.py::test_runtime_dependency_is_integrated",
+      "tests/gates78/products/test_zenas.py::test_shipped_memory_adapter_uses_actual_hermes_contract"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_zenas.py::test_unset_memory_and_brain_switches_add_no_work"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_zenas.py::test_actual_task_recall_receipt_then_remember_order",
+      "tests/gates78/products/test_zenas.py::test_region_jurisdiction_and_draft_entry_paths",
+      "tests/gates78/products/test_zenas.py::test_private_brain_dispatch_preserves_real_policy_identity_and_receipts",
+      "tests/gates78/products/test_zenas.py::test_typed_embeddings_use_real_same_region_tank_and_local_encoder"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_zenas.py::test_code_first_refusal_never_calls_brain_or_paid_gateway",
+      "tests/gates78/products/test_zenas.py::test_completed_code_brain_gap_never_falls_through_to_paid_provider"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_zenas.py::test_exact_repeat_new_run_id_has_zero_actual_paid_calls"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_zenas.py::test_meaningful_changes_and_other_owners_do_not_hit",
+      "tests/gates78/products/test_zenas.py::test_stateful_moot_ai_turns_never_reuse_a_legal_answer"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_zenas.py::test_correction_changes_only_the_owners_next_answer",
+      "tests/gates78/products/test_zenas.py::test_forget_and_correction_tombstone_private_command_replays"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_zenas.py::test_forget_invalidates_reusable_answer",
+      "tests/gates78/products/test_zenas.py::test_forget_and_correction_tombstone_private_command_replays"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_zenas.py::test_off_disables_only_that_users_recall_and_remember"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_zenas.py::test_memory_outage_is_truthful_and_never_repeats_paid_work"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_zenas.py::test_authentication_failure_is_not_reported_as_memory_outage",
+      "tests/gates78/products/test_zenas.py::test_private_brain_failures_never_redirect_or_pay_fallback",
+      "tests/gates78/products/test_zenas.py::test_private_brain_forged_receipts_fail_closed_without_second_payment"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_zenas.py::test_receipts_reconcile_and_remembered_legal_fields_are_meaningful",
+      "tests/gates78/products/test_zenas.py::test_real_ledger_reconciliation_and_first_repeat_changed_evidence",
+      "tests/gates78/products/test_zenas.py::test_private_brain_dispatch_preserves_real_policy_identity_and_receipts",
+      "tests/gates78/products/test_zenas.py::test_private_brain_forged_receipts_fail_closed_without_second_payment",
+      "tests/gates78/products/test_zenas.py::test_completed_private_task_without_output_never_pays_fallback",
+      "tests/gates78/products/test_zenas.py::test_private_receipt_reconciliation_preserves_provider_precision"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_zenas.py::test_retry_and_concurrent_requests_pay_at_most_once",
+      "tests/gates78/products/test_zenas.py::test_same_tenant_run_id_cannot_replay_another_users_private_response",
+      "tests/gates78/products/test_zenas.py::test_forget_and_correction_tombstone_private_command_replays",
+      "tests/gates78/products/test_zenas.py::test_typed_room_client_keeps_paid_admission_and_person_run_replay",
+      "tests/gates78/products/test_zenas.py::test_private_brain_failures_never_redirect_or_pay_fallback",
+      "tests/gates78/products/test_zenas.py::test_completed_private_task_without_output_never_pays_fallback"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_zenas.py::test_original_gate_nodes_are_preserved_in_manifest",
+      "tests/gates78/products/test_zenas.py::test_region_jurisdiction_and_draft_entry_paths",
+      "tests/gates78/products/test_zenas.py::test_stateful_moot_ai_turns_never_reuse_a_legal_answer"
+    ]
+  }
+}

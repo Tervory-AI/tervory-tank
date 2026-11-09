@@ -8,12 +8,15 @@ import hashlib
 from pathlib import Path, PurePosixPath
 import sys
 
-from tank.tervor_registry import digest, encoded, identity
+if __package__:
+    from .tervor_registry import digest, encoded, identity
+else:
+    from tervor_registry import digest, encoded, identity
 
 PLATFORM = '00000000-0000-0000-0000-000000000001'
 PRODUCT = 'opli'
 CATEGORIES = frozenset({'multi_file_patch', 'bug_fix', 'tests', 'command_safety', 'repository_rules'})
-FIXTURES = Path(__file__).resolve().parents[1] / 'tests/fixtures/tervor_code/baseline.json'
+FIXTURES = Path(__file__).resolve().parent / 'training_jobs/fixtures/tervor_code/baseline.json'
 MAX_BYTES = 1024 * 1024
 SAFE_COMMANDS = (['python', '-m', 'pytest', '-q'], ['git', 'diff', '--check'])
 
