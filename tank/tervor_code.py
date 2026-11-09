@@ -184,7 +184,7 @@ def preflight(data: dict) -> dict:
         base_model=None, base_revision=None, base_licence=None,
         base_evidence='tervory-build/MODEL.md: Tervor Code: a Qwen coder base; exact choice undecided',
         missing=['Founder-approved coding base model ID, immutable revision and commercial licence evidence',
-                 'Merged coding-capable training interface (current M9 accepts only Zenas/Base/Tiger)',
+                 'Reviewed, adequately sized public coding training and fit-validation corpus',
                  'At least 200 independently reviewed gold cases and calibrated Tank/DeepEval evaluation'],
         split_hashes={key: value['sha256'] for key, value in parts.items()},
         split_counts={key: value['count'] for key, value in parts.items()},

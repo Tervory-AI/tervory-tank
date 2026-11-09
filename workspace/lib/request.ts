@@ -36,7 +36,12 @@ export async function fetchWithDeadline(input: RequestInfo | URL, init: RequestI
           out.error(new Error("The response was interrupted. Check its status before trying again."));
         }
       },
-      cancel(reason) { finish(); controller.abort(); return reader.cancel(reason); },
+      cancel(reason) {
+        finish();
+        const cancelled = reader.cancel(reason);
+        controller.abort();
+        return cancelled;
+      },
     });
     const result = new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
     Object.defineProperties(result, { url: { value: response.url }, redirected: { value: response.redirected }, type: { value: response.type } });
