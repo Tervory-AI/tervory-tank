@@ -74,11 +74,11 @@ def test_off_by_default_hardened_and_no_shared_data(room):
         assert spec['environment']['BRAIN_ROOM'] == room
         assert spec['environment']['SANDBOX_KEY'] == '${SANDBOX_KEY_' + upper + ':-}'
         assert not set(spec) & {'ports', 'env_file', 'privileged', 'cap_add', 'network_mode', 'devices', 'pid'}
-        # Only these brains receive their own room DB, asserted above.
-        # Sandboxes and every other prohibited credential remain sealed.
-        protected = [key for key in spec['environment']
-                     if not (room in {'tisan', 'market_lab'} and spec is brain and key == 'DATABASE_URL')]
-        assert not any(part in key for key in protected for part in ('COOLIFY', 'ENFORCE', 'R2_', 'DATABASE', 'OPENAI', 'ANTHROPIC', 'OPENROUTER', 'LITELLM', 'EDGE_', 'SMTP', 'UNDO'))
+        # Only these explicit brains receive their already-owned room DBs,
+        # each asserted against its own service above. Sandboxes stay sealed.
+        own_database = {'DATABASE_URL'} if room in {'market_lab', 'tisan'} and spec is brain else set()
+        assert not any(part in key for key in set(spec['environment']) - own_database for part in ('COOLIFY', 'ENFORCE', 'R2_', 'DATABASE', 'OPENAI', 'ANTHROPIC', 'OPENROUTER', 'LITELLM', 'EDGE_', 'SMTP', 'UNDO'))
+
     assert brain['environment']['TANK_KEY'] == '${TANK_KEY_' + upper + ':-}'
     assert brain['environment']['TANK_URL'] == 'http://tank:8000'
     assert brain['environment']['HERMES_URL'] == 'http://hermes:8000'
