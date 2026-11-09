@@ -518,13 +518,15 @@ async def _owned_loop(pool: Any, skills: SkillClient) -> None:
             if models_paused():
                 await asyncio.sleep(min(60.0, max(1.0, _model_pause["until"] - time.time())))
                 continue
+            # Clear before inspecting the queue. A commit+wake during SELECT
+            # must remain visible when the empty query proceeds to wait.
+            _wake.clear()
             async with discovery_pool.acquire() as conn:
                 row = await conn.fetchrow(
                     "SELECT id, tenant_id, input FROM agent_base.tasks "
                     "WHERE task_type='base.enrich' AND status='queued' ORDER BY created_at LIMIT 1"
                 )
             if row is None:
-                _wake.clear()
                 try:
                     await asyncio.wait_for(_wake.wait(), timeout=30)
                 except asyncio.TimeoutError:
