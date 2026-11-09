@@ -117,7 +117,8 @@
       "tests/gates78/products/test_market_lab.py::test_outages_are_truthful_and_do_not_expose_private_cache",
       "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
       "tests/gates78/products/test_market_lab.py::test_private_brain_paid_admission_and_outage",
-      "tests/gates78/products/test_market_lab.py::test_private_brain_missing_policy_fails_closed"
+      "tests/gates78/products/test_market_lab.py::test_private_brain_missing_policy_fails_closed",
+      "tests/gates78/products/test_market_lab.py::test_paid_research_response_loss_never_authorizes_a_second_paid_task"
     ],
     "G8.auth_not_outage": [
       "tests/gates78/products/test_market_lab.py::test_real_signin_body_impersonation_and_missing_identity",
@@ -127,12 +128,14 @@
     "G8.receipts": [
       "tests/gates78/products/test_market_lab.py::test_http_exact_repeat_changed_input_and_user_tenant_misses",
       "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
-      "tests/gates78/products/test_market_lab.py::test_private_brain_real_entry_and_receipt"
+      "tests/gates78/products/test_market_lab.py::test_private_brain_real_entry_and_receipt",
+      "tests/gates78/products/test_market_lab.py::test_paid_research_response_loss_never_authorizes_a_second_paid_task"
     ],
     "G8.retry_concurrency": [
       "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
       "tests/gates78/products/test_market_lab.py::test_durable_nonce_concurrency_restart_and_forget_replay",
-      "tests/gates78/products/test_market_lab.py::test_private_brain_retry_reuses_real_paid_checkpoint"
+      "tests/gates78/products/test_market_lab.py::test_private_brain_retry_reuses_real_paid_checkpoint",
+      "tests/gates78/products/test_market_lab.py::test_paid_research_response_loss_never_authorizes_a_second_paid_task"
     ],
     "G8.product_regressions": [
       "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",

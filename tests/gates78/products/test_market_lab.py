@@ -463,7 +463,7 @@ async def brain_policy(r, *, admitted=True):
 
 async def test_private_brain_missing_policy_fails_closed(market_runtime):
     r=market_runtime
-    r.research_fault['status']=503
+    r.research_fault['not_started']=True
     result=accepted(await r.ask())
     assert result['status']=='unavailable' and result['brain']['error']=='HTTPStatusError'
     assert len(r.brain_requests)==1 and not r.calls
@@ -474,7 +474,7 @@ async def test_private_brain_missing_policy_fails_closed(market_runtime):
 async def test_private_brain_real_entry_and_receipt(market_runtime):
     r=market_runtime
     await brain_policy(r)
-    r.research_fault['status']=503
+    r.research_fault['not_started']=True
     result=accepted(await r.ask())
     assert result['status']=='unavailable'  # An ungrounded summary is never presented as sourced facts.
     assert result['brain']['result']=={'summary':SOURCE_TEXT}
@@ -554,3 +554,17 @@ async def test_private_brain_paid_admission_and_outage(market_runtime):
     with pytest.raises(httpx.HTTPStatusError) as outage:
         await post_task(actor=actor,run_id=str(uuid4()),task_key='market.research',payload={},tank_client=r.product.app.state.tank)
     assert outage.value.response.status_code==503 and not r.calls
+
+
+@pytest.mark.parametrize('failure', ['503', 'timeout'])
+async def test_paid_research_response_loss_never_authorizes_a_second_paid_task(market_runtime, failure):
+    r = market_runtime
+    await brain_policy(r)
+    r.research_fault['after_paid'] = failure
+    lost = await r.ask()
+    assert lost.status_code == 503 and SOURCE_TEXT not in lost.text
+    assert len(r.calls) == 1 and not r.brain_requests
+    billed = await r.bill()
+    assert len(billed) == 1 and float(billed[0]['cost_usd']) == .05
+    assert (billed[0]['tokens_in'], billed[0]['tokens_out']) == (10, 3)
+    assert not await r.pool.fetchval("SELECT count(*) FROM tank.ledger WHERE task_type='agent.market_lab.think'")

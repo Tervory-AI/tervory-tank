@@ -133,10 +133,25 @@ async def market_runtime(gate78_memory, gate78_database, monkeypatch):
                 assertions.append(request)
                 return await httpx.ASGITransport(app=product.app).handle_async_request(request)
             if host == "market-research":
+                if research_fault.get('after_paid'):
+                    response = await httpx.ASGITransport(app=research_app).handle_async_request(request)
+                    assert response.status_code == 200 and provider_calls
+                    if research_fault['after_paid'] == 'timeout':
+                        raise httpx.ReadTimeout('placeholder response lost after paid completion', request=request)
+                    return httpx.Response(503, json={'detail': 'placeholder response lost after paid completion'})
                 if research_fault['status']:
                     return httpx.Response(research_fault['status'],json={'detail':'placeholder research unavailable'})
                 return await httpx.ASGITransport(app=research_app).handle_async_request(request)
             if host == "tank":
+                if path == '/v1/market-lab/internal/research' and research_fault.get('not_started'):
+                    # Exercise the real Tank pre-send branch, not a replacement
+                    # research response; restore its client for later requests.
+                    previous = tank._http
+                    tank._http = None
+                    try:
+                        return await httpx.ASGITransport(app=tank.app).handle_async_request(request)
+                    finally:
+                        tank._http = previous
                 response=await httpx.ASGITransport(app=tank.app).handle_async_request(request)
                 if response.status_code>=400:
                     failed_edges.append((path,response.status_code,(await response.aread()).decode()[:300]))

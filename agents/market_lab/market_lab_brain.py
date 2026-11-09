@@ -57,6 +57,8 @@ async def brain_then_research(
         kwargs["paid_run_id"] = paid_run_id
     researched = await research_web(str(tenant_id), question, **kwargs)
     gap_receipt = None
+    # None is a proven pre-send gap, never a researcher 503/timeout. Unknown
+    # completion propagates without authorizing another paid delegation.
     # Plain unsigned tasks never acquire personal brain authority. Identity is
     # supplied only by the verified request or the durable enqueue actor.
     if researched is None and brain_enabled() and actor is not None:

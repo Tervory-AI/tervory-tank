@@ -85,7 +85,7 @@ def _research_route(router, tank):
         if refused:
             raise HTTPException(403, refused)
         if tank._http is None:
-            raise HTTPException(503, "Market Lab is not connected")
+            raise HTTPException(503, {"code": "research_not_started"})
         try:
             response = await tank._http.post("http://market-research:8000/research",
                 json=body.model_dump(mode="json"), timeout=160,

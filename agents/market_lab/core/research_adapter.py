@@ -39,10 +39,9 @@ async def research_web(tenant_id: str, question: str, *, paid_run_id=None) -> di
         if response.status_code == 409:
             from fastapi import HTTPException
             raise HTTPException(409, response.json().get('detail'))
-        if response.status_code == 503:
-            # Tank reports the researcher is not connected or could not finish. Keep the free
-            # "no sources yet" answer (as the old research path did when nothing was promoted)
-            # instead of failing the whole question.
+        if response.status_code == 503 and response.json().get('detail') == {'code': 'research_not_started'}:
+            # Only Tank's explicit pre-send refusal proves no research attempt
+            # reached a provider. Unknown failures may follow a billed call.
             return None
         response.raise_for_status()
         return response.json()
