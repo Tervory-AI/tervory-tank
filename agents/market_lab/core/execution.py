@@ -33,7 +33,12 @@ def guarded(handler, connection):
     async def run(ctx):
         ident = getattr(ctx, 'job_id', None)
         if not ident:
-            return await handler(ctx)  # Explicit CLI rehearsal, not a queue claim.
+            result = await handler(ctx)
+            from core.savings import record
+            receipt = await record(connection, ctx.tenant_id, handler.__name__,
+                {k:v for k,v in getattr(ctx, 'input', {}).items() if k in {'question','engine','areas','signals','passages','source','backfill'}}, result,
+                cached=bool(result.get('cache_hit')))
+            return {**result, 'run_receipt': receipt}
         owner, job = UUID(ctx.tenant_id), UUID(ident)
         effects = []
         async with connection(memory=ctx.memory) as ledger, ledger.conn.transaction():
@@ -41,6 +46,9 @@ def guarded(handler, connection):
                 WHERE tenant_id=$1 AND id=$2 FOR UPDATE''', owner, job)
             if row is None or row['kind'] != ctx.kind:
                 raise ValueError('Job does not belong to this tenant and handler')
+            completed = await ledger.conn.fetchval('SELECT result FROM agent_market_lab.executions WHERE tenant_id=$1 AND job_id=$2', owner, job)
+            if completed is not None:
+                return json.loads(completed) if isinstance(completed, str) else dict(completed)
             if row['status'] == 'done':
                 return json.loads(row['result']) if isinstance(row['result'], str) else dict(row['result'])
             if row['status'] not in {'queued', 'running'}:
@@ -49,9 +57,13 @@ def guarded(handler, connection):
             effect_token = after_commit.set(None if ctx.kind in INCREMENTAL else effects)
             try:
                 result = await handler(ctx)
-                await ledger.conn.execute('''UPDATE agent_market_lab.jobs
-                    SET status='done',result=$3::jsonb,error=NULL,finished_at=now()
-                    WHERE tenant_id=$1 AND id=$2''', owner, job, json.dumps(result))
+                from core.savings import record
+                receipt = await record(connection, ctx.tenant_id, ctx.kind,
+                    {k:v for k,v in getattr(ctx, 'input', {}).items() if k in {'question','engine','areas','signals','passages','source','backfill'}},
+                    result, run_id=ident, cached=bool(result.get('cache_hit')))
+                result = {**result, 'run_receipt': receipt}
+                await ledger.conn.execute('''INSERT INTO agent_market_lab.executions(tenant_id,job_id,result)
+                    VALUES($1,$2,$3::jsonb) ON CONFLICT DO NOTHING''', owner, job, json.dumps(result))
             finally:
                 active_ledger.reset(token)
                 after_commit.reset(effect_token)

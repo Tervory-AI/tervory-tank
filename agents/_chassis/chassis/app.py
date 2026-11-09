@@ -13,7 +13,7 @@ from typing import Any
 
 import asyncpg
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from chassis.browser import BrowserClient
@@ -146,7 +146,7 @@ def create_app(
 
     @app.post("/jobs", status_code=201)
     @tenant_path("body")
-    async def enqueue(body: JobIn | Job) -> dict[str, Any]:
+    async def enqueue(request: Request, body: JobIn | Job) -> dict[str, Any]:
         region = os.environ.get("TANK_REGION", "us-east")
         try:
             wire = body if isinstance(body, Job) else Job.from_room(
@@ -161,7 +161,9 @@ def create_app(
             run_at = run_at.replace(tzinfo=timezone.utc)
         schema = schema_for(agent)
         timeout_s = timeout_for(body.kind, app.state.job_timeouts)
-        async with app.state.pool.acquire() as conn:
+        actor_hook = getattr(app.state, 'job_actor', None)
+        actor = await actor_hook(request, body) if actor_hook else None
+        async with app.state.pool.acquire() as conn, conn.transaction():
             if timeout_s is None:
                 row = await conn.fetchrow(
                     f"""
@@ -187,6 +189,9 @@ def create_app(
                     run_at,
                     timeout_s,
                 )
+            persist_actor = getattr(app.state, 'persist_job_actor', None)
+            if persist_actor:
+                await persist_actor(conn, row, actor)
         log_line(agent, "job queued", tenant_id=str(body.tenant_id), job_id=str(row["id"]))
         return {
             "id": str(row["id"]),

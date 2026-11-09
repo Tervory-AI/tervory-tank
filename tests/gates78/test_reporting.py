@@ -130,3 +130,44 @@ def test_migration_mode_rejects_invalid_submission(tmp_path, monkeypatch):
     monkeypatch.setattr(runner.subprocess, "check_output", lambda command, **kw: "a" * 40 if command[1] == "rev-parse" else "")
     monkeypatch.setattr(runner, "run_tests", lambda *args: {"exit_code": 0, "cases": {"placeholder_core": "PASS"}})
     assert runner.main() == 1
+
+
+def test_market_lab_dependency_target_is_required_and_isolated(tmp_path, monkeypatch):
+    import hashlib
+    import os
+    monkeypatch.setattr(runner, 'ROOT', tmp_path)
+    requirements = tmp_path / 'researcher/requirements.txt'
+    requirements.parent.mkdir()
+    requirements.write_text('gpt-researcher==0.16.1\n')
+    output = tmp_path / 'proof.json'
+    output.write_text(json.dumps({'exit_code': 0, 'cases': {'placeholder': 'PASS'}}))
+    seen = []
+    monkeypatch.setattr(runner.subprocess, 'run', lambda command, **kw: (seen.append(kw['env']) or SimpleNamespace(returncode=0)))
+    node = 'tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields'
+    with pytest.raises(RuntimeError, match='pinned researcher'):
+        runner.run_tests([node], output)
+    target = tmp_path / '.tmp/researcher-test-deps' / hashlib.sha256(requirements.read_bytes()).hexdigest()
+    (target / 'gpt_researcher').mkdir(parents=True)
+    (target / 'gpt_researcher/__init__.py').write_text('')
+    runner.run_tests([node], output)
+    runner.run_tests(['tests/gates78/test_stack.py'], output)
+    assert seen[0]['PYTHONPATH'].split(os.pathsep)[0] == str(target)
+    assert str(target) not in seen[1]['PYTHONPATH'].split(os.pathsep)
+    assert seen[0]['PYTEST_ADDOPTS'] == seen[1]['PYTEST_ADDOPTS'] == ''
+
+
+def test_required_gates_job_owns_market_lab_without_extending_main_deadlines():
+    import yaml
+    root = Path(__file__).resolve().parents[2]
+    jobs = yaml.safe_load((root / '.github/workflows/ci.yml').read_text())['jobs']
+    assert 'gates78' in jobs['ci-ok']['needs']
+    assert jobs['tank']['timeout-minutes'] == 36
+    job = jobs['gates78']
+    assert job['runs-on'] == 'ubuntu-latest'
+    proof = next(step for step in job['steps'] if step.get('name') == 'Gate 7/8 foundation and every submitted product')
+    assert 'python scripts/gates_7_8.py --submitted' in proof['run']
+    assert proof['timeout-minutes'] == 18
+    install = next(step for step in job['steps'] if step.get('name') == 'Install shared and isolated researcher test dependencies')
+    assert '--no-deps --target "$target" -r researcher/requirements.txt' in install['run']
+    assert install['timeout-minutes'] == 10
+    assert not any('scripts/gates_7_8.py' in step.get('run', '') for step in jobs['tank']['steps'])

@@ -1,10 +1,18 @@
 """market_lab command declarations; argument classes remain exported by command."""
-TOOLS = {'market_lab': ['market_lab.research', 'market_lab.warnings', 'market_lab.predictions', 'market_lab.calibration', 'market_lab.calibration.curve', 'market_lab.feeds', 'market_lab.patterns', 'market_lab.gate', 'market_lab.briefs', 'market_lab.alerts.email', 'market_lab.alerts.webhook', 'market_lab.alerts.off']}
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class MarketLabQuestionArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question: str = Field(min_length=1, max_length=2000)
+
+
+TOOLS = {'market_lab': ['market_lab.research', 'market_lab.warnings', 'market_lab.predictions', 'market_lab.calibration', 'market_lab.calibration.curve', 'market_lab.feeds', 'market_lab.patterns', 'market_lab.gate', 'market_lab.briefs', 'market_lab.alerts.email', 'market_lab.alerts.webhook', 'market_lab.alerts.off', 'market_lab.ask', 'market_lab.refresh', 'market_lab.receipts']}
 FOUNDER_TOOLS = []
 TENANT_ADMIN_TOOLS = []
 ADMIN_ONLY_TOOLS = frozenset(['market_lab.alerts.email', 'market_lab.alerts.webhook', 'market_lab.alerts.off'])
 REQUEST_BODY_TOOLS = frozenset([])
-CONFIRMED = frozenset([])
+CONFIRMED = frozenset(['market_lab.refresh'])
 
 def adapters(command):
     return {
@@ -19,5 +27,8 @@ def adapters(command):
         'market_lab.alerts.email': command.Adapter('POST', '/v1/market-lab/alerts/email', command.EmptyArgs, 'market_lab.alerts.email'),
         'market_lab.alerts.webhook': command.Adapter('POST', '/v1/market-lab/alerts/webhook', command.MarketLabWebhookArgs, 'market_lab.alerts.webhook'),
         'market_lab.alerts.off': command.Adapter('POST', '/v1/market-lab/alerts/off', command.EmptyArgs, 'market_lab.alerts.off'),
-        'market_lab.research': command.Adapter('POST', '/v1/research', command.QuestionArgs, 'Research a market question', True, 'paid_run'),
+        'market_lab.research': command.Adapter('POST', '/v1/market-lab/actions/research', MarketLabQuestionArgs, 'Research a market question', True, 'paid_run'),
+        'market_lab.ask': command.Adapter('POST', '/v1/market-lab/actions/ask', MarketLabQuestionArgs, 'market_lab.ask', True, 'paid_run'),
+        'market_lab.refresh': command.Adapter('POST', '/v1/market-lab/actions/refresh', command.EmptyArgs, 'market_lab.refresh'),
+        'market_lab.receipts': command.Adapter('GET', '/v1/market-lab/reads/receipts', command.MarketLabReadArgs, 'market_lab.receipts'),
     }

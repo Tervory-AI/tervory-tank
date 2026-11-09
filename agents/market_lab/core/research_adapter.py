@@ -7,7 +7,25 @@ from typing import Any
 import httpx
 
 
-async def research_web(tenant_id: str, question: str) -> dict[str, Any] | None:
+async def price_reference(tenant_id, operation, payload, result, *, run_id):
+    """Tank owns price snapshots and canonical ledgers; this never calls a model."""
+    key = os.environ.get('TANK_KEY', '').strip()
+    if not key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+            response = await client.post(os.environ.get('TANK_URL', 'http://tank:8000').rstrip('/') + '/v1/market-lab/internal/savings',
+                headers={'X-Tank-Key': key}, json={'tenant_id': tenant_id, 'operation': operation,
+                    'run_id': run_id, 'input': payload, 'output': result})
+            response.raise_for_status()
+            return response.json()
+    except Exception:
+        # The owning room still persists the run, actual cost and explicit unknown
+        # comparison. A missing price/corridor must never fabricate zero savings.
+        return None
+
+
+async def research_web(tenant_id: str, question: str, *, paid_run_id=None) -> dict[str, Any] | None:
     """The room reaches the internal researcher only through its Tank corridor."""
     key = os.environ.get("TANK_KEY", "").strip()
     if not question.strip() or not key:
@@ -16,7 +34,11 @@ async def research_web(tenant_id: str, question: str) -> dict[str, Any] | None:
     async with httpx.AsyncClient(timeout=170, follow_redirects=False) as client:
         response = await client.post(base + "/v1/market-lab/internal/research",
             headers={"X-Tank-Key": key}, json={"tenant_id": tenant_id, "question": question,
-                "home_region": os.environ.get("TANK_REGION", "us-east")})
+                "home_region": os.environ.get("TANK_REGION", "us-east"),
+                **({'paid_run_id': str(paid_run_id)} if paid_run_id else {})})
+        if response.status_code == 409:
+            from fastapi import HTTPException
+            raise HTTPException(409, response.json().get('detail'))
         if response.status_code == 503:
             # Tank reports the researcher is not connected or could not finish. Keep the free
             # "no sources yet" answer (as the old research path did when nothing was promoted)

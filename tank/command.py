@@ -1814,7 +1814,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor, *, paid_run_id=No
         from trigger_commands import confirmation
         confirmation(actor, action.tool, action.arguments)
     method, path, params, body = adapter_request(action, actor)
-    if action.tool == "market_lab.research" and paid_run_id is not None:
+    if action.tool in {"market_lab.research", "market_lab.ask"} and paid_run_id is not None:
         body = {**body, "paid_run_id": str(paid_run_id)}
     if action.tool in {"radix.infra.scan", "radix.active.scan", "radix.active.consent", "radix.active.consent.withdraw"}:
         from trigger_commands import confirmation
@@ -2037,7 +2037,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
-                if action.tool == "market_lab.research":
+                if action.tool in {"market_lab.research", "market_lab.ask"}:
                     # Card identity is server-owned; the request cannot provide
                     # an approval or select another card's paid run.
                     status, result = await dispatch_action(action, actor, paid_run_id=uuid.UUID(card_id))

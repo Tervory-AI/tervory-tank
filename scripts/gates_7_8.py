@@ -14,6 +14,7 @@ Results are JSON + Markdown under .tmp/gates78/<unique run>/; no customer data.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -71,6 +72,12 @@ def mapped_outcome(nodes: list[str], evidence: dict) -> str:
 def run_tests(targets: list[str], output: Path) -> dict:
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(str(ROOT / p) for p in ("", "tank", "agents", "agents/_chassis", "tests", "tests/gates78"))
+    if any(node.startswith("tests/gates78/products/test_market_lab.py") for node in targets):
+        digest = hashlib.sha256((ROOT / "researcher/requirements.txt").read_bytes()).hexdigest()
+        target = ROOT / ".tmp/researcher-test-deps" / digest
+        if not (target / "gpt_researcher/__init__.py").is_file():
+            raise RuntimeError("Install the existing pinned researcher test dependencies before Market Lab proof")
+        env["PYTHONPATH"] = str(target) + os.pathsep + env["PYTHONPATH"]
     # Selection/exclusion flags from a developer shell cannot trim gate evidence.
     env["PYTEST_ADDOPTS"] = ""
     env.pop("PYTEST_PLUGINS", None)

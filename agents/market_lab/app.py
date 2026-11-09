@@ -105,29 +105,33 @@ async def research(ctx: JobContext) -> dict:
     if not _has_source_passages(passages):
         if not question:
             return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
-        if os.environ.get("DATABASE_URL"):
-            from core.evidence import answer as cited_answer
-            async with _ledger(memory=ctx.memory) as ledger:
-                saved = await cited_answer(ledger, ctx.tenant_id, question, engine=case_plan()["engine"])
-                facts = saved.get("facts") or []
-                if facts:
-                    from core.research_records import save as save_research
-                    report = await save_research(ledger, ctx.tenant_id, question, saved)
-            if facts:
-                from core.research_records import remember
-                await remember(ctx.memory, report)
-                return {'answer': report['answer'], 'citations': report['citations'],
-                        'report_id': report['id'], 'receipts': report['receipts'], 'cost_usd': 0}
-        from core.research_adapter import research_web
+        from core.personal import stored_job_actor, research_result
+        from core.evidence import answer as cited_answer
+        memory = getattr(ctx,'memory',None)
+        user = None
+        actor = None
+        result = {'facts': [], 'cost_usd': 0}
+        if os.environ.get('DATABASE_URL'):
+            async with _ledger(memory=memory) as ledger:
+                actor = await stored_job_actor(ledger, ctx)
+                user = actor.user_id if actor else None
+                result = await cited_answer(ledger, ctx.tenant_id, question, engine=case_plan()['engine'])
+                result['cost_usd'] = 0
+        async def persist(researched):
+            from core.research_records import save
+            async with _ledger(memory=memory) as ledger:
+                report = await save(ledger, ctx.tenant_id, question, researched)
+            return {**researched, 'answer':report['answer'], 'citations':report['citations'], 'report_id':report['id']}
+        if not result.get('facts'):
+            result = await research_result(memory, ctx.tenant_id, user, question,
+                paid_run_id=getattr(ctx,'job_id',None) if user else None, on_result=persist if os.environ.get('DATABASE_URL') else None, actor=actor, tank_client=getattr(ctx,'tank',None))
+        elif os.environ.get('DATABASE_URL'):
+            result = await persist(result)
+        if result.get('facts'):
+            return result
+        flags={key:result[key] for key in ('memory_unavailable','answered_from_memory','tokens_in','tokens_out','would_have_cost') if key in result}
+        return {'answer':result.get('answer') or 'no sources yet','citations':result.get('citations',[]),'cost_usd':result.get('cost_usd',0),**flags}
 
-        result = await research_web(ctx.tenant_id, question)
-        if result is not None and result.get('facts'):
-            from core.research_records import save as save_research, remember
-            async with _ledger(memory=ctx.memory) as ledger:
-                report = await save_research(ledger, ctx.tenant_id, question, result)
-            await remember(ctx.memory, report)
-            return {**result, 'answer': report['answer'], 'citations': report['citations'], 'report_id': report['id']}
-        return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
     async with _ledger(memory=ctx.memory) as ledger:
         answer = await perform_research(
             tenant_id=ctx.tenant_id,
@@ -393,6 +397,19 @@ app.include_router(ml3_router(key_ok=_room_key_ok, ledger_context=_ledger, engin
 from core.readiness import install as install_readiness
 
 install_readiness(app)
+
+def _attach_gates_memory_and_brain(application):
+    from market_lab_brain import brain_enabled as _market_lab_brain_enabled
+    from memory_api import attach_memory_routes
+
+    application.state.market_lab_brain_enabled = _market_lab_brain_enabled()
+    attach_memory_routes(application)
+    from core.personal import job_actor, persist_job_actor
+    application.state.job_actor = job_actor
+    application.state.persist_job_actor = persist_job_actor
+
+
+_attach_gates_memory_and_brain(app)
 
 from core.execution import guarded
 

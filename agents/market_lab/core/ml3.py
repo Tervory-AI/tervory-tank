@@ -27,6 +27,9 @@ def build_router(*, key_ok, ledger_context, engine):
             raise HTTPException(401, "Room key required")
         tenant = str(body.tenant_id)
         async with ledger_context() as ledger:
+            if operation == 'receipts':
+                from core.savings import listing as receipts
+                return {'receipts': await receipts(ledger, tenant)}
             if operation == "intel":
                 if tenant != PLATFORM:
                     raise HTTPException(404, "Not found")

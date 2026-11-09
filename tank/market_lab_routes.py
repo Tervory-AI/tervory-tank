@@ -16,12 +16,17 @@ class MarketRequest(BaseModel):
     offset: int = Field(default=0, ge=0, le=10000000)
     row: int | None = Field(default=None, ge=0, le=10000000)
     row_kind: Literal["point", "event"] | None = None
+    paid_run_id: UUID | None = None
 
 
 def build_router(tank):
     router = APIRouter()
+    from market_lab_savings import install as install_savings
+    install_savings(router, tank)
     _warning_routes(router, tank)
     _research_route(router, tank)
+    from market_lab_memory import install
+    install(router, tank)
     from market_lab_ml3 import build_router as ml3_router
     router.include_router(ml3_router(tank))
 
@@ -29,6 +34,10 @@ def build_router(tank):
     async def call(operation: str, body: MarketRequest):
         if operation not in {"overview", "ask", "document", "refresh"}:
             raise HTTPException(404, "Not found")
+        from product_identity import current
+        actor = current.get()
+        if actor is not None and str(body.tenant_id) != actor.tenant_id:
+            raise HTTPException(403, 'This workspace is not available')
         key = os.environ.get("TANK_KEY_MARKET_LAB", "")
         if not key or tank._http is None:
             raise HTTPException(503, "Market Lab is not connected")
@@ -38,8 +47,10 @@ def build_router(tank):
                 json=body.model_dump(mode="json"), headers={"x-tank-key": key},
                 timeout=180 if operation == "ask" else 30,
             )
+            if response.status_code == 409:
+                raise HTTPException(409, response.json().get('detail'))
             if response.status_code >= 400:
-                status = response.status_code if response.status_code in {404, 422, 503} else 502
+                status = response.status_code if response.status_code in {401, 403, 404, 409, 422, 503} else 502
                 raise HTTPException(status, "Market Lab could not complete this request")
             return JSONResponse(response.json(), headers={"Cache-Control": "private, no-store"})
         except HTTPException:
@@ -51,6 +62,7 @@ def build_router(tank):
 
 
 class ResearchRequest(BaseModel):
+    paid_run_id: UUID | None = None
     model_config = ConfigDict(extra="forbid")
     tenant_id: UUID
     question: str = Field(min_length=1, max_length=2000)
@@ -78,8 +90,12 @@ def _research_route(router, tank):
             response = await tank._http.post("http://market-research:8000/research",
                 json=body.model_dump(mode="json"), timeout=160,
                 headers={"X-Tank-Key": os.environ["TANK_KEY_MARKET_LAB"]})
+            if response.status_code == 409:
+                raise HTTPException(409, response.json().get('detail'))
             response.raise_for_status()
             return JSONResponse(response.json(), headers={"Cache-Control": "private, no-store"})
+        except HTTPException:
+            raise
         except Exception:
             raise HTTPException(503, "Market Lab could not complete this request") from None
 

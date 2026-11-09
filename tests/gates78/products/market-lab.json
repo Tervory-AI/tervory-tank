@@ -1,0 +1,146 @@
+{
+  "product": "market-lab",
+  "source_sha": "24cef6ce2ed28cac2e09479843b5e3f3b10ab3dd",
+  "entrypoints": [
+    "POST /market/ask",
+    "POST /jobs -> chassis.app._context -> app.state.handlers[research]",
+    "GET /v1/market-lab/memory",
+    "POST /v1/market-lab/memory/control",
+    "POST /v1/market-lab/memory/edit",
+    "POST /v1/market-lab/memory/forget",
+    "POST /v1/agents/market_lab/delegate -> private Market Lab /tasks -> POST /v1/agents/market_lab/tasks"
+  ],
+  "legacy_tests": [
+    "tests/test_market_lab_gates_7_8.py::test_product_request_brain_route_receipt_then_memory",
+    "tests/test_market_lab_gates_7_8.py::test_correction_applies_next_time_with_no_paid_call",
+    "tests/test_market_lab_gates_7_8.py::test_second_user_and_second_tenant_see_nothing",
+    "tests/test_market_lab_gates_7_8.py::test_same_task_twice_reports_cost_and_tokens_each_run",
+    "tests/test_market_lab_gates_7_8.py::test_memory_off_for_one_user_does_not_affect_other",
+    "tests/test_market_lab_gates_7_8.py::test_memory_controls_view_edit_forget",
+    "tests/test_market_lab_gates_7_8.py::test_code_skill_free_step_before_paid",
+    "tests/test_market_lab_gates_7_8.py::test_remembered_fields_refuse_empty",
+    "tests/test_market_lab_gates_7_8.py::test_apply_corrections_and_secret_refusal",
+    "tests/test_market_lab_gates_7_8.py::test_brain_switch_defaults_and_url",
+    "tests/test_market_lab_gates_7_8.py::test_live_memory_control_refuses_foreign_tenant_or_user",
+    "tests/test_market_lab_gates_7_8.py::test_live_memory_owner_positive_missing_identity_and_forged_selectors",
+    "tests/test_market_lab_gates_7_8.py::test_memory_service_outage_answers_without_memory",
+    "tests/test_market_lab_gates_7_8.py::test_identity_headers_round_trip_and_refuse_unverified",
+    "tests/test_market_lab_gates_7_8.py::test_scope_error_refused_memory_outage_marks_unavailable",
+    "tests/test_market_lab_hermes_memory_contract.py::test_CURRENT_write_recall_forget_own_key",
+    "tests/test_market_lab_hermes_memory_contract.py::test_CURRENT_shared_workspace_key_write_403",
+    "tests/test_market_lab_hermes_memory_contract.py::test_CURRENT_kind_format_and_tenant_scope",
+    "tests/test_market_lab_hermes_memory_contract.py::test_CURRENT_user_id_not_centrally_filtered",
+    "tests/test_market_lab_hermes_memory_contract.py::test_CURRENT_production_client_setting_names_and_no_v1_memory",
+    "tests/test_market_lab_hermes_memory_contract.py::test_UNAPPLIED_two_users_personal_isolation_and_tenant_wide",
+    "tests/test_market_lab_hermes_memory_contract.py::test_UNAPPLIED_shared_key_still_403",
+    "tests/test_market_lab_hermes_memory_contract.py::test_patch_has_no_registry_golden_and_names_t51_files"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
+      "tests/gates78/products/test_market_lab.py::test_supported_publish_owner_and_foreign_denials"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_market_lab.py::test_foreign_reads_mutations_and_publish_leave_state_unchanged",
+      "tests/gates78/products/test_market_lab.py::test_supported_publish_owner_and_foreign_denials"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_market_lab.py::test_foreign_reads_mutations_and_publish_leave_state_unchanged",
+      "tests/gates78/products/test_market_lab.py::test_supported_publish_owner_and_foreign_denials"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_market_lab.py::test_declared_shared_kinds_and_unowned_personal_rows"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_market_lab.py::test_real_signin_body_impersonation_and_missing_identity",
+      "tests/gates78/products/test_market_lab.py::test_worker_body_user_is_not_verified_owner"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_market_lab.py::test_real_signin_body_impersonation_and_missing_identity",
+      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_boundary_refusals"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_market_lab.py::test_nonce_assertion_rejections_cannot_return_cached_private_data"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_market_lab.py::test_durable_nonce_concurrency_restart_and_forget_replay"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_market_lab.py::test_sql_scope_precedes_vector_search_and_limit"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_market_lab.py::test_owner_path_with_restricted_database_role"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
+      "tests/gates78/products/test_market_lab.py::test_memory_off_is_user_scoped_and_blocks_reuse"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_market_lab.py::test_foreign_reads_mutations_and_publish_leave_state_unchanged",
+      "tests/gates78/products/test_market_lab.py::test_nonce_assertion_rejections_cannot_return_cached_private_data"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
+      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_real_entry_and_receipt"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_market_lab.py::test_default_off_and_code_steps_before_added_work"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_market_lab.py::test_http_exact_repeat_changed_input_and_user_tenant_misses",
+      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_real_entry_and_receipt"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_market_lab.py::test_code_research_passages_precede_brain_and_paid_network"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_market_lab.py::test_http_exact_repeat_changed_input_and_user_tenant_misses"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_market_lab.py::test_http_exact_repeat_changed_input_and_user_tenant_misses",
+      "tests/gates78/products/test_market_lab.py::test_code_research_passages_precede_brain_and_paid_network"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_market_lab.py::test_correction_and_forget_invalidate_reusable_answers"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_market_lab.py::test_correction_and_forget_invalidate_reusable_answers",
+      "tests/gates78/products/test_market_lab.py::test_durable_nonce_concurrency_restart_and_forget_replay"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_market_lab.py::test_memory_off_is_user_scoped_and_blocks_reuse"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_market_lab.py::test_outages_are_truthful_and_do_not_expose_private_cache",
+      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_paid_admission_and_outage",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_missing_policy_fails_closed"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_market_lab.py::test_real_signin_body_impersonation_and_missing_identity",
+      "tests/gates78/products/test_market_lab.py::test_nonce_assertion_rejections_cannot_return_cached_private_data",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_boundary_refusals"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_market_lab.py::test_http_exact_repeat_changed_input_and_user_tenant_misses",
+      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_real_entry_and_receipt"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice",
+      "tests/gates78/products/test_market_lab.py::test_durable_nonce_concurrency_restart_and_forget_replay",
+      "tests/gates78/products/test_market_lab.py::test_private_brain_retry_reuses_real_paid_checkpoint"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_market_lab.py::test_signed_owner_crud_and_meaningful_research_fields",
+      "tests/gates78/products/test_market_lab.py::test_http_exact_repeat_changed_input_and_user_tenant_misses",
+      "tests/gates78/products/test_market_lab.py::test_correction_and_forget_invalidate_reusable_answers",
+      "tests/gates78/products/test_market_lab.py::test_memory_off_is_user_scoped_and_blocks_reuse",
+      "tests/gates78/products/test_market_lab.py::test_code_research_passages_precede_brain_and_paid_network",
+      "tests/gates78/products/test_market_lab.py::test_research_worker_remember_failure_and_replay_never_pay_twice"
+    ]
+  }
+}
