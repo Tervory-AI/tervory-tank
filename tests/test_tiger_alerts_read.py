@@ -1,6 +1,5 @@
 """Offline Tiger alert reads: placeholder-only data, memory and disposable SQL."""
 from trigger_signin_fakes import set_founders
-import importlib.util
 import json
 import sys
 from datetime import datetime, timedelta, timezone
@@ -38,10 +37,12 @@ async def runtime(request, database, monkeypatch):
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-tank-key')
     set_founders(monkeypatch, 'placeholder-founder')
     import main
-    spec = importlib.util.spec_from_file_location('placeholder_tiger_alerts_room', ROOT/'agents/tiger/app.py')
-    room = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, spec.name, room)
-    spec.loader.exec_module(room)
+    from test_tiger import _load
+    # Flat production images own their module namespace. Reuse the existing
+    # loader to preserve another product's gates_memory during combined tests.
+    name = 'placeholder_tiger_alerts_room'
+    monkeypatch.setitem(sys.modules, name, None)
+    room = _load(name, ROOT/'agents/tiger/app.py')
     store = MemoryStore() if request.param == 'memory' else PgStore(database)
     monkeypatch.setattr(room, '_store', lambda: store)
     for tenant in (TENANT, OTHER, EMPTY):
