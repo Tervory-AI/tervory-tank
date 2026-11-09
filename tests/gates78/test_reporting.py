@@ -164,9 +164,12 @@ def test_required_gates_job_owns_market_lab_without_extending_main_deadlines():
     assert jobs['tank']['timeout-minutes'] == 36
     job = jobs['gates78']
     assert job['runs-on'] == 'ubuntu-latest'
+    assert job['timeout-minutes'] == 35
     proof = next(step for step in job['steps'] if step.get('name') == 'Gate 7/8 foundation and every submitted product')
     assert 'python scripts/gates_7_8.py --submitted' in proof['run']
-    assert proof['timeout-minutes'] == 18
+    # The complete twelve-product matrix uses the bounded job budget. A second
+    # 18-minute step cap interrupted passing runs before report aggregation.
+    assert 'timeout-minutes' not in proof
     install = next(step for step in job['steps'] if step.get('name') == 'Install shared and isolated researcher test dependencies')
     assert '--require-hashes --no-deps --target "$target" -r researcher/requirements.lock' in install['run']
     assert install['timeout-minutes'] == 10
