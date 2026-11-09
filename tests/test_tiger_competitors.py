@@ -32,7 +32,6 @@ async def test_code_receipt_records_tiger_without_interpolating_agent(monkeypatc
     assert args == [TENANT, 'us-east', 'tiger.match', None, 'tiger']
 
 import asyncio
-import importlib.util
 import json
 import socket
 from pathlib import Path
@@ -139,10 +138,11 @@ async def database(postgres):
 @pytest_asyncio.fixture
 async def corridor(database, monkeypatch):
     monkeypatch.setenv("TANK_KEY", "placeholder-room-key")
-    spec = importlib.util.spec_from_file_location('tiger_t1_agent', ROOT / 'agents/tiger/app.py')
-    agent = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, spec.name, agent)
-    spec.loader.exec_module(agent)
+    from test_tiger import _load
+    # The shared loader isolates Tiger's flat imports from other room apps.
+    name = 'tiger_t1_agent'
+    monkeypatch.setitem(sys.modules, name, None)
+    agent = _load(name, ROOT / 'agents/tiger/app.py')
     agent.app.state.pool = database
     # Test DNS never queries the outside network.
     set_founders(monkeypatch, '')

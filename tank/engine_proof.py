@@ -69,6 +69,9 @@ async def winner(rt, req, policy, caller=None):
         if (not graduated or not proven(policy, await evidence(rt, req, candidate))[0]
                 or not await engine_quality.proof_passes(rt, req, candidate)):
             continue
+        # ENGINE LEARNING: a graduation whose live answers slipped steps back up.
+        if await __import__('engine_rollback').blocked(rt, req, policy, candidate):
+            continue
         score = await ladder.evaluate(rt, req, policy, candidate['model'], samples, candidate['revision'], caller)
         if score is None or score < max(.99, float(policy.get('eval_threshold') or .99)):
             continue

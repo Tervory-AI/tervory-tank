@@ -172,7 +172,9 @@ def test_run_route_keeps_reviewed_hooks_and_code_streaming_body():
     # Engine adds deterministic local generation, coalesced memory/system
     # messages, free-model batch handling and scalar-only trace metadata. Paid admission and streaming
     # remain in this body; protect all bytes outside the two RouteLLM hooks.
-    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '645368d5248b6db0589742e2e89b8aa74947410feab440698e042433851b3b12'
+    # Engine stage 3 (#826) merges the C5 all-provider request options, {} unless
+    # ENGINE_C5_ALL_PROVIDERS_ENABLED=true, into the gateway body.
+    assert hashlib.sha256(''.join(old).encode()).hexdigest() == 'eee81894d1608ee3170f4100d01063b546de58468480587e8e183b46b17084e9'
 
 
 @pytest.mark.asyncio

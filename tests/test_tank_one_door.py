@@ -210,7 +210,10 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
 
     ('agents/_brain/runner.py', 'model invocation', 'e9a2464540ffec9e'): (1, 'Hermes is configured only for Tank /v1/agents/base; task agent.base.think.'),
     ('agents/base/app.py', 'provider/brain setting', '1a672692cf88e898'): (3, 'Brain-enabled preview rejection and receipt display; no model call.'),
-    ('agents/base/base_brain.py', 'provider/brain setting', '1855ed0c659a0982'): (4, 'Recovery orchestration only; the Base brain sends model work to Tank after the free pass.'),
+    ('agents/base/base_brain_route.py', 'provider/brain setting', '7b5e864bea92e4d6'): (1, 'Base-only signed private adapter URL; its bounded service sends planning solely through Tank paid admission/checkpoint/ledger after free passes. Replaces removed unsigned recovery reads.'),
+    ('tests/gates78/products/base_fixture.py', 'model/paid endpoint', 'cd459fa90d4cf237'): (1, 'Offline fake gateway origin routed through local ASGI/MockTransport; real Base/Tank/storage source executes, no provider sockets.'),
+    ('tests/gates78/products/test_base.py', 'model/paid endpoint', '8716c2a0708e6505'): (8, 'Offline Base private-service configuration; ASGI fixture sends signed planning through real Tank admission/checkpoint/ledger with a deterministic upstream.'),
+    ('tests/gates78/products/test_base.py', 'model/paid endpoint', '72dfc3d226875ce8'): (3, 'Offline ASGI client origin for real Base signed private planner; no external media, provider, or model traffic.'),
     ('agents/base/docker-compose.yml', 'configured endpoint', 'a0f34ba16fc832ef'): (1, 'Local Base recovery process address; its only model backend is Tank.'),
     ('agents/base/pilot/recording.json', 'model/paid endpoint', 'b66c19e42a77a35b'): (4, 'Saved pilot HTTP transcript, not executable provider traffic.'),
     ('agents/base/pilot/recording.json', 'model/paid endpoint', 'ba87316f64cb9f26'): (4, 'Saved pilot HTTP transcript, not executable provider traffic.'),
@@ -412,7 +415,8 @@ async def test_base_code_precedes_optional_brain(monkeypatch, base_bridge, statu
         assert payload["_base_brain_task"] == str(task)
         return {}
 
-    async def pipeline(pool, task_id, cfg, call):
+    async def pipeline(pool, task_id, cfg, call, *, planning=False):
+        assert planning is True
         assert task_id == task
         await call("base.normalize", {})
 
@@ -429,23 +433,20 @@ async def test_base_code_precedes_optional_brain(monkeypatch, base_bridge, statu
 @pytest.mark.asyncio
 @pytest.mark.parametrize("brain_available", [True, False])
 async def test_base_recovery_reuses_free_result_and_continues_once(monkeypatch, base_bridge, brain_available):
-    import asyncio
     from contextlib import asynccontextmanager
     import secrets
     import sys
     from types import SimpleNamespace
     from uuid import uuid4
-    import httpx
     from fastapi import FastAPI
 
-    tenant, task, ledger = uuid4(), uuid4(), uuid4()
+    tenant, task = uuid4(), uuid4()
     key = secrets.token_urlsafe(24)
     monkeypatch.setenv("TANK_KEY", key)
-    monkeypatch.setenv("BASE_BRAIN_URL", "http://base-recovery")
+    monkeypatch.setenv("BASE_BRAIN_URL", "http://base-recovery" if brain_available else "")
     events = []
     state = {"unresolved": True}
     final = []
-    original_client = httpx.AsyncClient
     app = FastAPI()
     base_bridge.register(app)
 
@@ -474,39 +475,27 @@ async def test_base_recovery_reuses_free_result_and_continues_once(monkeypatch, 
         state["unresolved"] = free
         return {}
 
-    async def pipeline(pool, task_id, cfg, call):
+    async def pipeline(pool, task_id, cfg, call, *, planning=False):
+        assert task_id == task
+        assert cfg["tenant_id"] == str(tenant)
+        assert "verified_user_id" not in cfg
+        assert "brain_receipt" not in cfg
+        assert planning is (not events)
         await call("base.normalize", {})
+        if not planning:
+            final.append("done")
 
-    async def upstream(request):
-        if request.method == "DELETE":
-            events.append("cancel")
-            return httpx.Response(200, json={})
-        assert events == ["free"]
-        events.append("brain")
-        if not brain_available:
-            return httpx.Response(503)
-        async with original_client(transport=httpx.ASGITransport(app=app), base_url="http://base") as client:
-            payload = {"tenant_id": str(tenant), "task_id": str(task)}
-            headers = {"X-Tank-Key": key}
-            other = await client.get("/brain/pipeline", params={**payload, "tenant_id": str(uuid4())}, headers=headers)
-            assert other.status_code == 404
-            for _ in range(2):
-                cached = await client.post("/brain/pipeline", json=payload, headers=headers)
-                assert cached.status_code == 200 and cached.json()["unresolved"]
-                assert events == ["free", "brain"]
-            finishing = await client.post("/brain/pipeline", json={**payload, "finish": True}, headers=headers)
-            assert finishing.status_code == 202
-            await asyncio.shield(base_bridge.active[(tenant, task)].job)
-            repeated = await client.post("/brain/pipeline", json={**payload, "finish": True}, headers=headers)
-            assert repeated.status_code == 200
-        return httpx.Response(200, json={"tenant_id": str(tenant), "task_id": str(task), "status": "done",
-                                        "steps": [], "model_receipts": [{"ledger_id": str(ledger), "cost_usd": 0.1}]})
+    # Ownerless historical work must stay on the deterministic pipeline. The
+    # signed private planner has real actor/checkpoint tests in Base acceptance.
+    import base_brain_route
+    def no_private_dispatch(**kwargs):
+        raise AssertionError("Ownerless rows cannot enter signed personal planning")
 
     monkeypatch.setitem(sys.modules, "room", SimpleNamespace(_run_batch=pipeline))
-    monkeypatch.setattr(base_bridge.httpx, "AsyncClient", lambda **kw: original_client(transport=httpx.MockTransport(upstream), **kw))
+    monkeypatch.setattr(base_brain_route.httpx, "AsyncClient", no_private_dispatch)
     cfg = {"tenant_id": str(tenant), "batch": "fixture", "count": 1}
     await base_bridge.run_code_first(Pool(), SimpleNamespace(_headers=lambda: {"X-Tank-Key": key}), task, cfg, skill)
-    assert events == (["free", "brain", "continuation"] if brain_available else ["free", "brain", "cancel", "continuation"])
+    assert events == ["free", "continuation"]
     assert final == ["done"] and (tenant, task) not in base_bridge.active
 
 

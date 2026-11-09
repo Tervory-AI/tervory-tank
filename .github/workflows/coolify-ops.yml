@@ -13,16 +13,18 @@
 #   coolify-zenas-renormalise. See docs/ops/ZENAS-ZA-RENORMALISE.md.
 # - room-setup generates a room's secrets inside this job (masked, never printed, never seen by anyone)
 #   and writes them straight into Coolify on the main app and the room. Existing values are never replaced.
+# - rollback puts an app's :live images back to the previous ones in the deploy record (or to the
+#   images of commit `to`) and redeploys it, in one step. Main only; it queues with deploys.
 name: coolify-ops
 
 on:
   workflow_dispatch:
     inputs:
       op:
-        description: "status | env-refs | create-room | deploy | room-setup | backup-scope | nightly-status | zenas-renormalise | zenas-renormalise-report"
+        description: "status | env-refs | create-room | deploy | room-setup | backup-scope | nightly-status | zenas-renormalise | zenas-renormalise-report | rollback"
         required: true
       app:
-        description: "Application uuid (env-refs, deploy)"
+        description: "Application uuid (env-refs, deploy, rollback)"
         required: false
         default: ""
       names:
@@ -54,6 +56,10 @@ on:
         description: "zenas-renormalise: resume after this document_id (last_document_id of a report)"
         required: false
         default: ""
+      to:
+        description: "rollback: go to the images of this full commit (default: the previous images in the deploy record)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -64,12 +70,13 @@ permissions:
 concurrency:
   # deploy/room-setup queue with deploy-on-merge; both renormalise ops share one fixed
   # group so two never run side by side; every other op runs on its own.
-  group: ${{ (inputs.op == 'deploy' || inputs.op == 'room-setup') && 'coolify-deploy' || (inputs.op == 'zenas-renormalise' || inputs.op == 'zenas-renormalise-report') && 'coolify-zenas-renormalise' || format('coolify-ops-{0}', github.run_id) }}
+  group: ${{ (inputs.op == 'deploy' || inputs.op == 'room-setup' || inputs.op == 'rollback') && 'coolify-deploy' || (inputs.op == 'zenas-renormalise' || inputs.op == 'zenas-renormalise-report') && 'coolify-zenas-renormalise' || format('coolify-ops-{0}', github.run_id) }}
   cancel-in-progress: false
   queue: max
 
 jobs:
   op:
+    if: inputs.op != 'rollback'
     runs-on: ubuntu-latest
     # 12: the renormalise run step stops itself at 9, leaving time for its restore step.
     timeout-minutes: 12
@@ -207,3 +214,48 @@ jobs:
                               *) fail "deploy HTTP $code" "$(head -c 300 out.json)" ;; esac
               ;;
           esac
+
+  # One-step rollback (deploy_changed.py rollback): its own job, because it alone needs to
+  # read the deploy record artifact and move image tags in GHCR.
+  rollback:
+    if: inputs.op == 'rollback' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    env:
+      COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      APP: ${{ inputs.app }}
+      ROLLBACK_TO: ${{ inputs.to }}
+      GITHUB_TOKEN: ${{ github.token }}
+      ACTOR: ${{ github.actor }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check inputs
+        run: |
+          case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be an https:// address"; exit 1 ;; esac
+          test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
+          test -n "$APP" || { echo "::error::rollback: app is required"; exit 1; }
+          case "$APP" in *[!A-Za-z0-9_-]*) echo "::error::bad id: $APP"; exit 1 ;; esac
+          if [ -n "$ROLLBACK_TO" ]; then
+            echo "$ROLLBACK_TO" | grep -Eqx '[0-9a-f]{40}' || { echo "::error::to must be a full 40-character commit"; exit 1; }
+          fi
+      - name: Roll back to the previous images and redeploy
+        run: |
+          mkdir -p "$RUNNER_TEMP/deploy"
+          python3 -c 'import sys, pathlib; sys.path.insert(0, ".github/scripts"); import deploy_images, os; deploy_images.latest_record(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"], pathlib.Path(os.environ["RUNNER_TEMP"]) / "deploy")'
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          DEPLOY_RECORD="$RUNNER_TEMP/deploy/deploy-record.json" python3 .github/scripts/deploy_changed.py rollback
+      - name: Keep the updated deploy record
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: deploy-record
+          path: ${{ runner.temp }}/deploy/deploy-record.json
+          retention-days: 90
+          if-no-files-found: ignore

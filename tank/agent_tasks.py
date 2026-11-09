@@ -65,6 +65,9 @@ def install(router, tank) -> None:
 
     @router.post("/v1/agents/{room}/tasks")
     async def room_task(room: str, body: RoomTask, request: Request):
+        if room == "base":
+            from base_agent_tasks import room_task as base_task
+            return await base_task(tank, body, request)
         actor = await actor_for(room, body, request)
         identity = UUID(paid_identity(actor.tenant_id, actor.user_id, str(body.run_id)))
         if body.task_key is not None:

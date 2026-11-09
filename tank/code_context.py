@@ -611,10 +611,10 @@ def prepare(key, body, messages, *, slicing, tool_mode, limit, allowed_files):
     return ordered, stats
 
 
-def preflight_scope(state, actor, thread_id, turn_id, body):
+def preflight_scope(state, actor, thread_id, turn_id, body, *, require_scope=False):
     """Read only the current server-owned #805 plan, never client-selected scope."""
     import code_limits
-    if not enabled() and not code_limits.caps_enabled():
+    if not require_scope and not enabled() and not code_limits.caps_enabled():
         return None
     if os.environ.get('ENGINE_CODE_PREFLIGHT_ENABLED', '').strip() != 'true':
         return None

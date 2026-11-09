@@ -7,6 +7,7 @@
 
 services:
   agent-tisan:
+    image: ghcr.io/tervory-ai/tervory-tank/tisan-agent-tisan:live
     build:
       context: ../..
       dockerfile: agents/tisan/Dockerfile
@@ -47,6 +48,7 @@ services:
       - "8000"
 
   figma-egress-proxy:
+    image: ghcr.io/tervory-ai/tervory-tank/tisan-figma-egress-proxy:live
     build:
       context: ..
       dockerfile: radix/Dockerfile
@@ -83,6 +85,7 @@ services:
   tisan-brain:
     profiles:
     - brain
+    image: ghcr.io/tervory-ai/tervory-tank/tisan-tisan-brain:live
     build:
       context: ../..
       dockerfile: agents/tisan/Dockerfile
@@ -140,6 +143,7 @@ services:
   tisan-sandbox:
     profiles:
     - brain
+    image: ghcr.io/tervory-ai/tervory-tank/tisan-tisan-sandbox:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.sandbox
@@ -172,6 +176,7 @@ services:
   tisan-browser:
     profiles:
     - brain
+    image: ghcr.io/tervory-ai/tervory-tank/tisan-tisan-browser:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.browser
@@ -208,6 +213,7 @@ services:
   tisan-browser-gateway:
     profiles:
     - brain
+    image: ghcr.io/tervory-ai/tervory-tank/tisan-tisan-browser-gateway:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.gateway

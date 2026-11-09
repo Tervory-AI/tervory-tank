@@ -19,10 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 # The upstream MIT LICENSE is retained in /opt/hermes/LICENSE.
 WORKDIR /app
 COPY agents/_brain /app/brain
+COPY agents/_chassis/chassis /app/chassis
+COPY agents/base/personal_brain.py /app/personal_brain.py
 RUN chmod -R a+rX /app/brain
 ENV PYTHONPATH=/opt/hermes:/app \
     HERMES_BUNDLED_SKILLS=/opt/empty-skills \
     HERMES_OPTIONAL_SKILLS=/opt/empty-skills \
     PYTHONUNBUFFERED=1
 USER brain
-CMD ["uvicorn", "brain.service:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
+CMD ["uvicorn", "personal_brain:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]

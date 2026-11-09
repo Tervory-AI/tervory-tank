@@ -1,0 +1,143 @@
+{
+  "product": "autumbra",
+  "source_sha": "0b0368df73e7deda0bc00aa7368c8d07ad953830",
+  "entrypoints": [
+    "Tank app TriggerSigninMiddleware -> /v1/ghost/autumbra/personal/{path} -> command.identity/require_tool -> call_room/product_identity.attach -> Watch",
+    "Watch -> TankClient.delegate_task -> Tank /v1/agents/ghost/delegate -> signed private brain -> TankClient.room_task -> Tank /v1/agents/ghost/tasks -> existing agent.ghost.think policy/admission/ledger",
+    "POST /brain/corrections",
+    "GET/POST /memory",
+    "GET/PATCH/DELETE /memory/{record_id}",
+    "POST /memory/recall",
+    "PUT /memory/settings",
+    "Watch MemoryClient -> Tank /v1/ghost/autumbra/memory/{records,recall,memories} -> Hermes create_app / Records / Qdrant",
+    "Tank POST /v1/route and _check_route_task reject ghost.brain.* unless GHOST_BRAIN_ENABLED is explicitly enabled"
+  ],
+  "legacy_tests": [
+    "tests/test_autumbra_gates_7_8.py::test_1_request_brain_tank_route_receipt_memory",
+    "tests/test_autumbra_gates_7_8.py::test_2_correction_applies_next_time_without_paid_call",
+    "tests/test_autumbra_gates_7_8.py::test_3_other_user_and_other_tenant_see_nothing",
+    "tests/test_autumbra_gates_7_8.py::test_4_same_task_twice_reports_cost_and_tokens_each_run",
+    "tests/test_autumbra_gates_7_8.py::test_memory_view_edit_forget_off_and_no_secrets",
+    "tests/test_autumbra_gates_7_8.py::test_code_pass_runs_before_brain_and_plan_fix_is_not_repeated",
+    "tests/test_autumbra_gates_7_8.py::test_brain_switch_defaults_on_and_off_pauses_without_paid_call",
+    "tests/test_autumbra_gates_7_8.py::test_compose_brain_service_without_profile_and_default_on",
+    "tests/test_autumbra_gates_7_8.py::test_tank_patch_is_unapplied_and_marks_safe_types_cache_eligible",
+    "tests/test_autumbra_gates_7_8.py::test_same_tenant_other_user_memory_view_edit_forget_and_corrections",
+    "tests/test_autumbra_gates_7_8.py::test_route_cache_identity_is_per_tenant_user_and_opaque",
+    "tests/test_autumbra_gates_7_8.py::test_untrusted_memory_metadata_cannot_leak_across_users",
+    "tests/test_autumbra_gates_7_8.py::test_exact_repeat_identity_per_run_evidence",
+    "tests/test_autumbra_gates_7_8.py::test_default_off_has_no_memory_or_checkpoint_side_effects",
+    "tests/test_autumbra_gates_7_8.py::test_paid_checkpoint_survives_memory_failure_retry_concurrency_and_restart",
+    "tests/test_autumbra_gates_7_8.py::test_forget_and_off_invalidate_paid_checkpoint_and_derived_answers",
+    "tests/test_autumbra_gates_7_8.py::test_auth_failure_is_not_storage_outage_or_paid_fallback",
+    "tests/test_autumbra_gates_7_8.py::test_watch_nonces_are_atomic_and_survive_restart",
+    "tests/test_autumbra_gates_7_8.py::test_memory_client_receives_owner_before_recall_limit_and_edit_is_replace",
+    "tests/test_autumbra_gates_7_8.py::test_unsigned_control_cannot_use_body_identity_and_plain_task_is_memoryless",
+    "tests/test_autumbra_gates_7_8.py::test_real_hermes_sql_listing_shape_keeps_owned_rows_and_exact_repeats",
+    "tests/test_autumbra_gates_7_8.py::test_forget_during_model_call_does_not_restore_deleted_context",
+    "tests/test_autumbra_gates_7_8.py::test_provider_secret_is_not_returned_or_checkpointed"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_autumbra.py::test_owner_crud_and_meaningful_kinds"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_autumbra.py::test_foreign_controls_refused_without_mutation"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_autumbra.py::test_foreign_controls_refused_without_mutation"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_autumbra.py::test_tenant_wide_standing_blocks_stay_unindexed"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_autumbra.py::test_required_owner_unsigned_and_body_impersonation"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_autumbra.py::test_real_oidc_signed_actor_and_header_impersonation",
+      "tests/gates78/products/test_autumbra.py::test_shipped_ingress_auth_grant_and_allowlist",
+      "tests/gates78/products/test_autumbra.py::test_private_adapter_refuses_scope_and_replay",
+      "tests/gates78/products/test_autumbra.py::test_private_brain_requires_its_own_signed_actor"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_autumbra.py::test_assertion_rejection"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_autumbra.py::test_assertion_replay_concurrent_and_after_worker_restart",
+      "tests/gates78/products/test_autumbra.py::test_private_adapter_refuses_scope_and_replay",
+      "tests/gates78/products/test_autumbra.py::test_private_brain_requires_its_own_signed_actor"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_autumbra.py::test_sql_scope_precedes_vector_limit"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_autumbra.py::test_restricted_database_role_actual_product_crud"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_autumbra.py::test_owner_crud_and_meaningful_kinds",
+      "tests/gates78/products/test_autumbra.py::test_foreign_controls_refused_without_mutation",
+      "tests/gates78/products/test_autumbra.py::test_plain_authorised_task_without_identity_has_no_personal_memory"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_autumbra.py::test_no_private_content_or_secrets_in_responses_receipts_logs",
+      "tests/gates78/products/test_autumbra.py::test_foreign_controls_refused_without_mutation"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_autumbra.py::test_runtime_contract",
+      "tests/gates78/products/test_autumbra.py::test_owner_crud_and_meaningful_kinds",
+      "tests/gates78/products/test_autumbra.py::test_shipped_ingress_auth_grant_and_allowlist"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_autumbra.py::test_default_off_no_memory_checkpoint_model_or_reschedule",
+      "tests/gates78/products/test_autumbra.py::test_opt_in_deployment_and_existing_boundaries",
+      "tests/gates78/products/test_autumbra.py::test_direct_tank_route_default_off_has_no_work",
+      "tests/gates78/products/test_autumbra.py::test_private_adapter_default_off_never_dispatches"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_autumbra.py::test_actual_task_receipt_remember_and_exact_business_repeat",
+      "tests/gates78/products/test_autumbra.py::test_free_code_before_model",
+      "tests/gates78/products/test_autumbra.py::test_scope_input_and_ineligible_misses",
+      "tests/gates78/products/test_autumbra.py::test_missing_serving_rung_does_not_bypass_ladder",
+      "tests/gates78/products/test_autumbra.py::test_private_brain_uses_tank_adapter_policy_and_actual_receipt"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_autumbra.py::test_free_code_before_model"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_autumbra.py::test_actual_task_receipt_remember_and_exact_business_repeat"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_autumbra.py::test_scope_input_and_ineligible_misses"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_autumbra.py::test_correction_and_forget_invalidate_derived_answers"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_autumbra.py::test_correction_and_forget_invalidate_derived_answers",
+      "tests/gates78/products/test_autumbra.py::test_assertion_replay_concurrent_and_after_worker_restart"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_autumbra.py::test_memory_off_is_per_owner_and_prevents_reuse"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_autumbra.py::test_memory_outage_truthful_and_no_second_payment"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_autumbra.py::test_memory_auth_refusal_never_becomes_outage_fallback"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_autumbra.py::test_actual_task_receipt_remember_and_exact_business_repeat",
+      "tests/gates78/products/test_autumbra.py::test_memory_outage_truthful_and_no_second_payment",
+      "tests/gates78/products/test_autumbra.py::test_private_brain_uses_tank_adapter_policy_and_actual_receipt"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_autumbra.py::test_concurrent_paid_retry_and_restart",
+      "tests/gates78/products/test_autumbra.py::test_memory_outage_truthful_and_no_second_payment"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_autumbra.py::test_owner_crud_and_meaningful_kinds",
+      "tests/gates78/products/test_autumbra.py::test_opt_in_deployment_and_existing_boundaries",
+      "tests/gates78/products/test_autumbra.py::test_original_browser_journeys"
+    ]
+  }
+}

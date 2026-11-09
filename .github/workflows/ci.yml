@@ -229,6 +229,8 @@ jobs:
           pip install --require-hashes -r tank/moot/requirements.sdk.lock
       - name: Prepare video processing tools for offline acceptance
         run: bash .github/scripts/install-video-test-tools.sh
+      - name: Prepare pinned real Rig SDK for offline worker acceptance
+        run: bash .github/scripts/install-rig-sdk.sh
       - name: Prepare real Radix advisory database for offline proofs
         run: |
           mkdir -p "$RUNNER_TEMP/radix-osv"

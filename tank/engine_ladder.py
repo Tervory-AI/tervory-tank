@@ -152,6 +152,8 @@ async def select(rt, req, policy, caller=None) -> dict:
                 from engine_proof import retain_proven_rung, winner
                 selected = await retain_proven_rung(rt, req, selected, caller)
                 selected = await winner(rt, req, selected, caller)
+                # ENGINE LEARNING: a graduation whose live answers slipped steps back up.
+                selected = await __import__('engine_rollback').step_back(rt, req, policy, selected)
                 async with rt.pool().acquire() as conn:
                     await conn.execute('''INSERT INTO tank.engine_state(tenant_id,region,task_type,model,revision)
                         VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,region,task_type)

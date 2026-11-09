@@ -6,6 +6,7 @@
 
 services:
   agent-market-lab:
+    image: ghcr.io/tervory-ai/tervory-tank/market-lab-agent-market-lab:live
     build:
       context: ..
       dockerfile: market_lab/Dockerfile
@@ -55,6 +56,7 @@ services:
   market-lab-brain:
     profiles:
     - brain
+    image: ghcr.io/tervory-ai/tervory-tank/market-lab-market-lab-brain:live
     build:
       context: ..
       dockerfile: market_lab/Dockerfile
@@ -112,6 +114,7 @@ services:
   market-lab-sandbox:
     profiles:
     - brain
+    image: ghcr.io/tervory-ai/tervory-tank/market-lab-market-lab-sandbox:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.sandbox
@@ -142,6 +145,7 @@ services:
     cap_drop:
     - ALL
   market-lab-browser:
+    image: ghcr.io/tervory-ai/tervory-tank/market-lab-market-lab-browser:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.browser
@@ -178,6 +182,7 @@ services:
     - /tmp:rw,nosuid,nodev,size=128m
     init: true
   market-lab-browser-gateway:
+    image: ghcr.io/tervory-ai/tervory-tank/market-lab-market-lab-browser-gateway:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.gateway

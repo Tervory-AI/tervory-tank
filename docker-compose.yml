@@ -261,6 +261,7 @@ services:
   # its tervory-gw-<agent> network here, and TANK_KEY_<AGENT> in the environment
   # below. No public domain. Agents call this service. They never call Qdrant.
   hermes:
+    image: ghcr.io/tervory-ai/tervory-tank/main-hermes:live
     build:
       context: .
       dockerfile: hermes/Dockerfile
@@ -312,6 +313,7 @@ services:
   # Provider-token cost is zero; CPU, RAM and electricity are not free.
   local-model:
     profiles: [engine]
+    image: ghcr.io/tervory-ai/tervory-tank/main-local-model:live
     build: ./litellm/local-model
     platform: linux/amd64
     restart: unless-stopped
@@ -332,6 +334,7 @@ services:
   # DECISION reuse the pinned runtime, with a larger Apache-2.0 model for answers.
   local-model-large:
     profiles: [engine]
+    image: ghcr.io/tervory-ai/tervory-tank/main-local-model-large:live
     build: ./litellm/local-model
     platform: linux/amd64
     restart: unless-stopped
@@ -350,6 +353,7 @@ services:
       start_period: 60s
 
   litellm:
+    image: ghcr.io/tervory-ai/tervory-tank/main-litellm:live
     build: ./litellm
     restart: unless-stopped
     command: ["--config", "/app/config.yaml", "--port", "4000"]
@@ -407,7 +411,7 @@ services:
   Ferry:
     environment:
       TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
-    image: ferry
+    image: ghcr.io/tervory-ai/tervory-tank/main-ferry:live
     build: ./tor
     restart: unless-stopped
     networks:
@@ -422,6 +426,7 @@ services:
       start_period: 60s
 
   searxng:
+    image: ghcr.io/tervory-ai/tervory-tank/main-searxng:live
     build: ./searxng
     restart: unless-stopped
     environment:
@@ -447,6 +452,7 @@ services:
   # No host port, provider key, shared history, or connection to LiteLLM/stores.
   # The public network is only for reading search-result pages.
   market-research:
+    image: ghcr.io/tervory-ai/tervory-tank/main-market-research:live
     build: ./researcher
     restart: unless-stopped
     environment:
@@ -468,6 +474,7 @@ services:
       start_period: 60s
 
   tiger:
+    image: ghcr.io/tervory-ai/tervory-tank/main-tiger:live
     build: ./tiger
     restart: unless-stopped
     shm_size: "1gb"            # Chromium needs shared memory
@@ -490,6 +497,7 @@ services:
       start_period: 30s
 
   tank:
+    image: ghcr.io/tervory-ai/tervory-tank/main-tank:live
     build:
       context: ./tank
       args:
@@ -639,6 +647,7 @@ services:
   # Boston only. Keep the founder-enabled backup in every normal redeployment.
   # Public recipient and UPLOADS credential values stay in Coolify.
   r2-backup:
+    image: ghcr.io/tervory-ai/tervory-tank/main-r2-backup:live
     build:
       context: .
       dockerfile: jobs/train/Dockerfile.backup
@@ -679,6 +688,7 @@ services:
   # One shot. Creates agent_<name> roles, then exits. Tank does not wait on it
   # and does not mount this code. restart on-failure retries a failed run only.
   agent-roles:
+    image: ghcr.io/tervory-ai/tervory-tank/main-agent-roles:live
     build:
       context: ./agents
       dockerfile: Dockerfile.roles
@@ -705,6 +715,7 @@ services:
       - default
 
   workspace:
+    image: ghcr.io/tervory-ai/tervory-tank/main-workspace:live
     build:
       context: ./workspace
       # The image builds the self-hosted CLI release from cli/ (served at /cli/).
@@ -781,6 +792,7 @@ services:
   site:
     environment:
       TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
+    image: ghcr.io/tervory-ai/tervory-tank/main-site:live
     build: ./site
     restart: unless-stopped
     volumes:
@@ -818,6 +830,7 @@ services:
   mcp:
     environment:
       TRIGGER_SIGNIN_SETUP_TOKEN: "disabled"
+    image: ghcr.io/tervory-ai/tervory-tank/main-mcp:live
     build: ./mcp
     restart: unless-stopped
     depends_on:

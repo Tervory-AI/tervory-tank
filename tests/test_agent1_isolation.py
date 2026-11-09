@@ -18,6 +18,11 @@ spec.loader.exec_module(brain)
 from brain import browser, runner, security, service, sandbox  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def base_module_path(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "agents/base"))
+
+
 def _base_brain():
     """agents/base/base_brain.py, loaded once. Tests used to rely on an earlier test in
     this file having loaded it, so they failed with KeyError when run alone or reordered."""
@@ -243,19 +248,21 @@ async def test_rerun_replaces_thinking_subtotal_without_double_counting(monkeypa
             yield self
         async def execute(self, sql, *args):
             assert args[:2] == (tenant, task)
-    monkeypatch.setattr(module.httpx, "AsyncClient", Client)
-    cfg = {"tenant_id": str(tenant), "batch": "public", "count": 1, "model_spend": 0.4, "brain_spend": 0.1}
-    await module.drive_batch(Pool(), SimpleNamespace(_headers=lambda: {}), task, cfg, None)
+    monkeypatch.setattr(__import__("base_brain_route"), "httpx", SimpleNamespace(AsyncClient=Client))
+    cfg = {"tenant_id": str(tenant), "batch": "public", "count": 1, "model_spend": 0.4, "brain_spend": 0.1,
+           "user_id": "placeholder-owner", "verified_user_id": "placeholder-owner"}
+    await module.drive_batch(Pool(), SimpleNamespace(_headers=lambda: {"X-Tank-Key": "placeholder-signing-key"}), task, cfg, None)
     assert cfg["model_spend"] == pytest.approx(0.45)
     assert cfg["brain_spend"] == 0.15
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["down", "refused", "paused"])
-async def test_brain_failure_before_pipeline_uses_existing_pipeline(monkeypatch, failure):
+async def test_signed_brain_failure_before_pipeline_never_replays_paid_work(monkeypatch, failure):
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
     import httpx
+    route = __import__("base_brain_route")
     module = _base_brain()
     tenant, task = uuid.uuid4(), uuid.uuid4()
     monkeypatch.setenv("BASE_BRAIN_URL", "http://base-brain")
@@ -264,25 +271,35 @@ async def test_brain_failure_before_pipeline_uses_existing_pipeline(monkeypatch,
         def __init__(self, **kwargs): pass
         async def __aenter__(self): return self
         async def __aexit__(self, *args): pass
-        async def post(self, *args, **kwargs):
-            if failure == "down": raise httpx.ConnectError("fixture")
-            return SimpleNamespace(status_code=200, json=lambda: {"tenant_id":str(tenant),"task_id":str(task),
-                "status":"failed","steps":[],"model_receipts":[]})
-        async def delete(self, *args, **kwargs):
-            calls.append("cancel")
+        async def post(self, url, **kwargs):
+            assert url == route.brain_url() + "/personal/tasks"
+            payload = json.loads(kwargs["content"])
+            assert payload["tenant_id"] == str(tenant)
+            assert payload["user_id"] == "placeholder-owner"
+            assert payload["task_id"] == str(task)
+            calls.append("signed planner")
+            if failure == "down": raise httpx.ConnectError("placeholder-unavailable")
+            return SimpleNamespace(status_code=503 if failure == "paused" else 200,
+                json=lambda: {"tenant_id": str(tenant), "task_id": str(task),
+                              "status": "failed", "steps": [], "model_receipts": []})
     class Pool:
         @asynccontextmanager
         async def acquire(self): yield self
-        async def execute(self, *args): pass
-    async def run(pool, task_id, cfg, callback):
-        calls.append("pipeline")
-        assert cfg["brain_receipt"]["status"] == "fallback"
-        assert module.active[(tenant,task)].operation == "fallback"
-    monkeypatch.setattr(module.httpx,"AsyncClient",Client)
-    monkeypatch.setitem(sys.modules,"room",SimpleNamespace(_run_batch=run))
-    cfg={"tenant_id":str(tenant),"batch":"fixture","count":1}
-    await module.drive_batch(Pool(),SimpleNamespace(_headers=lambda:{}),task,cfg,None)
-    assert calls == ["cancel","pipeline"]
+        async def execute(self, sql, *args):
+            assert args[:2] == (tenant, task)
+            assert "status='running'" in sql
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("A failed planner cannot authorize a second paid path")
+    monkeypatch.setattr(route, "httpx", SimpleNamespace(AsyncClient=Client))
+    monkeypatch.setitem(sys.modules, "room", SimpleNamespace(_run_batch=forbidden))
+    cfg = {"tenant_id": str(tenant), "batch": "placeholder-batch", "count": 1,
+           "user_id": "placeholder-owner", "verified_user_id": "placeholder-owner"}
+    skills = SimpleNamespace(_headers=lambda: {"X-Tank-Key": "placeholder-signing-key"})
+    with pytest.raises((httpx.TransportError, RuntimeError)):
+        await module.drive_batch(Pool(), skills, task, cfg, None)
+    assert calls == ["signed planner"]
+    assert "brain_receipt" not in cfg
+    assert (tenant, task) not in module.active
 
 
 @pytest.mark.asyncio
@@ -343,46 +360,45 @@ def test_deployment_gate_rejects_privileges_and_shared_namespaces(monkeypatch,fi
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status', ['done', 'failed'])
-async def test_brain_failure_after_free_pass_runs_paid_continuation(monkeypatch, status):
+async def test_brain_failure_after_free_pass_never_replays_continuation(monkeypatch, status):
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
     module = _base_brain()
+    route = __import__('base_brain_route')
     tenant, task = uuid.uuid4(), uuid.uuid4()
     monkeypatch.setenv('BASE_BRAIN_URL', 'http://base-brain')
-    calls=[]
+    calls = []
+    free_result = {'pipeline_status': status, 'unresolved': [{'id': 'placeholder-record'}]}
     class Pool:
         @asynccontextmanager
         async def acquire(self): yield self
         async def execute(self, sql, *args):
-            if 'status=$4' in sql: calls.append(('persist',args[3]))
-    async def free_pass():
-        await asyncio.sleep(.01)
-        calls.append('free settled')
+            assert args[:2] == (tenant, task)
+            assert "status='running'" in sql
     class Client:
         def __init__(self, **kwargs): pass
         async def __aenter__(self): return self
         async def __aexit__(self, *args): pass
-        async def post(self, *args, **kwargs):
-            batch=module.active[(tenant,task)]
-            batch.ran=True
-            batch.job=asyncio.create_task(free_pass())
+        async def post(self, url, **kwargs):
+            batch = module.active[(tenant, task)]
+            assert batch.ran and batch.result is free_result
+            assert batch.job is None
+            assert json.loads(kwargs['content'])['evidence'] == free_result['unresolved']
+            calls.append('signed planner')
             return SimpleNamespace(status_code=503)
-        async def delete(self, *args, **kwargs): calls.append('cancel')
-    async def phase(batch, body):
-        assert body.finish and batch.finished and calls==['cancel','free settled']
-        calls.append('paid pass')
-        batch.result={'pipeline_status':status,'summary':'continued'}
-    monkeypatch.setattr(module.httpx,'AsyncClient',Client)
-    monkeypatch.setattr(module,'run_phase',phase)
-    cfg={'tenant_id':str(tenant),'batch':'fixture','count':20}
-    action=module.drive_batch(Pool(),SimpleNamespace(_headers=lambda:{}),task,cfg,None)
-    if status=='failed':
-        with pytest.raises(RuntimeError,match='continuation'): await action
-    else: await action
-    assert calls==['cancel','free settled','paid pass',('persist',status)]
-    assert cfg['brain_receipt']['status']==status
-    assert cfg['brain_receipt']['steps'][-1]['action']=='pipeline_continue_fallback'
-    assert (tenant,task) not in module.active
+    async def forbidden(*args, **kwargs):
+        raise AssertionError('Failed planner cannot repeat the completed free pass or start paid continuation')
+    monkeypatch.setattr(route, 'httpx', SimpleNamespace(AsyncClient=Client))
+    monkeypatch.setattr(module, 'run_phase', forbidden)
+    monkeypatch.setitem(sys.modules, 'room', SimpleNamespace(_run_batch=forbidden))
+    cfg = {'tenant_id': str(tenant), 'batch': 'placeholder-batch', 'count': 20,
+           'user_id': 'placeholder-owner', 'verified_user_id': 'placeholder-owner'}
+    with pytest.raises(RuntimeError, match='Base brain unavailable'):
+        await module.drive_batch(Pool(), SimpleNamespace(_headers=lambda: {'X-Tank-Key': 'placeholder-signing-key'}),
+                                 task, cfg, None, free_result=free_result)
+    assert calls == ['signed planner']
+    assert 'brain_receipt' not in cfg
+    assert (tenant, task) not in module.active
 
 
 @pytest.mark.asyncio
@@ -401,8 +417,9 @@ async def test_twenty_unresolved_records_exclude_large_profiles_and_passes():
         async def fetchrow(self,*args):return {'status':'done','result':'20 processed'}
     result=await module.results(module.ActiveBatch(Pool(),{},None),module.Task(tenant_id=tenant,task_id=task))
     assert len(result['unresolved'])==20
-    assert all(set(row)=={'id','name','website','status'} for row in result['unresolved'])
+    assert all(set(row)=={'id','name','raw_name','website','status'} for row in result['unresolved'])
     assert result['unresolved'][0]['website']=='https://example.com'
+    assert all(row['raw_name'] == 'Fixture business' for row in result['unresolved'])
     assert len(runner.tool_result(result))<8000
     assert len(runner.tool_result({'html':'x'*100000}))<=8000
 
