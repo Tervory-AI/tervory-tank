@@ -1227,6 +1227,9 @@ def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[di
                     max_tokens: int, route_seat: str | None) -> tuple[str, str, str]:
     # Whole policy revision, pinned skill, system messages, matter and generation
     # limits participate. Even legacy platform/region scopes stay tenant-local.
+    if policy.get('_coverage'):
+        # ENGINE LEARNING: the coverage overlay never changes a cache key.
+        policy = {k: v for k, v in {**policy, **policy['_coverage']['stored']}.items() if k != '_coverage'}
     c1 = __import__('exact_cache')
     identity_policy = policy if c1.enabled() else {k: v for k, v in policy.items() if k != 'cache_ttl_s'}
     context = [identity_policy, req.skill, req.case_ref, route_seat, max_tokens, box_region()]
@@ -1337,6 +1340,8 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
         if __import__('request_router').enabled():
             original = await __import__('request_router').route(engine_rt, req, original, caller)
         # END ENGINE ROUTER
+        # ENGINE LEARNING: shadow coverage for client requests; unset returns the policy unchanged.
+        original = await __import__('engine_coverage').overlay(engine_rt, req, original)
     policy = original
     attempted = set()
     while True:
@@ -2113,7 +2118,8 @@ async def _shadow_work(req: RouteRequest, policy: dict[str, Any], messages: list
         log.warning("shadow %s skipped %s: a paid tool is not started from here", req.task_type, cand)
         return
     code = graduate.is_skill(cand)
-    budget_open = code or await _shadow_budget_open(req.task_type)
+    # ENGINE LEARNING: zero-price local shadows are unbudgeted only when coverage is on.
+    budget_open = code or await __import__('engine_coverage').unmetered(__import__('sys').modules[__name__], cand) or await _shadow_budget_open(req.task_type)
     if not cache and not budget_open:
         log.warning("shadow %s skipped %s: daily budget spent", req.task_type, cand)
         return
