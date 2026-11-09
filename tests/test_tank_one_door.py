@@ -477,6 +477,11 @@ async def test_base_recovery_reuses_free_result_and_continues_once(monkeypatch, 
         return {}
 
     async def pipeline(pool, task_id, cfg, call, *, planning=False):
+        assert task_id == task
+        assert cfg["tenant_id"] == str(tenant)
+        assert "verified_user_id" not in cfg
+        assert "brain_receipt" not in cfg
+        assert planning is (not events)
         await call("base.normalize", {})
         if not planning:
             final.append("done")
