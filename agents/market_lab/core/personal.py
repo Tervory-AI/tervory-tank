@@ -43,7 +43,10 @@ async def research_result(memory, tenant, user, question, *, paid_run_id=None, o
         result = await research_web(tenant, question, **({'paid_run_id': paid_run_id} if paid_run_id else {}))
         if result and result.get('facts') and on_result:
             result = await on_result(result)
-        return result if result is not None else {'cost_usd': None, 'status': 'unavailable'}
+        # None is returned only for an explicit pre-send refusal or absent
+        # configuration. No provider attempt means a known zero actual cost;
+        # failures after dispatch still propagate and cannot become free runs.
+        return result if result is not None else {'cost_usd': 0, 'status': 'unavailable'}
     from market_lab_memory_runtime import research_via_memory
     measured = await research_via_memory(memory, tenant_id=tenant, user_id=user, question=question,
                                           paid_run_id=paid_run_id, persist=True, on_result=on_result, actor=actor, tank_client=tank_client)

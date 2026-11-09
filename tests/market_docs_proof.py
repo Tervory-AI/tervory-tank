@@ -229,11 +229,15 @@ def check(env, output):
         assert fact['name'] == 'report.pdf · Page 2' and '14474' in fact['text']
         doc = ask(operation='document', document_id=file['id'], row=1).json()
         assert doc['passages'][1]['page'] == 2
-        assert ask(other, question='warehouse inventory').json()['facts'] == []
+        foreign = ask(other, question='warehouse inventory')
+        assert foreign.status_code == 503
+        assert foreign.json() == {'detail': 'Market Lab could not complete this request'}
         assert ask(other, operation='document', document_id=file['id']).status_code == 404
         assert vault('DELETE', 'files/' + file['id'], tenant=other).status_code == 404
         assert vault('DELETE', 'files/' + file['id']).status_code == 200
-        assert ask(question='warehouse inventory').json()['facts'] == []
+        deleted = ask(question='warehouse inventory')
+        assert deleted.status_code == 503
+        assert deleted.json() == {'detail': 'Market Lab could not complete this request'}
         assert ask(operation='document', document_id=file['id']).status_code == 404
         assert not (output / 'bucket/tervory-market-lab/us-east' / owner / 'uploads' / file['id']).exists()
         assert vault('POST', 'files', files=[('file', ('broken.pdf', b'bad pdf', 'application/pdf'))]).status_code == 200
@@ -255,7 +259,9 @@ def check(env, output):
             assert ask(question='warehouse').json()['facts']
             assert asyncio.run(stored_points(meta['id'])) == 2
             assert vault('DELETE', 'files/' + meta['id']).status_code == 200
-            assert not ask(question='warehouse').json()['facts']
+            missing = ask(question='warehouse')
+            assert missing.status_code == 503
+            assert missing.json() == {'detail': 'Market Lab could not complete this request'}
             assert asyncio.run(stored_points(meta['id'])) == 0
         assert vault('POST', 'files', room='base', files=[('file', ('records.csv', b'one,two\n1,2', 'text/csv'))]).status_code == 200
         base = listing(room='base')['files'][0]

@@ -467,7 +467,7 @@ def test_R54(monkeypatch):
 async def test_R55(monkeypatch):
     import test_market_lab_finish_receipts as proofs
     await proofs.test_report_keeps_original_receipts_and_unknown_cost_and_survives_memory_failure()
-    await proofs.test_http_research_releases_database_for_network_and_remembers_after_save(monkeypatch)
+    await proofs.test_http_research_releases_database_and_unsigned_request_never_writes_personal_memory(monkeypatch)
 
 
 @pytest.mark.asyncio
