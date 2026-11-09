@@ -14,7 +14,6 @@ import pytest_asyncio
 from fastapi import FastAPI
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "agents" / "opli"))
 sys.path.insert(0, str(ROOT / "integrations" / "tank"))
 
 from chassis.memory import MemoryClient
