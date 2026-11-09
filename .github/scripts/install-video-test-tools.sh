@@ -29,13 +29,13 @@ cat > "$apt_tmp/ubuntu.sources" <<EOF
 Types: deb
 URIs: $archive
 Suites: $VERSION_CODENAME $VERSION_CODENAME-updates
-Components: main restricted universe multiverse
+Components: main universe
 Signed-By: $keyring
 
 Types: deb
 URIs: $security
 Suites: $VERSION_CODENAME-security
-Components: main restricted universe multiverse
+Components: main universe
 Signed-By: $keyring
 EOF
 chmod 644 "$apt_tmp/ubuntu.sources"
@@ -50,8 +50,30 @@ apt_options=(
   -o Acquire::http::Timeout=20
   -o Acquire::https::Timeout=20
   -o DPkg::Lock::Timeout=30
+  # FFmpeg and its dependencies are in main and universe. Fetch only the
+  # Packages indexes apt needs to resolve them: no translations, command-not-found
+  # or AppStream metadata (about a third of the bytes on a slow primary archive).
+  -o Acquire::Languages=none
+  -o Acquire::IndexTargets::deb::CNF::DefaultEnabled=false
+  -o Acquire::IndexTargets::deb::DEP-11::DefaultEnabled=false
+  -o Acquire::IndexTargets::deb::DEP-11-icons::DefaultEnabled=false
+  -o Acquire::IndexTargets::deb::DEP-11-icons-hidpi::DefaultEnabled=false
 )
-timeout --kill-after=15s 120s sudo env DEBIAN_FRONTEND=noninteractive apt-get "${apt_options[@]}" update
+# A slow primary archive can need more than one bounded attempt. Completed,
+# signature-checked indexes are kept between attempts (List-Cleanup=0), so each
+# retry only fetches what is still missing. Fail closed after the last attempt.
+updated=0
+for attempt in 1 2 3; do
+  if timeout --kill-after=15s 120s sudo env DEBIAN_FRONTEND=noninteractive apt-get "${apt_options[@]}" update; then
+    updated=1
+    break
+  fi
+  echo "apt index update attempt $attempt did not finish; retrying with the indexes already fetched." >&2
+done
+if [[ $updated != 1 ]]; then
+  echo 'Ubuntu archive indexes did not download within three bounded attempts.' >&2
+  exit 1
+fi
 timeout --kill-after=15s 300s sudo env DEBIAN_FRONTEND=noninteractive apt-get "${apt_options[@]}" install -y --no-install-recommends ffmpeg
 command -v ffmpeg
 command -v ffprobe
