@@ -111,11 +111,13 @@ def radix_blocks(name: str) -> bool:
         return False
 
 
-def api(method: str, path: str) -> tuple[int, object]:
+def api(method: str, path: str, payload: dict | None = None) -> tuple[int, object]:
     if URL != "https://coolify.tervory.com":
         raise ValueError("COOLIFY_URL must match the fixed https Coolify base")
     req = urllib.request.Request(f"https://coolify.tervory.com/api/v1{path}", method=method,
-                                 headers={"Authorization": f"Bearer {TOKEN}", "Accept": "application/json"})
+                                 data=json.dumps(payload).encode() if payload is not None else None,
+                                 headers={"Authorization": f"Bearer {TOKEN}", "Accept": "application/json",
+                                          **({"Content-Type": "application/json"} if payload is not None else {})})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             body = r.read().decode() or "null"
@@ -262,6 +264,20 @@ def last_failed(uuid: str) -> bool:
 
 def already_live(uuid: str, name: str) -> bool:
     """True when the app's latest Coolify deployment finished on MAIN_HEAD, so a deploy would only restart it."""
+    if PLAN_PATH:
+        # Coolify's Git SHA describes the Compose checkout, not the images it
+        # pulled. A newer main must never conceal an older :live image release.
+        compose = _compose.get(uuid, "")
+        entry = (_record.get("apps") or {}).get(deploy_images.compose_key(compose)) if compose else None
+        good = (entry or {}).get("last_good") or {}
+        images = good.get("images") or {}
+        if (not entry or entry.get("state") not in {"deployed", "restored", "rolled-back"}
+                or good != entry.get("live") or good.get("sha") != AFTER or not images):
+            return False
+        if any(registry().digest(f"{deploy_images.image_repo(compose, service)}:live") != digest
+               for service, digest in images.items()):
+            return False
+        return healthy(uuid, name, wait_s=0)
     if len(MAIN_HEAD) != 40:
         return False
     code, body = api("GET", f"/deployments/applications/{uuid}?take=1")
@@ -319,6 +335,8 @@ def release(uuid: str, name: str) -> bool:
     compose = _compose.get(uuid, "")
     if not _plan or compose not in _plan.get("build", []):
         return True
+    if not pin_source(uuid, name, AFTER):
+        return False
     try:
         entry = deploy_images.promote(compose, AFTER, registry(), _record, specs=_plan_specs)
     except (deploy_images.MissingImage, RuntimeError) as exc:
@@ -327,6 +345,26 @@ def release(uuid: str, name: str) -> bool:
     _promoted.add(uuid)
     previous = (entry.get("previous") or {}).get("sha", "")[:8] or "none recorded"
     print(f"::notice title=live image::{name} :live is {AFTER[:8]} (previous {previous})")
+    return True
+
+
+def pin_source(uuid: str, name: str, sha: str) -> bool:
+    """Coolify's deploy endpoint has no commit argument; pin only its source SHA.
+
+    PATCH /applications/{uuid} supports git_commit_sha. Read it back before
+    queueing anything; an older server or denied setting cannot silently deploy HEAD.
+    """
+    if not deploy_images.SHA.fullmatch(sha or ""):
+        print(f"::error title=source pin::{name} has no verified full release commit")
+        return False
+    code, _ = api("PATCH", f"/applications/{uuid}", {"git_commit_sha": sha})
+    if not 200 <= code < 300:
+        print(f"::error title=source pin::{name} release pin refused (HTTP {code})")
+        return False
+    code, body = api("GET", f"/applications/{uuid}")
+    if code != 200 or not isinstance(body, dict) or body.get("git_commit_sha") != sha:
+        print(f"::error title=source pin::{name} release pin could not be verified")
+        return False
     return True
 
 
@@ -341,8 +379,8 @@ def healthy(uuid: str, name: str, wait_s: int = HEALTH_WAIT_S) -> bool:
             return True
         if status == "running:unknown":
             print(f"::warning title=no health check::{name} has no health check Coolify can read; "
-                  "counted as deployed without one")
-            return True
+                  "not verified as a healthy image release")
+            return False
         if time.time() >= deadline:
             print(f"::error title=health check failed::{name} is {status or 'unknown'} "
                   f"{wait_s}s after its deployment finished")
@@ -364,8 +402,13 @@ def undo(uuid: str, name: str) -> None:
         print(f"::error title=restore {name}::{exc}")
         return
     print(f"::error title=rolled back::{name} failed on {AFTER[:8]}; :live is back on the previous images "
-          "and they are redeployed")
-    if deploy(uuid, name) and wait_for(uuid, name, MAIN_TIMEOUT_S if uuid == MAIN_APP else room_timeout(name)):
+          "and an exact-source recovery is attempted")
+    previous = (_record.get("apps", {}).get(deploy_images.compose_key(compose)) or {}).get("live") or {}
+    if not pin_source(uuid, name, previous.get("sha", "")):
+        return
+    if (deploy(uuid, name) and wait_for(uuid, name, MAIN_TIMEOUT_S if uuid == MAIN_APP else room_timeout(name))
+            and healthy(uuid, name)):
+        mark_healthy(uuid, "restored")
         print(f"::notice title=previous images back::{name} runs its previous images again")
 
 
@@ -376,12 +419,22 @@ def ship(uuid: str, name: str, timeout_s: int) -> bool:
     ok = deploy(uuid, name) and wait_for(uuid, name, timeout_s)
     if ok and uuid in _promoted:
         ok = healthy(uuid, name)
+        if ok:
+            mark_healthy(uuid)
     if not ok and uuid not in _timed_out:
         undo(uuid, name)
     elif not ok:
         # Still building or starting in Coolify: it may finish, so :live stays on the new images.
         _promoted.discard(uuid)
     return ok
+
+
+def mark_healthy(uuid: str, state: str = "deployed") -> None:
+    compose = _compose.get(uuid, "")
+    entry = (_record.get("apps") or {}).get(deploy_images.compose_key(compose)) if compose else None
+    if entry and (entry.get("live") or {}).get("images"):
+        entry["last_good"] = entry["live"]
+        entry["state"], entry["at"] = state, deploy_images._now_iso()
 
 
 def load_plan() -> None:
@@ -556,11 +609,15 @@ def rollback_main() -> int:
         name = app.get("name") or uuid
         compose = deploy_images.compose_for_app(app) if uuid != MAIN_APP else "docker-compose.yml"
         entry = deploy_images.rollback(compose, registry(), _record, to)
+        _compose[uuid] = compose
+        if not pin_source(uuid, name, entry["live"].get("sha", "")):
+            return 1
         print(f"::notice title=rollback::{name} :live is now {entry['live'].get('sha', '')[:8] or 'the previous images'}")
         wait = MAIN_TIMEOUT_S if uuid == MAIN_APP else ZA_TIMEOUT_S if name == SA_APP else room_timeout(name)
         if not (deploy(uuid, name) and wait_for(uuid, name, wait) and healthy(uuid, name)):
             print(f"::error title=rollback deploy::{name} did not come back healthy on the rolled-back images")
             return 1
+        mark_healthy(uuid, "rolled-back")
         return 0
     except (deploy_images.MissingImage, RuntimeError, ValueError) as exc:
         print(f"::error title=rollback::{exc}")

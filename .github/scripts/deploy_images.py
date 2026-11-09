@@ -267,7 +267,11 @@ def plan(before: str, after: str, record: dict, *, diff: Callable[[str, str], li
     """
     paths = set(diff(before, after))
     for compose in composes:
-        last = (record.get("apps", {}).get(compose_key(compose)) or {}).get("live", {}).get("sha", "")
+        entry = record.get("apps", {}).get(compose_key(compose)) or {}
+        if entry and (entry.get("state") not in {"deployed", "restored", "rolled-back"}
+                      or not entry.get("last_good") or entry.get("last_good") != entry.get("live")):
+            paths.add(compose)  # A promoted/failed/unknown attempt is still owed a deploy.
+        last = entry.get("last_good", {}).get("sha", "")
         if not last or last == after:
             continue
         if known(last):
@@ -397,21 +401,39 @@ def promote(compose: str, sha: str, registry, record: dict, *,
     if missing:
         raise MissingImage(f"{compose_key(compose)}: no image for {sha[:8]}: {', '.join(missing)}")
     old = {s.service: registry.digest(f"{s.repo}:{LIVE}") for s in services}
-    for s in services:
-        if old[s.service] and old[s.service] != new[s.service]:
-            registry.tag(f"{s.repo}@{old[s.service]}", f"{s.repo}:{PREVIOUS}")
-        registry.tag(f"{s.repo}:{sha}", f"{s.repo}:{LIVE}")
     apps = record.setdefault("apps", {})
     entry = apps.get(compose_key(compose)) or {}
+    old_previous = {s.service: registry.digest(f"{s.repo}:{PREVIOUS}") for s in services}
+    try:
+        for s in services:
+            if old[s.service] and old[s.service] != new[s.service]:
+                registry.tag(f"{s.repo}@{old[s.service]}", f"{s.repo}:{PREVIOUS}")
+            registry.tag(f"{s.repo}@{new[s.service]}", f"{s.repo}:{LIVE}")
+    except RuntimeError:
+        # Registry writes are not atomic. Restore every existing tag, not only
+        # the last service attempted; no Coolify deploy may follow this failure.
+        errors = []
+        for s in services:
+            for tag, digest in ((LIVE, old[s.service]), (PREVIOUS, old_previous[s.service])):
+                if digest:
+                    try:
+                        registry.tag(f"{s.repo}@{digest}", f"{s.repo}:{tag}")
+                    except RuntimeError:
+                        errors.append(f"{s.service}:{tag}")
+        apps[compose_key(compose)] = {**entry, "compose": compose, "state": "promotion_failed",
+                                      "pending_sha": sha, "at": _now_iso()}
+        if errors:
+            raise RuntimeError("Promotion failed; tag restoration incomplete: " + ", ".join(errors)) from None
+        raise
     if any(old.values()) and old != new:
         # What was really live before this deploy; its commit is known when the record matches.
-        recorded = entry.get("live") or {}
+        recorded = entry.get("last_good") or {}
         previous = {"sha": recorded.get("sha", "") if recorded.get("images") == old else "",
                     "images": {k: v for k, v in old.items() if v}}
     else:
         previous = entry.get("previous") or {}
     entry = {"compose": compose, "live": {"sha": sha, "images": new}, "previous": previous or {},
-             "state": "promoted", "at": _now_iso()}
+             "last_good": entry.get("last_good") or {}, "state": "promoted", "at": _now_iso()}
     apps[compose_key(compose)] = entry
     return entry
 
@@ -427,7 +449,7 @@ def restore(compose: str, registry, record: dict) -> bool:
         repo = image_repo(compose, service)
         registry.tag(f"{repo}@{digest}", f"{repo}:{LIVE}")
     entry["failed"] = entry.get("live")
-    entry["live"], entry["state"], entry["at"] = previous, "restored", _now_iso()
+    entry["live"], entry["state"], entry["at"] = previous, "restore_pending", _now_iso()
     return True
 
 
@@ -455,7 +477,8 @@ def rollback(compose: str, registry, record: dict, to: str = "", *,
         if (current.get("images") or {}).get(service):
             registry.tag(f"{repo}@{current['images'][service]}", f"{repo}:{PREVIOUS}")
         registry.tag(f"{repo}@{digest}", f"{repo}:{LIVE}")
-    entry = {"compose": compose, "live": target, "previous": current, "state": "rolled-back", "at": _now_iso()}
+    entry = {"compose": compose, "live": target, "previous": current,
+             "last_good": entry.get("last_good") or {}, "state": "rollback_pending", "at": _now_iso()}
     record.setdefault("apps", {})[compose_key(compose)] = entry
     return entry
 
@@ -606,6 +629,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "plan":
         after, before = os.environ["AFTER"], os.environ.get("BEFORE", "")
+        args.out.parent.mkdir(parents=True, exist_ok=True)
         record = latest_record(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"], args.out.parent)
         result = plan(before, after, record, diff=git_paths, known=has_commit,
                       composes=deployable_composes(), specs=built_services)

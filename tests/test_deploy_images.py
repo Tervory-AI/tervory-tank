@@ -88,6 +88,8 @@ def test_an_app_behind_its_last_good_deploy_gets_its_own_changes_back() -> None:
     # The previous run (A) failed main, so the room never deployed C..A changes. The room's
     # record says it last ran C: its own paths since C are included, main's are not re-added.
     record = {"apps": {"base": {"live": {"sha": C}}, "main": {"live": {"sha": A}}}}
+    for entry in record["apps"].values():
+        entry.update(state="deployed", last_good=dict(entry["live"]))
     diffs = {(A, B): ["tank/x.py"], (C, B): ["agents/base/app.py", "tank/y.py", "agents/zenas/z.py"]}
     result = _plan(A, B, record, diffs)
     assert "agents/base/app.py" in result["paths"]
@@ -103,6 +105,7 @@ def test_a_recorded_commit_missing_from_the_clone_counts_as_changed() -> None:
 
 def test_an_app_already_on_this_commit_adds_nothing() -> None:
     record = {"apps": {"base": {"live": {"sha": B}}}}
+    record["apps"]["base"].update(state="deployed", last_good=dict(record["apps"]["base"]["live"]))
     assert _plan(A, B, record, {(A, B): []})["build"] == []
 
 
@@ -200,6 +203,7 @@ def test_promote_moves_live_and_records_the_previous_digests() -> None:
     reg = FakeRegistry({f"{_repo('tank')}:{B}": "sha256:tb", f"{_repo('workspace')}:{B}": "sha256:wb",
                         f"{_repo('tank')}:live": "sha256:ta", f"{_repo('workspace')}:live": "sha256:wa"})
     record = {"apps": {"main": {"live": {"sha": A, "images": {"tank": "sha256:ta", "workspace": "sha256:wa"}}}}}
+    record["apps"]["main"]["last_good"] = dict(record["apps"]["main"]["live"])
     entry = di.promote("docker-compose.yml", B, reg, record, specs=_specs)
     assert reg.tags[f"{_repo('tank')}:live"] == "sha256:tb"
     assert reg.tags[f"{_repo('tank')}:previous"] == "sha256:ta"
@@ -226,11 +230,12 @@ def test_restore_after_a_failed_deploy_puts_the_previous_images_back() -> None:
     reg = FakeRegistry({f"{_repo('tank')}:{B}": "sha256:tb", f"{_repo('workspace')}:{B}": "sha256:wb",
                         f"{_repo('tank')}:live": "sha256:ta", f"{_repo('workspace')}:live": "sha256:wa"})
     record = {"apps": {"main": {"live": {"sha": A, "images": {"tank": "sha256:ta", "workspace": "sha256:wa"}}}}}
+    record["apps"]["main"]["last_good"] = dict(record["apps"]["main"]["live"])
     di.promote("docker-compose.yml", B, reg, record, specs=_specs)
     assert di.restore("docker-compose.yml", reg, record) is True
     assert reg.tags[f"{_repo('tank')}:live"] == "sha256:ta" and reg.tags[f"{_repo('workspace')}:live"] == "sha256:wa"
     entry = record["apps"]["main"]
-    assert entry["live"]["sha"] == A and entry["failed"]["sha"] == B and entry["state"] == "restored"
+    assert entry["live"]["sha"] == A and entry["failed"]["sha"] == B and entry["state"] == "restore_pending"
 
 
 def test_restore_without_a_previous_image_says_so() -> None:
@@ -371,7 +376,12 @@ def _image_mode(monkeypatch, tmp_path, mod, build: list[str], status: str = "run
     images = [{"compose": c, "service": s.service} for c in build for s in _specs(c)]
     plan = {"paths": ["tank/main.py", "agents/zenas/app.py"], "build": build, "images": images}
     (tmp_path / "plan.json").write_text(json.dumps(plan))
-    (tmp_path / "record.json").write_text(json.dumps(record or {}))
+    if record is None:
+        record = {"apps": {di.compose_key(c): {"live": {"sha": A, "images": {
+            spec.service: f"sha256:{spec.service}-old" for spec in _specs(c)}}, "state": "deployed"} for c in build}}
+        for entry in record["apps"].values():
+            entry["last_good"] = dict(entry["live"])
+    (tmp_path / "record.json").write_text(json.dumps(record))
     monkeypatch.setattr(mod, "PLAN_PATH", str(tmp_path / "plan.json"))
     monkeypatch.setattr(mod, "RECORD_PATH", str(tmp_path / "record.json"))
     tags = {}
@@ -384,12 +394,17 @@ def _image_mode(monkeypatch, tmp_path, mod, build: list[str], status: str = "run
     monkeypatch.setattr(mod, "_registry", reg)
     calls: list[str] = []
 
-    def api(method: str, path: str):
+    pins = {}
+    def api(method: str, path: str, payload=None):
+        if method == "PATCH":
+            assert set(payload) == {"git_commit_sha"}
+            pins[path] = payload["git_commit_sha"]
+            return 200, {}
         calls.append(f"{method} {path}")
         if path == "/applications":
             return 200, APPS
         if path.startswith("/applications/"):
-            return 200, {"status": status}
+            return 200, {"status": status, "git_commit_sha": pins.get(path, "HEAD")}
         return 200, []
 
     monkeypatch.setattr(mod, "api", api)
@@ -502,7 +517,11 @@ def test_rollback_command_goes_back_one_step_and_redeploys(monkeypatch, tmp_path
                                  "previous": {"sha": A, "images": {"agent-zenas": "sha256:old"}}}}}
     reg, _ = _image_mode(monkeypatch, tmp_path, mod, [], record=record)
     reg.tags[f"{repo}:live"] = "sha256:new"
-    monkeypatch.setattr(mod, "api", lambda method, path: (200, {**APPS[2], "status": "running:healthy"}))
+    def api(method, path, payload=None):
+        if method == "PATCH":
+            assert payload == {"git_commit_sha": A}
+        return 200, {**APPS[2], "status": "running:healthy", "git_commit_sha": A}
+    monkeypatch.setattr(mod, "api", api)
     monkeypatch.setenv("APP", "room-uuid")
     deployed: list[str] = []
     monkeypatch.setattr(mod, "deploy", lambda uuid, name: deployed.append(reg.tags[f"{repo}:live"]) or True)
@@ -553,3 +572,129 @@ def test_coolify_ops_rollback_is_one_main_only_step_in_the_deploy_group() -> Non
     assert ops["jobs"]["op"]["if"] == "inputs.op != 'rollback'"
     assert "inputs.op == 'rollback'" in ops["concurrency"]["group"].split("&& 'coolify-deploy'")[0]
     assert any("deploy_changed.py rollback" in step.get("run", "") for step in job["steps"])
+
+
+@pytest.mark.parametrize('available', [False, True])
+def test_bootstrap_plan_creates_directory_without_readable_record(monkeypatch, tmp_path, available):
+    import io
+    monkeypatch.setenv('AFTER', B)
+    monkeypatch.setenv('BEFORE', A)
+    monkeypatch.setenv('GITHUB_REPOSITORY', 'placeholder/repository')
+    monkeypatch.setenv('GITHUB_TOKEN', 'placeholder')
+    def response(*args, **kwargs):
+        if available:
+            return io.BytesIO(b'{"artifacts": []}')
+        raise OSError('placeholder unavailable')
+    monkeypatch.setattr(di.urllib.request, 'urlopen', response)
+    monkeypatch.setattr(di, 'git_paths', lambda *args: [])
+    monkeypatch.setattr(di, 'deployable_composes', lambda: [])
+    output = tmp_path / 'new' / 'deploy' / 'plan.json'
+    assert di.main(['plan', '--out', str(output)]) == 0
+    assert json.loads(output.read_text())['images'] == []
+
+
+def test_partial_promotion_restores_all_existing_tags_and_keeps_retry_needed():
+    class Broken(FakeRegistry):
+        broken = False
+        def tag(self, source, target):
+            if target == f'{_repo("workspace")}:live' and not self.broken:
+                self.broken = True
+                raise RuntimeError('placeholder failed second promotion')
+            super().tag(source, target)
+    tags = {f'{_repo(s)}:{tag}': f'sha256:{s}-{tag}'
+            for s in ('tank', 'workspace') for tag in (B, 'live', 'previous')}
+    reg = Broken(tags)
+    record = {}
+    with pytest.raises(RuntimeError):
+        di.promote('docker-compose.yml', B, reg, record, specs=_specs)
+    assert {k: reg.tags[k] for k in tags} == tags
+    assert record['apps']['main']['state'] == 'promotion_failed'
+    assert 'live' not in record['apps']['main']
+
+
+def test_image_skip_uses_verified_release_not_moving_coolify_git_head(monkeypatch, tmp_path):
+    mod = _deploy_script(monkeypatch)
+    reg, _ = _image_mode(monkeypatch, tmp_path, mod, ['docker-compose.yml'])
+    mod.load_plan()
+    mod.map_composes(APPS)
+    monkeypatch.setattr(mod, 'MAIN_HEAD', C)
+    # Coolify may label its Compose checkout C even while the actual images are A.
+    assert not mod.already_live(mod.MAIN_APP, 'main')
+    monkeypatch.setattr(mod, 'deploy', lambda *args: True)
+    monkeypatch.setattr(mod, 'wait_for', lambda *args: True)
+    assert mod.ship(mod.MAIN_APP, 'main', 10)
+    assert mod._record['apps']['main']['last_good']['sha'] == B
+    assert mod.already_live(mod.MAIN_APP, 'main')
+    monkeypatch.setattr(mod, 'AFTER', C)
+    assert not mod.already_live(mod.MAIN_APP, 'main')
+    monkeypatch.setattr(mod, 'AFTER', B)
+    reg.tags[f'{_repo("tank")}:live'] = 'sha256:foreign'
+    assert not mod.already_live(mod.MAIN_APP, 'main')
+
+
+def test_failed_bootstrap_deploy_is_retried_after_unrelated_merge(monkeypatch, tmp_path):
+    mod = _deploy_script(monkeypatch)
+    reg, _ = _image_mode(monkeypatch, tmp_path, mod, ['docker-compose.yml'], record={})
+    for service in ('tank', 'workspace'):
+        reg.tags.pop(f'{_repo(service)}:live')
+    mod.load_plan(); mod.map_composes(APPS)
+    monkeypatch.setattr(mod, 'deploy', lambda *args: False)
+    assert not mod.ship(mod.MAIN_APP, 'main', 10)
+    entry = mod._record['apps']['main']
+    assert not entry.get('last_good') and entry['state'] == 'promoted'
+    next_plan = _plan(B, C, mod._record, {(B, C): ['docs/unrelated.md']})
+    assert 'docker-compose.yml' in next_plan['build']
+
+
+def test_source_pin_refusal_or_mismatch_never_promotes_or_deploys(monkeypatch, tmp_path):
+    mod = _deploy_script(monkeypatch)
+    reg, _ = _image_mode(monkeypatch, tmp_path, mod, ['docker-compose.yml'])
+    mod.load_plan(); mod.map_composes(APPS)
+    monkeypatch.setattr(mod, 'api', lambda method, path, payload=None: (200, {'git_commit_sha': C}))
+    deployed = []
+    monkeypatch.setattr(mod, 'deploy', lambda *args: deployed.append(args) or True)
+    assert not mod.ship(mod.MAIN_APP, 'main', 10)
+    assert not reg.moves and not deployed
+
+
+def test_partial_image_promotion_never_queues_deployment(monkeypatch, tmp_path):
+    mod = _deploy_script(monkeypatch)
+    reg, _ = _image_mode(monkeypatch, tmp_path, mod, ['docker-compose.yml'])
+    original = reg.tag
+    failed = False
+    def tag(source, target):
+        nonlocal failed
+        if target == f'{_repo("workspace")}:live' and not failed:
+            failed = True
+            raise RuntimeError('placeholder second tag unavailable')
+        original(source, target)
+    reg.tag = tag
+    mod.load_plan(); mod.map_composes(APPS)
+    deployed = []
+    monkeypatch.setattr(mod, 'deploy', lambda *args: deployed.append(args) or True)
+    assert not mod.ship(mod.MAIN_APP, 'main', 10)
+    assert not deployed
+    assert reg.tags[f'{_repo("tank")}:live'] == 'sha256:tank-old'
+    assert reg.tags[f'{_repo("workspace")}:live'] == 'sha256:workspace-old'
+    entry = mod._record['apps']['main']
+    assert entry['state'] == 'promotion_failed' and entry['last_good']['sha'] == A
+
+
+def test_unhealthy_or_unknown_image_release_cannot_be_skipped(monkeypatch, tmp_path):
+    mod = _deploy_script(monkeypatch)
+    reg, _ = _image_mode(monkeypatch, tmp_path, mod, ['docker-compose.yml'], status='running:unknown')
+    mod.load_plan(); mod.map_composes(APPS)
+    entry = mod._record['apps']['main']
+    monkeypatch.setattr(mod, 'AFTER', A)
+    assert entry['last_good'] == entry['live']
+    assert not mod.already_live(mod.MAIN_APP, 'main')
+
+
+def test_unverified_live_record_cannot_supply_a_recovery_source_sha():
+    reg = FakeRegistry({f"{_repo('tank')}:{B}": "sha256:tb", f"{_repo('workspace')}:{B}": "sha256:wb",
+                        f"{_repo('tank')}:live": "sha256:ta", f"{_repo('workspace')}:live": "sha256:wa"})
+    record = {"apps": {"main": {"state": "promoted", "live": {"sha": A, "images": {
+        "tank": "sha256:ta", "workspace": "sha256:wa"}}}}}
+    entry = di.promote("docker-compose.yml", B, reg, record, specs=_specs)
+    assert entry["previous"]["sha"] == ""
+    assert entry["last_good"] == {}
