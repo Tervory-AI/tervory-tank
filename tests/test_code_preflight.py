@@ -120,6 +120,16 @@ def test_task_splitter_separates_asks():
     assert code_preflight.split('Fix the bug in tank/a.py and add a test') == ['Fix the bug in tank/a.py and add a test']
 
 
+def test_splitter_and_triage_stay_linear_on_hostile_text():
+    import time
+    for text in ['* ' + '  ' * 10000 + 'x', 'a.' + ' ' * 20000 + 'also b', 'x. ' * 6000, '1) ' + '\t' * 20000]:
+        started = time.monotonic()
+        code_preflight.split(text)
+        code_preflight.vague(text)
+        assert time.monotonic() - started < 1
+    assert code_preflight.split('- a\n-  b  ') == ['a', 'b']
+
+
 def test_paths_are_relative_and_bounded():
     text = 'Edit ./tank/a.py, `web/App.tsx` and Dockerfile. Not /etc/passwd, ../x.py, e.g. or https://x.io/a.js.'
     assert code_preflight.paths_in(text) == ['tank/a.py', 'web/App.tsx', 'Dockerfile']

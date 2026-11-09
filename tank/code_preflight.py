@@ -52,8 +52,9 @@ CONCRETE = [re.compile(pattern) for pattern in (
     r'`[^`\n]+`', r'\b[a-z][a-z0-9]*_[a-z0-9_]+\b', r'\b[a-z]+[A-Z][A-Za-z0-9]*\b', r'\b[A-Z][a-z0-9]+[A-Z]\w*\b',
     r'\b\w+\(\)', r'\b\w*(?:Error|Exception)\b|Traceback', r'\bline \d+\b', r'"[^"\n]{3,}"', r'#\d+\b')]
 VAGUE_WORDS = frozenset(('something', 'somehow', 'stuff', 'whatever', 'etc', 'things', 'everything'))
-LIST_ITEM = re.compile(r'^\s*(?:[-*•]|\d{1,2}[.)])\s+(.*\S)\s*$')
-JOINER = re.compile(r'(?<=[.!?;])\s+(?=(?:also|then|next|additionally|separately|finally|and also)\b)', re.I)
+# Linear-time markers only: no nested or adjacent quantifiers over user text.
+LIST_MARKER = re.compile(r'(?:[-*\u2022]|\d{1,2}[.)])(?=\s)')
+JOINERS = ('also', 'then', 'next', 'additionally', 'separately', 'finally')
 STOP = frozenset(('the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'add', 'fix', 'make', 'use', 'when',
                   'should', 'please', 'file', 'files', 'code', 'change', 'update', 'all', 'new', 'not', 'are', 'can',
                   'our', 'its', 'has', 'have', 'then', 'also', 'any', 'out', 'more', 'less', 'one', 'two'))
@@ -124,9 +125,9 @@ def split(text: str) -> list[str]:
     items: list[str] = []
     preamble: list[str] = []
     for line in text.splitlines():
-        match = LIST_ITEM.match(line)
-        if match:
-            items.append(match.group(1))
+        match = LIST_MARKER.match(line.strip())
+        if match and line.strip()[match.end():].strip():
+            items.append(line.strip()[match.end():].strip())
         elif line.strip() and items:
             items[-1] += '\n' + line.strip()
         elif line.strip():
@@ -134,8 +135,27 @@ def split(text: str) -> list[str]:
     if len(items) >= 2:
         context = ' '.join(preamble)
         return [context + '\n' + item if context else item for item in items]
-    parts = [part.strip() for part in JOINER.split(text) if part.strip()]
+    parts = [part.strip() for part in sentences(text) if part.strip()]
     return parts if len(parts) >= 2 else [text.strip()]
+
+
+def sentences(text: str) -> list[str]:
+    """Split after . ! ? ; when the next word is a joiner (one linear scan)."""
+    parts, start, index = [], 0, 0
+    while index < len(text):
+        if text[index] in '.!?;' and index + 1 < len(text) and text[index + 1].isspace():
+            after = index + 1
+            while after < len(text) and text[after].isspace():
+                after += 1
+            word = re.match(r'[A-Za-z]+', text[after:after + 16])
+            if word and word.group(0).lower() in JOINERS:
+                parts.append(text[start:index + 1])
+                start = after
+            index = after
+            continue
+        index += 1
+    parts.append(text[start:])
+    return parts
 
 
 def words(text: str) -> set[str]:
