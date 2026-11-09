@@ -55,6 +55,7 @@ class RunnerTest(unittest.TestCase):
                 config.write_text(json.dumps(pages))
                 out = Path(tmp) / "out"
                 env = {k: v for k, v in os.environ.items() if k not in ("LIVE_CHECK_EMAIL", "LIVE_CHECK_PASSWORD")}
+                env["SIGNED_IN_RECHECK_MS"] = "500"
                 done = subprocess.run(["node", str(ROOT / "ops/signed_in_check.mjs"), "--signed-out",
                                        "--pages", str(config), "--output", str(out)],
                                       capture_output=True, text=True, timeout=180, env=env, check=False)
@@ -66,6 +67,10 @@ class RunnerTest(unittest.TestCase):
                 self.assertIn("Empty section: Next step", rows["blank"]["reasons"])
                 self.assertIn("Empty: Ask Rig answers", rows["blank"]["reasons"])
                 self.assertEqual(rows["down"]["reasons"][0], "HTTP 503")
+                # Failed pages are looked at twice; both looks are kept, the good page once.
+                self.assertEqual(rows["down"]["firstReasons"][0], "HTTP 503")
+                self.assertIn("Empty section: Next step", rows["blank"]["firstReasons"])
+                self.assertNotIn("firstReasons", rows["good"])
                 for failed in ("blank", "down"):
                     self.assertTrue((out / rows[failed]["screenshot"]).is_file())
                 summary = (out / "summary.md").read_text()

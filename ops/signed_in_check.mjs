@@ -22,6 +22,7 @@ const check = (await fs.readFile(path.join(root, 'ops/page_content_check.js'), '
 const email = process.env.LIVE_CHECK_EMAIL || '';
 const password = process.env.LIVE_CHECK_PASSWORD || '';
 const signedOut = values['signed-out'];
+const RECHECK_MS = Number(process.env.SIGNED_IN_RECHECK_MS ?? 90000);
 const results = [];
 const save = () => fs.writeFile(path.join(out, 'results.json'), JSON.stringify(results, null, 2) + '\n');
 
@@ -116,7 +117,7 @@ try {
     }
   }
   const signedIn = !signedOut && results.every((row) => row.passed || row.id === 'sign-in-provider');
-  for (const target of config.pages) {
+  async function checkPage(target) {
     // A fresh tab per page: a failed load can never be checked against the last page.
     await page.close();
     page = await context.newPage();
@@ -126,21 +127,35 @@ try {
       await signIn(page, `${target.id}-sign-in`).catch(() => false);
       ({status, failed, error} = await open(page, target.url));
     }
-    if (error) {
-      await record(page, target.id, target.url, [error]);
-      continue;
-    }
+    if (error) return record(page, target.id, target.url, [error]);
     if (!signedOut && isSignIn(page.url())) {
-      await record(page, target.id, target.url, ['Page sent the signed-in check account back to sign-in']);
-      continue;
+      return record(page, target.id, target.url, ['Page sent the signed-in check account back to sign-in']);
     }
     if (target.click) {
       await page.getByRole('button', {name: target.click, exact: true}).first().click().catch(() => {});
       await page.waitForTimeout(1500);
     }
-    await inspect(page, target.id, target.url, status, failed, {
+    return inspect(page, target.id, target.url, status, failed, {
       signIn: isSignIn(page.url()), expect: isSignIn(page.url()) ? [] : target.expect, required: target.required,
     });
+  }
+  for (const target of config.pages) await checkPage(target);
+  // A deploy replaces containers for about a minute and Traefik answers 503 meanwhile
+  // (seen 9 Nov 01:36 UTC). Pages that failed get one more look after RECHECK_MS; only a
+  // page that fails both times is reported. The first reasons stay in results.json.
+  const again = config.pages.filter((target) => results.some((row) => row.id === target.id && !row.passed));
+  if (again.length) {
+    console.log(`Checking ${again.length} failed page(s) again in ${RECHECK_MS / 1000}s`);
+    await new Promise((resolve) => setTimeout(resolve, RECHECK_MS));
+    for (const target of again) {
+      const index = results.findIndex((row) => row.id === target.id);
+      const [first] = results.splice(index, 1);
+      const row = await checkPage(target);
+      row.firstReasons = first.reasons;
+      results.splice(results.indexOf(row), 1);
+      results.splice(index, 0, row);
+    }
+    await save();
   }
 } finally {
   await browser.close();
