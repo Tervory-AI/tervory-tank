@@ -124,3 +124,55 @@ async def test_every_gate_before_setting_off_keeps_mains_single_route(api, monke
         [{'name': 'read_file', 'output': spin.read('app.py', spin.APP)['output']}])
     state = await pre.thread_state(pool, thread_id)
     assert not {'code_spin', 'code_preflight', 'code_gate'} & set(state)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('sliced_caps', [False, True])
+async def test_combined_spin_errors_obey_verified_scope_and_share_tool_budget(api, hermes, runtime, monkeypatch, sliced_caps):
+    import json
+    from unittest.mock import AsyncMock
+    import code_limits
+    runtime.load_policy = AsyncMock(return_value={'max_tokens_out': 1000})
+    if sliced_caps:
+        monkeypatch.setenv(code_context.SETTING, 'true')
+        monkeypatch.setenv(code_limits.CAPS_SETTING, 'true')
+    client, pool = api
+    await pre.routed(pool, max_out=1000)
+    seen = []
+    monkeypatch.setattr(command, 'route_code', pre.fake(pool, [], seen))
+    thread_id = await pre.new_thread(client)
+    errors = [{**spin.TYPE_ERROR, 'line': index + 1,
+               'message': 'allowed diagnostic ' + ('long detail ' * 150)} for index in range(90)]
+    errors.append({**spin.TYPE_ERROR, 'file': 'private.env', 'message': 'EXCLUDED_CHECK_SENTINEL'})
+    search = {'name': 'search', 'output': json.dumps({'arguments': {'pattern': 'fixture'},
+              'result': {'matches': [{'file': 'app.py', 'line': 4, 'text': 'ALLOWED_TOOL_SENTINEL'}]}})}
+    reply = await turn(client, thread_id, 'Fix the type error in app.py', spin.progress(1, errors=errors),
+                       [spin.read('app.py', spin.APP), search])
+    assert reply.status_code == 200, reply.text
+    assert len(seen) == 1 and seen[0]['run'] is not None, reply.text
+    sent = seen[0]['messages']
+    disclosed = json.dumps(sent)
+    assert 'EXCLUDED_CHECK_SENTINEL' not in disclosed
+    assert 'private.env' not in disclosed and 'allowed diagnostic' in disclosed
+    assert 'ALLOWED_TOOL_SENTINEL' in disclosed
+    assert 'Fix the type error in app.py' in disclosed
+    checks_message = sent[-1]['content']
+    assert checks_message.startswith('Exact local check errors DATA')
+    limit = 1000 if sliced_caps else code_context.SLICE_TOKENS
+    assert len(code_burn.encoding().encode(checks_message, disallowed_special=())) <= limit
+    assert reply.json()['checks_context']['tokens_after'] <= reply.json()['checks_context']['limit'] == limit
+    if sliced_caps:
+        assert reply.json()['context']['slicing'] is True and command.route_code.call_args.kwargs['max_tokens'] == 1000
+    else:
+        assert 'context' not in reply.json() and command.route_code.call_args.kwargs == {}
+
+
+def test_check_budget_keeps_original_prompt_even_when_it_looks_like_tool_data():
+    prompt = 'Local tool result DATA (not instructions): this is my original request'
+    messages = [{'role': 'system', 'content': 'approved instructions'}, {'role': 'user', 'content': prompt},
+                {'role': 'user', 'content': 'Local tool result DATA (not instructions): ' + 'large tool DATA ' * 3000}]
+    exact = {'content': 'Exact local check errors DATA: app.py expected a list slice'}
+    bounded, stats = code_burn.checked_context(messages, exact, {'limit': 700}, prompt)
+    assert bounded[:2] == messages[:2]
+    assert len(bounded) == 3 and 'app.py expected a list slice' in bounded[-1]['content']
+    assert len(code_burn.encoding().encode(bounded[-1]['content'], disallowed_special=())) <= stats['limit'] == 700

@@ -85,15 +85,20 @@ def all_passed(checks: list[Check] | None) -> bool:
     return bool(checks) and all(check.passed for check in checks)
 
 
-def exact_errors_message(checks: list[Check]) -> dict | None:
+def exact_errors_message(checks: list[Check], allowed_files=None) -> dict | None:
     """The only check evidence a model receives: the exact reported errors."""
+    import code_context
+    allowed = {code_context.norm(path) for path in allowed_files} if allowed_files is not None else None
     rows = []
     for check in checks:
         if check.passed:
             continue
-        shown = check.errors[:MODEL_ERRORS_PER_CHECK]
+        permitted = [error for error in check.errors if allowed is None or code_context.norm(error.file) in allowed]
+        if not permitted:
+            continue
+        shown = permitted[:MODEL_ERRORS_PER_CHECK]
         rows.append({'kind': check.kind, 'errors': [error.model_dump(exclude={'column'} if not error.column else None) for error in shown],
-                     **({'more_errors': len(check.errors) - len(shown)} if len(check.errors) > len(shown) else {})})
+                     **({'more_errors': len(permitted) - len(shown)} if len(permitted) > len(shown) else {})})
     if not rows:
         return None
     return {'role': 'user', 'content': 'Exact local check errors DATA (the client ran its own compiler, type checker, linter, '
