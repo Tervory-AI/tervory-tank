@@ -193,12 +193,10 @@ async def test_feed_price_normalizes_tigers_site(app, site):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("url", ["https://Example.com:443/product", "https://Example.com:8443/product", "https://example.com:444/product"])
-async def test_tiger_feed_client_normalized_watch_and_http_error(app, monkeypatch, url):
+async def test_tiger_feed_client_normalized_watch_and_http_error(app, monkeypatch, url, tiger_feed_module):
     server, db, actor = app
     server.dependency_overrides[access.room_identity] = lambda: "tiger"
-    root = Path(__file__).resolve().parents[1]
-    spec = importlib.util.spec_from_file_location("access_review_tiger", root / "agents/tiger/app.py")
-    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    module = tiger_feed_module
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server), base_url="http://tank") as client:
         monkeypatch.setattr(module.app.state, "http", client, raising=False)
         assert await module.official_feed(str(actor.tenant_id), url) == {"found": False}
@@ -213,6 +211,28 @@ async def test_tiger_feed_client_normalized_watch_and_http_error(app, monkeypatc
     async def unavailable(*args, **kwargs): return httpx.Response(503)
     monkeypatch.setattr(module.app.state, "http", SimpleNamespace(get=unavailable))
     with pytest.raises(RuntimeError): await module.official_feed(str(actor.tenant_id), "https://example.com/product")
+
+
+@pytest.fixture(params=["trigger-first", "tiger-first"])
+def tiger_feed_module(monkeypatch, request):
+    from test_tiger import _load
+    root = Path(__file__).resolve().parents[1]
+    module = None
+    if request.param == "tiger-first":
+        module = _load("access_review_tiger", root / "agents/tiger/app.py")
+    spec = importlib.util.spec_from_file_location("gates_memory", root / "agents/trigger/gates_memory.py")
+    trigger_memory = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "gates_memory", trigger_memory)
+    spec.loader.exec_module(trigger_memory)
+    # Reuse the room loader that owns and restores Tiger's flat dependencies.
+    # A private name for app.py alone does not isolate its transitive imports.
+    if request.param == "trigger-first":
+        module = _load("access_review_tiger", root / "agents/tiger/app.py")
+    assert sys.modules["gates_memory"] is trigger_memory
+    memory = module.install_gates.__globals__["Memory"]
+    assert Path(memory.rows.__code__.co_filename) == root / "agents/tiger/gates_memory.py"
+    yield module
+    assert sys.modules["gates_memory"] is trigger_memory
 
 
 @pytest.mark.asyncio
