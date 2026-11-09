@@ -31,7 +31,6 @@ import urllib.parse
 
 from backup_runtime_scope import verify_main_scope
 import deploy_images
-from deploy_images import wanted as _wanted
 
 URL = os.environ["COOLIFY_URL"].rstrip("/")
 TOKEN = os.environ["COOLIFY_TOKEN"]
@@ -150,7 +149,16 @@ def changed_paths() -> list[str]:
 
 
 def wanted(paths: list[str]) -> tuple[bool, set[str], bool]:
-    return _wanted(paths)
+    # Same rule as deploy_images.wanted (tests/test_deploy_images.py keeps the two equal);
+    # kept self-contained here because other tests load this function on its own.
+    main = any(p.startswith(MAIN_PREFIXES) for p in paths)
+    rooms: set[str] = set()
+    every_room = any(p.startswith(ALL_ROOMS_PREFIXES) for p in paths)
+    for p in paths:
+        parts = p.split("/")
+        if len(parts) > 2 and parts[0] == "agents" and not parts[1].startswith("_"):
+            rooms.add("agent-" + parts[1].replace("_", "-"))
+    return main, rooms, every_room
 
 
 # How long to wait for each Coolify deployment. ZA builds on a slower host: when

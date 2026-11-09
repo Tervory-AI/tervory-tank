@@ -336,6 +336,9 @@ def test_build_args_without_a_default_are_refused(tmp_path: Path) -> None:
 def test_main_prefixes_are_the_deploy_scripts_prefixes(monkeypatch: pytest.MonkeyPatch) -> None:
     mod = _deploy_script(monkeypatch)
     assert mod.MAIN_PREFIXES == di.MAIN_PREFIXES and mod.ALL_ROOMS_PREFIXES == di.ALL_ROOMS_PREFIXES
+    for paths in (["tank/a.py", "agents/zenas/x.py"], ["agents/_chassis/x.py"], ["agents/market_lab/a/b.py"],
+                  ["docs/x.md", "agents/README.md"], ["docker-compose.za.yml", "agents/_template/y"]):
+        assert mod.wanted(paths) == di.wanted(paths), paths
     assert mod.wanted(["tank/a.py", "agents/zenas/x.py"]) == (True, {"agent-zenas"}, False)
 
 
