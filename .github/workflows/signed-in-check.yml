@@ -1,0 +1,90 @@
+# Signed-in page checks, every 15 minutes, plus a manual run.
+#   gh api -X POST repos/Tervory-AI/tervory-tank/actions/workflows/signed-in-check.yml/dispatches -f ref=main
+# Signs in as the dedicated check account (repo secrets LIVE_CHECK_EMAIL and
+# LIVE_CHECK_PASSWORD, never printed) and opens every product page a user reaches
+# (ops/signed_in_pages.json). Each page must show real content: no 5xx, no sign-in
+# provider name, no empty section or answer box, no placeholder text. A failed page
+# opens or updates one issue "Signed-in check failed: <page>" (label incident) and is
+# closed when the page passes again. A new issue also pushes to the founder when the
+# repo secret FOUNDER_PUSH_URL is set. Screenshots of failed pages are run artifacts.
+name: signed-in-check
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ops/signed_in_check.mjs
+      - ops/page_content_check.js
+      - ops/signed_in_pages.json
+      - .github/scripts/signed_in_alerts.py
+      - .github/workflows/signed-in-check.yml
+      - tests/test_signed_in_runner.py
+      - tests/signed_in_fixtures/**
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: signed-in-check-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+      cancel-in-progress: false
+    steps:
+      - name: Set working paths
+        run: |
+          echo "LIVE_CHECK_PLAYWRIGHT_PATH=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "SIGNED_IN_OUTPUT=$RUNNER_TEMP/signed-in-results" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: signed-in-playwright-${{ runner.os }}-1.64.1-chromium
+      - name: Install browser test packages (committed lock, Playwright 1.64.1)
+        run: |
+          npm ci --prefix tests/trigger_browser_tools --ignore-scripts --no-audit --no-fund
+          browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$browser" ]; then
+            echo "LIVE_CHECK_CHROMIUM=$browser" >> "$GITHUB_ENV"
+          else
+            tests/trigger_browser_tools/node_modules/.bin/playwright install --with-deps chromium
+          fi
+      - name: Checker runs against saved fixtures (offline)
+        run: python3 tests/test_signed_in_runner.py
+      - name: Open every product page signed in
+        id: live
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          LIVE_CHECK_EMAIL: ${{ secrets.LIVE_CHECK_EMAIL }}
+          LIVE_CHECK_PASSWORD: ${{ secrets.LIVE_CHECK_PASSWORD }}
+        run: node ops/signed_in_check.mjs --output "$SIGNED_IN_OUTPUT"
+      - name: Save screenshots and results
+        id: artifact
+        if: ${{ always() && steps.live.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: signed-in-check-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.SIGNED_IN_OUTPUT }}
+          if-no-files-found: error
+      - name: Publish page results in the run summary
+        if: ${{ always() && steps.live.outcome != 'skipped' }}
+        run: cat "$SIGNED_IN_OUTPUT/summary.md" >> "$GITHUB_STEP_SUMMARY" || echo 'No summary; see the failed step log.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Open, update or close one issue per page
+        if: ${{ always() && steps.live.outcome != 'skipped' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          FOUNDER_PUSH_URL: ${{ secrets.FOUNDER_PUSH_URL }}
+        run: python3 .github/scripts/signed_in_alerts.py

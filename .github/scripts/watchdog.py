@@ -42,11 +42,21 @@ ZA_OFFLINE = os.environ.get("ZA_OFFLINE", "").strip().lower() == "true"
 # Issue titles for per-app rows start with this. The bare "Down: Coolify" issue is the API itself.
 APP_PREFIX = "Coolify "
 
+# Coolify adds up a compose app's containers: any exited or restarting container makes it
+# exited/degraded, any failing health check makes it running:unhealthy, and only when every
+# container is running and none is unhealthy but at least one has no health check does it say
+# running:unknown. So running:unknown is not an outage: it is a health-check gap. It gets its
+# own issue ("No health check: ...") and a warning, and never fails the run. (Autumbra and
+# Autumbra Enforce failed every run from 2 Nov to 9 Nov this way, issues #611 and #735.)
+GAP_PREFIX = "No health check: "
+GAP_DETAIL = ("running; Coolify reports running:unknown because at least one container has no "
+              "health check. Not an outage. Add a health check to every long-running service.")
+
 
 @dataclass
 class Result:
     thing: str
-    state: str  # ok, down, warn, skip, gone
+    state: str  # ok, down, warn, gap, skip, gone
     detail: str
 
 
@@ -64,7 +74,7 @@ def say(result: Result) -> None:
     thing = redact(result.thing)
     if result.state == "down":
         print(f"::error title={thing}::{detail}", flush=True)
-    elif result.state == "warn":
+    elif result.state in ("warn", "gap"):
         print(f"::warning title={thing}::{detail}", flush=True)
     else:
         print(f"{result.state} {thing} {detail}", flush=True)
@@ -261,6 +271,8 @@ def coolify_results() -> list[Result]:
         allowed = status == "running:healthy" or (status == "running:unknown" and uuid == MAIN_APP)
         if allowed:
             results.append(Result(thing, "ok", status))
+        elif status == "running:unknown":
+            results.append(Result(thing, "gap", GAP_DETAIL))
         else:
             results.append(Result(thing, "down", f"status {status}"))
     return results
@@ -284,10 +296,11 @@ def gone_apps(results: list[Result], open_titles: list[str]) -> list[Result]:
     seen = {result.thing for result in results}
     gone: list[Result] = []
     for title in open_titles:
-        if not title.startswith("Down: "):
+        prefix = next((p for p in ("Down: ", GAP_PREFIX) if title.startswith(p)), None)
+        if prefix is None:
             continue
-        thing = title[len("Down: "):]
-        if not thing.startswith(APP_PREFIX) or thing in seen:
+        thing = title[len(prefix):]
+        if not thing.startswith(APP_PREFIX) or thing in seen or any(g.thing == thing for g in gone):
             continue
         if ZA_OFFLINE and is_za_app(thing):
             continue
@@ -426,13 +439,35 @@ def sync_issues(results: list[Result]) -> None:
     open_issues = github.open_incidents()
     for result in gone_apps(results, list(open_issues)):
         say(result)
-        number = int(open_issues[f"Down: {result.thing}"]["number"])
-        github.comment(number, "closed: this app no longer exists in Coolify")
-        github.close(number)
-        print(f"closed #{number} Down: {result.thing} (no longer in Coolify)", flush=True)
+        for title in (f"Down: {result.thing}", f"{GAP_PREFIX}{result.thing}"):
+            if title in open_issues:
+                number = int(open_issues[title]["number"])
+                github.comment(number, "closed: this app no longer exists in Coolify")
+                github.close(number)
+                print(f"closed #{number} {title} (no longer in Coolify)", flush=True)
     for result in results:
         title = f"Down: {result.thing}"
         current = open_issues.get(title)
+        gap_title = f"{GAP_PREFIX}{result.thing}"
+        gap = open_issues.get(gap_title)
+        if result.state == "gap":
+            if gap is None:
+                gap_number = github.open_issue(gap_title, result.detail)
+                print(f"opened #{gap_number} {gap_title}", flush=True)
+            else:
+                gap_number = int(gap["number"])
+                print(f"already open #{gap_number} {gap_title}", flush=True)
+            if current is not None:
+                number = int(current["number"])
+                github.comment(number, f"Not down: {result.detail} Tracked in #{gap_number}.")
+                github.close(number)
+                print(f"closed #{number} {title} (health-check gap, not an outage)", flush=True)
+            continue
+        if result.state in ("ok", "warn") and gap is not None:
+            number = int(gap["number"])
+            github.comment(number, f"recovered: Coolify reports {result.detail}")
+            github.close(number)
+            print(f"closed #{number} {gap_title}", flush=True)
         if result.state == "down":
             if current is None:
                 number = github.open_issue(title, result.detail)

@@ -229,7 +229,6 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
     ('agents/rig/rigbox/three_d/forge.py', 'model/paid endpoint', '6ccb0ebfdccd8aa5'): (1, 'Local job submission; paid GPU authorization is relayed to Tank before execution.'),
     ('docker-compose.yml', 'configured endpoint', '29a2f8b609b5bf88'): (1, 'Tank alone receives the internal LiteLLM origin in this stack.'),
     ('docker-compose.za.yml', 'configured endpoint', '29a2f8b609b5bf88'): (1, 'ZA Tank alone receives the internal LiteLLM origin in this stack.'),
-    ('agents/zenas/pool/embed.py', 'model/paid endpoint', '682052aabab5db9c'): (1, 'Founder-authorized law embeddings through box-local Hermes only; fixed host, no proxy or redirects, region checked.'),
     ('hermes/law_routes.py', 'model/paid endpoint', '682052aabab5db9c'): (1, 'Internal endpoint reuses the pinned CPU encoder; Zenas-only authentication and box jurisdiction checks precede encoding.'),
     ('tests/zenas_za_meaning_search/test_hermes_law.py', 'model/paid endpoint', '682052aabab5db9c'): (2, 'In-process ASGI requests with a stub encoder and local Qdrant; outbound sockets are disabled.'),
     ('hermes/embeddings.py', 'model invocation', 'f6436138f93f0a6c'): (1, 'Founder-authorized pinned CPU encoder, fixed local files only; no runtime download or external inference API.'),

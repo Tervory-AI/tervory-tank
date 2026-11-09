@@ -24,6 +24,8 @@ ROUTES = (
     ('early', 'trigger_signin_config', 'router', None, True),
     ('early', 'event_bus', 'router', None, True),
     ('early', 'agent_skills', 'build_router', ('tank',), True),
+    ('early', 'zenas_savings', 'install', ('tank',), False),
+    ('early', 'zenas_law', 'install', ('tank',), False),
     ('early', 'base_product', 'build_router', ('tank',), True),
     ('early', 'base_lists', 'build_router', (), True),
     ('early', 'base_compare', 'build_router', (), True),
@@ -71,6 +73,8 @@ ROUTES = (
     ('early', 'workspace_board', 'build_router', ('tank',), True),
     ('early', 'morning_report', 'build_router', ('tank',), True),
     ('early', 'engine_admin', 'build_router', ('tank',), True),
+    # Empty router unless ENGINE_LEDGER_ENABLED=true at start-up.
+    ('early', 'savings_ledger', 'build_router', ('tank',), True),
 )
 
 def register_routes(tank: Any, phase: str) -> None:
