@@ -8,6 +8,7 @@
 
 services:
   agent-zenas:
+    image: ghcr.io/tervory-ai/tervory-tank/zenas-za-agent-zenas:live
     build:
       context: ..
       dockerfile: zenas/Dockerfile
@@ -57,6 +58,7 @@ services:
 
   zenas-brain:
     profiles: [brain]
+    image: ghcr.io/tervory-ai/tervory-tank/zenas-za-zenas-brain:live
     build:
       context: ..
       dockerfile: zenas/Dockerfile
@@ -94,6 +96,7 @@ services:
 
   zenas-sandbox:
     profiles: [brain]
+    image: ghcr.io/tervory-ai/tervory-tank/zenas-za-zenas-sandbox:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.sandbox
@@ -120,6 +123,7 @@ services:
   # One-shot SA pool load. Not started with the room.
   # docker compose -f docker-compose.za.yml --profile load run --rm pool-loader
   pool-loader:
+    image: ghcr.io/tervory-ai/tervory-tank/zenas-za-pool-loader:live
     build:
       context: ..
       dockerfile: zenas/pool/Dockerfile
