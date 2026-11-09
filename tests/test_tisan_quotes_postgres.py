@@ -37,6 +37,8 @@ async def database():
     # Bootstrap DDL before room-role provisioning, as the all-schema RLS fixture
     # does. Installing a schema must not create a login or weaken its policies.
     existed = await conn.fetchval("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan')")
+    from chassis.db import ensure_schema
+    await ensure_schema(conn, 'tisan')
     await conn.execute(schema)
     assert await conn.fetchval("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan')") == existed
     assert await conn.fetchval("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='agent_tisan' AND c.relname IN ('quote_requests','quote_events') AND c.relrowsecurity AND c.relforcerowsecurity") == 2
@@ -128,6 +130,8 @@ async def test_quote_rls_stays_off_before_the_platform_rollout():
     try:
         await conn.execute('CREATE SCHEMA agent_tisan')
         schema = (ROOT / 'agents/tisan/schema.sql').read_text()
+        from chassis.db import ensure_schema
+        await ensure_schema(conn, 'tisan')
         await conn.execute(schema)
         on = ("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
               "WHERE n.nspname='agent_tisan' AND c.relname IN ('quote_requests','quote_events') "
@@ -162,6 +166,10 @@ async def test_schema_reapplies_as_provisioned_room_without_tank_access(rollout_
         if rollout_on:
             await conn.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
         await conn.execute('CREATE SCHEMA agent_tisan')
+        from chassis.db import ensure_schema
+        await ensure_schema(conn, 'tisan')
+        await apply_roles(conn, {'AGENT_DB_PASSWORD_TISAN': 'placeholder-disposable-test-password'})
+        await conn.execute('SET ROLE agent_tisan')
         schema = (ROOT / 'agents/tisan/schema.sql').read_text()
         await conn.execute(schema)
         # Reproduce #564's accidentally enabled state on BOTH quote tables.
@@ -169,8 +177,6 @@ async def test_schema_reapplies_as_provisioned_room_without_tank_access(rollout_
                            'ALTER TABLE agent_tisan.quote_requests FORCE ROW LEVEL SECURITY; '
                            'ALTER TABLE agent_tisan.quote_events ENABLE ROW LEVEL SECURITY; '
                            'ALTER TABLE agent_tisan.quote_events FORCE ROW LEVEL SECURITY')
-        await apply_roles(conn, {'AGENT_DB_PASSWORD_TISAN': 'placeholder-disposable-test-password'})
-        await conn.execute('SET ROLE agent_tisan')
         assert not await conn.fetchval("SELECT has_schema_privilege(current_user,'tank','USAGE')")
         await conn.execute(schema)
         await conn.execute(schema)

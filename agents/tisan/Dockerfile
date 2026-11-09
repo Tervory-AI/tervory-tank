@@ -5,6 +5,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data /opt/npm-cache \
     && chown agent:agent /data
+COPY agents/tisan/requirements.lock /app/tisan-savings.lock
+RUN pip install --no-cache-dir --require-hashes -r /app/tisan-savings.lock
 COPY agents/_chassis/chassis /app/chassis
 COPY ops/live_check.mjs ops/live_check_banned.txt /app/ops/
 COPY agents/tisan/scaffold.py /app/scaffold.py
@@ -59,6 +61,9 @@ RUN apt-get update \
     && rm -rf /tmp/npm-warm \
     && chown -R agent:agent /opt/npm-cache /data
 COPY agents/tisan/app.py agents/tisan/promotion.py agents/tisan/promotion_api.py agents/tisan/publish.py agents/tisan/builder.py agents/tisan/runtime.py agents/tisan/upstream.py agents/tisan/archive.py agents/tisan/storage.py agents/tisan/quotes.py agents/tisan/schema.sql /app/
+COPY agents/tisan/savings.py /app/savings.py
+COPY agents/tisan/gates_memory.py agents/tisan/memory_api.py agents/tisan/brain_service.py agents/tisan/plan_jobs.py /app/
+COPY tank/cl100k_base.tiktoken /app/cl100k_base.tiktoken
 # Reuse Tiger's SMTP transport without copying other rooms or their configuration.
 COPY agents/rig/rigbox/reserve.py /app/quote_smtp.py
 COPY docs/figma /app/docs/figma

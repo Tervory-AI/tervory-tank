@@ -134,6 +134,14 @@ def room_key(value: str) -> None:
         raise HTTPException(401, "room key required")
 
 
+def _memory_api():
+    try:
+        from agents.tisan import memory_api
+    except ModuleNotFoundError:
+        import memory_api
+    return memory_api
+
+
 def founder(value: str, user: str) -> None:
     room_key(value)
     allowed = {part.strip() for part in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if part.strip()}
@@ -195,7 +203,32 @@ def mount(app: Any) -> None:
                 page_hash=EXCLUDED.page_hash,approved_by=EXCLUDED.approved_by,approved_at=now()
             """, body.tenant_id, body.page_id, row["figma_file_id"], row["figma_frame_id"],
                 row["frame_hash"], row["built_page_path"], row["page_hash"], x_tervory_admin)
+        memory = _memory_api()
+        await memory.remember_value(request.app, body.tenant_id, request, memory.gates_memory.SECTION, body.page_id,
+            {"decision": "approved", "figma_file_id": row["figma_file_id"], "figma_frame_id": row["figma_frame_id"],
+             "frame_hash": row["frame_hash"], "page_hash": row["page_hash"]})
         return {"approved": True}
+
+    @app.post("/gold/reject")
+    async def reject(request: Request, x_tank_key: str = Header(default=""),
+                     x_tervory_admin: str = Header(default="")) -> dict[str, Any]:
+        founder(x_tank_key, x_tervory_admin)
+        memory = _memory_api()
+        body = memory.Rejection.model_validate(await request.json())
+        try:
+            row = snapshot(root(), str(body.tenant_id), body.page_id)
+        except (OSError, ValueError, KeyError, TypeError):
+            raise HTTPException(404, "page not found") from None
+        if body.frame_hash != row["frame_hash"] or body.page_hash != row["page_hash"]:
+            raise HTTPException(409, "page or frame changed; review again")
+        reason = body.reason.strip()[:1000]
+        if not reason:
+            raise HTTPException(422, "a rejection reason is required")
+        memory_id = await memory.remember_value(request.app, body.tenant_id, request, memory.gates_memory.SECTION,
+            body.page_id, {"decision": "rejected", "reason": reason, "figma_file_id": row["figma_file_id"],
+                           "figma_frame_id": row["figma_frame_id"], "frame_hash": row["frame_hash"],
+                           "page_hash": row["page_hash"]})
+        return {"rejected": True, "memory_id": memory_id}
 
     @app.get("/gold/candidates")
     async def candidates(request: Request, tenant_id: uuid.UUID = uuid.UUID(PLATFORM_TENANT),

@@ -9,6 +9,8 @@ import logging
 import os
 import re
 import tempfile
+import hashlib
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -140,26 +142,77 @@ def validate_plan(plan: Any, contract: dict) -> dict:
     return result
 
 
-async def make_plan(payload: dict, tenant: str, contract: dict, tank: Any) -> dict:
+def planning_messages(request: str, contract: dict) -> list[dict]:
+    def shape(definition):
+        schema = _planning(definition['props'], definition['text_slots'] + definition['image_slots'])
+        def prune(node):
+            if node.get('type') == 'object':
+                node['properties'] = {k: prune(v) for k, v in node['properties'].items()
+                                      if v != {'type': 'string', 'maxLength': 0}}
+                node['required'] = [k for k in node.get('required', []) if k in node['properties']]
+            elif node.get('type') == 'array':
+                node['items'] = prune(node['items'])
+            return node
+        return {'props': prune(schema), 'purpose': definition.get('purpose', {})}
+    compact = {'site': shape(contract['site']),
+               'sections': {k: shape(v) for k, v in contract['sections'].items()}} if contract else {}
+    return [{'role': 'system', 'content':
+        'JSON only: site fields and pages [{name,path,sections:[{id,type,props}]}]. '
+        'Include home at /; other paths /<name>. Unique names/ids. No text, titles, code or images. '
+        'Omit copy/media leaves; retain structure. Contract:' + json.dumps(compact, separators=(',', ':'))},
+        {'role': 'user', 'content': request}]
+
+
+async def make_plan(payload: dict, tenant: str, contract: dict, tank: Any, replies: list | None = None, *, cache_allowed: bool = True) -> dict:
     if "plan" in payload:
         return validate_plan(payload["plan"], contract)
     request = payload.get("request")
     if not isinstance(request, str) or not request.strip() or len(request) > 16000:
         raise ValueError("plan or request is required")
+    # A supplied JSON plan is parsing/validation, never a model task.
+    if request.lstrip().startswith('{'):
+        try:
+            return validate_plan(json.loads(request), contract)
+        except json.JSONDecodeError:
+            raise ValueError('invalid JSON plan') from None
     if tank is None:
         raise ValueError("Tank client is required for request planning")
-    messages = [{"role": "system", "content": "Return only a JSON plan with site fields logo/nav/footer/ui and pages (name, path, sections). A home page has path /; other paths are /<name>. Sections have type, unique id, props. Do not write text, code, page titles or image URLs. Omit text and image leaves; retain array/object structure and non-text props. Slot purposes describe the future accepted copy. Contract: " + json.dumps(contract)},
-                {"role": "user", "content": request}]
+    tenant = str(uuid.UUID(tenant))
+    key = (tenant, hashlib.sha256(json.dumps([contract, request], sort_keys=True).encode()).hexdigest())
+    cache = getattr(tank, '_tisan_plan_cache', None)
+    if not isinstance(cache, dict):
+        cache = tank._tisan_plan_cache = {}
+    now = time.monotonic()
+    for old in list(cache):
+        if cache[old][0] <= now:
+            del cache[old]
+    if cache_allowed and key in cache:
+        return validate_plan(cache[key][1], contract)
+    messages = planning_messages(request, contract)
+    try:
+        from agents.tisan import savings
+    except ModuleNotFoundError:
+        import savings
     for attempt in range(2):
+        savings.routing()
         reply = await asyncio.wait_for(tank.route(tenant, "tisan.plan", messages), timeout=60)
+        savings.routed(reply)
+        if replies is not None:
+            replies.append(reply if isinstance(reply, dict) else {})
         raw = reply.get("content")
         try:
-            return validate_plan(json.loads(raw), contract)
+            result = validate_plan(json.loads(raw), contract)
+            if len(cache) >= 128:
+                del cache[next(iter(cache))]
+            if cache_allowed:
+                cache[key] = (time.monotonic() + 300, copy.deepcopy(result))
+            return result
         except (ValueError, TypeError, ValidationError) as exc:
             if attempt:
                 raise ValueError("invalid plan after retry") from None
-            messages += [{"role": "assistant", "content": raw if isinstance(raw, str) else ""},
-                         {"role": "user", "content": "Correct the plan using these validation errors: " + str(exc)}]
+            messages = planning_messages(request, contract) + [
+                {"role": "assistant", "content": raw[:4096] if isinstance(raw, str) else ""},
+                {"role": "user", "content": "Correct the plan using these validation errors: " + str(exc)[:512]}]
     raise AssertionError("unreachable")
 
 
@@ -207,13 +260,82 @@ def _media_url(value: Any) -> bool:
     return (not parsed.scheme or bool(parsed.hostname)) and parsed.username is None and parsed.password is None and ".." not in parsed.path.split("/")
 
 
-async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any = None, data_root: Path | None = None) -> dict:
+def _gates():
+    try:
+        from agents.tisan import gates_memory
+    except ModuleNotFoundError:
+        import gates_memory
+    return gates_memory
+
+
+async def brain_plan(tank: Any, actor: Any, run_id: str, request: str, contract: dict) -> tuple[dict, dict]:
+    """Tank owns typed delegation, private discovery, signing and receipt validation."""
+    try:
+        from agents.tisan import savings
+    except ModuleNotFoundError:
+        import savings
+    data = await tank.delegate_task(actor, run_id, "tisan.plan",
+                                    {"request": request, "contract": contract}, [])
+    receipt = data["receipt"]
+    for ledger in receipt["ledger_ids"]:
+        savings.routing()
+        savings.routed({"ledger_id": ledger})
+    return validate_plan(data["result"], contract), receipt
+
+
+async def remembered_plan(payload: dict, tenant: str, contract: dict, tank: Any, memory: Any, user: Any, run_id: str | None = None) -> tuple[dict, dict | None]:
+    """Gates 7+8: a request plan recalls scoped memory before the brain routes through Tank."""
+    gates = _gates()
+    request = payload.get("request")
+    if (memory is None or user is None or "plan" in payload or not gates.brain_enabled()
+            or not isinstance(request, str) or request.lstrip().startswith('{')):
+        replies: list = []
+        plan = await make_plan(payload, tenant, contract, tank, replies, cache_allowed=not gates.brain_enabled())
+        return plan, gates.tank_receipt(replies) if replies and gates.brain_enabled() else None
+    async def brain():
+        from chassis.user_assertion import SignedUser
+        if tank is None:
+            raise ValueError("Tank client is required for request planning")
+        # user is restored from the signed enqueue's durable job ownership, never
+        # a brief selector. The same logical job identity survives worker retries.
+        actor = SignedUser(tenant, str(user), "member")
+        return await brain_plan(tank, actor, run_id or str(uuid.uuid4()), request, contract)
+    outcome = await gates.run(memory, tenant, str(user), "tisan.plan", [contract, request], brain)
+    brand = payload.get("brand")
+    if not outcome["memory"]["hit"] and outcome["memory"]["enabled"] and isinstance(brand, dict) and brand:
+        await gates.GateMemory(memory, tenant, str(user)).remember_choice(gates.BRAND, "brand", brand)
+    return validate_plan(outcome["result"], contract), {**outcome["receipt"], "memory_hit": outcome["memory"]["hit"]}
+
+
+def run_tank(tank: Any, run_id: str | None):
+    """Keep the shipped route/approval client; Tank owns durable checkpoints."""
+    from chassis.tank import TankClient
+    if run_id is None or not isinstance(tank, TankClient):
+        return tank
+    class RunTank(TankClient):
+        async def _post(self, path, body):
+            if path != '/v1/route':
+                return await super()._post(path, body)
+            ident = uuid.uuid5(uuid.UUID(run_id), body['task_type'] + ':' + _gates().input_hash(body['messages']))
+            return await super()._post(path, {**body, 'paid_run_id': str(ident)})
+    bound = RunTank(tank._base, tank._api_key, tank.agent, tank._http)
+    # Keep the existing process cache across jobs. Scoped-memory mode disables
+    # this cache at make_plan; binding a run must not reset default-off behavior.
+    cache = getattr(tank, '_tisan_plan_cache', None)
+    tank._tisan_plan_cache = cache if isinstance(cache, dict) else {}
+    bound._tisan_plan_cache = tank._tisan_plan_cache
+    return bound
+
+
+async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any = None, data_root: Path | None = None,
+                  memory: Any = None, user: Any = None, run_id: str | None = None) -> dict:
     scaffold = _scaffold()
     try:
         tenant = str(uuid.UUID(str(tenant_id)))
         brief = scaffold.validate(payload)
         contract = manifest()
-        plan = await make_plan(payload, tenant, contract, tank)
+        tank = run_tank(tank, run_id)
+        plan, brain_receipt = await remembered_plan(payload, tenant, contract, tank, memory, user, run_id)
         brief["pages"] = [p["name"] for p in plan["pages"]]
         copy_ids, media = payload.get("copy", {}), payload.get("media", {})
         if not isinstance(copy_ids, dict) or not isinstance(media, dict) or any(not isinstance(v, str) for v in copy_ids.values()):
@@ -226,7 +348,8 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
         missing = [{"key": k, "section_type": kind, "purpose": purpose} for k, kind, purpose, _, _, image in pending if not image and not copy_ids.get(k)]
         missing_media = [{"key": k, "section_type": kind, "purpose": purpose} for k, kind, purpose, _, _, image in pending if image and not media.get(k)]
         if missing or missing_media:
-            return {"ok": False, "copy_needed": missing, "media_needed": missing_media}
+            return {"ok": False, "copy_needed": missing, "media_needed": missing_media,
+                    **({"brain_receipt": brain_receipt} if brain_receipt else {})}
         if any(not _media_url(v) for v in media.values()):
             raise ValueError("media URLs must use https:// or /media/ without credentials or traversal")
         async def fill(client):
@@ -276,15 +399,16 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
             files = scaffold.pack(project, archive)
         result = scaffold._manifest(brief, files=files, checks=checks, detail=detail, archive=str(archive), build=number)
         atomic_json(folder / f"{number}.json", result)
-        return result
+        return {**result, "brain_receipt": brain_receipt} if brain_receipt else result
     except (ValueError, ValidationError) as exc:
         return {"ok": False, "refused": True, "detail": str(exc)}
+
 
 
 async def handle(ctx: Any) -> dict:
     failure = None
     try:
-        result = await execute(ctx.input, str(ctx.tenant_id), tank=ctx.tank)
+        result = await execute(ctx.input, str(ctx.tenant_id), tank=ctx.tank, memory=ctx.memory, user=getattr(ctx, "user_id", None), run_id=str(ctx.job_id))
         try:
             from agents.tisan import repo_scan
         except ModuleNotFoundError:
@@ -303,12 +427,17 @@ async def handle(ctx: Any) -> dict:
     if result.get("archive"):
         evidence.append(Path(result["archive"]).name)
     try:
-        saved = await asyncio.wait_for(ctx.memory.remember(str(ctx.tenant_id), json.dumps(claim, ensure_ascii=False),
-            "build", "job:" + str(ctx.job_id), evidence=evidence, confidence=1.0), timeout=30)
-        identifier = saved['id']
-        if not isinstance(identifier, str) or re.fullmatch(r'[A-Za-z0-9_-]+', identifier) is None:
-            raise ValueError('memory unavailable')
-        result["memory_id"] = identifier
+        import inspect
+        scoped = 'user_id' in inspect.signature(ctx.memory.remember).parameters
+        user = getattr(ctx, 'user_id', None)
+        if not scoped or user is not None:
+            saved = await asyncio.wait_for(ctx.memory.remember(str(ctx.tenant_id), json.dumps(claim, ensure_ascii=False),
+                "build", "job:" + str(ctx.job_id), evidence=evidence, confidence=1.0, index=False,
+                **({'user_id': user} if scoped else {})), timeout=30)
+            identifier = saved['id']
+            if not isinstance(identifier, str) or re.fullmatch(r'[A-Za-z0-9_-]+', identifier) is None:
+                raise ValueError('memory unavailable')
+            result["memory_id"] = identifier
     except Exception as exc:
         logging.getLogger("agent").warning("build memory failed (%s)", type(exc).__name__)
     if failure is not None:

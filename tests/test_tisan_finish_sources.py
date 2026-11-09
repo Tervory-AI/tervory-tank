@@ -56,7 +56,7 @@ async def test_private_archive_roundtrip_and_retry_use_signed_immutable_keys(tmp
         records.append(payload)
         return httpx.Response(201, json={'id':payload['id'], 'seen':len(records)})
     async with httpx.AsyncClient(transport=httpx.MockTransport(remember)) as http:
-        memory = MemoryClient('http://placeholder-hermes', 'placeholder', 'tisan', http, user_id='placeholder-user')
+        memory = MemoryClient('http://placeholder-hermes', 'placeholder', 'tisan', http, user_id='placeholder-verified-archive-user')
         first = await archive.export(TENANT, {'slug':'site','build':1}, root=tmp_path, memory=memory)
         again = await archive.export(TENANT, {'slug':'site','build':1}, root=tmp_path, memory=memory)
     assert first['ok'] and first['public'] is False

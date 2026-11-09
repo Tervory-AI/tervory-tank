@@ -67,7 +67,7 @@ async def test_each_build_has_one_private_measured_record(monkeypatch, outcome):
         return httpx.Response(201, json={'id': record_id})
     async with httpx.AsyncClient(transport=httpx.MockTransport(hermes)) as http:
         ctx = SimpleNamespace(input=brief(), tenant_id=str(TENANT), job_id=str(uuid.uuid4()), tank=None,
-            memory=MemoryClient(base_url='http://placeholder-hermes', api_key='placeholder-room', agent='tisan', http=http, user_id='placeholder-user'))
+            user_id='placeholder-verified-builder', memory=MemoryClient(base_url='http://placeholder-hermes', api_key='placeholder-room', agent='tisan', http=http))
         if outcome == 'exception':
             with pytest.raises(RuntimeError, match='placeholder private error'):
                 await b.handle(ctx)
@@ -76,6 +76,7 @@ async def test_each_build_has_one_private_measured_record(monkeypatch, outcome):
             result = await b.handle(ctx)
     assert len(records) == 1 and records[0]['tenant_id'] == str(TENANT)
     assert records[0]['kind'] == 'build' and records[0]['confidence'] == 1.0
+    assert records[0]['meta']['user_id'] == ctx.user_id
     claim = json.loads(records[0]['text'])
     assert claim.get('slug') == (None if outcome in ('refused', 'exception') else 'placeholder-site')
     assert claim['ok'] == (outcome == 'passed')

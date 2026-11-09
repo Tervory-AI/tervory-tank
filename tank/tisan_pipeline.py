@@ -5,9 +5,28 @@ import hmac
 import os
 from types import SimpleNamespace
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from tenant_db import tenant_path
+
+
+class Measurement(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    input_hash: str = Field(pattern=r'^[0-9a-f]{64}$')
+    tokens_in: int = Field(ge=0, le=10000000)
+    tokens_out: int = Field(ge=0, le=10000000)
+
+
+class RunReceipt(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    tenant_id: UUID
+    operation_id: UUID
+    kind: Literal['ping', 'scaffold', 'figma', 'pipeline', 'build', 'archive']
+    measurement: Measurement
+    route_ids: list[UUID] = Field(default_factory=list, max_length=100)
+    uncertain: bool = False
 
 
 class Archive(BaseModel):
@@ -28,6 +47,20 @@ def build_router():
                 or request.headers.get('x-tervory-tenant') != str(tenant)
                 or request.headers.get('x-tervory-region') != main.box_region()):
             raise HTTPException(403, 'not found')
+
+    @router.post('/receipts')
+    @tenant_path('body')
+    async def receipt(body: RunReceipt, request: Request):
+        await authorize(request, body.tenant_id)
+        from main import pool
+        from agents.tisan.savings import complete
+        try:
+            async with pool().acquire() as conn:
+                measured = await complete(conn, body.tenant_id, body.operation_id, body.kind, {}, {},
+                    ids=body.route_ids, uncertain=body.uncertain, measurement=body.measurement.model_dump())
+        except ValueError:
+            raise HTTPException(409, 'receipt evidence unavailable') from None
+        return {'tenant_id': str(body.tenant_id), 'operation_id': str(body.operation_id), 'receipt': measured}
 
     @router.post('/repo-scan')
     async def scan(body: Archive, request: Request):

@@ -1,0 +1,106 @@
+{
+  "baseline_commit": "0847daa7ea1f3620a814ff0fb2de06528606fd54",
+  "baseline_prefix": "Return only a JSON plan with site fields logo/nav/footer/ui and pages (name, path, sections). A home page has path /; other paths are /<name>. Sections have type, unique id, props. Do not write text, code, page titles or image URLs. Omit text and image leaves; retain array/object structure and non-text props. Slot purposes describe the future accepted copy. Contract: ",
+  "cases": [
+    {
+      "tenant": "11111111-1111-4111-8111-111111111111",
+      "request": "one page",
+      "response": {
+        "nav": [
+          {
+            "href": "/"
+          }
+        ],
+        "ui": {},
+        "pages": [
+          {
+            "name": "home",
+            "path": "/",
+            "sections": [
+              {
+                "id": "hero-1",
+                "type": "hero",
+                "props": {}
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tenant": "11111111-1111-4111-8111-111111111111",
+      "request": "one page",
+      "response": {
+        "nav": [
+          {
+            "href": "/"
+          }
+        ],
+        "ui": {},
+        "pages": [
+          {
+            "name": "home",
+            "path": "/",
+            "sections": [
+              {
+                "id": "hero-1",
+                "type": "hero",
+                "props": {}
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tenant": "11111111-1111-4111-8111-111111111111",
+      "request": "{\"nav\": [{\"href\": \"/\"}], \"ui\": {}, \"pages\": [{\"name\": \"home\", \"path\": \"/\", \"sections\": [{\"id\": \"hero-1\", \"type\": \"hero\", \"props\": {}}]}]}",
+      "response": {
+        "nav": [
+          {
+            "href": "/"
+          }
+        ],
+        "ui": {},
+        "pages": [
+          {
+            "name": "home",
+            "path": "/",
+            "sections": [
+              {
+                "id": "hero-1",
+                "type": "hero",
+                "props": {}
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tenant": "22222222-2222-4222-8222-222222222222",
+      "request": "one page",
+      "response": {
+        "nav": [
+          {
+            "href": "/"
+          }
+        ],
+        "ui": {},
+        "pages": [
+          {
+            "name": "home",
+            "path": "/",
+            "sections": [
+              {
+                "id": "hero-1",
+                "type": "hero",
+                "props": {}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

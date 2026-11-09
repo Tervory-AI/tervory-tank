@@ -247,24 +247,45 @@ async function browserChecks(origin, paths, proxyUrl) {
 async function lighthouse(origin, paths, proxyUrl) {
   const reportDir = join(process.cwd(), ".lighthouseci");
   rmSync(reportDir, { recursive: true, force: true });
+  // Own Chromium through Playwright. Lighthouse CLI's fire-and-forget kill
+  // can leave detached Chromium children alive between full-suite builds.
+  const { chromium } = require("@playwright/test");
+  const reserved = http.createServer();
+  const debugPort = await listen(reserved);
+  await close(reserved);
+  const browser = await chromium.launch({
+    executablePath: chromium.executablePath(),
+    proxy: { server: proxyUrl, bypass: "<-loopback>" },
+    args: [
+      `--remote-debugging-port=${debugPort}`,
+      "--disable-background-networking",
+      "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1",
+    ],
+  });
   const env = {
     ...process.env,
+    TISAN_CHECK_CHROME_PORT: String(debugPort),
     TISAN_CHECK_ORIGIN: origin,
     TISAN_CHECK_PROXY: proxyUrl,
     TISAN_CHECK_PAGES: JSON.stringify(paths),
     NPM_CONFIG_OFFLINE: "true",
   };
   let runnerLog = "";
-  const code = await new Promise((resolve) => {
-    const child = spawn("npm", ["run", "lhci"], { env, stdio: ["ignore", "pipe", "pipe"] });
-    const collect = (chunk) => {
-      runnerLog = (runnerLog + chunk.toString()).slice(-100000);
-    };
-    child.stdout.on("data", collect);
-    child.stderr.on("data", collect);
-    child.on("error", () => resolve(127));
-    child.on("exit", (code) => resolve(code));
-  });
+  let code;
+  try {
+    code = await new Promise((resolve) => {
+      const child = spawn("npm", ["run", "lhci"], { env, stdio: ["ignore", "pipe", "pipe"] });
+      const collect = (chunk) => {
+        runnerLog = (runnerLog + chunk.toString()).slice(-100000);
+      };
+      child.stdout.on("data", collect);
+      child.stderr.on("data", collect);
+      child.on("error", () => resolve(127));
+      child.on("exit", (code) => resolve(code));
+    });
+  } finally {
+    await browser.close();
+  }
   mkdirSync(reportDir, { recursive: true });
   writeFileSync(join(reportDir, "runner.log"), runnerLog);
   const reports = existsSync(reportDir)

@@ -421,6 +421,16 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
                 and current_actor(actor).founder and isinstance(card.get("result"), dict)):
             from tisan_requests import build_result
             card["result"] = await build_result(actor.tenant_id, card["result"])
+            ids = explicit_ledger_ids(card["result"])
+            if ids:
+                async with editing(thread_id, actor) as (conn, durable, saved):
+                    current = saved['cards'][card['card_id']]
+                    current['result'] = card['result']
+                    current['evidence_ids'] = sorted(set(current.get('evidence_ids', [])) | {str(i) for i in ids})
+                    await record_receipts(conn, durable, saved, card['card_id'], [uuid.UUID(i) for i in current['evidence_ids']])
+                    current['receipt_status'] = 'recorded' if all(r['cost_usd'] is not None for r in saved['receipts'] if r['step_id'] == card['card_id']) else 'pending'
+                    card.update(current)
+                    state['receipts'] = saved['receipts']
         if card.get("tool") == "tiger.match" and card.get("status") == "confirmed" and isinstance(card.get("result"), dict):
             from access import tiger_card_result
             card["result"] = await tiger_card_result(actor.tenant_id, card["result"])
@@ -448,7 +458,10 @@ async def task_receipts(task_id: uuid.UUID, actor: Actor = Depends(identity)) ->
         raise HTTPException(404, "no such task for this tenant")
     if task["ledger_id"] is not None and task["data"] is None:
         raise HTTPException(409, "Receipt evidence is missing or outside this tenant")
-    rows = [receipt_row(unpack(task["data"]), str(task_id))] if task["data"] is not None else []
+    from agents.tisan.savings import overlay as tisan_savings
+    async with db().acquire() as conn:
+        records = await tisan_savings(conn, actor.tenant_id, [unpack(task["data"])]) if task["data"] is not None else []
+    rows = [receipt_row(r, str(task_id)) for r in records]
     founder = current_actor(actor).founder
     return {"rows": [public_receipt(r, founder) for r in rows], "totals": totals(rows) if rows else
             {"cost_usd": None, "baseline_cost_usd": None, "saved_usd": None},
@@ -1924,7 +1937,9 @@ async def record_receipts(conn: Any, row: dict, state: dict, step_id: str, ids: 
                                row["tenant_id"], ids)
     if len(records) != len(ids):
         raise HTTPException(409, "Receipt evidence is missing or outside this tenant")
-    by_id = {str(unpack(r["data"])["id"]): unpack(r["data"]) for r in records}
+    from agents.tisan.savings import overlay as tisan_savings
+    records = await tisan_savings(conn, row["tenant_id"], [unpack(r["data"]) for r in records])
+    by_id = {str(r["id"]): r for r in records}
     added = []
     for existing in state["receipts"]:
         if existing["ledger_id"] in by_id and existing["step_id"] != step_id:
