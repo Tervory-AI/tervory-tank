@@ -441,7 +441,8 @@ async def test_legacy_requirements_and_product_browser_entrypoints_are_retained(
     assert manifest['source_sha'] == SOURCE_SHA
     assert len(manifest['legacy_tests']) >= 30
     # Exercise the assembled Tank UI. These Git blobs were checked against the
-    # declared product SHA during Head review; CI needs no private second checkout.
+    # declared product SHA and explicit Tank reviews recorded in the manifest;
+    # CI needs no private second checkout.
     source = ROOT
     assert manifest['browser_source_blobs']
     for name, expected in manifest['browser_source_blobs'].items():

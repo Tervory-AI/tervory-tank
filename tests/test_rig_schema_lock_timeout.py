@@ -5,6 +5,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -49,13 +50,22 @@ async def test_apply_schema_times_out_retries_and_fails_cleanly_under_a_held_loc
             await store.apply_schema()
             fast(monkeypatch)
             holder, tx = await held(url)
-            release = None
+            lock_released = False
             try:
                 if released:
-                    async def let_go():
-                        await asyncio.sleep(0.3)  # after the first timeout, before the attempts run out
-                        await tx.rollback()
-                    release = asyncio.create_task(let_go())
+                    async def release_on_retry(delay):
+                        nonlocal lock_released
+                        # The worker reaches this backoff only after PostgreSQL
+                        # times out and the real retry warning has been logged.
+                        # Release before continuing, even if startup was delayed.
+                        if not lock_released:
+                            await tx.rollback()
+                            lock_released = True
+                        await asyncio.sleep(delay)
+
+                    # Scope the scheduling hook to this module; retain the real
+                    # backoff without patching asyncio for the driver or test.
+                    monkeypatch.setattr(rig_store, "asyncio", SimpleNamespace(sleep=release_on_retry))
                 started = time.monotonic()
                 with caplog.at_level(logging.WARNING, logger="agent"):
                     if released:
@@ -65,11 +75,11 @@ async def test_apply_schema_times_out_retries_and_fails_cleanly_under_a_held_loc
                             await asyncio.wait_for(store.apply_schema(), 15)
                 elapsed = time.monotonic() - started
             finally:
-                if release is not None:
-                    await release
-                else:
-                    await tx.rollback()
-                await holder.close()
+                try:
+                    if not lock_released:
+                        await tx.rollback()
+                finally:
+                    await holder.close()
             retries = [r for r in caplog.records if r.levelno == logging.WARNING and "lock timeout, retry" in r.getMessage()]
             exhausted = [r for r in caplog.records if r.levelno == logging.ERROR and "lock not acquired" in r.getMessage()]
             if released:

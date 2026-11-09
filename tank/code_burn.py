@@ -133,6 +133,29 @@ def improved(progress, baseline) -> bool:
     return progress.tests_passed > baseline[0] or progress.build_stage > baseline[1]
 
 
+def planned(state: dict, turn_id: str) -> set[str] | None:
+    """The preflight scope lock's files for this turn, when preflight planned it."""
+    import code_preflight
+    plan = state.get('code_preflight') if code_preflight.enabled() else None
+    active = plan.get('active') if isinstance(plan, dict) else None
+    if not isinstance(active, dict) or active.get('turn_id') != turn_id:
+        return None
+    task = plan['tasks'][plan['current']]
+    return {code_preflight.norm(path) for path in task['plan']['files']}
+
+
+def in_scope(request: dict, allowed: set[str] | None) -> bool:
+    """A $0 edit obeys the same scope lock as a model's edit."""
+    if allowed is None or request['name'] != 'propose_edit':
+        return True
+    import code_preflight
+    try:
+        paths = [entry['path'] for entry in code_fixes.parse(request['arguments']['diff'])]
+    except code_fixes.DiffError:
+        return False
+    return all(code_preflight.norm(path) in allowed for path in paths)
+
+
 # ------------------------------------------------------------- hook: before
 
 async def before(command, conn, row, state, actor, turn_id, body, gate):
@@ -187,6 +210,8 @@ async def before(command, conn, row, state, actor, turn_id, body, gate):
             requests, marks = await code_fixes.recall(actor, checks, tried)
             source = 'memory'
         spin['tried'] = sorted(tried | set(marks))[-TRIED:]
+        allowed = planned(state, turn_id)
+        requests = [request for request in requests if in_scope(request, allowed)]
         if requests:
             save(spin, 'zero_fixes')
             return await finish(command, conn, row, state, actor, turn_id, body, spin, 'fix_' + source,
@@ -213,7 +238,9 @@ async def remember_fixed(command, actor, turn_id, pending, checks, applied) -> N
 async def rollback(command, conn, row, state, actor, turn_id, body, spin):
     """A paid round that raised neither tests nor build stage is undone, not built on."""
     inverses = [code_fixes.inverse(diff) for diff in reversed(spin['since'])]
-    if spin['overflow'] or not spin['checkpoints'] or not inverses or len(inverses) > 6 or None in inverses:
+    allowed = planned(state, turn_id)
+    if spin['overflow'] or not spin['checkpoints'] or not inverses or len(inverses) > 6 or None in inverses \
+            or not all(in_scope({'name': 'propose_edit', 'arguments': {'diff': diff}}, allowed) for diff in inverses):
         spin['since'], spin['overflow'] = [], False
         return await finish(command, conn, row, state, actor, turn_id, body, spin, 'rollback_manual',
                             'The last paid round did not raise passing tests or the build stage, and its changes cannot be '
@@ -322,8 +349,12 @@ def text_tokens(texts: list[str]) -> int | None:
 
 # ------------------------------------------------------------ hook: paid round
 
-async def paid_round(command, thread_id, body, actor, turn_id, messages, options):
-    """Replaces only Command's route_code call; everything after it is unchanged."""
+async def paid_round(command, thread_id, body, actor, turn_id, messages, options, *, route=None, prepared=None):
+    """Replaces only Command's model call; everything after it is unchanged.
+
+    ``route`` is Command's single model path (preflight's paid call around
+    route_code); ``prepared`` is the context code_context already built.
+    """
     info = ROUND.get()
     ROUND.set(None)
     if not info or info.get('turn') != turn_id:
@@ -331,7 +362,10 @@ async def paid_round(command, thread_id, body, actor, turn_id, messages, options
     checks = info['checks']
     original = [dict(message) for message in messages]
     extra = {}
-    if body.tool_results:
+    sliced = isinstance(prepared, dict) and 'slicing' in prepared
+    # When send-only-what-matters already sliced the request, its messages stand;
+    # spin then only adds the exact check errors.
+    if body.tool_results and not sliced:
         rows = code_fixes.diffs_in(code_checks.command_outputs(body.tool_results, checks))
         import code_limits
         if code_limits.enabled():
@@ -355,7 +389,7 @@ async def paid_round(command, thread_id, body, actor, turn_id, messages, options
     try:
         # Measured inside the slot, so local tokenizing CPU is bounded by capacity too.
         before_tokens, after_tokens = await asyncio.to_thread(tokens, original), await asyncio.to_thread(tokens, messages)
-        answer = await command.route_code(actor, messages, body.model, uuid.UUID(turn_id), **options)
+        answer = await (route or command.route_code)(actor, messages, body.model, uuid.UUID(turn_id), **options)
     finally:
         await admission().leave()
     try:
