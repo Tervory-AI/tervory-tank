@@ -168,6 +168,6 @@ def test_required_gates_job_owns_market_lab_without_extending_main_deadlines():
     assert 'python scripts/gates_7_8.py --submitted' in proof['run']
     assert proof['timeout-minutes'] == 18
     install = next(step for step in job['steps'] if step.get('name') == 'Install shared and isolated researcher test dependencies')
-    assert '--no-deps --target "$target" -r researcher/requirements.txt' in install['run']
+    assert '--require-hashes --no-deps --target "$target" -r researcher/requirements.lock' in install['run']
     assert install['timeout-minutes'] == 10
     assert not any('scripts/gates_7_8.py' in step.get('run', '') for step in jobs['tank']['steps'])

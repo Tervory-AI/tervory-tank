@@ -444,9 +444,9 @@ jobs:
       - name: Install shared and isolated researcher test dependencies
         timeout-minutes: 10
         run: |
-          python -m pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+          python -m pip install --require-hashes -r .github/requirements-gates78.lock
           target=".tmp/researcher-test-deps/$(sha256sum researcher/requirements.txt | cut -d' ' -f1)"
-          python -m pip install --no-deps --target "$target" -r researcher/requirements.txt
+          python -m pip install --require-hashes --no-deps --target "$target" -r researcher/requirements.lock
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "22"
@@ -454,11 +454,11 @@ jobs:
           cache-dependency-path: workspace/package-lock.json
       - name: Install workspace packages for offline billing and Node tests
         working-directory: workspace
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Prepare pinned Tisan acceptance browser dependencies
         working-directory: agents/tisan/templates/next-site
         run: |
-          npm ci --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
           npx --no-install playwright install chromium
           echo "TISAN_NPM_CACHE=$(npm config get cache)" >> "$GITHUB_ENV"
       - name: Prepare pinned Tiger acceptance browser dependencies
@@ -481,18 +481,6 @@ jobs:
       - name: Prepare CLI acceptance fixtures
         run: |
           npm ci --prefix cli --ignore-scripts --no-audit --no-fund
-          # Setup may fetch pinned dependencies; the acceptance tests themselves stay offline.
-          node --input-type=module - <<'JS'
-          import { PLATFORMS } from './cli/scripts/build-release.mjs';
-          import { readFileSync } from 'node:fs';
-          import { execFileSync } from 'node:child_process';
-          const lock = JSON.parse(readFileSync('cli/package-lock.json'));
-          for (const platform of Object.keys(PLATFORMS)) {
-            const name = '@napi-rs/keyring-' + platform;
-            const version = lock.packages['node_modules/' + name].version;
-            execFileSync('npm', ['cache', 'add', name + '@' + version], { stdio: 'inherit' });
-          }
-          JS
           if ! command -v bwrap >/dev/null; then
             if [ "$RUNNER_ENVIRONMENT" != github-hosted ]; then
               echo "Self-hosted CLI acceptance needs preinstalled Bubblewrap."
