@@ -11,7 +11,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
-from uuid import UUID
+from uuid import UUID, uuid5
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -64,6 +64,33 @@ def save(body, receipt):
             (json.dumps(receipt), str(body.tenant_id), str(body.task_id), body.user_id))
 
 
+def release_unspent(body):
+    """Only called after Tank's exact, scoped pre-dispatch approval response."""
+    with closing(sqlite3.connect(state_file(), timeout=5)) as db, db:
+        db.execute('DELETE FROM plans WHERE tenant=? AND task=? AND owner=? AND receipt IS NULL',
+                   (str(body.tenant_id), str(body.task_id), body.user_id))
+
+
+def approval_pause(response, body):
+    if response.status_code != 409:
+        return None
+    try:
+        data = response.json()
+        detail = data['detail']
+        identity = str(uuid5(body.tenant_id, body.user_id + ':' + str(body.task_id)))
+        if (data.get('dispatch'), data.get('task_id'), data.get('user_id'),
+                detail.get('code'), detail.get('tenant_id'), detail.get('run_id')) != (
+                'not_started', str(body.task_id), body.user_id,
+                'paid_step_approval_required', str(body.tenant_id), identity):
+            return None
+        UUID(detail['approval_id'])
+        if not isinstance(detail.get('step_id'), str) or not detail['step_id']:
+            return None
+        return detail
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return None
+
+
 @app.post('/personal/tasks')
 async def personal_task(body: Plan, request: Request):
     key = os.environ.get('TANK_KEY', '')
@@ -94,6 +121,10 @@ async def personal_task(body: Plan, request: Request):
         response = await client.post(os.environ.get('TANK_URL', 'http://tank:8000').rstrip('/') + path,
                                      content=raw, headers=headers, follow_redirects=False)
     if response.status_code != 200:
+        pause = approval_pause(response, body)
+        if pause is not None:
+            await asyncio.to_thread(release_unspent, body)
+            raise HTTPException(409, pause)
         raise HTTPException(503, 'Base planning unavailable; check the retained receipt before retrying')
     data = response.json()
     row = data['receipt']

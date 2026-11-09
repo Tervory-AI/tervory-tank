@@ -503,3 +503,102 @@ async def test_personal_planner_keeps_signed_owner_and_durable_receipt(base_entr
                 headers={'X-Tank-Key': e.stack.key, 'Content-Type': 'application/json', HEADER: signed})
             assert result.status_code == expected, result.text
     assert len(e.provider_calls) == before
+
+
+async def planning_request(e, body, *, user=USER_A):
+    raw = json.dumps({**body, 'user_id': user}, separators=(',', ':')).encode()
+    path = '/personal/tasks'
+    signature = sign_assertion('base', SignedUser(body['tenant_id'], user, 'member'),
+                               'POST', path, raw, key=e.stack.key)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=e.brain.app), base_url='http://base-brain') as client:
+        return await client.post(path, content=raw,
+            headers={'X-Tank-Key':e.stack.key, 'Content-Type':'application/json', HEADER:signature})
+
+
+def planning_body(e):
+    return {'tenant_id':e.stack.tenant, 'task_id':str(uuid4()), 'home_region':'us-east',
+            'batch':'placeholder approval batch', 'count':1, 'evidence':[{'name':'placeholder unresolved'}]}
+
+
+@pytest.mark.asyncio
+async def test_tank_paid_checkpoint_binds_actual_signed_base_actor(base_entry):
+    from uuid import UUID
+    import paid_steps
+    from task_contract import paid_identity
+    e = base_entry
+    run_id = str(uuid4())
+    path = '/v1/agents/base/tasks'
+    async def request(user):
+        body = {'tenant_id':e.stack.tenant, 'user_id':user, 'run_id':run_id,
+                'messages':[{'role':'user','content':'placeholder identical planning message'}]}
+        raw = json.dumps(body, separators=(',', ':')).encode()
+        signature = sign_assertion('base', SignedUser(e.stack.tenant, user, 'member'),
+                                   'POST', path, raw, key=e.stack.key)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=e.main.app), base_url='http://tank') as client:
+            return await client.post(path, content=raw, headers={'X-Tank-Key':e.stack.key,
+                'X-Home-Region':'us-east', 'Content-Type':'application/json', HEADER:signature})
+    first = await request(USER_A)
+    assert first.status_code == 200, first.text
+    assert first.json()['receipt']['task_id'] == run_id
+    step = paid_steps.model_step('agent.base.think', 'placeholder-base-model')
+    await e.pool.execute("UPDATE tank.paid_step_settings SET mode='ask' WHERE tenant_id=$1 AND step_id=$2", UUID(e.stack.tenant), step)
+    second = await request(USER_B)
+    assert second.status_code == 409, second.text
+    assert second.json()['detail']['run_id'] == paid_identity(e.stack.tenant, USER_B, run_id)
+    assert 'choices' not in second.json() and len(e.provider_calls) == 1
+    await paid_steps.decide(UUID(e.stack.tenant), UUID(second.json()['detail']['approval_id']),
+                            user='placeholder-admin', approve=True, reason='offline fixture approval')
+    resumed = await request(USER_B)
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()['receipt']['ledger_id'] != first.json()['receipt']['ledger_id']
+    assert len(e.provider_calls) == 2
+    assert (await request(USER_A)).json() == first.json()
+    assert len(e.provider_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_personal_planner_resumes_only_proven_unspent_approval(base_entry):
+    from uuid import UUID
+    import paid_steps
+    e = base_entry
+    body = planning_body(e)
+    await e.pool.execute("UPDATE tank.paid_step_settings SET mode='ask' WHERE tenant_id=$1", UUID(e.stack.tenant))
+    first = await planning_request(e, body)
+    assert first.status_code == 409, first.text
+    assert first.json()['detail']['code'] == 'paid_step_approval_required'
+    assert not e.provider_calls
+    await paid_steps.decide(UUID(e.stack.tenant), UUID(first.json()['detail']['approval_id']),
+                            user='placeholder-admin', approve=True, reason='offline fixture approval')
+    resumed = await planning_request(e, body)
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()['task_id'] == body['task_id']
+    assert len(e.provider_calls) == 1
+    assert (await planning_request(e, body)).json() == resumed.json()
+    assert len(e.provider_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_personal_planner_transport_uncertainty_keeps_pending_claim(base_entry, monkeypatch):
+    e = base_entry
+    body = planning_body(e)
+    calls = []
+    class Uncertain:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, *args, **kwargs):
+            calls.append(1)
+            raise httpx.ReadTimeout('placeholder uncertain response')
+    original = e.brain.httpx.AsyncClient
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=e.brain.app), base_url='http://base-brain') as client:
+        monkeypatch.setattr(e.brain.httpx, 'AsyncClient', lambda **kwargs: Uncertain())
+        async def request():
+            raw = json.dumps({**body,'user_id':USER_A}, separators=(',', ':')).encode()
+            signed = sign_assertion('base', SignedUser(e.stack.tenant, USER_A, 'member'),
+                                    'POST', '/personal/tasks', raw, key=e.stack.key)
+            return await client.post('/personal/tasks',content=raw,headers={
+                'X-Tank-Key':e.stack.key,'Content-Type':'application/json',HEADER:signed})
+        with pytest.raises(httpx.ReadTimeout): await request()
+        retry = await request()
+        assert retry.status_code == 409 and 'pending' in retry.text
+    monkeypatch.setattr(e.brain.httpx, 'AsyncClient', original)
+    assert len(calls) == 1 and not e.provider_calls
