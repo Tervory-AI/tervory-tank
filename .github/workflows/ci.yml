@@ -481,6 +481,12 @@ jobs:
       - name: Prepare CLI acceptance fixtures
         run: |
           npm ci --prefix cli --ignore-scripts --no-audit --no-fund
+          # Build the real locked eight-platform payload once online to warm
+          # its tarballs; later acceptance repeats it with npm forced offline.
+          CLI_ACCEPTANCE_WARMUP="$RUNNER_TEMP/gates78-cli-warmup" node --input-type=module - <<'JS'
+          import { buildRelease } from './cli/scripts/build-release.mjs';
+          buildRelease({ out: process.env.CLI_ACCEPTANCE_WARMUP });
+          JS
           if ! command -v bwrap >/dev/null; then
             if [ "$RUNNER_ENVIRONMENT" != github-hosted ]; then
               echo "Self-hosted CLI acceptance needs preinstalled Bubblewrap."

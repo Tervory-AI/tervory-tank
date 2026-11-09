@@ -44,7 +44,7 @@ async def research_result(memory, tenant, user, question, *, paid_run_id=None, o
         if result and result.get('facts') and on_result:
             result = await on_result(result)
         return result if result is not None else {'cost_usd': None, 'status': 'unavailable'}
-    from gates_memory import research_via_memory
+    from market_lab_memory_runtime import research_via_memory
     measured = await research_via_memory(memory, tenant_id=tenant, user_id=user, question=question,
                                           paid_run_id=paid_run_id, persist=True, on_result=on_result, actor=actor, tank_client=tank_client)
     result = dict(measured.get('result') or {})

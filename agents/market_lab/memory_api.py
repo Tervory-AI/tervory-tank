@@ -12,7 +12,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from gates_memory import (
+from market_lab_memory_runtime import (
     MemoryControlError,
     MemoryScopeError,
     apply_memory_edit,

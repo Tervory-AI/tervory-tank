@@ -111,3 +111,18 @@ async def main():
 
 asyncio.run(main())
 '''
+
+
+def test_memory_api_does_not_import_another_rooms_cached_gates_memory():
+    program = '''
+import sys, types
+sys.modules['gates_memory'] = types.ModuleType('placeholder_other_room')
+import memory_api, market_lab_memory_runtime
+assert memory_api.MemoryControlError is market_lab_memory_runtime.MemoryControlError
+assert memory_api.MemoryScopeError is market_lab_memory_runtime.MemoryScopeError
+assert memory_api.view_memories is market_lab_memory_runtime.view_memories
+'''
+    env = {**os.environ, 'PYTHONPATH': str(ROOT / 'agents/market_lab') + os.pathsep + str(ROOT / 'agents/_chassis')}
+    result = subprocess.run([sys.executable, '-c', program], cwd=ROOT / 'agents/market_lab', env=env,
+                            capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -18,6 +18,7 @@ COPY rig/rigbox/reserve.py /app/agents/rig/rigbox/reserve.py
 COPY market_lab/app.py /app/app.py
 COPY market_lab/gold_sources.py /app/gold_sources.py
 COPY market_lab/gates_memory.py /app/gates_memory.py
+COPY market_lab/market_lab_memory_runtime.py /app/market_lab_memory_runtime.py
 COPY market_lab/memory_api.py /app/memory_api.py
 COPY market_lab/market_lab_brain.py /app/market_lab_brain.py
 COPY market_lab/market_lab_brain_service.py /app/market_lab_brain_service.py
