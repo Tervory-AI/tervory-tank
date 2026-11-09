@@ -77,6 +77,21 @@ class Scope:
     used: float = 0.
 
 
+def path_cost(path: str) -> int:
+    # A path string held in the map or a task's path list, with object overhead.
+    return 2 * len(path.encode()) + 96
+
+
+def norm(path):
+    """One spelling per path: forward slashes, no leading './'. Dot-folders are kept."""
+    if not isinstance(path, str):
+        return None
+    path = path.replace('\\', '/')
+    while path.startswith('./'):
+        path = path[2:]
+    return path.lstrip('/') or None
+
+
 def digest(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
@@ -135,7 +150,7 @@ def parse(path: str, text: str) -> Entry:
         symbols = pattern_symbols(lines)
     # Approximate resident size (text plus per-line and per-symbol object overhead),
     # so the byte caps below bound real process memory, not just source length.
-    size = 2 * len(text.encode()) + 72 * len(lines) + 400 * len(symbols)
+    size = 2 * len(text.encode()) + 72 * len(lines) + 400 * len(symbols) + path_cost(path)
     return Entry(path, digest(text), tuple(lines), tuple(symbols), size)
 
 
@@ -190,7 +205,11 @@ class RepoMapCache:
                     scope.size += entry.size
                     self.size += entry.size
                 scope.files.move_to_end(path)
-            record = scope.tasks.pop(task, None) or {'paths': [], 'diff': None}
+            record = scope.tasks.pop(task, None)
+            if record is None:
+                record = {'paths': [], 'diff': None}
+                scope.size += path_cost(task)
+                self.size += path_cost(task)
             if diff is not None:
                 scope.size += len(diff.encode()) - len((record['diff'] or '').encode())
                 self.size += len(diff.encode()) - len((record['diff'] or '').encode())
@@ -198,11 +217,14 @@ class RepoMapCache:
             for path in paths:
                 if path not in record['paths']:
                     record['paths'].append(path)
+                    scope.size += path_cost(path)
+                    self.size += path_cost(path)
             scope.tasks[task] = record
             while len(scope.tasks) > MAX_TASKS:
-                _, dropped = scope.tasks.popitem(last=False)
-                scope.size -= len((dropped['diff'] or '').encode())
-                self.size -= len((dropped['diff'] or '').encode())
+                name, dropped = scope.tasks.popitem(last=False)
+                freed = task_cost(name, dropped)
+                scope.size -= freed
+                self.size -= freed
             while scope.size > MAX_SCOPE_BYTES and scope.files:
                 _, dropped = scope.files.popitem(last=False)
                 scope.size -= dropped.size
@@ -211,6 +233,11 @@ class RepoMapCache:
                 _, dropped = self.scopes.popitem(last=False)
                 self.size -= dropped.size
             return dict(scope.files), list(record['paths']), record['diff']
+
+
+def task_cost(name, record) -> int:
+    return (path_cost(name) + len((record['diff'] or '').encode())
+            + sum(path_cost(path) for path in record['paths']))
 
 
 CACHE = RepoMapCache()
@@ -262,7 +289,9 @@ def diff_paths(text: str) -> dict[str, list[tuple[int, int, str]]]:
 
 
 def resolve(name: str, known) -> str | None:
-    name = name.replace('\\', '/').lstrip('./')
+    name = norm(name)
+    if name is None:
+        return None
     if name in known:
         return name
     matches = sorted(path for path in known if name.endswith('/' + path) or path.endswith('/' + name))
@@ -288,8 +317,8 @@ def collect(results):
         arguments = value.get('arguments') if isinstance(value.get('arguments'), dict) else {}
         body = value.get('result') if isinstance(value.get('result'), dict) else {}
         if result.name == 'read_file' and body.get('exists') is True and isinstance(body.get('text'), str) \
-                and isinstance(arguments.get('path'), str) and len(body['text'].encode()) <= MAX_FILE_BYTES:
-            files[arguments['path'].replace('\\', '/').lstrip('./')] = clean(body['text'])
+                and norm(arguments.get('path')) and len(body['text'].encode()) <= MAX_FILE_BYTES:
+            files[norm(arguments['path'])] = clean(body['text'])
             absorbed.add(index)
         elif result.name == 'git' and arguments.get('action') == 'diff' and isinstance(body.get('output'), str):
             diffs.append(clean(body['output']))
@@ -298,7 +327,7 @@ def collect(results):
             # The file changed locally; a cached body would now be stale.
             stale.update(diff_paths(arguments['diff']))
             if isinstance(arguments.get('path'), str):
-                stale.add(arguments['path'].replace('\\', '/').lstrip('./'))
+                stale.add(norm(arguments['path']))
         elif result.name == 'search' and isinstance(body.get('matches'), list):
             for match in body['matches'][:200]:
                 if isinstance(match, dict) and isinstance(match.get('file'), str) and type(match.get('line')) is int:
@@ -312,6 +341,59 @@ def collect(results):
                     if len(locations) >= 400:
                         break
     return files, absorbed, '\n'.join(diffs) if diffs else None, stale, locations
+
+
+OUTSIDE = 'outside this task\'s allowed files; not sent'
+
+
+def scope_diff(text: str, allowed: set[str]) -> str:
+    """Keep only per-file diff blocks whose path is inside the allowed scope."""
+    lines = text.split('\n')
+    blocks: list[list[str]] = [[]]
+    for index, line in enumerate(lines):
+        header = line.startswith('--- ') and index + 1 < len(lines) and lines[index + 1].startswith('+++ ')
+        current = blocks[-1]
+        if line.startswith('diff --git ') or header and (not current or not current[0].startswith('diff --git ')
+                                                         or any(row.startswith('+++ ') for row in current)):
+            blocks.append([])
+        blocks[-1].append(line)
+    kept = []
+    for block in blocks:
+        paths = set(diff_paths('\n'.join(block)))
+        if paths and paths <= allowed:
+            kept.append('\n'.join(block))
+    return '\n'.join(kept)
+
+
+def scoped(results, allowed: set[str]):
+    """Scope lock for raw tool results: no excluded file's text leaves in any tool shape."""
+    from types import SimpleNamespace
+    kept = []
+    for result in results:
+        value = envelope(result.output)
+        arguments = value.get('arguments') if value and isinstance(value.get('arguments'), dict) else {}
+        body = value.get('result') if value and isinstance(value.get('result'), dict) else None
+        if result.name == 'read_file':
+            path = norm(arguments.get('path'))
+            if path not in allowed:
+                result = SimpleNamespace(name='read_file', output=json.dumps(
+                    {'arguments': {'path': path}, 'result': {'omitted': OUTSIDE}}, ensure_ascii=False))
+        elif result.name == 'search':
+            if body is None or not isinstance(body.get('matches'), list):
+                result = SimpleNamespace(name='search', output=json.dumps({'result': {'omitted': 'search result could not be scoped; not sent'}}))
+            else:
+                matches = [m for m in body['matches'] if isinstance(m, dict) and norm(m.get('file')) in allowed]
+                result = SimpleNamespace(name='search', output=json.dumps(
+                    {'arguments': arguments, 'result': {**body, 'matches': matches,
+                                                        'outside_scope': len(body['matches']) - len(matches)}}, ensure_ascii=False))
+        elif result.name == 'git' and arguments.get('action') == 'diff':
+            if body is None or not isinstance(body.get('output'), str):
+                result = SimpleNamespace(name='git', output=json.dumps({'result': {'omitted': 'diff could not be scoped; not sent'}}))
+            else:
+                result = SimpleNamespace(name='git', output=json.dumps(
+                    {'arguments': arguments, 'result': {**body, 'output': scope_diff(body['output'], allowed)}}, ensure_ascii=False))
+        kept.append(result)
+    return kept
 
 
 def innermost(entry: Entry, line: int, kinds=('function', 'method')) -> Symbol | None:
@@ -462,6 +544,10 @@ def prepare(key, body, messages, *, slicing, tool_mode, limit, allowed_files):
     encoding = input_encoding()
     found = sections(messages)
     results = list(body.tool_results)
+    allowed = None
+    if allowed_files is not None:
+        allowed = list(dict.fromkeys(path for path in map(norm, allowed_files) if path))
+        results = scoped(results, set(allowed))
     stats: dict = {'tokens_before': tokens(messages, encoding)}
     remaining = results
     ordered = list(messages)
@@ -472,12 +558,7 @@ def prepare(key, body, messages, *, slicing, tool_mode, limit, allowed_files):
         touched = list(files) + sorted(diff_paths(diff)) if diff else list(files)
         entries, task_paths, task_diff = CACHE.update(key, str(body.prompt_id), files, stale, diff,
                                                       [*touched, *located, *sorted(stale)])
-        scope = list(dict.fromkeys(path.replace('\\', '/').lstrip('./') for path in allowed_files)) \
-            if allowed_files is not None else task_paths
-        if allowed_files is not None:
-            # The scope lock decides; files outside it are not sent, not even as raw results.
-            absorbed |= {index for index, result in enumerate(results) if result.name == 'read_file'
-                         and (envelope(result.output) or {}).get('arguments', {}).get('path') not in scope}
+        scope = allowed if allowed is not None else task_paths
         words = set(WORD.findall(body.text))
         sliced, map_stats = build_slice(entries, scope, list(files), task_diff, locations, words, encoding)
         stats['repo_map'] = map_stats
