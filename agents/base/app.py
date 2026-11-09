@@ -182,7 +182,9 @@ async def gold_candidates(
 
 
 def _skills() -> SkillClient:
-    return SkillClient(app.state.http, TANK_URL, os.environ.get("TANK_KEY", ""))
+    client = SkillClient(app.state.http, TANK_URL, os.environ.get("TANK_KEY", ""))
+    client.memory = getattr(app.state, "memory", None)
+    return client
 
 
 class ContextTrialRecord(BaseModel):
@@ -373,6 +375,7 @@ class BaseRun(BaseModel):
     preview: bool = False
     concurrency: int = Field(default=8, ge=1, le=12)
     split_by_state: bool = False
+    memory_control: Literal["off", "view", "edit", "forget"] | None = None
 
 
 class BaseRetry(BaseModel):
@@ -424,6 +427,9 @@ async def _submit_batch(body: BaseRun, *, verified_user: str | None = None) -> d
     except SkillError as exc:
         raise _http_skill(exc) from exc
     canonical = body.model_dump(mode="json", exclude={"request_id", "created_by"})
+    # Preserve pre-memory request hashes for already queued owner-bound retries.
+    if body.memory_control is None:
+        canonical.pop("memory_control", None)
     digest = hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     root = uuid.uuid5(body.tenant_id, str(body.request_id) if body.request_id else digest)
     tasks, labels = [], []
@@ -450,7 +456,8 @@ async def _submit_batch(body: BaseRun, *, verified_user: str | None = None) -> d
             row = await insert_batch(conn, body.tenant_id, body.created_by, label, records,
                 f" · {number + 1}/{len(ordered)}" if body.split_by_state else "",
                 body.preview, body.engine, body.concurrency, body.registry,
-                task_id=root if number == 0 else uuid.uuid5(root, state))
+                task_id=root if number == 0 else uuid.uuid5(root, state),
+                memory_control=body.memory_control)
             if verified_user is not None:
                 await conn.execute("UPDATE agent_base.tasks SET input=input || $3::jsonb WHERE tenant_id=$1 AND id=$2",
                     body.tenant_id, row['id'], json.dumps({'created_by': verified_user,
@@ -579,3 +586,7 @@ async def base_records(
             data[key] = json.loads(data[key]) if isinstance(data[key], str) else data[key]
         out.append(data)
     return out
+
+
+from base_memory_api import attach_memory_routes
+attach_memory_routes(app)

@@ -58,9 +58,10 @@ def test_independent_agreement(html, want):
 @pytest.mark.asyncio
 async def test_room_auth_and_limit(monkeypatch):
     monkeypatch.setitem(sys.modules, "gold_sources", gold)
-    spec = importlib.util.spec_from_file_location('tiger_gold_app', ROOT / 'agents/tiger/app.py')
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    from test_tiger import _load
+    name = 'tiger_gold_app'
+    monkeypatch.setitem(sys.modules, name, None)
+    mod = _load(name, ROOT / 'agents/tiger/app.py')
     key = secrets.token_hex(24)
     monkeypatch.setenv('TANK_KEY', key)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=mod.app), base_url='http://test') as client:
@@ -136,9 +137,10 @@ def test_bundle_rebuild_removes_non_itemprop_meta(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_optional_snapshot_file_is_never_exported(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "gold_sources", gold)
-    spec = importlib.util.spec_from_file_location('tiger_snapshot_app', ROOT / 'agents/tiger/app.py')
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    from test_tiger import _load
+    name = 'tiger_snapshot_app'
+    monkeypatch.setitem(sys.modules, name, None)
+    mod = _load(name, ROOT / 'agents/tiger/app.py')
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("TANK_REGION", "us-east")
     key = secrets.token_hex(24)
