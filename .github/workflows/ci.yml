@@ -507,7 +507,9 @@ jobs:
             bash .github/scripts/install-rig-sdk.sh
           fi
       - name: Gate 7/8 foundation and every submitted product
-        timeout-minutes: 18
+        # The complete product matrix shares the existing 35-minute job budget.
+        # Keep the runner's 180-second per-test timeout; a separate 18-minute
+        # step cap truncated successful product runs before final aggregation.
         env:
           MEMORY_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
           POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
