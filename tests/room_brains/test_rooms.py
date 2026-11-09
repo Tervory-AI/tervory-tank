@@ -35,6 +35,11 @@ def test_off_by_default_hardened_and_no_shared_data(room):
     if room == 'radix':
         assert brain['build'] == {'context': '..', 'dockerfile': 'radix/Dockerfile'}
         assert brain['command'][1] == 'radix_brain_service:app'
+    elif room == 'tisan':
+        assert brain['build'] == {'context': '../..', 'dockerfile': 'agents/tisan/Dockerfile'}
+        assert brain['command'][1] == 'brain_service:app'
+        assert brain['environment']['TISAN_BRAIN_ENABLED'] == '${TISAN_BRAIN_ENABLED:-false}'
+        assert brain['environment']['DATABASE_URL'] == services['agent-tisan']['environment']['DATABASE_URL']
     elif room == 'ghost':
         assert brain['build'] == {'context': '..', 'dockerfile': 'ghost/Dockerfile'}
         assert brain['command'][1] == 'ghost.brain_service:app'
@@ -64,7 +69,11 @@ def test_off_by_default_hardened_and_no_shared_data(room):
         assert spec['environment']['BRAIN_ROOM'] == room
         assert spec['environment']['SANDBOX_KEY'] == '${SANDBOX_KEY_' + upper + ':-}'
         assert not set(spec) & {'ports', 'env_file', 'privileged', 'cap_add', 'network_mode', 'devices', 'pid'}
-        assert not any(part in key for key in spec['environment'] for part in ('COOLIFY', 'ENFORCE', 'R2_', 'DATABASE', 'OPENAI', 'ANTHROPIC', 'OPENROUTER', 'LITELLM', 'EDGE_', 'SMTP', 'UNDO'))
+        # Only Tisan's brain receives its already-owned room DB, asserted above.
+        # The sandbox and every other prohibited credential remain sealed.
+        protected = [key for key in spec['environment']
+                     if not (room == 'tisan' and spec is brain and key == 'DATABASE_URL')]
+        assert not any(part in key for key in protected for part in ('COOLIFY', 'ENFORCE', 'R2_', 'DATABASE', 'OPENAI', 'ANTHROPIC', 'OPENROUTER', 'LITELLM', 'EDGE_', 'SMTP', 'UNDO'))
     assert brain['environment']['TANK_KEY'] == '${TANK_KEY_' + upper + ':-}'
     assert brain['environment']['TANK_URL'] == 'http://tank:8000'
     assert brain['environment']['HERMES_URL'] == 'http://hermes:8000'

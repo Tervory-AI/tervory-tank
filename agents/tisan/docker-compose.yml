@@ -85,10 +85,10 @@ services:
     - brain
     build:
       context: ../..
-      dockerfile: agents/rig/Dockerfile.brain
+      dockerfile: agents/tisan/Dockerfile
     command:
     - uvicorn
-    - brain.standby:app
+    - brain_service:app
     - --host
     - 0.0.0.0
     - --port
@@ -103,7 +103,9 @@ services:
     - /tmp:rw,noexec,nosuid,nodev,size=32m
     environment:
       BRAIN_ROOM: tisan
-      TANK_REGION: us-east
+      TISAN_BRAIN_ENABLED: ${TISAN_BRAIN_ENABLED:-false}
+      DATABASE_URL: postgresql://agent_tisan:${AGENT_DB_PASSWORD_TISAN}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_REGION: ${TANK_REGION:-us-east}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_TISAN:-}
       HERMES_URL: http://hermes:8000
@@ -168,6 +170,8 @@ services:
     cap_drop:
     - ALL
   tisan-browser:
+    profiles:
+    - brain
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.browser
@@ -196,14 +200,14 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-    profiles:
-    - brain
     read_only: true
     pids_limit: 128
     tmpfs:
     - /tmp:rw,nosuid,nodev,size=128m
     init: true
   tisan-browser-gateway:
+    profiles:
+    - brain
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.gateway
@@ -231,8 +235,6 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-    profiles:
-    - brain
     read_only: true
     pids_limit: 128
     tmpfs:
