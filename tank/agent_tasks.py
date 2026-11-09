@@ -40,12 +40,12 @@ def install(router, tank) -> None:
     from agent_skills import Chat, complete, local_region, room_key
 
     async def actor_for(room: str, body: TaskScope, request: Request):
-        if room not in {"tiger", "radix", "ghost", "zenas"}:
+        if room not in {"tiger", "radix", "ghost", "zenas", "market_lab"}:
             raise HTTPException(403, "Room task unavailable")
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
-        setting = {"radix": "RADIX_BRAIN_ENABLED", "tiger": "TIGER_BRAIN_ENABLED", "ghost": "GHOST_BRAIN_ENABLED", "zenas": "ZENAS_BRAIN_ENABLED"}[room]
+        setting = {"radix": "RADIX_BRAIN_ENABLED", "tiger": "TIGER_BRAIN_ENABLED", "ghost": "GHOST_BRAIN_ENABLED", "zenas": "ZENAS_BRAIN_ENABLED", "market_lab": "MARKET_LAB_BRAIN_ENABLED"}[room]
         if os.environ.get(setting, "false").lower() not in {"true", "1", "yes"}:
-            raise HTTPException(409, {"radix": "Radix brain is off", "tiger": "Tiger brain is off", "ghost": "GHOST_BRAIN_ENABLED is off.", "zenas": "Zenas brain is off"}[room])
+            raise HTTPException(409, {"radix": "Radix brain is off", "tiger": "Tiger brain is off", "ghost": "GHOST_BRAIN_ENABLED is off.", "zenas": "Zenas brain is off", "market_lab": "Market Lab brain is off"}[room])
         if room == "radix" and request.headers.get("x-home-region") != tank.box_region():
             raise HTTPException(403, "Region mismatch")
         local_region(tank, request.headers.get("x-home-region"), room=room)
@@ -110,12 +110,13 @@ def install(router, tank) -> None:
             from rig_agent_tasks import delegate_task as rig_delegate
             return await rig_delegate(tank, body, request)
         actor = await actor_for(room, body, request)
-        unavailable = {"tiger": "Tiger task unavailable", "radix": "Radix task unavailable", "ghost": "Autumbra task unavailable", "zenas": "Zenas task unavailable"}[room]
+        unavailable = {"tiger": "Tiger task unavailable", "radix": "Radix task unavailable", "ghost": "Autumbra task unavailable", "zenas": "Zenas task unavailable", "market_lab": "Market Lab task unavailable"}[room]
         try:
-            base = origin(os.environ.get("TIGER_BRAIN_URL", "http://tiger-brain:8001") if room == "tiger" else f"http://{room}-brain:8001")
+            host = "market-lab-brain" if room == "market_lab" else room + "-brain"
+            base = origin(os.environ.get("TIGER_BRAIN_URL", "http://tiger-brain:8001") if room == "tiger" else "http://" + host + ":8001")
             parsed = urlsplit(base)
             # Private service only; this directory never accepts a caller URL.
-            if parsed.scheme != "http" or parsed.hostname != room + "-brain" or parsed.port != 8001:
+            if parsed.scheme != "http" or parsed.hostname != host or parsed.port != 8001:
                 raise ValueError("Invalid private origin")
         except ValueError:
             raise HTTPException(503, unavailable) from None

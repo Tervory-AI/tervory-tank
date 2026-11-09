@@ -296,3 +296,43 @@ async def test_real_room_job_query_is_tenant_scoped(repo_api):
         foreign = await client.get('/v1/command/radix/repo/findings', params={'scan_id': scan_id},
                                    headers={'x-tervory-tenant': str(OTHER)})
         assert foreign.status_code == 404 and 'placeholder-private-summary' not in foreign.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('personal', [False, True])
+async def test_radix_wrapper_preserves_chassis_request_and_actor_transaction(command_pool, monkeypatch, personal):
+    from chassis.app import create_app
+    from chassis.db import ensure_schema
+    from chassis.user_assertion import HEADER, SignedUser, sign_assertion
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.syspath_prepend(str(root / 'agents/radix'))
+    from agents.radix.task_runtime import attach
+
+    key = 'placeholder-radix-enqueue-key'
+    monkeypatch.setenv('TANK_KEY', key)
+    monkeypatch.setenv('TANK_KEY_RADIX', key)
+    monkeypatch.setenv('RADIX_MEMORY_ENABLED', 'true' if personal else 'false')
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    async with command_pool.acquire() as conn:
+        await ensure_schema(conn, 'radix')
+        await conn.execute((root / 'agents/radix/schema.sql').read_text())
+    room = create_app(agent='radix', handlers={})
+    room.state.pool = command_pool
+    attach(room)
+    actor = SignedUser(str(TENANT), 'placeholder-signed-owner', 'member')
+    raw = json.dumps({'tenant_id': str(TENANT), 'kind': 'scan',
+                      'input': {'user_id': 'placeholder-forged-owner'}}).encode()
+    headers = {'X-Tank-Key': key, 'Content-Type': 'application/json'}
+    if personal:
+        headers[HEADER] = sign_assertion('radix', actor, 'POST', '/jobs', raw, key=key)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(room), base_url='http://placeholder-room') as client:
+        response = await client.post('/jobs', content=raw, headers=headers)
+        assert response.status_code == 201, response.text
+        job_id = uuid.UUID(response.json()['id'])
+        assert await command_pool.fetchval('SELECT count(*) FROM agent_radix.jobs WHERE tenant_id=$1 AND id=$2', TENANT, job_id) == 1
+        owner = await command_pool.fetchval('SELECT user_id FROM agent_radix.task_context WHERE tenant_id=$1 AND job_id=$2', TENANT, job_id)
+        assert owner == (actor.user_id if personal else None)
+        if personal:
+            replay = await client.post('/jobs', content=raw, headers=headers)
+            assert replay.status_code == 401
+            assert await command_pool.fetchval('SELECT count(*) FROM agent_radix.jobs WHERE tenant_id=$1', TENANT) == 1

@@ -76,12 +76,12 @@ def attach(app):
         tenant = str(body.tenant_id)
         actor = await signed_user(request, tenant_id=tenant, product="radix", required=True) if request.headers.get(HEADER) else None
         if not memory_enabled() or actor is None:
-            return await original.endpoint(body)
+            return await original.endpoint(request=request, body=body)
         pool = pool_for(app)
         async with pool.acquire() as conn, conn.transaction():
             token = pool.current.set(conn)
             try:
-                submitted = await original.endpoint(body)
+                submitted = await original.endpoint(request=request, body=body)
                 wire = body if isinstance(body, Job) else Job.from_room(body.model_dump(), agent="radix", region=os.environ.get("TANK_REGION", "us-east"))
                 execution_input = dict(wire.input)
                 if wire.engine is not None:

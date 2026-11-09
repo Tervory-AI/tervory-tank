@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from tenant_db import tenant_path
 
 PLATFORM = "00000000-0000-0000-0000-000000000001"
-READS = {"warnings", "predictions", "calibration", "feeds", "patterns", "gate", "briefs", "calibration.curve"}
+READS = {"receipts","warnings", "predictions", "calibration", "feeds", "patterns", "gate", "briefs", "calibration.curve"}
 
 
 def obj(raw):
@@ -47,6 +47,8 @@ def link(value: str) -> str:
 
 
 def records(operation: str, data: dict) -> list[dict]:
+    if operation == 'receipts':
+        return data.get('receipts', [])
     if operation == "calibration.curve":
         # The binned data is available to callers; its dedicated Workspace view
         # waits for Figma rather than creating labels or a new chart here.
@@ -99,7 +101,7 @@ async def code_plan(actor, messages: list[dict], task_id=None):
     if last.get("role") != "user":
         return None
     source = last.get("content", "").strip()
-    allowed = {"market_lab." + name for name in READS} | {"market_lab.alerts." + name for name in ("email", "webhook", "off")}
+    allowed = {"market_lab.ask", "market_lab.refresh", "market_lab.research"} | {"market_lab." + name for name in READS} | {"market_lab.alerts." + name for name in ("email", "webhook", "off")}
     if not source or source.split(maxsplit=1)[0] not in allowed:
         return None
     from main import pool, box_region
@@ -285,6 +287,19 @@ def build_router(tank):
         if report_id is not None and operation != "briefs":
             raise HTTPException(422, "The action arguments are invalid")
         data = await room(operation, actor.tenant_id, report_id=report_id) if report_id else await room(operation, actor.tenant_id)
+        if operation == 'receipts':
+            own=data.get('receipts',[])
+            covered={ident for row in own for ident in row.get('ledger_ids',[])}
+            async with pool().acquire() as conn:
+                raw=await conn.fetch("""SELECT id,ts,task_type,cost_usd,cost_status,standard_cost_usd,standard_model,baseline_status
+                    FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND agent='market_lab' AND task_type<>'market_lab.receipts'
+                    ORDER BY ts DESC,id DESC""",actor.tenant_id,box_region())
+            own += [{'id':str(r['id']),'made_at':r['ts'],'operation':r['task_type'],
+                'cost':float(r['cost_usd']) if r['cost_status']=='set' and r['cost_usd'] is not None else None,
+                'would_have_cost':float(r['standard_cost_usd']) if r['standard_cost_usd'] is not None else None,
+                'baseline_model':r['standard_model'],'comparison_status':r['baseline_status'],'cache_hit':False,
+                'ledger_ids':[str(r['id'])]} for r in raw if str(r['id']) not in covered and r['task_type'] not in {'market_lab.'+name for name in READS}]
+            data={'receipts':own}
         rows = records(operation, data)
         ledger_id = await pool().fetchval("INSERT INTO tank.ledger(tenant_id,region,agent,task_type,rung,model,cost_usd,tokens_in,tokens_out) VALUES($1,$2,'market_lab',$3,3,'code',0,0,0) RETURNING id", actor.tenant_id, box_region(), "market_lab." + operation)
         return JSONResponse(jsonable_encoder({"records": rows[page * limit:(page + 1) * limit], "total": len(rows), "ledger_id": str(ledger_id), "cost_usd": 0}), headers={"Cache-Control": "private, no-store"})

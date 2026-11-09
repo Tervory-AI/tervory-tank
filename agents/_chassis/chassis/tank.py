@@ -80,7 +80,7 @@ class TankClient:
         from .task_contract import origin, context, check_receipt
         base = origin(self._base)
         tenant, run = context(actor, run_id)
-        if self.agent not in {"tiger", "rig", "radix", "ghost", "zenas", "tisan"} or not self._api_key:
+        if self.agent not in {"tiger", "rig", "radix", "ghost", "zenas", "market_lab", "tisan"} or not self._api_key:
             raise ValueError("Room task client unavailable")
         path = f"/v1/agents/{self.agent}/{operation}"
         body = json.dumps({"tenant_id": tenant, "user_id": actor.user_id,

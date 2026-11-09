@@ -167,9 +167,10 @@ async def test_job_receipt_serializes_replays_and_rolls_back_code_work(tmp_path)
     try:
         async with pool.acquire() as conn:
             await ensure_schema(conn,'market_lab')
+            await PostgresLedger(conn).apply_schema()
             await conn.execute('CREATE TABLE agent_market_lab.placeholder_effects (id uuid, tenant_id uuid)')
             owner,other,job=uuid4(),uuid4(),uuid4()
-            await conn.execute("INSERT INTO agent_market_lab.jobs(id,tenant_id,kind,status) VALUES($1,$2,'opportunities','running')",job,owner)
+            await conn.execute("INSERT INTO agent_market_lab.jobs(id,tenant_id,kind,status,attempts) VALUES($1,$2,'opportunities','running',1)",job,owner)
         @asynccontextmanager
         async def connection(**kwargs):
             async with pool.acquire() as conn:yield PostgresLedger(conn)
@@ -189,6 +190,8 @@ async def test_job_receipt_serializes_replays_and_rolls_back_code_work(tmp_path)
         assert a==b and len(calls)==1
         from chassis.worker import _fail, _finish
         async with pool.acquire() as conn:
+            # The chassis worker, not the handler, owns attempt completion.
+            await _finish(conn,'market_lab',job,owner,a,1)
             await _fail(conn,'market_lab',job,owner,1,3,'TimeoutError')
             await _finish(conn,'market_lab',job,owner,{'wrong':True},1)
             completed=await conn.fetchrow('SELECT status,result FROM agent_market_lab.jobs WHERE tenant_id=$1 AND id=$2',owner,job)

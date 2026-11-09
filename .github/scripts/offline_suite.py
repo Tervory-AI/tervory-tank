@@ -41,7 +41,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ALONE = ["tests/tiger_g5", "tests/zenas_regulation_alerts"]
 # Run by their own workflows: security job (pinned gitleaks), live-check.yml (Node Playwright).
-ELSEWHERE = ["tests/ci_security", "tests/test_live_check.py", "tests/test_signed_in_runner.py"]
+ELSEWHERE = ["tests/ci_security", "tests/test_live_check.py", "tests/test_signed_in_runner.py",
+             "tests/gates78/products/test_market_lab.py"]  # required gates78 job, isolated researcher pins
 # Test files a side workflow already runs, by name, mapped to "workflow file: job". The main
 # suite leaves them out so they no longer run twice (3 Nov, founder). A file is listed only
 # when the side workflow runs on every pull request that could change it: the file and every

@@ -64,6 +64,10 @@ def build_router(*, key_ok, ledger_context):
                         result = await accept(ledger, str(tenant_id), str(ident), name, parsed, region=store.region)
                     result['sha256'] = digest
                     await save_record(ledger, str(tenant_id), str(ident), result)
+            from core.savings import record
+            await record(ledger_context, str(tenant_id), 'upload',
+                         {'name': name, 'passages': (parsed or {}).get('passages', [])},
+                         {key: result[key] for key in ('status', 'reason', 'pages', 'rows')})
             return {key: result[key] for key in ('status', 'reason', 'pages', 'rows')}
         except StorageError:
             raise HTTPException(503, 'File storage is unavailable. Check the room storage settings.') from None
@@ -80,6 +84,8 @@ def build_router(*, key_ok, ledger_context):
                 await ledger.conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', f'upload:{tenant_id}:{ident}')
                 await forget(ledger, str(tenant_id), str(ident))
                 await store.delete(str(tenant_id), 'uploads', str(ident))
+            from core.savings import record
+            await record(ledger_context, str(tenant_id), 'file.remove', {'file_id': str(ident)}, {'ok': True})
             return {'ok': True}
         except StorageError:
             raise HTTPException(503, 'File could not be removed. Please try again.') from None

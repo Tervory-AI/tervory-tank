@@ -51,7 +51,7 @@ async def test_invalid_evidence_or_receipts_are_never_saved(mutation):
 
 
 @pytest.mark.asyncio
-async def test_http_research_releases_database_for_network_and_remembers_after_save(monkeypatch):
+async def test_http_research_releases_database_and_unsigned_request_never_writes_personal_memory(monkeypatch):
     owner=str(uuid4());ledger=MemoryLedger();active=[];events=[]
     class Memory:
         async def remember(self,*args):
@@ -75,7 +75,9 @@ async def test_http_research_releases_database_for_network_and_remembers_after_s
     assert response.status_code==200
     assert response.json()['report_id']==ledger.reports[0]['id']
     assert ledger.reports[0]['receipts']==response.json()['receipts']
-    assert events==['research','remember']
+    assert events==['research']
+    assert response.json()['cost_usd'] == .004
+    assert response.json()['run_receipt']['ledger_ids'] == [row['ledger_id'] for row in ledger.reports[0]['receipts']]
 
 
 @pytest.mark.asyncio
@@ -154,3 +156,21 @@ async def test_scheduled_live_refresh_uses_recorded_publishers_and_private_postg
         assert (await overview(ledger,owner,'ffl'))['on_count']==1
     finally:
         await conn.close();server.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_presend_refusal_cost_is_known_but_dispatch_failure_is_not_free(monkeypatch):
+    from core.personal import research_result
+    monkeypatch.delenv('MARKET_LAB_MEMORY_ENABLED', raising=False)
+    research_call = AsyncMock(return_value=None)
+    monkeypatch.setattr(research_adapter, 'research_web', research_call)
+    persist = AsyncMock()
+    result = await research_result(None, str(uuid4()), None, 'placeholder-question', on_result=persist)
+    assert result == {'cost_usd': 0, 'status': 'unavailable'}
+    assert research_call.await_count == 1
+    persist.assert_not_awaited()
+    research_call.side_effect = httpx.ReadTimeout('placeholder-unknown-completion')
+    with pytest.raises(httpx.ReadTimeout):
+        await research_result(None, str(uuid4()), None, 'placeholder-question', on_result=persist)
+    assert research_call.await_count == 2
+    persist.assert_not_awaited()

@@ -58,9 +58,13 @@ def test_real_tank_routes_to_real_room_and_postgres(tmp_path, monkeypatch):
                 unrelated = json.loads((ROOT / "tests/fixtures/market_lab_questions.json").read_text())["unrelated"]
                 for question in unrelated:
                     response = request("ask", question=question)
-                    assert response.status_code == 200
-                    assert response.json() == {"content": "No stored data matches this question", "facts": [], "sources": []}, question
-                assert request("ask", tenant=other, question="population").json()["facts"] == []
+                    # The fixture has no researcher. An attempted corridor that
+                    # fails must not be presented as a successful zero-cost run.
+                    assert response.status_code == 503, question
+                    assert response.json() == {"detail": "Market Lab could not complete this request"}
+                foreign = request("ask", tenant=other, question="population")
+                assert foreign.status_code == 503
+                assert foreign.json() == {"detail": "Market Lab could not complete this request"}
                 for fact in brief.json()["facts"]:
                     ident = fact["href"].split("/")[-1].split("?")[0]
                     row = int(fact["href"].split("#point-")[1])

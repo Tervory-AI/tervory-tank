@@ -16,6 +16,9 @@ class Memory:
     async def remember(self, *args, **kwargs):
         return {'id': kwargs.get('record_id', str(uuid4())), 'seen': 1}
 
+    async def recall(self, *args, **kwargs):
+        return []
+
     async def records(self, *args, **kwargs):
         return []
 

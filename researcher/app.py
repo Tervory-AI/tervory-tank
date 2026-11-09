@@ -38,6 +38,7 @@ class ResearchRequest(BaseModel):
     tenant_id: UUID
     question: str = Field(min_length=1, max_length=2000)
     home_region: str = Field(min_length=1, max_length=50)
+    paid_run_id: UUID | None = None
 
 
 @dataclass
@@ -46,6 +47,7 @@ class Run:
     sources: Sources = field(default_factory=Sources)
     receipts: list[dict] = field(default_factory=list)
     failed: asyncio.Event = field(default_factory=asyncio.Event)
+    approval: dict | None = None
 
 
 class QuietOutput:
@@ -138,7 +140,12 @@ def create_app():
                         "tenant_id": str(run.request.tenant_id), "agent": "market_lab",
                         "task_type": "market.research", "messages": messages,
                         "home_region": run.request.home_region, "max_tokens": 2048,
+                        **({'paid_run_id': str(run.request.paid_run_id)} if run.request.paid_run_id else {}),
                     })
+                if response.status_code == 409:
+                    run.approval = response.json().get('detail')
+                    run.failed.set()
+                    raise HTTPException(409, run.approval)
                 response.raise_for_status()
                 routed = response.json()
             receipt = {k: routed[k] for k in ("ledger_id", "tokens_in", "tokens_out")}
@@ -151,6 +158,8 @@ def create_app():
                     "usage": {"prompt_tokens": routed["tokens_in"],
                               "completion_tokens": routed["tokens_out"],
                               "total_tokens": routed["tokens_in"] + routed["tokens_out"]}}
+        except HTTPException:
+            raise
         except Exception:
             run.failed.set()  # Cancels upstream retries; never route around a Tank refusal.
             raise HTTPException(503, "Research stopped") from None
@@ -177,6 +186,11 @@ def create_app():
             }
             researcher.retrievers = [search]
             researcher.scraper_manager = run.sources
+            async def original_query_only(*args, **kwargs):
+                # The original question is already searched; GPTResearcher
+                # appends it itself. Never pay to rewrite the same single query.
+                return []
+            researcher.research_conductor.plan_research = original_query_only
             await researcher.conduct_research()
             if not run.sources.pages:
                 return cited_answer('{"claims": []}', run)
@@ -195,6 +209,8 @@ def create_app():
         try:
             done, _ = await asyncio.wait({work, failed}, timeout=150,
                                          return_when=asyncio.FIRST_COMPLETED)
+            if run.approval is not None:
+                raise HTTPException(409, run.approval)
             if run.failed.is_set() or work not in done:
                 raise HTTPException(503, "Research stopped")
             return work.result()

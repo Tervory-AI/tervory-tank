@@ -7,6 +7,7 @@ correction is a new row, and nothing here updates an existing prediction.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -669,7 +670,16 @@ def _plain_point(point: dict[str, Any]) -> dict[str, Any]:
 
 def _statements(script: str) -> list[str]:
     found: list[str] = []
-    for raw in script.split(";"):
+    # Keep procedural blocks and quoted values intact while splitting SQL.
+    start = 0
+    tokens = re.finditer(r"\$\$[\s\S]*?\$\$|'(?:''|[^'])*'|;", script)
+    chunks = []
+    for token in tokens:
+        if token.group() == ";":
+            chunks.append(script[start:token.start()])
+            start = token.end()
+    chunks.append(script[start:])
+    for raw in chunks:
         lines = [line for line in raw.splitlines() if not line.strip().startswith("--")]
         text = "\n".join(lines).strip()
         if text:

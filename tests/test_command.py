@@ -366,7 +366,7 @@ def test_adapters_force_identity_and_do_not_accept_paid_route_overrides(runtime)
     actor = command.Actor(TENANT, 'founder', True)
     action = command.PlannedAction(tool='market_lab.research', arguments={'question': 'A question'})
     method, path, query, body = command.adapter_request(action, actor)
-    assert (method, path) == ('POST', '/v1/research')
+    assert (method, path) == ('POST', '/v1/market-lab/actions/research')
     assert body == {'question': 'A question', 'tenant_id': str(TENANT), 'home_region': 'us-east'}
     assert query['tenant_id'] == str(TENANT)
     for overrides in [{'preset': 'high'}, {'model': 'expensive'}, {'home_region': 'za'}, {'tenant_id': str(OTHER)}]:

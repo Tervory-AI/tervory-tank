@@ -3,7 +3,7 @@ import json
 from uuid import UUID
 from typing import Literal
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.evidence import answer, document_page, overview
@@ -17,13 +17,26 @@ class RequestBody(BaseModel):
     offset: int = Field(default=0, ge=0, le=10000000)
     row: int | None = Field(default=None, ge=0, le=10000000)
     row_kind: Literal["point", "event"] | None = None
+    paid_run_id: UUID | None = None
+    user_id: str | None = Field(default=None, max_length=200)
 
 
 def build_router(*, key_ok, ledger_context, engine: str | None = None):
     router = APIRouter()
 
     @router.post("/market/{operation}")
-    async def call(operation: str, body: RequestBody, x_tank_key: str = Header(default="")):
+    async def call(
+        operation: str,
+        body: RequestBody,
+        request: Request,
+        x_tank_key: str = Header(default=""),
+        x_tervory_tenant: str | None = Header(default=None),
+        x_tervory_user: str | None = Header(default=None),
+        x_tervory_identity_timestamp: str | None = Header(default=None),
+        x_tervory_identity_signature: str | None = Header(default=None),
+        x_lifecycle_timestamp: str | None = Header(default=None),
+        x_lifecycle_signature: str | None = Header(default=None),
+    ):
         if not key_ok(x_tank_key):
             raise HTTPException(401, "Room key required")
         if operation not in {"overview", "ask", "document", "refresh"}:
@@ -34,22 +47,8 @@ def build_router(*, key_ok, ledger_context, engine: str | None = None):
             if operation == "ask":
                 if not body.question.strip():
                     raise HTTPException(422, "A question is required")
-                async with ledger_context() as ledger:
-                    saved = await answer(ledger, str(body.tenant_id), body.question, engine=engine)
-                if saved.get("facts"):
-                    return saved
-                from core.research_adapter import research_web
-                researched = await research_web(str(body.tenant_id), body.question)
-                # Preserve the existing no-sources wording, including when the
-                # search finds nothing. Never hold a DB connection during research.
-                if researched and researched.get('facts'):
-                    from core.research_records import save, remember
-                    async with ledger_context() as ledger:
-                        report = await save(ledger, str(body.tenant_id), body.question, researched)
-                        memory = getattr(ledger, 'memory', None)
-                    await remember(memory, report)
-                    return {**researched, 'report_id': report['id']}
-                return saved
+                from core.personal import ask
+                return await ask(request, body, ledger_context, engine=engine, answer_fn=answer)
             async with ledger_context() as ledger:
                 tenant = str(body.tenant_id)
                 if operation == "document":

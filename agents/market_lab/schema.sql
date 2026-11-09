@@ -4,6 +4,58 @@
 
 CREATE SCHEMA IF NOT EXISTS agent_market_lab;
 
+CREATE TABLE IF NOT EXISTS agent_market_lab.answer_cache (
+    tenant_id uuid NOT NULL, cache_key text NOT NULL, generation text NOT NULL,
+    expires_at timestamptz NOT NULL, result jsonb NOT NULL,
+    PRIMARY KEY(tenant_id,cache_key)
+);
+CREATE TABLE IF NOT EXISTS agent_market_lab.run_receipts (
+    tenant_id uuid NOT NULL, id uuid NOT NULL, made_at timestamptz NOT NULL DEFAULT now(),
+    operation text NOT NULL, receipt jsonb NOT NULL, PRIMARY KEY(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS market_run_receipts_scope ON agent_market_lab.run_receipts(tenant_id,made_at DESC,id);
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+               WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+        ALTER TABLE agent_market_lab.answer_cache ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_market_lab.answer_cache FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_market_lab.run_receipts ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_market_lab.run_receipts FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_market_lab' AND tablename='answer_cache' AND policyname='market_cache_owner') THEN
+            CREATE POLICY market_cache_owner ON agent_market_lab.answer_cache USING (tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK (tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_market_lab' AND tablename='run_receipts' AND policyname='market_receipt_owner') THEN
+            CREATE POLICY market_receipt_owner ON agent_market_lab.run_receipts USING (tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK (tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS agent_market_lab.job_actors (
+    tenant_id uuid NOT NULL, job_id uuid NOT NULL, user_id text NOT NULL,
+    role text NOT NULL, PRIMARY KEY(tenant_id,job_id)
+);
+CREATE TABLE IF NOT EXISTS agent_market_lab.executions (
+    tenant_id uuid NOT NULL, job_id uuid NOT NULL, result jsonb NOT NULL,
+    PRIMARY KEY(tenant_id,job_id)
+);
+
+DO $$ BEGIN
+    IF EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+              WHERE c.relrowsecurity AND ((n.nspname='tank' AND c.relname='command_threads')
+                 OR (n.nspname='agent_market_lab' AND c.relname='jobs'))) THEN
+        ALTER TABLE agent_market_lab.job_actors ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_market_lab.job_actors FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_market_lab.executions ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_market_lab.executions FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='agent_market_lab' AND tablename='job_actors' AND policyname='market_job_actor') THEN
+            CREATE POLICY market_job_actor ON agent_market_lab.job_actors USING(tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK(tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='agent_market_lab' AND tablename='executions' AND policyname='market_execution') THEN
+            CREATE POLICY market_execution ON agent_market_lab.executions USING(tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK(tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END $$;
+
 -- Tenant-selected public feeds, checked by the existing scheduled-job worker.
 CREATE TABLE IF NOT EXISTS agent_market_lab.feed_links (
     tenant_id uuid NOT NULL,
