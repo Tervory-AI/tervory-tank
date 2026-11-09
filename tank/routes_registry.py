@@ -73,6 +73,8 @@ ROUTES = (
     ('early', 'workspace_board', 'build_router', ('tank',), True),
     ('early', 'morning_report', 'build_router', ('tank',), True),
     ('early', 'engine_admin', 'build_router', ('tank',), True),
+    # Empty router unless ENGINE_LEDGER_ENABLED=true at start-up.
+    ('early', 'savings_ledger', 'build_router', ('tank',), True),
 )
 
 def register_routes(tank: Any, phase: str) -> None:
