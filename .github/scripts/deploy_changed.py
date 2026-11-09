@@ -394,6 +394,9 @@ def undo(uuid: str, name: str) -> None:
     if uuid not in _promoted:
         return
     _promoted.discard(uuid)
+    previous = (_record.get("apps", {}).get(deploy_images.compose_key(compose)) or {}).get("previous") or {}
+    if not pin_source(uuid, name, previous.get("sha", "")):
+        return
     try:
         if not deploy_images.restore(compose, registry(), _record):
             print(f"::error title=no previous image::{name} has no recorded previous image to go back to")
@@ -403,9 +406,6 @@ def undo(uuid: str, name: str) -> None:
         return
     print(f"::error title=rolled back::{name} failed on {AFTER[:8]}; :live is back on the previous images "
           "and an exact-source recovery is attempted")
-    previous = (_record.get("apps", {}).get(deploy_images.compose_key(compose)) or {}).get("live") or {}
-    if not pin_source(uuid, name, previous.get("sha", "")):
-        return
     if (deploy(uuid, name) and wait_for(uuid, name, MAIN_TIMEOUT_S if uuid == MAIN_APP else room_timeout(name))
             and healthy(uuid, name)):
         mark_healthy(uuid, "restored")
@@ -608,10 +608,12 @@ def rollback_main() -> int:
             return 1
         name = app.get("name") or uuid
         compose = deploy_images.compose_for_app(app) if uuid != MAIN_APP else "docker-compose.yml"
+        target_sha = to or (((_record.get("apps") or {}).get(deploy_images.compose_key(compose)) or {})
+                            .get("previous") or {}).get("sha", "")
+        if not pin_source(uuid, name, target_sha):
+            return 1
         entry = deploy_images.rollback(compose, registry(), _record, to)
         _compose[uuid] = compose
-        if not pin_source(uuid, name, entry["live"].get("sha", "")):
-            return 1
         print(f"::notice title=rollback::{name} :live is now {entry['live'].get('sha', '')[:8] or 'the previous images'}")
         wait = MAIN_TIMEOUT_S if uuid == MAIN_APP else ZA_TIMEOUT_S if name == SA_APP else room_timeout(name)
         if not (deploy(uuid, name) and wait_for(uuid, name, wait) and healthy(uuid, name)):

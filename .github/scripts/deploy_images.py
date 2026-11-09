@@ -388,6 +388,25 @@ class MissingImage(RuntimeError):
     pass
 
 
+def retag(registry, moves: list[tuple[str, str]]) -> None:
+    """Compensate existing tags on a partial registry failure; never imply atomic writes."""
+    before = {target: registry.digest(target) for _, target in moves}
+    try:
+        for source, target in moves:
+            registry.tag(source, target)
+    except RuntimeError:
+        errors = []
+        for target, digest in before.items():
+            if digest:
+                try:
+                    registry.tag(f"{target.rsplit(':', 1)[0]}@{digest}", target)
+                except RuntimeError:
+                    errors.append(target)
+        if errors:
+            raise RuntimeError("Tag update failed; restoration incomplete: " + ", ".join(errors)) from None
+        raise
+
+
 def promote(compose: str, sha: str, registry, record: dict, *,
             specs: Callable[[str], list[BuildSpec]] = built_services) -> dict:
     """<sha> becomes :live for every image of this app; the old :live is kept as :previous.
@@ -403,27 +422,16 @@ def promote(compose: str, sha: str, registry, record: dict, *,
     old = {s.service: registry.digest(f"{s.repo}:{LIVE}") for s in services}
     apps = record.setdefault("apps", {})
     entry = apps.get(compose_key(compose)) or {}
-    old_previous = {s.service: registry.digest(f"{s.repo}:{PREVIOUS}") for s in services}
+    moves = []
+    for spec in services:
+        if old[spec.service] and old[spec.service] != new[spec.service]:
+            moves.append((f"{spec.repo}@{old[spec.service]}", f"{spec.repo}:{PREVIOUS}"))
+        moves.append((f"{spec.repo}@{new[spec.service]}", f"{spec.repo}:{LIVE}"))
     try:
-        for s in services:
-            if old[s.service] and old[s.service] != new[s.service]:
-                registry.tag(f"{s.repo}@{old[s.service]}", f"{s.repo}:{PREVIOUS}")
-            registry.tag(f"{s.repo}@{new[s.service]}", f"{s.repo}:{LIVE}")
+        retag(registry, moves)
     except RuntimeError:
-        # Registry writes are not atomic. Restore every existing tag, not only
-        # the last service attempted; no Coolify deploy may follow this failure.
-        errors = []
-        for s in services:
-            for tag, digest in ((LIVE, old[s.service]), (PREVIOUS, old_previous[s.service])):
-                if digest:
-                    try:
-                        registry.tag(f"{s.repo}@{digest}", f"{s.repo}:{tag}")
-                    except RuntimeError:
-                        errors.append(f"{s.service}:{tag}")
         apps[compose_key(compose)] = {**entry, "compose": compose, "state": "promotion_failed",
                                       "pending_sha": sha, "at": _now_iso()}
-        if errors:
-            raise RuntimeError("Promotion failed; tag restoration incomplete: " + ", ".join(errors)) from None
         raise
     if any(old.values()) and old != new:
         # What was really live before this deploy; its commit is known when the record matches.
@@ -445,9 +453,8 @@ def restore(compose: str, registry, record: dict) -> bool:
     images = previous.get("images") or {}
     if not images:
         return False
-    for service, digest in sorted(images.items()):
-        repo = image_repo(compose, service)
-        registry.tag(f"{repo}@{digest}", f"{repo}:{LIVE}")
+    retag(registry, [(f"{image_repo(compose, service)}@{digest}",
+                      f"{image_repo(compose, service)}:{LIVE}") for service, digest in sorted(images.items())])
     entry["failed"] = entry.get("live")
     entry["live"], entry["state"], entry["at"] = previous, "restore_pending", _now_iso()
     return True
@@ -472,11 +479,13 @@ def rollback(compose: str, registry, record: dict, to: str = "", *,
         target = entry.get("previous") or {}
         if not target.get("images"):
             raise MissingImage(f"{compose_key(compose)}: the record has no previous image to go back to")
+    moves = []
     for service, digest in sorted(target["images"].items()):
         repo = image_repo(compose, service)
         if (current.get("images") or {}).get(service):
-            registry.tag(f"{repo}@{current['images'][service]}", f"{repo}:{PREVIOUS}")
-        registry.tag(f"{repo}@{digest}", f"{repo}:{LIVE}")
+            moves.append((f"{repo}@{current['images'][service]}", f"{repo}:{PREVIOUS}"))
+        moves.append((f"{repo}@{digest}", f"{repo}:{LIVE}"))
+    retag(registry, moves)
     entry = {"compose": compose, "live": target, "previous": current,
              "last_good": entry.get("last_good") or {}, "state": "rollback_pending", "at": _now_iso()}
     record.setdefault("apps", {})[compose_key(compose)] = entry

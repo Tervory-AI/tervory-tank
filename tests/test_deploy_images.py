@@ -698,3 +698,82 @@ def test_unverified_live_record_cannot_supply_a_recovery_source_sha():
     entry = di.promote("docker-compose.yml", B, reg, record, specs=_specs)
     assert entry["previous"]["sha"] == ""
     assert entry["last_good"] == {}
+
+
+@pytest.mark.parametrize('operation', ['undo', 'rollback'])
+def test_recovery_source_pin_refusal_leaves_all_tags_unchanged(monkeypatch, tmp_path, operation):
+    mod = _deploy_script(monkeypatch)
+    record = {'apps': {'main': {'live': {'sha': B, 'images': {'tank': 'sha256:tb', 'workspace': 'sha256:wb'}},
+                               'previous': {'sha': A, 'images': {'tank': 'sha256:ta', 'workspace': 'sha256:wa'}}}}}
+    reg, _ = _image_mode(monkeypatch, tmp_path, mod, ['docker-compose.yml'], record=record)
+    mod.load_plan()
+    mod._compose[mod.MAIN_APP] = 'docker-compose.yml'
+    mod._promoted.add(mod.MAIN_APP)
+    before = dict(reg.tags)
+    deployed = []
+    monkeypatch.setattr(mod, 'pin_source', lambda *args: False)
+    monkeypatch.setattr(mod, 'deploy', lambda *args: deployed.append(args) or True)
+    if operation == 'undo':
+        mod.undo(mod.MAIN_APP, 'main')
+    else:
+        monkeypatch.setenv('APP', mod.MAIN_APP)
+        monkeypatch.setattr(mod, 'api', lambda *args: (200, {'uuid': mod.MAIN_APP, 'name': 'main'}))
+        assert mod.rollback_main() == 1
+    assert reg.tags == before and reg.moves == [] and deployed == []
+
+
+@pytest.mark.parametrize('operation', ['restore', 'rollback'])
+def test_partial_recovery_tag_failure_restores_every_existing_tag(operation):
+    record = {'apps': {'main': {'live': {'sha': B, 'images': {'tank': 'sha256:tb', 'workspace': 'sha256:wb'}},
+                               'previous': {'sha': A, 'images': {'tank': 'sha256:ta', 'workspace': 'sha256:wa'}}}}}
+    reg = FakeRegistry({f'{_repo(s)}:live': f'sha256:{s}-new' for s in ['tank', 'workspace']})
+    reg.tags.update({f'{_repo(s)}:previous': f'sha256:{s}-old' for s in ['tank', 'workspace']})
+    before = dict(reg.tags)
+    old_record = json.loads(json.dumps(record))
+    original = reg.tag
+    failed = False
+    def tag(source, target):
+        nonlocal failed
+        if target == f'{_repo("workspace")}:live' and not failed:
+            failed = True
+            raise RuntimeError('injected registry failure')
+        original(source, target)
+    reg.tag = tag
+    with pytest.raises(RuntimeError, match='injected registry failure'):
+        getattr(di, operation)('docker-compose.yml', reg, record)
+    assert reg.tags == before and record == old_record
+
+
+@pytest.mark.parametrize('operation', ['undo', 'rollback'])
+def test_partial_recovery_failure_never_deploys(monkeypatch, tmp_path, operation):
+    mod = _deploy_script(monkeypatch)
+    record = {'apps': {'main': {'live': {'sha': B, 'images': {'tank': 'sha256:tb', 'workspace': 'sha256:wb'}},
+                               'previous': {'sha': A, 'images': {'tank': 'sha256:ta', 'workspace': 'sha256:wa'}}}}}
+    reg, _ = _image_mode(monkeypatch, tmp_path, mod, ['docker-compose.yml'], record=record)
+    mod.load_plan()
+    mod._compose[mod.MAIN_APP] = 'docker-compose.yml'
+    mod._promoted.add(mod.MAIN_APP)
+    for service in ['tank', 'workspace']:
+        reg.tags[f'{_repo(service)}:previous'] = f'sha256:{service}-prior'
+    before = dict(reg.tags)
+    deployed = []
+    pins = []
+    monkeypatch.setattr(mod, 'pin_source', lambda uuid, name, sha: pins.append(sha) or True)
+    monkeypatch.setattr(mod, 'deploy', lambda *args: deployed.append(args) or True)
+    original = reg.tag
+    failed = False
+    def tag(source, target):
+        nonlocal failed
+        assert pins == [A]
+        if target == f'{_repo("workspace")}:live' and not failed:
+            failed = True
+            raise RuntimeError('injected registry failure')
+        original(source, target)
+    reg.tag = tag
+    if operation == 'undo':
+        mod.undo(mod.MAIN_APP, 'main')
+    else:
+        monkeypatch.setenv('APP', mod.MAIN_APP)
+        monkeypatch.setattr(mod, 'api', lambda *args: (200, {'uuid': mod.MAIN_APP, 'name': 'main'}))
+        assert mod.rollback_main() == 1
+    assert pins == [A] and reg.tags == before and deployed == []
