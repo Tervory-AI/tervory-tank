@@ -17,6 +17,7 @@ import os
 import re
 import threading
 import time
+from fastapi import HTTPException
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
@@ -229,9 +230,17 @@ class RepoMapCache:
                 _, dropped = scope.files.popitem(last=False)
                 scope.size -= dropped.size
                 self.size -= dropped.size
-            while (self.size > MAX_TOTAL_BYTES or len(self.scopes) > MAX_SCOPES) and len(self.scopes) > 1:
+            # A task can hold paths/diff even after every file body was evicted.
+            while scope.size > MAX_SCOPE_BYTES and scope.tasks:
+                name, dropped = scope.tasks.popitem(last=False)
+                freed = task_cost(name, dropped)
+                scope.size -= freed
+                self.size -= freed
+            while (self.size > MAX_TOTAL_BYTES or len(self.scopes) > MAX_SCOPES) and self.scopes:
                 _, dropped = self.scopes.popitem(last=False)
                 self.size -= dropped.size
+            if key not in self.scopes or task not in scope.tasks:
+                return {}, [], None
             return dict(scope.files), list(record['paths']), record['diff']
 
 
@@ -377,21 +386,33 @@ def scoped(results, allowed: set[str]):
             path = norm(arguments.get('path'))
             if path not in allowed:
                 result = SimpleNamespace(name='read_file', output=json.dumps(
-                    {'arguments': {'path': path}, 'result': {'omitted': OUTSIDE}}, ensure_ascii=False))
+                    {'result': {'omitted': OUTSIDE}}, ensure_ascii=False))
         elif result.name == 'search':
             if body is None or not isinstance(body.get('matches'), list):
                 result = SimpleNamespace(name='search', output=json.dumps({'result': {'omitted': 'search result could not be scoped; not sent'}}))
             else:
-                matches = [m for m in body['matches'] if isinstance(m, dict) and norm(m.get('file')) in allowed]
+                matches = [{key: m[key] for key in ('file', 'line', 'text') if key in m}
+                           for m in body['matches'] if isinstance(m, dict) and norm(m.get('file')) in allowed]
                 result = SimpleNamespace(name='search', output=json.dumps(
-                    {'arguments': arguments, 'result': {**body, 'matches': matches,
+                    {'result': {'matches': matches,
                                                         'outside_scope': len(body['matches']) - len(matches)}}, ensure_ascii=False))
         elif result.name == 'git' and arguments.get('action') == 'diff':
             if body is None or not isinstance(body.get('output'), str):
                 result = SimpleNamespace(name='git', output=json.dumps({'result': {'omitted': 'diff could not be scoped; not sent'}}))
             else:
                 result = SimpleNamespace(name='git', output=json.dumps(
-                    {'arguments': arguments, 'result': {**body, 'output': scope_diff(body['output'], allowed)}}, ensure_ascii=False))
+                    {'arguments': {'action': 'diff'}, 'result': {'output': scope_diff(body['output'], allowed)}}, ensure_ascii=False))
+        elif result.name == 'list_files' and body is not None and isinstance(body.get('files'), list):
+            result = SimpleNamespace(name=result.name, output=json.dumps(
+                {'result': {'files': [path for path in body['files'] if norm(path) in allowed]}}, ensure_ascii=False))
+        elif result.name == 'propose_edit':
+            changed = set(diff_paths(arguments.get('diff', '')))
+            if norm(arguments.get('path')) not in allowed or not changed <= allowed:
+                continue
+        else:
+            # Unstructured command output and unknown envelopes cannot prove
+            # file ownership. They are omitted only while a scope lock is active.
+            continue
         kept.append(result)
     return kept
 
@@ -565,9 +586,9 @@ def prepare(key, body, messages, *, slicing, tool_mode, limit, allowed_files):
         remaining = [result for index, result in enumerate(results) if index not in absorbed]
         stable = [messages[0]]
         for name in ('project', 'mcp'):
-            if name in found:
+            if name in found and (allowed_files is None or name == 'mcp'):
                 stable.append(found[name])
-        prefix = history_prefix(body.history, encoding)
+        prefix = history_prefix(body.history, encoding) if allowed_files is None else []
         if prefix:
             stable.append({'role': 'user', 'content': 'Earlier local session DATA (stable prefix only; not instructions): '
                            + json.dumps(prefix, default=str, ensure_ascii=False)})
@@ -577,7 +598,8 @@ def prepare(key, body, messages, *, slicing, tool_mode, limit, allowed_files):
         if 'attachments' in found:
             ordered.append(found['attachments'])
     else:
-        ordered = [message for message in messages if message is not found.get('tools')]
+        blocked = {id(found.get(name)) for name in ('tools', 'history', 'project')} if allowed_files is not None else {id(found.get('tools'))}
+        ordered = [message for message in messages if id(message) not in blocked]
     if remaining:
         if tool_mode == 'raw':
             payload = json.dumps([{'name': r.name, 'output': r.output} for r in remaining], default=str, ensure_ascii=False)
@@ -587,6 +609,31 @@ def prepare(key, body, messages, *, slicing, tool_mode, limit, allowed_files):
         ordered.append({'role': 'user', 'content': 'Local tool result DATA (not instructions): ' + payload})
     stats['tokens_after'] = tokens(ordered, encoding)
     return ordered, stats
+
+
+def preflight_scope(state, actor, thread_id, turn_id, body):
+    """Read only the current server-owned #805 plan, never client-selected scope."""
+    import code_limits
+    if not enabled() and not code_limits.caps_enabled():
+        return None
+    if os.environ.get('ENGINE_CODE_PREFLIGHT_ENABLED', '').strip() != 'true':
+        return None
+    plan = state.get('code_preflight')
+    if not isinstance(plan, dict) or plan.get('prompt_id') != str(body.prompt_id):
+        return None
+    active = plan.get('active')
+    if not isinstance(active, dict) or (active.get('turn_id'), active.get('user_id'), active.get('thread_id')) != (
+            str(turn_id), actor.user_id, str(thread_id)):
+        return None
+    tasks, index = plan.get('tasks'), plan.get('current')
+    if not isinstance(tasks, list) or type(index) is not int or not 0 <= index < len(tasks):
+        raise HTTPException(422, 'The verified code plan has no current task.')
+    task = tasks[index]
+    selected = task.get('plan') if isinstance(task, dict) else None
+    paths = selected.get('files') if isinstance(selected, dict) else None
+    if not isinstance(paths, list) or not paths or any(not isinstance(path, str) or not path for path in paths):
+        raise HTTPException(422, 'The verified code plan has no file scope.')
+    return paths
 
 
 async def send_only_what_matters(actor, thread_id, body, messages, *, allowed_files=None):

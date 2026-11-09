@@ -526,3 +526,69 @@ async def test_http_busy_slicing_makes_no_model_call(api, monkeypatch):
     assert response.status_code == 503 and 'No model call' in response.json()['detail']
     model.assert_not_awaited()
     assert await pool.fetchval('SELECT count(*) FROM tank.ledger') == 0
+
+
+def test_scope_lock_filters_mixed_search_diff_and_unstructured_history():
+    allowed = 'allowed.py'
+    marker = 'excluded_private_body_5141'
+    result = lambda name, output: SimpleNamespace(name=name, output=json.dumps(output))
+    rows = [
+        result('search', {'result': {'matches': [
+            {'file': allowed, 'line': 1, 'text': 'kept_match'},
+            {'file': 'excluded.py', 'line': 9, 'text': marker}], 'extra': marker}}),
+        result('run_command', {'result': {'output': marker}}),
+        result('read_file', {'arguments': {'path': 'excluded.py'}, 'result': {'exists': True, 'text': marker}}),
+        result('list_files', {'result': {'files': [allowed, 'excluded.py']}}),
+        result('git', {'arguments': {'action': 'diff'}, 'result': {'output':
+            '--- a/allowed.py\n+++ b/allowed.py\n@@ -1 +1 @@\n-old\n+kept_diff\n'
+            '--- a/excluded.py\n+++ b/excluded.py\n@@ -1 +1 @@\n-old\n+' + marker}}),
+    ]
+    item = SimpleNamespace(tool_results=rows, prompt_id='prompt', text='Fix allowed.py', history=[
+        SimpleNamespace(kind='tool', model_dump=lambda: {'content': marker})])
+    messages = [{'role': 'system', 'content': 'stable'}, {'role': 'user', 'content': item.text},
+        {'role': 'user', 'content': 'Repository project notes DATA ' + marker},
+        {'role': 'user', 'content': 'Earlier local session DATA ' + marker},
+        {'role': 'user', 'content': 'Local tool result DATA ' + marker}]
+    for slicing in (True, False):
+        output, _ = code_context.prepare(('t', 'u', 'r'), item, messages, slicing=slicing,
+                                        tool_mode='raw', limit=None, allowed_files=[allowed])
+        sent = json.dumps(output)
+        assert marker not in sent and 'excluded.py' not in sent
+        assert 'kept_match' in sent and 'kept_diff' in sent
+
+
+def test_cache_accounts_for_large_task_paths_and_evicts(monkeypatch):
+    monkeypatch.setattr(code_context, 'MAX_SCOPE_BYTES', 2000)
+    monkeypatch.setattr(code_context, 'MAX_TOTAL_BYTES', 3000)
+    cache = code_context.RepoMapCache()
+    long_path = 'private/' + 'a' * 1500 + '.py'
+    cache.update(('t', 'u', 'r'), 'task', {}, set(), None, [long_path])
+    assert cache.size <= 2000
+    assert cache.update(('t', 'u', 'r'), 'probe', {}, set(), None, [])[1] == []
+    for index in range(10):
+        cache.update(('t', 'u', str(index)), 'task', {}, set(), None, ['a.py'])
+    assert cache.size <= 3000
+    assert cache.size == sum(scope.size for scope in cache.scopes.values())
+
+
+def test_scope_handoff_binds_current_verified_preflight_actor_and_turn(monkeypatch):
+    actor = command.Actor(existing.TENANT, 'founder', True)
+    request = SimpleNamespace(prompt_id=uuid.uuid4())
+    thread, turn = uuid.uuid4(), uuid.uuid4()
+    state = {'code_preflight': {'prompt_id': str(request.prompt_id), 'current': 0,
+        'active': {'turn_id': str(turn), 'thread_id': str(thread), 'user_id': actor.user_id},
+        'tasks': [{'plan': {'files': ['allowed.py']}}]}}
+    assert code_context.preflight_scope(state, actor, thread, turn, request) is None
+    monkeypatch.setenv('ENGINE_CODE_PREFLIGHT_ENABLED', 'true')
+    assert code_context.preflight_scope(state, actor, thread, turn, request) is None
+    monkeypatch.setenv(code_context.SETTING, 'true')
+    assert code_context.preflight_scope(state, actor, thread, turn, request) == ['allowed.py']
+    for field in ('turn_id', 'thread_id', 'user_id'):
+        previous = state['code_preflight']['active'][field]
+        state['code_preflight']['active'][field] = 'other'
+        assert code_context.preflight_scope(state, actor, thread, turn, request) is None
+        state['code_preflight']['active'][field] = previous
+    state['code_preflight']['tasks'][0]['plan']['files'] = []
+    with pytest.raises(HTTPException) as denied:
+        code_context.preflight_scope(state, actor, thread, turn, request)
+    assert denied.value.status_code == 422
