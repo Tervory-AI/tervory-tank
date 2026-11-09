@@ -3699,6 +3699,154 @@ CREATE SCHEMA IF NOT EXISTS agent_ghost;
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS autumbra_reference_hash text;
 -- END autumbra
 
+-- BEGIN engine_ledger
+-- Savings ledger and dated baselines. Code reads and writes these only when
+-- ENGINE_LEDGER_ENABLED is the literal true; unset leaves both tables empty.
+-- A baseline fixes the comparison model and its list price (per token, as in
+-- tank.proof_prices) from effective_from forward. Rows are never back-dated,
+-- updated or deleted, so a provider price change never moves past savings.
+CREATE TABLE IF NOT EXISTS tank.savings_baselines (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    task_type text NOT NULL,
+    baseline_model text NOT NULL,
+    input_usd numeric(20,12) NOT NULL CHECK (input_usd>=0),
+    output_usd numeric(20,12) NOT NULL CHECK (output_usd>=0),
+    top_model text,
+    top_input_usd numeric(20,12) CHECK (top_input_usd>=0),
+    top_output_usd numeric(20,12) CHECK (top_output_usd>=0),
+    effective_from timestamptz NOT NULL DEFAULT now(),
+    recorded_by text NOT NULL,
+    recorded_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (task_type,effective_from)
+);
+-- One row per receipt, per tenant, chained: row_hash covers prev_hash and every
+-- stored value, so any edit made outside these triggers breaks the chain.
+CREATE TABLE IF NOT EXISTS tank.savings_ledger (
+    tenant_id uuid NOT NULL,
+    seq bigint NOT NULL,
+    ledger_id uuid NOT NULL,
+    region text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    receipt_at timestamptz NOT NULL,
+    task_type text NOT NULL,
+    rung smallint NOT NULL,
+    cache_layer text,
+    model text NOT NULL,
+    tokens_in integer NOT NULL,
+    tokens_out integer NOT NULL,
+    cost_usd numeric(18,8) NOT NULL,
+    would_have_cost_usd numeric(18,8),
+    top_cost_usd numeric(18,8),
+    baseline_id bigint REFERENCES tank.savings_baselines(id),
+    baseline_model text,
+    input_usd numeric(20,12),
+    output_usd numeric(20,12),
+    price_date date,
+    top_model text,
+    prev_hash text NOT NULL,
+    row_hash text NOT NULL,
+    PRIMARY KEY (tenant_id,seq),
+    UNIQUE (tenant_id,ledger_id)
+);
+CREATE INDEX IF NOT EXISTS savings_ledger_period ON tank.savings_ledger(tenant_id,created_at);
+CREATE OR REPLACE FUNCTION tank.savings_ledger_digest(r tank.savings_ledger) RETURNS text
+LANGUAGE sql STABLE AS $$
+    SELECT encode(sha256(convert_to(concat_ws('|', r.prev_hash, r.tenant_id::text, r.seq::text,
+        r.ledger_id::text, r.region, to_char(r.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        to_char(r.receipt_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), r.task_type, r.rung::text,
+        coalesce(r.cache_layer,''), r.model, r.tokens_in::text, r.tokens_out::text, r.cost_usd::text,
+        coalesce(r.would_have_cost_usd::text,''), coalesce(r.top_cost_usd::text,''),
+        coalesce(r.baseline_id::text,''), coalesce(r.baseline_model,''), coalesce(r.input_usd::text,''),
+        coalesce(r.output_usd::text,''), coalesce(to_char(r.price_date,'YYYY-MM-DD'),''),
+        coalesce(r.top_model,'')),'UTF8')),'hex')
+$$;
+CREATE OR REPLACE FUNCTION tank.savings_ledger_chain() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE last_seq bigint; last_hash text;
+BEGIN
+    -- One writer per tenant chain at a time; other tenants never wait.
+    PERFORM pg_advisory_xact_lock(hashtextextended('tank.savings_ledger:'||NEW.tenant_id::text,0));
+    SELECT seq,row_hash INTO last_seq,last_hash FROM tank.savings_ledger
+      WHERE tenant_id=NEW.tenant_id ORDER BY seq DESC LIMIT 1;
+    NEW.seq := coalesce(last_seq,0)+1;
+    NEW.prev_hash := coalesce(last_hash,repeat('0',64));
+    NEW.created_at := now(); -- never back-dated into a period already billed
+    NEW.row_hash := tank.savings_ledger_digest(NEW);
+    RETURN NEW;
+END $$;
+CREATE OR REPLACE FUNCTION tank.savings_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'tank.% is append-only: % refused', TG_TABLE_NAME, TG_OP
+      USING ERRCODE='restrict_violation';
+END $$;
+CREATE OR REPLACE FUNCTION tank.savings_baseline_forward() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.effective_from < now() THEN
+      RAISE EXCEPTION 'A baseline applies from its date forward, never to past receipts'
+        USING ERRCODE='check_violation';
+    END IF;
+    NEW.recorded_at := now();
+    RETURN NEW;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='savings_ledger_chain' AND tgrelid='tank.savings_ledger'::regclass) THEN
+      CREATE TRIGGER savings_ledger_chain BEFORE INSERT ON tank.savings_ledger
+        FOR EACH ROW EXECUTE FUNCTION tank.savings_ledger_chain();
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='savings_ledger_append_only' AND tgrelid='tank.savings_ledger'::regclass) THEN
+      CREATE TRIGGER savings_ledger_append_only BEFORE UPDATE OR DELETE ON tank.savings_ledger
+        FOR EACH ROW EXECUTE FUNCTION tank.savings_append_only();
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='savings_ledger_no_truncate' AND tgrelid='tank.savings_ledger'::regclass) THEN
+      CREATE TRIGGER savings_ledger_no_truncate BEFORE TRUNCATE ON tank.savings_ledger
+        FOR EACH STATEMENT EXECUTE FUNCTION tank.savings_append_only();
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='savings_baselines_forward' AND tgrelid='tank.savings_baselines'::regclass) THEN
+      CREATE TRIGGER savings_baselines_forward BEFORE INSERT ON tank.savings_baselines
+        FOR EACH ROW EXECUTE FUNCTION tank.savings_baseline_forward();
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='savings_baselines_append_only' AND tgrelid='tank.savings_baselines'::regclass) THEN
+      CREATE TRIGGER savings_baselines_append_only BEFORE UPDATE OR DELETE ON tank.savings_baselines
+        FOR EACH ROW EXECUTE FUNCTION tank.savings_append_only();
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='savings_baselines_no_truncate' AND tgrelid='tank.savings_baselines'::regclass) THEN
+      CREATE TRIGGER savings_baselines_no_truncate BEFORE TRUNCATE ON tank.savings_baselines
+        FOR EACH STATEMENT EXECUTE FUNCTION tank.savings_append_only();
+    END IF;
+END $$;
+-- Stripe meter sends (ENGINE_STRIPE_METERING_ENABLED): one per tenant and closed period.
+CREATE TABLE IF NOT EXISTS tank.savings_meter_events (
+    tenant_id uuid NOT NULL,
+    period text NOT NULL CHECK (period ~ '^[0-9]{4}-[0-9]{2}$'),
+    identifier text NOT NULL UNIQUE,
+    value_cents bigint NOT NULL CHECK (value_cents>=0),
+    rows_digest text NOT NULL,
+    sent_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,period)
+);
+-- Follow an existing RLS rollout exactly like personal_tokens; never switch it on alone.
+DO $$
+DECLARE tab text;
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        FOREACH tab IN ARRAY ARRAY['savings_ledger','savings_meter_events'] LOOP
+            EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',tab);
+            EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',tab);
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=format('tank.%I',tab)::regclass AND polname='tenant_access') THEN
+                EXECUTE format($policy$CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC
+                    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,tab);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=format('tank.%I',tab)::regclass AND polname='tenant_boundary') THEN
+                EXECUTE format($policy$CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC
+                    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,tab);
+            END IF;
+        END LOOP;
+    END IF;
+END
+$$;
+-- END engine_ledger
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
