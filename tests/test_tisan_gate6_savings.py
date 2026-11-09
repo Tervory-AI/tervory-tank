@@ -347,6 +347,11 @@ async def test_long_build_receipt_reaches_existing_founder_card_once(tank_patch,
 
 @pytest.mark.asyncio
 async def test_worker_does_nothing_until_receipt_migration_is_ready(command_pool):
+    # This fixture owns a fresh disposable database. Bootstrap now creates the
+    # table, so remove it here to exercise the actual missing-migration state.
+    async with command_pool.acquire() as conn:
+        await conn.execute('DROP TABLE agent_tisan.run_receipts')
+        assert await conn.fetchval("SELECT to_regclass('agent_tisan.run_receipts')") is None
     handler = AsyncMock()
     ctx = SimpleNamespace(tenant_id=str(TENANT), job_id=str(uuid4()), input={})
     with pytest.raises(RuntimeError, match='receipt store unavailable'):

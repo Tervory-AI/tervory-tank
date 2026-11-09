@@ -132,7 +132,7 @@ async def test_rls_missing_admin_bindings_start_blocked_without_opening_worker_p
     import chassis.app
     async with command_pool.acquire() as conn:
         name = await conn.fetchval('SELECT current_database()')
-        await conn.execute('CREATE SCHEMA agent_tisan; CREATE TABLE agent_tisan.placeholder_probe (id int); '
+        await conn.execute('CREATE SCHEMA IF NOT EXISTS agent_tisan; CREATE TABLE agent_tisan.placeholder_probe (id int); '
                            'ALTER TABLE agent_tisan.placeholder_probe ENABLE ROW LEVEL SECURITY')
     base = urlsplit(os.environ['POOL_SCHEMA_DATABASE_URL'])
     assert base.hostname in {'127.0.0.1', 'localhost'}
@@ -244,5 +244,5 @@ def test_saturday_command_has_no_implicit_live_launch():
         result = subprocess.run([str(ROOT / 'scripts/saturday.sh'), *args], cwd=ROOT,
                                 capture_output=True, text=True, timeout=10)
         assert result.returncode == 2
-        assert result.stderr.strip() == 'Usage: scripts/saturday.sh --dry-run'
+        assert result.stderr.strip() == 'Use --dry-run. This command never launches paid work or training.'
         assert result.stdout == ''
