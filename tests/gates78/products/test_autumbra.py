@@ -283,8 +283,8 @@ async def test_shipped_ingress_auth_grant_and_allowlist(autumbra, refusal):
 
 async def test_opt_in_deployment_and_existing_boundaries():
     room = yaml.safe_load((ROOT/'agents/ghost/docker-compose.yml').read_text())
-    assert 'autumbra-brain' in room['services'], 'BLOCKED: product runtime not integrated'
-    assert room['services']['autumbra-brain']['profiles'] == ['brain']
+    assert 'ghost-brain' in room['services'], 'BLOCKED: product runtime not integrated'
+    assert room['services']['ghost-brain']['profiles'] == ['brain']
     assert room['services']['ghost-sandbox']['profiles'] == ['brain']
     assert room['services']['agent-ghost']['environment']['GHOST_BRAIN_ENABLED'] == '${GHOST_BRAIN_ENABLED:-false}'
     assert room['services']['ghost-sandbox']['networks'] == ['sandbox']

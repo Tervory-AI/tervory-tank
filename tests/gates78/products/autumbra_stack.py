@@ -108,7 +108,7 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
         async def edge(request):
             state.network.append((request.method, request.url.host, request.url.path))
             if request.url.host in apps:
-                if request.url.host == 'autumbra-brain' or request.url.path.startswith('/v1/agents/ghost/'):
+                if request.url.host == 'ghost-brain' or request.url.path.startswith('/v1/agents/ghost/'):
                     state.private.append((request.method, str(request.url), request.content, dict(request.headers)))
                 if request.url.host == 'hermes' and state.fault and state.fault[0] == (request.method, request.url.path):
                     if state.fault[1] == 'timeout':
@@ -149,7 +149,7 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
             tank_http = await cleanup.enter_async_context(paid())
             monkeypatch.setattr(tank, '_http', tank_http)
             private_store = Store(tmp_path/'private-brain.sqlite3')
-            apps['autumbra-brain'] = brain_app(network, private_store)
+            apps['ghost-brain'] = brain_app(network, private_store)
             watch.state.user_memory = UserMemory(MemoryClient('http://tank:8000/v1/ghost/autumbra/memory', stack.key, 'ghost', network), store)
             watch.state.brain = Brain(watch.state.user_memory, _brain_service(network), [classify_alert_code])
             client = await cleanup.enter_async_context(original_http(transport=httpx.ASGITransport(app=tank.app), base_url='http://tank'))
@@ -181,7 +181,7 @@ async def autumbra(gate78_memory, monkeypatch, tmp_path):
                 return response.json()
 
             box = SimpleNamespace(stack=stack,state=state,watch=watch,store=store,tank=tank,provider=provider,
-                                  private_app=apps['autumbra-brain'], private_store=private_store, client=client,direct=direct,request=request,task=task,rows=rows,write=write,role=role)
+                                  private_app=apps['ghost-brain'], private_store=private_store, client=client,direct=direct,request=request,task=task,rows=rows,write=write,role=role)
             try:
                 yield box
             finally:
