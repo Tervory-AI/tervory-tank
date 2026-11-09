@@ -334,7 +334,7 @@ async def insert_batch(
         "model_spend": 0,
     }
     if memory_control is not None:
-        from gates_memory import normalize_memory_control
+        from base_gates_memory import normalize_memory_control
         cfg["memory_control"] = normalize_memory_control(memory_control)
     cfg = Job(tenant_id=tenant_id, region=os.environ.get("TANK_REGION", "us-east"),
               agent="base", skill="base.enrich", input=cfg, engine=engine).to_room(skill_column="task_type")["input"]

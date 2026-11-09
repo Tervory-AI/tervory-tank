@@ -588,5 +588,5 @@ async def base_records(
     return out
 
 
-from memory_api import attach_memory_routes
+from base_memory_api import attach_memory_routes
 attach_memory_routes(app)

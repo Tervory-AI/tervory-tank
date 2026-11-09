@@ -7,7 +7,7 @@ from uuid import UUID, uuid5, NAMESPACE_URL
 from fastapi import HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from chassis.user_assertion import signed_user
-from gates_memory import (MemoryScopeError, require_authenticated_user_id,
+from base_gates_memory import (MemoryScopeError, require_authenticated_user_id,
                           select_tenant_user_memories, _text_has_secret)
 
 CONTROL_KIND = 'base.quirk'

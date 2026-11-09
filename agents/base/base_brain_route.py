@@ -17,9 +17,9 @@ except ModuleNotFoundError:
     from agents.base.network import BoundedHTTP
 
 try:
-    from gates_memory import usage_from_model_receipts
+    from base_gates_memory import usage_from_model_receipts
 except ModuleNotFoundError:
-    from agents.base.gates_memory import usage_from_model_receipts
+    from agents.base.base_gates_memory import usage_from_model_receipts
 
 
 def brain_url() -> str:

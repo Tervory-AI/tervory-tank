@@ -122,7 +122,7 @@ async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | N
         batch.ran, batch.operation, batch.result = True, "pipeline", free_result
     receipt = None
     memory = getattr(skills, "memory", None)
-    from gates_memory import normalize_memory_control, resolve_authenticated_user_id
+    from base_gates_memory import normalize_memory_control, resolve_authenticated_user_id
     # Fail closed for memory: no synthetic tenant-as-user identity.
     user_id = resolve_authenticated_user_id(cfg if isinstance(cfg, dict) else {}, tenant)
     # Only the verified ingress may persist this marker in the queued row.
@@ -141,7 +141,7 @@ async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | N
         try:
             rows = await memory.records(str(tenant), user_id=user_id)
         except (RuntimeError, TimeoutError, ConnectionError) as exc:
-            from gates_memory import storage_unavailable
+            from base_gates_memory import storage_unavailable
             if not storage_unavailable(exc):
                 raise
             rows, skip_storage = [], True
@@ -159,7 +159,7 @@ async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | N
                 "WHERE tenant_id=$1 AND id=$2", tenant, task_id)
 
         async def _brain_tank_paid(task_payload: dict) -> dict:
-            from brain_route import invoke_brain_task
+            from base_brain_route import invoke_brain_task
             return await invoke_brain_task(
                 skills,
                 tenant_id=str(tenant),
@@ -178,7 +178,7 @@ async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | N
                 "Memory bracket skipped: memory_control=off (historical path, no memory ops)")
 
         if use_memory:
-            from gates_memory import product_to_brain_tank_memory
+            from base_gates_memory import product_to_brain_tank_memory
             # Memory enabled: bracket failures fail closed (no silent paid direct path).
             bracket = await product_to_brain_tank_memory(
                 memory,
@@ -210,7 +210,7 @@ async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | N
                     "tokens_out": 0,
                     "tokens_total": 0,
                 }
-                from gates_memory import usage_from_model_receipts
+                from base_gates_memory import usage_from_model_receipts
                 original = bracket.get("result") or {}
                 comparison = usage_from_model_receipts(original.get("model_receipts", []))
                 receipt.update(paid_calls=0, would_have_cost=comparison["cost_usd"],

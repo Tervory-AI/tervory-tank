@@ -319,7 +319,7 @@ def test_all_original_requirements_and_real_worker_are_retained():
     assert manifest['source_sha']==SOURCE_SHA and len(manifest['legacy_tests'])>=35
     worker=(ROOT/'agents/base/base_brain.py').read_text()
     assert 'async def drive_batch' in worker and 'run_code_first' in worker
-    assert (ROOT/'agents/base/gates_memory.py').exists(), 'Base memory runtime has not been integrated into Tank main'
+    assert (ROOT/'agents/base/base_gates_memory.py').exists(), 'Base memory runtime has not been integrated into Tank main'
 
 
 @pytest.mark.asyncio
@@ -385,7 +385,7 @@ async def test_drive_batch_persisted_inputs_and_unknown_accounting(gate78_memory
     stack = await gate78_memory('base')
     monkeypatch.syspath_prepend(str(ROOT / 'agents/base'))
     worker = importlib.import_module('base_brain')
-    route = importlib.import_module('brain_route')
+    route = importlib.import_module('base_brain_route')
     room = importlib.import_module('room')
     pool = stack.records.pool
     async with pool.acquire() as conn:

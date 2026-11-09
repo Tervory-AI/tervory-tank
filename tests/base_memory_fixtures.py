@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # Match the room image's flat module layout without lint suppressions in callers.
 sys.path.insert(0, str(ROOT / "agents/base"))
 base_brain = importlib.import_module("base_brain")
-gates = importlib.import_module("gates_memory")
-api = importlib.import_module("memory_api")
+gates = importlib.import_module("base_gates_memory")
+api = importlib.import_module("base_memory_api")
 memory_kinds = gates.memory_kinds
 _text_has_secret = gates._text_has_secret
 usage_from_model_receipts = gates.usage_from_model_receipts

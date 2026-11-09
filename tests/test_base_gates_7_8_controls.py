@@ -13,7 +13,7 @@ from base_memory_fixtures import (
     pilot_fixture_identical_repeat_usage,
     pilot_fixture_repeat_usage_after_correction,
 )
-from gates_memory import (
+from base_gates_memory import (
     MemoryControlError,
     MemoryScopeError,
     apply_memory_forget,
@@ -363,7 +363,7 @@ async def test_product_path_usage_comes_from_tank_receipts_not_fixture_constants
                 ]
             })
 
-    import brain_route as route_mod
+    import base_brain_route as route_mod
 
     class _AsyncCM:
         def __init__(self, http):
@@ -376,7 +376,7 @@ async def test_product_path_usage_comes_from_tank_receipts_not_fixture_constants
             return False
 
     monkeypatch.setattr(route_mod.httpx, "AsyncClient", lambda timeout=30: _AsyncCM(FakeHTTP()))
-    from brain_route import invoke_brain_task
+    from base_brain_route import invoke_brain_task
 
     skills = FakeSkills()
     memory = FakeMemory()
@@ -425,7 +425,7 @@ def _fixed_paid_factory(counter: dict):
 
 @pytest.mark.asyncio
 async def test_reuse_key_requires_same_tenant_user_task_key_and_input_hash():
-    from gates_memory import task_input_hash
+    from base_gates_memory import task_input_hash
 
     memory = FakeMemory()
     tenant, user = str(uuid4()), str(uuid4())
@@ -699,7 +699,7 @@ async def test_product_memory_short_circuits_before_brain_tank_invocation(monkey
 @pytest.mark.asyncio
 async def test_drive_batch_shaped_payload_ignores_fresh_task_uuid():
     """Mirrors base_brain drive_batch business fields + out-of-band task_id."""
-    from gates_memory import task_input_hash
+    from base_gates_memory import task_input_hash
 
     memory = FakeMemory()
     tenant, user = str(uuid4()), str(uuid4())
@@ -746,7 +746,7 @@ async def test_chassis_calls_receive_verified_user_before_storage_filtering():
             return await super().remember(*args, **kwargs)
     async def paid(task):
         return {'cost_usd': .00056, 'tokens_in': 400, 'tokens_out': 80, 'result': {'verified': ['placeholder-record'], 'sources': ['placeholder-source']}}
-    from gates_memory import run_with_memory
+    from base_gates_memory import run_with_memory
     result = await run_with_memory(ScopedMemory(), tenant_id=str(uuid4()), user_id='placeholder-owner', task_key='placeholder-batch', task={'batch':'placeholder-batch'}, paid_call=paid)
     assert result['paid_calls'] == 1
 
@@ -754,7 +754,7 @@ async def test_chassis_calls_receive_verified_user_before_storage_filtering():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure', ['hermes answered 503', 'hermes answered 401', 'hermes answered 403'])
 async def test_post_payment_storage_failure_never_dispatches_twice(failure):
-    from gates_memory import run_with_memory
+    from base_gates_memory import run_with_memory
     class WriteFailure(FakeMemory):
         async def remember(self, *args, **kwargs):
             raise RuntimeError(failure)

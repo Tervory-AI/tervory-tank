@@ -10,8 +10,8 @@ from base_memory_fixtures import (
     pilot_fixture_first_usage,
     pilot_fixture_repeat_usage_after_correction,
 )
-from brain_route import brain_enabled, brain_url, invoke_brain_task
-from gates_memory import (
+from base_brain_route import brain_enabled, brain_url, invoke_brain_task
+from base_gates_memory import (
     apply_corrections,
     build_memory_text,
     product_to_brain_tank_memory,
@@ -323,7 +323,7 @@ async def test_product_brain_tank_memory_uses_brain_route_and_tank_receipts(monk
                 },
             )
 
-    import brain_route as route_mod
+    import base_brain_route as route_mod
 
     monkeypatch.setattr(route_mod.httpx, "AsyncClient", lambda timeout=30: _AsyncCM(FakeHTTP()))
 

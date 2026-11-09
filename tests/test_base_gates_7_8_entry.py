@@ -13,11 +13,11 @@ from base_memory_fixtures import (
 )
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from gates_memory import (
+from base_gates_memory import (
     build_memory_text,
     resolve_authenticated_user_id,
 )
-from memory_api import attach_memory_routes
+from base_memory_api import attach_memory_routes
 
 FIXED = {"cost_usd": 0.00056, "tokens_in": 400, "tokens_out": 80}
 
@@ -320,7 +320,7 @@ def test_created_by_resolves_as_session_user_on_batch_cfg():
 
 
 def test_business_hash_ignores_fresh_run_uuids():
-    from gates_memory import business_task_payload, task_input_hash
+    from base_gates_memory import business_task_payload, task_input_hash
 
     a = {
         "batch": "Delaware ATF",

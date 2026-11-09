@@ -14,8 +14,8 @@ from base_memory_fixtures import (
 )
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from gates_memory import business_task_payload, task_input_hash
-from memory_api import attach_memory_routes
+from base_gates_memory import business_task_payload, task_input_hash
+from base_memory_api import attach_memory_routes
 
 FIXED = {"cost_usd": 0.00056, "tokens_in": 400, "tokens_out": 80}
 
@@ -114,7 +114,7 @@ async def test_drive_batch_fresh_task_uuids_identical_business_zero_second_paid(
             },
         }
 
-    import brain_route as route_mod
+    import base_brain_route as route_mod
 
     monkeypatch.setattr(route_mod, "invoke_brain_task", fake_invoke)
 
@@ -241,7 +241,7 @@ async def test_drive_batch_off_skips_memory_and_pays_each_run(monkeypatch, contr
             return False
 
     monkeypatch.setattr(
-        __import__("brain_route").httpx, "AsyncClient", lambda timeout=30: _AsyncCM(FakeHTTP())
+        __import__("base_brain_route").httpx, "AsyncClient", lambda timeout=30: _AsyncCM(FakeHTTP())
     )
 
     # Seed would-be reusable memory — must be ignored when control=off.
@@ -333,14 +333,14 @@ async def test_drive_batch_changed_actual_inputs_never_reuse(monkeypatch, field)
     memory = FakeMemory()
     tenant, user = str(uuid4()), str(uuid4())
     invocations = []
-    import brain_route
+    import base_brain_route
 
     async def paid(skills, *, tenant_id, task_id, **kwargs):
         invocations.append(task_id)
         return {**FIXED, "result": {"tenant_id": tenant_id, "task_id": task_id,
             "room": "base", "status": "done", "model_receipts": _model_receipts()}}
 
-    monkeypatch.setattr(brain_route, "invoke_brain_task", paid)
+    monkeypatch.setattr(base_brain_route, "invoke_brain_task", paid)
     monkeypatch.setenv("TANK_REGION", "us-east")
     records = [{"name": "placeholder-a", "source": {"sha256": "placeholder-source-a"},
                 "nested_id": str(uuid4())}, {"name": "placeholder-b"}]
@@ -372,9 +372,9 @@ async def test_drive_batch_changed_actual_inputs_never_reuse(monkeypatch, field)
 
 @pytest.mark.asyncio
 async def test_drive_batch_missing_records_refuses_reuse_before_paid(monkeypatch):
-    import brain_route
+    import base_brain_route
     paid = AsyncMock()
-    monkeypatch.setattr(brain_route, "invoke_brain_task", paid)
+    monkeypatch.setattr(base_brain_route, "invoke_brain_task", paid)
     cfg = _business_cfg(str(uuid4()), str(uuid4()))
     memory = FakeMemory()
     with pytest.raises(RuntimeError, match="inputs are incomplete"):
