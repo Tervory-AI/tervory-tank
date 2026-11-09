@@ -1,0 +1,346 @@
+# UNAPPLIED Tisan adapter and ingress proposal against Tank main ea9f0d0418951ae7215a165e9df1e590902002fd
+# Head review/integration required; no Tiger authorization or new model policy.
+diff --git a/agents/_chassis/chassis/tank.py b/agents/_chassis/chassis/tank.py
+index a315c864..9a5e1c6f 100644
+--- a/agents/_chassis/chassis/tank.py
++++ b/agents/_chassis/chassis/tank.py
+@@ -77,7 +77,7 @@ class TankClient:
+         from .task_contract import origin, context, check_receipt
+         base = origin(self._base)
+         tenant, run = context(actor, run_id)
+-        if self.agent != "tiger" or not self._api_key:
++        if self.agent not in {"tiger", "tisan"} or not self._api_key:
+             raise ValueError("Room task client unavailable")
+         path = f"/v1/agents/{self.agent}/{operation}"
+         body = json.dumps({"tenant_id": tenant, "user_id": actor.user_id,
+diff --git a/agents/_chassis/chassis/task_contract.py b/agents/_chassis/chassis/task_contract.py
+index d97508e6..0f02a605 100644
+--- a/agents/_chassis/chassis/task_contract.py
++++ b/agents/_chassis/chassis/task_contract.py
+@@ -34,14 +34,35 @@ def paid_identity(tenant: str, user: str, run: str) -> str:
+
+ def check_receipt(data: dict[str, Any], tenant: str, user: str, run: str, room: str) -> None:
+     receipt = data["receipt"]
+-    if (receipt["tenant_id"] != tenant or receipt["room"] != room
+-            or receipt["task_id"] != paid_identity(tenant, user, run)
+-            or receipt["task_type"] != "agent." + room + ".think"):
+-        raise ValueError("Receipt scope mismatch")
+-    UUID(receipt["ledger_id"])
++    if room == "tisan":
++        # Tisan keeps its existing tisan.plan routing policy and aggregate route
++        # evidence; do not relabel it as an agent.tiger/tisan.think model call.
++        if (receipt["tenant_id"] != tenant or receipt["user_id"] != user
++                or receipt["run_id"] != run or receipt["room"] != room
++                or receipt["task_type"] != "tisan.plan"):
++            raise ValueError("Receipt scope mismatch")
++        ledgers = receipt["ledger_ids"]
++        if (not isinstance(ledgers, list) or len(set(ledgers)) != len(ledgers)
++                or type(receipt["paid_calls"]) is not int or receipt["paid_calls"] != len(ledgers)):
++            raise ValueError("Invalid ledger receipt")
++        for ledger in ledgers:
++            UUID(ledger)
++    else:
++        _check_room_receipt(receipt, tenant, user, run, room)
+     for field in ("tokens_in", "tokens_out"):
+         if type(receipt[field]) is not int or receipt[field] < 0:
+             raise ValueError("Invalid token receipt")
+     cost = receipt["cost_usd"]
++    # A missing price stays pending, never becomes a fabricated zero.
++    if room == "tisan" and cost is None:
++        return
+     if isinstance(cost, bool) or not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0:
+         raise ValueError("Invalid cost receipt")
++
++
++def _check_room_receipt(receipt, tenant, user, run, room):
++    if (receipt["tenant_id"] != tenant or receipt["room"] != room
++            or receipt["task_id"] != paid_identity(tenant, user, run)
++            or receipt["task_type"] != "agent." + room + ".think"):
++        raise ValueError("Receipt scope mismatch")
++    UUID(receipt["ledger_id"])
+diff --git a/tank/agent_tasks.py b/tank/agent_tasks.py
+index 90d9f5d7..2c799f36 100644
+--- a/tank/agent_tasks.py
++++ b/tank/agent_tasks.py
+@@ -37,6 +37,8 @@ class DelegatedTask(TaskScope):
+
+ def install(router, tank) -> None:
+     from agent_skills import Chat, complete, local_region, room_key
++    from tisan_tasks import install as install_tisan
++    install_tisan(router, tank)
+
+     async def actor_for(room: str, body: TaskScope, request: Request):
+         if room != "tiger":
+diff --git a/tank/task_contract.py b/tank/task_contract.py
+index d97508e6..0f02a605 100644
+--- a/tank/task_contract.py
++++ b/tank/task_contract.py
+@@ -34,14 +34,35 @@ def paid_identity(tenant: str, user: str, run: str) -> str:
+
+ def check_receipt(data: dict[str, Any], tenant: str, user: str, run: str, room: str) -> None:
+     receipt = data["receipt"]
+-    if (receipt["tenant_id"] != tenant or receipt["room"] != room
+-            or receipt["task_id"] != paid_identity(tenant, user, run)
+-            or receipt["task_type"] != "agent." + room + ".think"):
+-        raise ValueError("Receipt scope mismatch")
+-    UUID(receipt["ledger_id"])
++    if room == "tisan":
++        # Tisan keeps its existing tisan.plan routing policy and aggregate route
++        # evidence; do not relabel it as an agent.tiger/tisan.think model call.
++        if (receipt["tenant_id"] != tenant or receipt["user_id"] != user
++                or receipt["run_id"] != run or receipt["room"] != room
++                or receipt["task_type"] != "tisan.plan"):
++            raise ValueError("Receipt scope mismatch")
++        ledgers = receipt["ledger_ids"]
++        if (not isinstance(ledgers, list) or len(set(ledgers)) != len(ledgers)
++                or type(receipt["paid_calls"]) is not int or receipt["paid_calls"] != len(ledgers)):
++            raise ValueError("Invalid ledger receipt")
++        for ledger in ledgers:
++            UUID(ledger)
++    else:
++        _check_room_receipt(receipt, tenant, user, run, room)
+     for field in ("tokens_in", "tokens_out"):
+         if type(receipt[field]) is not int or receipt[field] < 0:
+             raise ValueError("Invalid token receipt")
+     cost = receipt["cost_usd"]
++    # A missing price stays pending, never becomes a fabricated zero.
++    if room == "tisan" and cost is None:
++        return
+     if isinstance(cost, bool) or not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0:
+         raise ValueError("Invalid cost receipt")
++
++
++def _check_room_receipt(receipt, tenant, user, run, room):
++    if (receipt["tenant_id"] != tenant or receipt["room"] != room
++            or receipt["task_id"] != paid_identity(tenant, user, run)
++            or receipt["task_type"] != "agent." + room + ".think"):
++        raise ValueError("Receipt scope mismatch")
++    UUID(receipt["ledger_id"])
+diff --git a/tank/tisan_requests.py b/tank/tisan_requests.py
+index d244d1ee..aa7183bf 100644
+--- a/tank/tisan_requests.py
++++ b/tank/tisan_requests.py
+@@ -25,6 +25,51 @@ class FeedbackArgs(RequestIdArgs):
+     text: str = Field(min_length=1, max_length=4000)
+
+
++class PlanArgs(BaseModel):
++    model_config = ConfigDict(extra='forbid')
++    run_id: UUID
++    brief: dict
++
++
++class MemorySettingArgs(BaseModel):
++    model_config = ConfigDict(extra='forbid')
++    enabled: bool
++
++
++class MemoryEditArgs(BaseModel):
++    model_config = ConfigDict(extra='forbid')
++    value: object
++
++
++@__import__('product_identity').bind_actor
++async def memory_request(actor, method, path, *, body=None):
++    """Forward only a verified actor through the shipped nonce-protected signer."""
++    from main import _http
++    from urllib.parse import urlencode
++    key = os.environ.get('TANK_KEY_TISAN', '')
++    if _http is None or not key:
++        refused('memory_unavailable', 503)
++    scope = {'tenant_id': str(actor.tenant_id), 'user_id': actor.user_id}
++    if not path.startswith('/memory'):
++        scope.pop('user_id')
++    content = json.dumps({**(body or {}), **scope}).encode() if body is not None else b''
++    target = path + '?' + urlencode(scope)
++    headers = {'X-Tank-Key': key, 'X-Tervory-Tenant': str(actor.tenant_id), 'Content-Type': 'application/json'}
++    if actor.founder:
++        headers['X-Tervory-Admin'] = actor.user_id
++    try:
++        # paid_http.Client already binds product_identity to exact origin,
++        # encoded query/body and a fresh nonce. No private signature protocol.
++        response = await _http.request(method, 'http://agent-tisan:8000' + target,
++            content=content, headers=headers, timeout=30, follow_redirects=False)
++    except httpx.HTTPError:
++        refused('memory_unavailable', 503)
++    if response.status_code != 200:
++        refused('not_found' if response.status_code in (401, 403, 404) else 'memory_unavailable',
++                404 if response.status_code in (401, 403, 404) else 503)
++    return response.json()
++
++
+ def refused(code: str, status: int = 409):
+     raise HTTPException(status, {'status': code})
+
+@@ -198,6 +243,36 @@ def build_router():
+     globals()['TisanRequestArgs'] = TisanRequestArgs
+     globals()['Actor'] = Actor
+
++    @router.post('/plan')
++    async def plan_start(args: PlanArgs, actor: Annotated[Actor, Depends(identity)]):
++        require_tool(actor, 'tisan.preview')
++        return await memory_request(actor, 'POST', '/plan/start', body=args.model_dump(mode='json'))
++
++    @router.get('/memory')
++    async def memory_view(actor: Annotated[Actor, Depends(identity)]):
++        require_tool(actor, 'tisan.preview')
++        return await memory_request(actor, 'GET', '/memory')
++
++    @router.post('/memory/setting')
++    async def memory_setting(args: MemorySettingArgs, actor: Annotated[Actor, Depends(identity)]):
++        require_tool(actor, 'tisan.preview')
++        return await memory_request(actor, 'POST', '/memory/setting', body=args.model_dump())
++
++    @router.post('/memory/{memory_id}')
++    async def memory_edit(memory_id: UUID, args: MemoryEditArgs, actor: Annotated[Actor, Depends(identity)]):
++        require_tool(actor, 'tisan.preview')
++        return await memory_request(actor, 'POST', '/memory/' + str(memory_id), body=args.model_dump())
++
++    @router.delete('/memory/{memory_id}')
++    async def memory_forget(memory_id: UUID, actor: Annotated[Actor, Depends(identity)]):
++        require_tool(actor, 'tisan.preview')
++        return await memory_request(actor, 'DELETE', '/memory/' + str(memory_id))
++
++    @router.delete('/memory')
++    async def memory_forget_all(actor: Annotated[Actor, Depends(identity)]):
++        require_tool(actor, 'tisan.preview')
++        return await memory_request(actor, 'DELETE', '/memory')
++
+     async def result(actor, tool, data):
+         return {**data, 'ledger_id': str(await code_receipt(actor.tenant_id, tool, agent='tisan')), 'cost_usd': 0}
+
+diff --git a/tank/tisan_tasks.py b/tank/tisan_tasks.py
+new file mode 100644
+index 00000000..78938c09
+--- /dev/null
++++ b/tank/tisan_tasks.py
+@@ -0,0 +1,62 @@
++"""Tisan-only optional runtime adapter. Tank owns discovery and signed dispatch."""
++from __future__ import annotations
++
++import json
++import os
++from urllib.parse import urlencode, urlsplit
++
++import httpx
++from agent_skills import local_region, room_key
++from agent_tasks import DelegatedTask
++from command_tools._user_assertion import PostgresNonces, signed_user
++from fastapi import HTTPException, Request
++from product_identity import actor_scope
++from task_contract import check_receipt, origin
++
++
++def install(router, tank):
++    @router.post('/v1/agents/tisan/delegate')
++    async def delegate(body: DelegatedTask, request: Request):
++        room_key('tisan', request.headers.get('authorization', ''), request.headers.get('x-tank-key', ''))
++        if os.environ.get('TISAN_BRAIN_ENABLED', 'false').lower() not in {'true', '1', 'yes'}:
++            raise HTTPException(409, 'Tisan brain is off')
++        region = local_region(tank, request.headers.get('x-home-region'), room='tisan')
++        actor = await signed_user(request, tenant_id=str(body.tenant_id), product='tisan', required=True,
++                                  nonces=PostgresNonces(tank.pool(), 'tank'))
++        if actor.user_id != body.user_id:
++            raise HTTPException(403, 'Actor mismatch')
++        if body.task_key != 'tisan.plan' or set(body.input) != {'request', 'contract'} or body.recall:
++            raise HTTPException(422, 'Invalid planning task')
++        prompt = body.input['request']
++        if not isinstance(prompt, str) or not 1 <= len(prompt) <= 16000 or not isinstance(body.input['contract'], dict):
++            raise HTTPException(422, 'Invalid planning task')
++        try:
++            base = origin(os.environ.get('TISAN_BRAIN_URL', 'http://tisan-brain:8001'))
++            parsed = urlsplit(base)
++            if parsed.scheme != 'http' or parsed.hostname != 'tisan-brain' or parsed.port != 8001:
++                raise ValueError('Invalid private origin')
++        except ValueError:
++            raise HTTPException(503, 'Tisan task unavailable') from None
++        target = '/tasks/plan?' + urlencode({'tenant_id': actor.tenant_id, 'user_id': actor.user_id})
++        content = json.dumps({'task_key': body.task_key, 'input': body.input,
++                              'recall': body.recall, 'run_id': str(body.run_id)}).encode()
++        if len(content) > 1_000_000:
++            raise HTTPException(413, 'Task is too large')
++        try:
++            with actor_scope(actor):
++                response = await tank._http.post(base + target, content=content,
++                    headers={'Content-Type': 'application/json', 'X-Tank-Key': os.environ['TANK_KEY_TISAN'],
++                             'X-Home-Region': region},
++                    extensions={'tervory_product_origin': ('tisan', (parsed.scheme, parsed.hostname, parsed.port))},
++                    timeout=70, follow_redirects=False)
++            response.raise_for_status()
++            data = response.json()
++            check_receipt(data, actor.tenant_id, actor.user_id, str(body.run_id), 'tisan')
++            if data['receipt']['region'] != region:
++                raise ValueError('Receipt region mismatch')
++            return data
++        except httpx.HTTPStatusError as exc:
++            status = exc.response.status_code
++            raise HTTPException(status if 400 <= status < 600 else 502, 'Tisan task unavailable') from None
++        except (httpx.HTTPError, ValueError, KeyError, TypeError, OverflowError):
++            raise HTTPException(502, 'Tisan task unavailable') from None
+diff --git a/tests/registry_frozen.golden b/tests/registry_frozen.golden
+index 779a2a8c..de90eb96 100644
+--- a/tests/registry_frozen.golden
++++ b/tests/registry_frozen.golden
+@@ -8648,6 +8648,13 @@
+         ],
+         "name": "chat"
+       },
++      {
++        "path": "/v1/agents/tisan/delegate",
++        "methods": [
++          "POST"
++        ],
++        "name": "delegate"
++      },
+       {
+         "path": "/v1/agents/{room}/tasks",
+         "methods": [
+@@ -9012,6 +9019,48 @@
+         ],
+         "name": "alerts"
+       },
++      {
++        "path": "/v1/command/tisan/plan",
++        "methods": [
++          "POST"
++        ],
++        "name": "plan_start"
++      },
++      {
++        "path": "/v1/command/tisan/memory",
++        "methods": [
++          "GET"
++        ],
++        "name": "memory_view"
++      },
++      {
++        "path": "/v1/command/tisan/memory/setting",
++        "methods": [
++          "POST"
++        ],
++        "name": "memory_setting"
++      },
++      {
++        "path": "/v1/command/tisan/memory/{memory_id}",
++        "methods": [
++          "POST"
++        ],
++        "name": "memory_edit"
++      },
++      {
++        "path": "/v1/command/tisan/memory/{memory_id}",
++        "methods": [
++          "DELETE"
++        ],
++        "name": "memory_forget"
++      },
++      {
++        "path": "/v1/command/tisan/memory",
++        "methods": [
++          "DELETE"
++        ],
++        "name": "memory_forget_all"
++      },
+       {
+         "path": "/v1/command/tisan/request",
+         "methods": [

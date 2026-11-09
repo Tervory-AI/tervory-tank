@@ -3175,6 +3175,57 @@ END $$;
 
 -- END rig
 -- BEGIN tisan (new blocks for tisan go here)
+DO $$ BEGIN
+    -- Bootstrap before command ingress, but leave an independently owned room
+    -- to its own migration role when Tank reapplies its schema.
+    IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='agent_tisan') THEN
+        CREATE SCHEMA IF NOT EXISTS agent_tisan;
+    ELSIF NOT EXISTS (SELECT 1 FROM pg_namespace
+                      WHERE nspname='agent_tisan' AND pg_has_role(current_user,nspowner,'USAGE')) THEN
+        RETURN;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+               WHERE n.nspname='agent_tisan' AND c.relname='run_receipts'
+                 AND NOT pg_has_role(current_user,c.relowner,'USAGE')) THEN
+        RETURN;
+    END IF;
+
+-- Run snapshots are separate from billed model ledger rows.
+CREATE TABLE IF NOT EXISTS agent_tisan.run_receipts (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    input_hash text NOT NULL,
+    kind text NOT NULL,
+    route_ids jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(route_ids)='array'),
+    uncertain boolean NOT NULL DEFAULT false,
+    cost_usd numeric,
+    baseline_model text,
+    baseline_cost_usd numeric,
+    baseline_tokens_in integer NOT NULL CHECK (baseline_tokens_in>=0),
+    baseline_tokens_out integer NOT NULL CHECK (baseline_tokens_out>=0),
+    tokens_in integer NOT NULL CHECK (tokens_in>=0),
+    tokens_out integer NOT NULL CHECK (tokens_out>=0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,id)
+);
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+               WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+        ALTER TABLE agent_tisan.run_receipts ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.run_receipts FORCE ROW LEVEL SECURITY;
+    ELSE
+        ALTER TABLE agent_tisan.run_receipts NO FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.run_receipts DISABLE ROW LEVEL SECURITY;
+    END IF;
+    IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan' AND tablename='run_receipts' AND policyname='tenant_scope') THEN
+        CREATE POLICY tenant_scope ON agent_tisan.run_receipts
+            USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+            WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan') THEN
+        GRANT SELECT,INSERT,UPDATE ON agent_tisan.run_receipts TO agent_tisan;
+    END IF;
+END $$;
+
 -- END tisan
 -- BEGIN radix (new blocks for radix go here)
 -- END radix

@@ -1,0 +1,50 @@
+{
+  "tank/tisan_requests.py": {
+    "repository": "Tervory-AI/tervory-tank",
+    "commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
+    "path": "tank/tisan_requests.py",
+    "sha256": "e3b49ab847ad8a4abc7e9931f267bf739fd45b0e38cfb63103c8df794c41eec6"
+  },
+  "tank/task_contract.py": {
+    "repository": "Tervory-AI/tervory-tank",
+    "commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
+    "path": "tank/task_contract.py",
+    "sha256": "2390a4d838d79e76c433e3d294164c1851c81ea8ff8af2706900cbbc383c39d0"
+  },
+  "agents/_chassis/chassis/tank.py": {
+    "repository": "Tervory-AI/tervory-tank",
+    "commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
+    "path": "agents/_chassis/chassis/tank.py",
+    "sha256": "dbaef671a1b043ac34315df3ef77e7226556ce382ff5819f3ca043cf32312fb0"
+  },
+  "agents/_chassis/chassis/task_contract.py": {
+    "repository": "Tervory-AI/tervory-tank",
+    "commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
+    "path": "agents/_chassis/chassis/task_contract.py",
+    "sha256": "2390a4d838d79e76c433e3d294164c1851c81ea8ff8af2706900cbbc383c39d0"
+  },
+  "tests/registry_frozen.golden": {
+    "repository": "Tervory-AI/tervory-tank",
+    "commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
+    "path": "tests/registry_frozen.golden",
+    "sha256": "251189b3adf1db52f9916d4d435b8ddbe5a7f6ab770fea2217bd3669f07c2384"
+  },
+  "ingress.patch": {
+    "repository": "Tervory-AI/tervory-tisan",
+    "commit": "6c3207008a5085be9648f3485e8bd6492dc9ef2f",
+    "path": "tank-patches/gates78-current-core-ingress.patch",
+    "sha256": "db1b736e2ce68f8a841ac41186adda5db50341f6bb1b067b6d8e7571687daed0"
+  },
+  "legacy_memory.py": {
+    "repository": "Tervory-AI/tervory-tisan",
+    "commit": "6c3207008a5085be9648f3485e8bd6492dc9ef2f",
+    "path": "vendor/tervory-tank/agents/_chassis/chassis/memory.py",
+    "sha256": "021960c298cb1570d05b8d44842c7dcb2a8e73cf855c6821ca0aa0601c24e5a3"
+  },
+  "tank/agent_tasks.py.txt": {
+    "repository": "Tervory-AI/tervory-tank",
+    "commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
+    "path": "tank/agent_tasks.py",
+    "sha256": "3b3ed59f33d2e061e5f0d16604d2a99a96f5fa4520b9646824ab195e77211a96"
+  }
+}

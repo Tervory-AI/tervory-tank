@@ -48,7 +48,8 @@ async def database(command_pool):
     # The imported API fixture still mounts the real room guard and tenant binder.
     from chassis.tenant_db import TenantPool
     async with command_pool.acquire() as conn:
-        await conn.execute('CREATE SCHEMA IF NOT EXISTS agent_tisan')
+        from chassis.db import ensure_schema
+        await ensure_schema(conn, 'tisan')
         await conn.execute((ROOT / 'agents/tisan/schema.sql').read_text())
         yield quotes.q.Quotes(TenantPool(command_pool)), conn, command_pool
 

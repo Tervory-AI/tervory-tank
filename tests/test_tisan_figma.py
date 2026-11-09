@@ -379,6 +379,7 @@ def test_room_reaches_only_figma_through_the_locked_proxy_and_copies_the_reader(
     assert compose.startswith('# coolify: raw compose')
     assert box['volumes']['agent_tisan_data'] is None
     assert [name for name, spec in box["services"].items() if not spec.get("profiles")] == ["agent-tisan", "figma-egress-proxy"]
+    assert all(box["services"][name]["profiles"] == ["brain"] for name in ("tisan-brain", "tisan-sandbox", "tisan-browser", "tisan-browser-gateway"))
     assert set(box["networks"]) == {"gw", "figma_internal", "egress", "sandbox", "browser"}
     assert box["networks"]["figma_internal"] == {"internal": True}
     assert box["networks"]["egress"] == {}

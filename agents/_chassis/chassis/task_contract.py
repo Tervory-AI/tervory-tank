@@ -36,17 +36,38 @@ def check_receipt(data: dict[str, Any], tenant: str, user: str, run: str, room: 
     receipt = data["receipt"]
     if room == "rig" and "status" in receipt:
         return check_rig_worker(receipt, tenant, user, run)
+    if room == "tisan":
+        # Tisan keeps its existing tisan.plan routing policy and aggregate route
+        # evidence; do not relabel it as an agent.tiger/tisan.think model call.
+        if (receipt["tenant_id"] != tenant or receipt["user_id"] != user
+                or receipt["run_id"] != run or receipt["room"] != room
+                or receipt["task_type"] != "tisan.plan"):
+            raise ValueError("Receipt scope mismatch")
+        ledgers = receipt["ledger_ids"]
+        if (not isinstance(ledgers, list) or len(set(ledgers)) != len(ledgers)
+                or type(receipt["paid_calls"]) is not int or receipt["paid_calls"] != len(ledgers)):
+            raise ValueError("Invalid ledger receipt")
+        for ledger in ledgers:
+            UUID(ledger)
+    else:
+        _check_room_receipt(receipt, tenant, user, run, room)
+    for field in ("tokens_in", "tokens_out"):
+        if type(receipt[field]) is not int or receipt[field] < 0:
+            raise ValueError("Invalid token receipt")
+    cost = receipt["cost_usd"]
+    # A missing price stays pending, never becomes a fabricated zero.
+    if room == "tisan" and cost is None:
+        return
+    if isinstance(cost, bool) or not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0:
+        raise ValueError("Invalid cost receipt")
+
+
+def _check_room_receipt(receipt, tenant, user, run, room):
     if (receipt["tenant_id"] != tenant or receipt["room"] != room
             or receipt["task_id"] != paid_identity(tenant, user, run)
             or receipt["task_type"] != "agent." + room + ".think"):
         raise ValueError("Receipt scope mismatch")
     UUID(receipt["ledger_id"])
-    for field in ("tokens_in", "tokens_out"):
-        if type(receipt[field]) is not int or receipt[field] < 0:
-            raise ValueError("Invalid token receipt")
-    cost = receipt["cost_usd"]
-    if isinstance(cost, bool) or not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0:
-        raise ValueError("Invalid cost receipt")
 
 
 def check_rig_worker(receipt: dict[str, Any], tenant: str, user: str, run: str) -> None:

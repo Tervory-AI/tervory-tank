@@ -27,6 +27,9 @@ module.exports = {
       numberOfRuns: 3,
       chromePath: chromium.executablePath(),
       settings: {
+        ...(process.env.TISAN_CHECK_CHROME_PORT
+          ? { port: Number(process.env.TISAN_CHECK_CHROME_PORT) }
+          : {}),
         chromeFlags:
           "--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-background-networking" +
           (process.env.TISAN_CHECK_PROXY

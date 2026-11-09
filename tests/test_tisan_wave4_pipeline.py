@@ -109,9 +109,11 @@ async def test_unknown_side_effect_is_recorded_without_resubmission(tmp_path):
 @pytest.mark.asyncio
 async def test_actual_confirm_request_queues_one_durable_room_job_and_refreshes_card(client, runtime, monkeypatch, tmp_path):
     browser, pool, _, room = client
+    from pathlib import Path
     from chassis.db import ensure_schema
     async with pool.acquire() as conn:
         await ensure_schema(conn, 'tisan')
+        await conn.execute((Path(__file__).resolve().parents[1] / 'agents/tisan/schema.sql').read_text())
     room.state.pool = pool
     from agents.tisan import promotion, publish
     modules = {'gold_sources.py': gold_sources, 'promotion.py': promotion, 'publish.py': publish}
