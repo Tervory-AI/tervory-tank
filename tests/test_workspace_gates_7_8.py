@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import importlib.util
 import json
 import os
-import sys
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,17 +13,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def _load(name: str, rel: str):
-    path = ROOT / "integrations" / "workspace" / rel
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-_gates = _load("integrations.workspace.gates_memory", "gates_memory.py")
-_request = _load("integrations.workspace.request_path", "request_path.py")
+_gates = importlib.import_module("integrations.workspace.gates_memory")
+_request = importlib.import_module("integrations.workspace.request_path")
 FIXED_FAKE_PER_CALL = _gates.FIXED_FAKE_PER_CALL
 FakeMemory = _gates.FakeMemory
 MemoryControlError = _gates.MemoryControlError
@@ -970,8 +960,13 @@ def test_workspace_gates_ts_auth_refuse_and_outage_degrade_static():
     assert "isMemoryOutageFailure" in gates
     assert "memory_unavailable" in gates
     assert 'memory_status: "memory unavailable"' in gates or "memory unavailable" in gates
-    assert "await route(" in gates
-    assert "await createTask(" in gates
+    # A backend 5xx can follow payment. The server owns availability fallback;
+    # the browser must never dispatch a second model/job after an unknown result.
+    assert "await route(" not in gates
+    assert "await createTask(" not in gates
+    assert 'commandRequest(identity, "threads"' in gates
+    assert 'tool: "workspace.task.create"' in gates
+    assert 'confirmation_required: true' in gates
     # Auth path still throws InputError (no paid call at this layer for empty scope).
     assert 'throw new InputError("Signed-in tenant required.")' in gates
     assert 'throw new InputError("Signed-in user required.")' in gates
@@ -1726,7 +1721,7 @@ def test_classify_workspace_command_failure_ts_unit_via_node():
         """const fs = require("fs");
 const src = fs.readFileSync("workspace/lib/workspace-gates.ts", "utf8");
 const start = src.indexOf("function isAuthOrScopeFailure");
-const end = src.indexOf("function memoryUnavailableBracket");
+const end = src.indexOf("async function commandWorkspace");
 if (start < 0 || end < 0) throw new Error("helpers missing");
 let body = src.slice(start, end);
 body = body

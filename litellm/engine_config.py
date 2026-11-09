@@ -11,6 +11,8 @@ import engine_runtime
 
 def configure(config):
     config = deepcopy(config)
+    # Non-serving catalogue metadata never reaches the provider router.
+    config.pop("x_unpriced_models", None)
     # DECISION only an explicit shared C1 setting initializes Redis caching.
     settings = config.setdefault('litellm_settings', {})
     settings['cache'] = os.environ.get('ENGINE_C1_ENABLED') == '1'

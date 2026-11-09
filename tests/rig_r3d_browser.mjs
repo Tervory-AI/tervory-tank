@@ -81,7 +81,8 @@ try {
     assert.equal(await page.locator('#start-build').getAttribute('href'),'https://app.tervory.com/rig/admin/three-d');
     await page.locator('#start-build').focus();
     assert.equal(await page.evaluate(()=>document.activeElement.id),'start-build');
-    await page.clock.setSystemTime(new Date(Date.now()+61000)); await page.waitForTimeout(1100);
+    await page.clock.setSystemTime(new Date(await page.evaluate(()=>Date.now()) + 61000));
+    await page.waitForFunction(()=>document.body.dataset.attract === 'true');
     assert.equal(await page.locator('body').getAttribute('data-attract'),'true');
     assert(!requested.slice(unconfiguredStart).some(name=>name.startsWith('/v1/') || name.includes('terminal-runtime')));
     configured = true;

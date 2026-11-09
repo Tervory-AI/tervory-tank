@@ -1,6 +1,6 @@
 # F1 window agent frames — Proposed
 
-Figma file: [Tervory design file](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS). Separate page: [F1 · Window agent tools · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-1460).
+Figma file: [Tervory design file](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS). Separate page: [F1 · Opli Code agent tools · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-1460).
 
 Branch: `codex/figma-window-agent`. All frames and new wording are **Proposed**. These are editable designs for the window build, not shipped UI.
 

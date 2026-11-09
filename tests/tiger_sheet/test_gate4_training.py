@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from tervor_training_fixtures import configured_base as configured_base
 
 from tiger_sheet.patch_source import module
 from tiger_sheet.test_finish_training import hub as hub, trainer as trainer

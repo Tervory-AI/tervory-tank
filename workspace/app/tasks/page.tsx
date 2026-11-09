@@ -118,6 +118,10 @@ export default function TasksPage() {
       const data = await res.json();
       if (!res.ok && data.retry_safe === true) definitelyRejected = true;
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (data.confirmation_required === true && typeof data.thread_id === "string") {
+        window.location.assign(`/chats?thread=${encodeURIComponent(data.thread_id)}`);
+        return;
+      }
       setTitle("");
       setRequest("");
       await refresh();

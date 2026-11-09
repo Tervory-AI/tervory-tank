@@ -32,16 +32,26 @@ def test_off_by_default_hardened_and_no_shared_data(room):
     services = config['services']
     assert services['agent-' + stem]['environment'][upper + '_BRAIN_ENABLED'] == '${' + upper + '_BRAIN_ENABLED:-false}'
     brain, sandbox = services[stem + '-brain'], services[stem + '-sandbox']
-    assert brain['build']['dockerfile'] == 'agents/rig/Dockerfile.brain'
-    assert 'HERMES_COMMIT=d923a5eb487a17c0a68801bba9ef0f56c81040a8' in (ROOT / brain['build']['dockerfile']).read_text()
-    assert brain['command'][1] == 'brain.standby:app'
+    if room == 'radix':
+        assert brain['build'] == {'context': '..', 'dockerfile': 'radix/Dockerfile'}
+        assert brain['command'][1] == 'radix_brain_service:app'
+    elif room == 'ghost':
+        assert brain['build'] == {'context': '..', 'dockerfile': 'ghost/Dockerfile'}
+        assert brain['command'][1] == 'ghost.brain_service:app'
+        image = (ROOT / 'agents/ghost/Dockerfile').read_text()
+        assert 'COPY ghost /app/ghost' in image and 'USER agent' in image
+        assert brain['environment']['GHOST_BRAIN_ENABLED'] == '${GHOST_BRAIN_ENABLED:-false}'
+    else:
+        assert brain['build']['dockerfile'] == 'agents/rig/Dockerfile.brain'
+        assert 'HERMES_COMMIT=d923a5eb487a17c0a68801bba9ef0f56c81040a8' in (ROOT / brain['build']['dockerfile']).read_text()
+        assert brain['command'][1] == 'brain.standby:app'
     assert sandbox['build']['dockerfile'] == 'agents/base/Dockerfile.sandbox'
     assert brain['networks'] == ['gw', 'sandbox'] and sandbox['networks'] == ['sandbox']
     assert config['networks']['sandbox'] == {'internal': True}
     assert config['networks']['gw']['name'] == 'tervory-gw-' + room
     assert brain['volumes'] == [room + '_brain_data:/data'] and not sandbox.get('volumes')
     assert config['volumes'][room + '_brain_data'] == {'name': 'tervory-' + stem + '-brain-data'}
-    assert (brain['mem_limit'], brain['cpus'], brain['pids_limit']) == ('2g', 1, 128)
+    assert (brain['mem_limit'], brain['cpus'], brain['pids_limit']) == ('512m' if room == 'ghost' else '2g', 1, 128)
     assert (sandbox['mem_limit'], sandbox['cpus'], sandbox['pids_limit']) == ('512m', .5, 64)
     assert any(value.startswith('/work:') for value in sandbox['tmpfs'])
     assert set(sandbox['environment']) == {'BRAIN_ROOM', 'SANDBOX_KEY'}
