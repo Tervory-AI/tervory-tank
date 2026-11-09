@@ -291,7 +291,7 @@ async def test_memory_auth_failure_never_degrades_to_paid(base_entry,status):
     e=base_entry
     await seed(e)
     before=await e.snapshot()
-    e.faults.update(path='/recall',status=status)
+    e.faults.update(path='/records',status=status)
     response=await e.request('memory',{'user_id':USER_A,'task_key':'placeholder-batch'},method='GET')
     assert response.status_code in {401,403},response.text
     assert not e.provider_calls and await e.snapshot()==before
@@ -328,6 +328,10 @@ async def test_retries_concurrency_and_meaningful_receipts(base_entry,monkeypatc
     monkeypatch.setenv('BASE_BRAIN_URL','http://base-brain:8000')
     request_id=uuid4()
     responses=await asyncio.gather(e.submit(request_id=request_id),e.submit(request_id=request_id))
+    # Existing try-advisory submission contract returns 409 while the winner commits.
+    assert all(r.status_code in {202,409} for r in responses),[r.text for r in responses]
+    assert any(r.status_code==202 for r in responses)
+    responses = [await e.submit(request_id=request_id) if r.status_code==409 else r for r in responses]
     assert all(r.status_code==202 for r in responses),[r.text for r in responses]
     assert responses[0].json()['task']['id']==responses[1].json()['task']['id']
     task_id=responses[0].json()['task']['id']
@@ -369,7 +373,7 @@ async def test_free_passes_precede_real_drive_batch(base_entry,monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('accounting', ['recorded', 'missing_price', 'ledger_unavailable'])
-async def test_drive_batch_persisted_inputs_and_unknown_accounting(gate78_memory, monkeypatch, accounting):
+async def test_drive_batch_persisted_inputs_and_unknown_accounting(gate78_memory, monkeypatch, accounting, base_module_scope):
     """Real worker/SQL/Hermes/signing; brain/ledger HTTP is an offline provider fixture."""
     import importlib
     from types import SimpleNamespace
@@ -431,7 +435,7 @@ async def test_drive_batch_persisted_inputs_and_unknown_accounting(gate78_memory
             row = await conn.fetchrow('SELECT status,input FROM agent_base.tasks WHERE tenant_id=$1 AND id=$2', tenant, task_id)
             return row['status'], json.loads(row['input']) if isinstance(row['input'], str) else row['input']
 
-    skills = SimpleNamespace(memory=stack.client(USER_A), _base='http://tank.test', _headers=dict,
+    skills = SimpleNamespace(memory=stack.client(USER_A), _base='http://tank.test', _headers=lambda: {'X-Tank-Key': stack.key},
                              _http=real_http(transport=transport))
     try:
         first_id, first = await task(rows)

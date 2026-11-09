@@ -9,18 +9,11 @@ import json
 import logging
 import os
 import socket
-import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
-import httpx
-
-try:
-    from network import BoundedHTTP
-except ModuleNotFoundError:  # package imports in offline and shared callers
-    from agents.base.network import BoundedHTTP
 from fastapi import Header, HTTPException
 from pydantic import BaseModel
 
@@ -142,9 +135,16 @@ async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | N
         or os.environ.get("BASE_MEMORY_CONTROL")
         or "off"
     )
+    skip_storage = False
     if memory is not None and user_id is not None and memory_control != "off":
         # Persisted personal OFF wins over request overrides and survives restarts.
-        rows = await memory.records(str(tenant), user_id=user_id)
+        try:
+            rows = await memory.records(str(tenant), user_id=user_id)
+        except (RuntimeError, TimeoutError, ConnectionError) as exc:
+            from gates_memory import storage_unavailable
+            if not storage_unavailable(exc):
+                raise
+            rows, skip_storage = [], True
         for row in rows:
             meta = row.get("meta") or {}
             if (row.get("tenant_id") == str(tenant) and meta.get("user_id") == user_id
@@ -187,7 +187,7 @@ async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | N
                 task_key=task_key,
                 task=await batch_memory_payload(pool, tenant, task_id, cfg),
                 brain_tank_call=_brain_tank_paid,
-                memory_control=memory_control,
+                memory_control=memory_control, skip_storage=skip_storage,
             )
             if bracket.get("answered_from_memory"):
                 reuse = ((bracket.get("result") or {}) if isinstance(bracket.get("result"), dict) else {}).get("reuse")
@@ -243,104 +243,21 @@ async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | N
             }
 
         if not use_memory:
-          try:
-            async with httpx.AsyncClient(timeout=30) as raw_client:
-                client = BoundedHTTP(raw_client)
-                response = await client.post(os.environ["BASE_BRAIN_URL"] + "/tasks",
-                    headers=skills._headers(), json={"tenant_id": str(tenant), "task_id": str(task_id),
-                        "home_region": os.environ.get("TANK_REGION", "us-east"), "batch": cfg["batch"],
-                        "count": cfg["count"], "engine": cfg.get("engine")})
-                deadline = time.monotonic() + 300
-                while response.status_code == 202:
-                    if time.monotonic() > deadline:
-                        raise RuntimeError("Base brain polling deadline reached")
-                    await asyncio.sleep(2)
-                    response = await client.get(os.environ["BASE_BRAIN_URL"] + "/tasks/" + str(task_id),
-                        headers=skills._headers(), params={"tenant_id": str(tenant),
-                            "home_region": os.environ.get("TANK_REGION", "us-east")})
-            if response.status_code != 200:
-                raise RuntimeError("Base brain unavailable")
-            receipt = response.json()
-            if receipt.get("tenant_id") != str(tenant) or receipt.get("task_id") != str(task_id):
-                receipt = None
-                raise RuntimeError("Brain receipt scope mismatch")
-            if receipt.get("status") != "done":
-                raise RuntimeError("Brain did not finish")
-          except Exception as exc:
-            logging.getLogger("base.brain").warning("Brain flow failed (%s)", type(exc).__name__)
-            # The unchanged pipeline remains available if memory, policy, the
-            # agent or its service failed before it started any pipeline work.
-            if not batch.ran:
+            if user_id is None:
+                # Historical ownerless rows stay on the unchanged code/skill path.
+                # They never enter personal memory or a fabricated shared actor.
                 from room import _run_batch
-                # A lost start response must not allow a late brain callback to
-                # race the fallback. Cancel its job and close the pipeline gate.
-                batch.ran, batch.operation = True, "fallback"
-                try:
-                    async with httpx.AsyncClient(timeout=5) as raw_client:
-                        cancel_client = BoundedHTTP(raw_client)
-                        await cancel_client.delete(os.environ["BASE_BRAIN_URL"] + "/tasks/" + str(task_id),
-                            headers=skills._headers(), params={"tenant_id": str(tenant),
-                                "home_region": os.environ.get("TANK_REGION", "us-east")})
-                except Exception:
-                    pass
-                receipt = receipt if isinstance(receipt, dict) else {
-                    "tenant_id": str(tenant), "task_id": str(task_id), "room": "base", "model_receipts": [], "steps": []}
-                receipt.update(status="fallback", error="Brain unavailable before pipeline; default pipeline used.")
-                receipt["steps"].append({"action": "pipeline_fallback", "reason": "brain failed before pipeline_run"})
-                try:
-                    response = await skills._http.get(skills._base + "/v1/agents/base/receipts",
-                        headers=skills._headers(), params={"tenant_id": str(tenant), "task_id": str(task_id)}, timeout=15)
-                    if response.status_code == 200:
-                        receipt["model_receipts"] = response.json()["receipts"]
-                except Exception:
-                    pass
-                previous = float(cfg.get("brain_spend") or 0)
-                cost = max(previous, receipt_spend(receipt.get("model_receipts", [])))
-                cfg["brain_spend"] = cost
-                cfg["model_spend"] = float(cfg.get("model_spend") or 0) - previous + cost
-                cfg["brain_receipt"] = receipt
-                await _run_batch(pool, task_id, cfg, scoped_call)
+                if batch.ran:
+                    await run_phase(batch, Task(tenant_id=tenant, task_id=task_id, finish=True))
+                else:
+                    await _run_batch(pool, task_id, cfg, scoped_call)
                 return
-            if not batch.finished:
-                # Close callbacks before stopping the agent, then let any free
-                # pass settle before using the existing paid continuation.
-                async with batch.lock:
-                    batch.finished = True
-                    batch.operation = "finish_fallback"
-                try:
-                    async with httpx.AsyncClient(timeout=5) as raw_client:
-                        cancel_client = BoundedHTTP(raw_client)
-                        await cancel_client.delete(os.environ["BASE_BRAIN_URL"] + "/tasks/" + str(task_id),
-                            headers=skills._headers(), params={"tenant_id": str(tenant),
-                                "home_region": os.environ.get("TANK_REGION", "us-east")})
-                except Exception:
-                    pass
-                if batch.job:
-                    await asyncio.shield(batch.job)
-                receipt = receipt or {"tenant_id": str(tenant), "task_id": str(task_id), "room": "base",
-                    "steps": [], "model_receipts": []}
-                batch.job = asyncio.create_task(run_phase(batch, Task(tenant_id=tenant, task_id=task_id, finish=True)))
-                await asyncio.shield(batch.job)
-                result = batch.result or {"pipeline_status": "failed"}
-                receipt["steps"].append({"action": "pipeline_continue_fallback", "status": result["pipeline_status"],
-                    "summary": result.get("summary"), "reason": "brain failed after pipeline_run"})
-                receipt["status"] = "done" if result["pipeline_status"] == "done" else "failed"
-                receipt["error"] = None if receipt["status"] == "done" else "Default pipeline continuation did not finish."
-            else:
-                if batch.job and not batch.job.done():
-                    await asyncio.shield(batch.job)
-                if not receipt:
-                    receipt = {"tenant_id": str(tenant), "task_id": str(task_id), "room": "base", "status": "failed",
-                        "error": "Brain unavailable after pipeline started; completed work retained.", "steps": [], "model_receipts": []}
-            try:
-                response = await skills._http.get(skills._base + "/v1/agents/base/receipts",
-                    headers=skills._headers(), params={"tenant_id": str(tenant), "task_id": str(task_id)}, timeout=15)
-                if response.status_code == 200:
-                    receipt["model_receipts"] = response.json()["receipts"]
-            except Exception:
-                pass
+            paid = await _brain_tank_paid({})
+            receipt = dict(paid['result'])
+            receipt.update({field: paid[field] for field in ('cost_usd', 'tokens_in', 'tokens_out', 'tokens_total')})
+            receipt.update(paid_calls=len(receipt.get('model_receipts', [])), answered_from_memory=False)
         cfg["brain_receipt"] = receipt
-        if use_memory and bracket["cost_usd"] is None:
+        if (bracket["cost_usd"] if use_memory else receipt.get("cost_usd")) is None:
             # The work already ran. Retain its receipt and unknown spend; never
             # retry a paid edge or publish a zero total after a ledger outage.
             cfg["brain_spend"] = cfg["model_spend"] = None
@@ -404,6 +321,7 @@ async def results(batch: ActiveBatch, body: Task) -> dict:
             item = profile.get(key) or raw.get(key) or ""
             return str(item.get("value") or "") if isinstance(item, dict) else str(item)
         unresolved.append({"id": str(row["id"]), "name": value("name")[:120],
+            "raw_name": str(raw.get("name") or "")[:120],
             "website": value("website")[:160], "status": row["status"]})
     return {"pipeline_status": task["status"], "summary": task["result"], "unresolved": unresolved,
             "skills": batch.cfg.get("refs", {}), "cost_usd": batch.cfg.get("model_spend", 0)}

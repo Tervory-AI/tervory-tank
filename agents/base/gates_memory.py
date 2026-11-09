@@ -306,6 +306,12 @@ async def apply_memory_forget(
     await memory.forget(memory_id, tenant, user_id=user)
 
 
+def storage_unavailable(exc):
+    return isinstance(exc, (TimeoutError, ConnectionError)) or (
+        isinstance(exc, RuntimeError) and str(exc) in {
+            'hermes unreachable', 'hermes answered 502', 'hermes answered 503', 'hermes answered 504'})
+
+
 async def run_with_memory(
     memory: Any,
     *,
@@ -315,6 +321,7 @@ async def run_with_memory(
     task: dict[str, Any],
     paid_call: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]],
     memory_control: str = "edit",
+    skip_storage: bool = False,
 ) -> dict[str, Any]:
     """Product request → recall → correction | identical reuse | paid → remember.
 
@@ -355,7 +362,20 @@ async def run_with_memory(
     input_hash = task_input_hash(task)
     receipt["input_hash"] = input_hash
 
-    recalled = await memory.recall(tenant, task_key, kind=None, limit=32, user_id=user)
+    try:
+        if skip_storage:
+            raise RuntimeError('hermes unreachable')
+        recalled = await memory.recall(tenant, task_key, kind=None, limit=32, user_id=user)
+    except (RuntimeError, TimeoutError, ConnectionError) as exc:
+        if not storage_unavailable(exc):
+            raise
+        # No recalled preference/correction/receipt is trusted during an outage.
+        # Run the already-authorized plain path once; never store derived reuse.
+        paid = await paid_call(task)
+        receipt.update(usage_from_model_receipts([paid]), paid_calls=1,
+                       result=paid.get('result', paid), memory_unavailable=True)
+        receipt['steps'].append({'action': 'memory_unavailable', 'status': 'read_failed'})
+        return receipt
     scoped = select_tenant_user_memories(recalled, tenant_id=tenant, user_id=user)
     receipt["steps"].append(
         {"action": "recall", "count": len(scoped), "memory_ids": [r["id"] for r in scoped]}
@@ -416,7 +436,8 @@ async def run_with_memory(
         return receipt
 
     text = build_memory_text(
-        summary=f"Base task {task_key}: " + str((receipt["result"] or {}).get("summary") or ""),
+        summary=f"Base task {task_key}: " + str((receipt["result"] or {}).get("summary") or "")
+            + " evidence=" + json.dumps((receipt["result"] or {}).get("evidence") or [], sort_keys=True),
         verified=list((receipt["result"] or {}).get("verified") or []) or None,
         sources=list((receipt["result"] or {}).get("sources") or []) or None,
         failed_checks=list((receipt["result"] or {}).get("failed_checks") or []) or None,
@@ -515,6 +536,7 @@ async def product_to_brain_tank_memory(
     task: dict[str, Any],
     brain_tank_call: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]],
     memory_control: str = "edit",
+    skip_storage: bool = False,
 ) -> dict[str, Any]:
     """Product → recall → (correction | identical reuse | brain→Tank→receipt) → remember.
 
@@ -528,5 +550,5 @@ async def product_to_brain_tank_memory(
         task_key=task_key,
         task=task,
         paid_call=brain_tank_call,
-        memory_control=memory_control,
+        memory_control=memory_control, skip_storage=skip_storage,
     )

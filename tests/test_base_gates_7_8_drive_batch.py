@@ -206,13 +206,15 @@ async def test_drive_batch_off_skips_memory_and_pays_each_run(monkeypatch, contr
             return self._payload
 
     class FakeHTTP:
-        async def post(self, url, headers=None, json=None, **kwargs):
+        async def post(self, url, headers=None, content=None, **kwargs):
+            import json
+            payload = json.loads(content)
             posts["n"] += 1
-            tid = str(json["task_id"])
+            tid = str(payload["task_id"])
             return FakeResponse(
                 200,
                 {
-                    "tenant_id": str(json["tenant_id"]),
+                    "tenant_id": str(payload["tenant_id"]),
                     "task_id": tid,
                     "room": "base",
                     "status": "done",
@@ -239,7 +241,7 @@ async def test_drive_batch_off_skips_memory_and_pays_each_run(monkeypatch, contr
             return False
 
     monkeypatch.setattr(
-        base_brain.httpx, "AsyncClient", lambda timeout=30: _AsyncCM(FakeHTTP())
+        __import__("brain_route").httpx, "AsyncClient", lambda timeout=30: _AsyncCM(FakeHTTP())
     )
 
     # Seed would-be reusable memory — must be ignored when control=off.

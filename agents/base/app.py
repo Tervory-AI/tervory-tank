@@ -427,6 +427,9 @@ async def _submit_batch(body: BaseRun, *, verified_user: str | None = None) -> d
     except SkillError as exc:
         raise _http_skill(exc) from exc
     canonical = body.model_dump(mode="json", exclude={"request_id", "created_by"})
+    # Preserve pre-memory request hashes for already queued owner-bound retries.
+    if body.memory_control is None:
+        canonical.pop("memory_control", None)
     digest = hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     root = uuid.uuid5(body.tenant_id, str(body.request_id) if body.request_id else digest)
     tasks, labels = [], []

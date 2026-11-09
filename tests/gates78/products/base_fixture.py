@@ -140,7 +140,6 @@ async def base_entry(gate78_memory, monkeypatch, tmp_path, base_module_scope):
     def local_http(**kwargs):
         return REAL_HTTP(transport=network, **kwargs)
     # Change only the HTTP transport. The worker, brain and receipt code remain real.
-    monkeypatch.setattr(worker, 'httpx', SimpleNamespace(AsyncClient=local_http))
     import brain_route
     monkeypatch.setattr(brain_route, 'httpx', SimpleNamespace(AsyncClient=local_http))
     monkeypatch.setattr(brain, 'httpx', SimpleNamespace(AsyncClient=local_http))

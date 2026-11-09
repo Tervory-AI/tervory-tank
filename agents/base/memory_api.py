@@ -55,7 +55,13 @@ def memory_client(app):
 
 
 async def owned_rows(memory, tenant, user):
-    rows = await memory.records(str(tenant), user_id=user)
+    try:
+        rows = await memory.records(str(tenant), user_id=user)
+    except RuntimeError as exc:
+        for status in (401, 403):
+            if str(exc) == f'hermes answered {status}':
+                raise HTTPException(status, 'Memory access refused') from None
+        raise
     return select_tenant_user_memories(rows, tenant_id=str(tenant), user_id=user)
 
 

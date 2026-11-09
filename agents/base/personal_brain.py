@@ -14,11 +14,11 @@ import sqlite3
 from uuid import UUID
 
 import httpx
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from chassis.sqlite_nonces import SQLiteNonces
 from chassis.user_assertion import SignedUser, signed_user, sign_assertion
-from brain.service import app
+app = FastAPI()
 
 
 class Plan(BaseModel):
@@ -103,6 +103,11 @@ async def personal_task(body: Plan, request: Request):
     summary = data['choices'][0]['message']['content']
     receipt = dict(tenant_id=str(body.tenant_id), user_id=actor.user_id, task_id=str(body.task_id),
         room='base', region=body.home_region, status='done', summary=summary,
-        model_receipts=[row], steps=[{'action': 'tank_plan', 'ledger_id': row['ledger_id']}])
+        model_receipts=[row], evidence=body.evidence, steps=[{'action': 'tank_plan', 'ledger_id': row['ledger_id']}])
     await asyncio.to_thread(save, body, receipt)
     return receipt
+
+
+@app.get('/health')
+async def health():
+    return {'status': 'ok'}
