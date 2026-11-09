@@ -8,7 +8,6 @@ from uuid import uuid4
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "agents" / "opli"))
 sys.path.insert(0, str(ROOT / "integrations" / "tank"))
 
 from fixed_fake import FIXED_FAKE_PER_CALL
