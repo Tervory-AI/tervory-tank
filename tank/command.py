@@ -2669,3 +2669,7 @@ router.include_router(radix_deploy_router())
 
 from radix_report import build_router as radix_report_router
 router.include_router(radix_report_router())
+
+# GATE BEFORE (finish): a tenant's own code caps (404 unless ENGINE_CODE_TENANT_CAPS_ENABLED=true).
+from code_caps import build_router as code_caps_router
+router.include_router(code_caps_router())
