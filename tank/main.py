@@ -1357,6 +1357,8 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
                 answer = await __import__('request_router').receipt(engine_rt, req, policy, answer)
             answer = await __import__('exact_cache').record(engine_rt, req, policy, answer)
             answer = await prompt_cache.receipt(engine_rt, req, answer)
+            # C5 on every provider: receipt line; off unless ENGINE_C5_ALL_PROVIDERS_ENABLED=true.
+            answer = await __import__('prompt_cache_providers').receipt(engine_rt, req, answer)
             # Savings ledger: returns the same answer; off unless ENGINE_LEDGER_ENABLED=true.
             return await __import__('savings_ledger').record(engine_rt, req, answer)
         attempted.add(policy["model"])
@@ -1623,6 +1625,9 @@ async def _run_route(
     cache_options = await __import__('exact_cache').gateway_options(
         __import__('sys').modules[__name__], req, policy, identity, model, safe=not holds_identifier,
         streaming=_on_token is not None)
+    # C5 on every provider: per-tenant cache key where documented; off: {}.
+    cache_options = {**cache_options, **await __import__('prompt_cache_providers').request_options(
+        __import__('sys').modules[__name__], req, model, messages)}
     try:
         if _on_token is not None and req.task_type in {"command.turn", "command.code"}:
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
