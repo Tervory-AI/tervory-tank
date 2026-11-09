@@ -289,7 +289,8 @@ def test_room_catalogues_return_counts_and_refuse_a_write(monkeypatch: pytest.Mo
                 headers={"X-Tank-Key": ROOM_KEY},
             )
             assert listed.status_code == 200
-            assert listed.json() == {"products": 3, "fits": 3}
+            assert listed.json() == {"products": 3, "active": 3, "fits": 3, "approved_fits": 3, "waiting_fits": 0,
+                                     "feeds": 0, "delivery": True}
             assert "rk_" not in listed.text
 
             empty = await client.get(
@@ -298,7 +299,8 @@ def test_room_catalogues_return_counts_and_refuse_a_write(monkeypatch: pytest.Mo
                 headers={"X-Tank-Key": ROOM_KEY},
             )
             assert empty.status_code == 200
-            assert empty.json() == {"products": 0, "fits": 0}
+            assert empty.json() == {"products": 0, "active": 0, "fits": 0, "approved_fits": 0, "waiting_fits": 0,
+                                    "feeds": 0, "delivery": False}
 
             shopper = await client.get("/v1/rig/search", params={"q": "scope", "tenant_id": TENANT})
             assert shopper.status_code == 401

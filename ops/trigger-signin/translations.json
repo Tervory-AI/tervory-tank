@@ -75,7 +75,6 @@
     }
   },
   "signedin": {
-    "title": "You’re signed in",
     "description": "Your Trigger sign-in is complete."
   },
   "verify": {
