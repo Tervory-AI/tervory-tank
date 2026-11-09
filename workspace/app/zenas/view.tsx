@@ -21,6 +21,7 @@ const TOP_LINKS = [
 ] as const;
 
 const PAGE_LINKS = [
+  { href: "/zenas/receipts", label: "Receipts" },
   { href: "/matters", label: "Matters" },
   { href: "/review", label: "Review" },
 ] as const;
