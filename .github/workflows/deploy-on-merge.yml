@@ -58,13 +58,13 @@ jobs:
       - name: Find the previous deployed commit
         id: before
         run: |
-          # Compare with the previous push run that actually ran (success or failure), not only the
-          # last success: one app failing must not make every later merge redeploy every app (28 Oct).
-          # Cancelled runs (a superseded settle among them) are skipped, so their changes are still
-          # included. Apps whose last Coolify deployment failed are retried by deploy_changed.py.
+          # A failed run may stop before listing apps or writing any deploy record.
+          # Only a successful push run establishes the shared comparison baseline;
+          # otherwise its undeployed changes disappear after an unrelated merge.
+          # Query successes directly so a burst of failures cannot hide the last good run.
           prev=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&event=push&status=completed&per_page=20" \
-            | jq -r '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // empty')
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&event=push&status=success&per_page=20" \
+            | jq -r '[.workflow_runs[] | select(.conclusion == "success")][0].head_sha // empty')
           if [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then
             echo "before=$prev" >> "$GITHUB_OUTPUT"
             echo "BEFORE=$prev" >> "$GITHUB_ENV"

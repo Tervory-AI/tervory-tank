@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -541,6 +542,48 @@ def test_without_a_plan_nothing_changes_for_coolify_ops(monkeypatch) -> None:
 
 def _flow() -> dict:
     return yaml.safe_load((ROOT / ".github/workflows/deploy-on-merge.yml").read_text(encoding="utf-8"))
+
+
+def test_api_failure_before_first_record_keeps_undeployed_room_changes(tmp_path):
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+
+    git("init", "-q")
+    git("config", "user.name", "placeholder")
+    git("config", "user.email", "placeholder@example.invalid")
+    (tmp_path / "README.md").write_text("placeholder baseline")
+    git("add", ".")
+    git("commit", "-qm", "placeholder deployed")
+    deployed = git("rev-parse", "HEAD")
+    room = tmp_path / "agents/zenas/app.py"
+    room.parent.mkdir(parents=True)
+    room.write_text("# placeholder pending room change\n")
+    git("add", ".")
+    git("commit", "-qm", "placeholder API failed before any deploy record")
+    failed = git("rev-parse", "HEAD")
+    (tmp_path / "README.md").write_text("placeholder unrelated next merge")
+    git("add", ".")
+    git("commit", "-qm", "placeholder next merge")
+    current = git("rev-parse", "HEAD")
+    listing = tmp_path / "runs.json"
+    listing.write_text(json.dumps({"workflow_runs": [
+        {"conclusion": "failure", "head_sha": failed},
+        {"conclusion": "cancelled", "head_sha": current},
+        {"conclusion": "success", "head_sha": deployed},
+    ]}))
+    output = tmp_path / "outputs"
+    step = next(s for s in _flow()["jobs"]["settle"]["steps"] if s.get("id") == "before")
+    script = step["run"].replace("${{ github.repository }}", "placeholder/repository")
+    subprocess.run(["bash", "-e", "-o", "pipefail", "-c",
+                    'curl() { cat "$FIXTURE_RUNS"; };\n' + script], cwd=tmp_path, check=True,
+                   env={**os.environ, "FIXTURE_RUNS": str(listing), "GITHUB_TOKEN": "placeholder",
+                        "GITHUB_OUTPUT": str(output), "GITHUB_ENV": str(tmp_path / "env")})
+    before = output.read_text().strip().removeprefix("before=")
+    result = di.plan(before, current, {}, diff=lambda b, a: di.git_paths(b, a, tmp_path),
+                     known=lambda sha: di.has_commit(sha, tmp_path), composes=COMPOSES, specs=_specs)
+    assert "agents/zenas/docker-compose.yml" in result["build"]
+    assert "agents/zenas/docker-compose.za.yml" in result["build"]
+    assert before == deployed
 
 
 def test_workflow_settles_plans_builds_then_deploys() -> None:
