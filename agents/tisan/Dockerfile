@@ -1,11 +1,12 @@
 FROM python:3.12-slim
 WORKDIR /app
 COPY agents/_chassis/requirements.txt .
-COPY agents/tisan/requirements.txt /app/tisan-requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt -r /app/tisan-requirements.txt \
+RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data /opt/npm-cache \
     && chown agent:agent /data
+COPY agents/tisan/requirements.lock /app/tisan-savings.lock
+RUN pip install --no-cache-dir --require-hashes -r /app/tisan-savings.lock
 COPY agents/_chassis/chassis /app/chassis
 COPY ops/live_check.mjs ops/live_check_banned.txt /app/ops/
 COPY agents/tisan/scaffold.py /app/scaffold.py

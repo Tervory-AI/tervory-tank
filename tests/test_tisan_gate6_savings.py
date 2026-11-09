@@ -5,7 +5,6 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
-import subprocess
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -192,30 +191,10 @@ async def test_unknown_provider_spend_is_pending_and_exception_is_private(receip
 
 
 @pytest.fixture
-def tank_patch(tmp_path, monkeypatch):
-    for name in ('command.py', 'tisan_requests.py', 'tisan_pipeline.py'):
-        path = tmp_path/'tank'/name
-        path.parent.mkdir(exist_ok=True)
-        path.write_bytes((ROOT/'vendor/tervory-tank/tank'/name).read_bytes())
-    subprocess.run(['git', 'apply', '--exclude=tests/registry_frozen.golden', '--check', str(ROOT/'tank-patches/gate6.patch')], cwd=tmp_path, check=True)
-    subprocess.run(['git', 'apply', '--exclude=tests/registry_frozen.golden', str(ROOT/'tank-patches/gate6.patch')], cwd=tmp_path, check=True)
-    # Execute the actual changed functions with the existing native runtime.
-    tree = ast.parse((tmp_path/'tank/command.py').read_text())
-    nodes = [n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name in {'record_receipts', 'get_thread', 'task_receipts'}]
-    for node in nodes:
-        node.decorator_list = []
-    namespace = dict(command.__dict__)
-    exec(compile(ast.Module(body=nodes, type_ignores=[]), 'gate6_command_patch', 'exec'), namespace)
-    for name in ('record_receipts', 'get_thread', 'task_receipts'):
-        monkeypatch.setattr(command, name, namespace[name])
-    spec = importlib.util.spec_from_file_location('gate6_tisan_requests', tmp_path/'tank/tisan_requests.py')
-    module = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, spec.name, module)
-    spec.loader.exec_module(module)
+def tank_patch():
+    # Integration exercises the actual shared runtime, not a patched vendor copy.
     import tisan_requests
-    monkeypatch.setattr(tisan_requests, 'build_router', module.build_router)
-    monkeypatch.setattr(tisan_requests, 'build_result', module.build_result)
-    return namespace, module
+    return vars(command), tisan_requests
 
 
 def test_mcp_exposes_same_main_actions_and_auth_as_window_mobile(runtime):

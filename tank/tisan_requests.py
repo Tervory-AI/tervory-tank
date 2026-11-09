@@ -237,7 +237,6 @@ async def queue_pipeline(actor, operation, data):
 def build_router():
     from command import Actor, TisanRequestArgs, db, identity, require_tool
     from trigger_commands import confirmation
-    from trigger_routes import code_receipt
     router = APIRouter(prefix='/v1/command/tisan', tags=['tisan'])
     # Local annotation must be available to FastAPI's signature resolver.
     globals()['TisanRequestArgs'] = TisanRequestArgs
@@ -273,8 +272,12 @@ def build_router():
         require_tool(actor, 'tisan.preview')
         return await memory_request(actor, 'DELETE', '/memory')
 
-    async def result(actor, tool, data):
-        return {**data, 'ledger_id': str(await code_receipt(actor.tenant_id, tool, agent='tisan')), 'cost_usd': 0}
+    async def result(actor, tool, data, arguments, operation=None):
+        from agents.tisan.savings import complete
+        from uuid import uuid4
+        async with db().acquire() as conn:
+            receipt = await complete(conn, actor.tenant_id, operation or uuid4(), tool.removeprefix('tisan.'), arguments, data)
+        return {**data, 'ledger_id': receipt['ledger_id'], 'cost_usd': receipt['cost_usd'], 'receipt': receipt}
 
     @router.post('/request')
     async def request(args: TisanRequestArgs, actor: Annotated[Actor, Depends(identity)]):
@@ -288,26 +291,26 @@ def build_router():
         saved = await Store(db()).create(actor.tenant_id, actor.user_id, operation, data)
         if actor.founder:
             saved.update(await queue_pipeline(actor, operation, data))
-        return await result(actor, 'tisan.request', saved)
+        return await result(actor, 'tisan.request', saved, data, operation)
 
     @router.get('/preview')
     async def preview(slug: Annotated[str, Field(min_length=1, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")], actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, 'tisan.preview')
-        return await result(actor, 'tisan.preview', await Store(db()).preview(actor.tenant_id, slug))
+        return await result(actor, 'tisan.preview', await Store(db()).preview(actor.tenant_id, slug), {'slug': slug})
 
     @router.post('/feedback')
     async def feedback(args: FeedbackArgs, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, 'tisan.feedback')
         operation = confirmation(actor, 'tisan.feedback', args.model_dump(mode='json', exclude_none=True))
         return await result(actor, 'tisan.feedback', await Store(db()).move(actor.tenant_id, actor.user_id, operation,
-                            args.slug, 'changes_requested', args.text))
+                            args.slug, 'changes_requested', args.text), args.model_dump(mode='json'), operation)
 
     @router.post('/handover')
     async def handover(args: RequestIdArgs, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, 'tisan.handover')
         operation = confirmation(actor, 'tisan.handover', args.model_dump(mode='json', exclude_none=True))
         return await result(actor, 'tisan.handover', await Store(db()).move(actor.tenant_id, actor.user_id, operation,
-                            args.slug, 'accepted'))
+                            args.slug, 'accepted'), args.model_dump(mode='json'), operation)
     router.include_router(__import__('tisan_pipeline').build_router())
     return router
 
@@ -333,7 +336,7 @@ async def build_result(tenant: UUID, result: dict) -> dict:
                 return result
             return {**result, **{k: v for k, v in measured.items() if k in {
                 'status', 'pipeline_status', 'steps', 'checks', 'results', 'production', 'ok', 'slug', 'build',
-                'memory_id', 'url', 'commit', 'detail', 'summary', 'copy_needed', 'media_needed'}}}
+                'memory_id', 'url', 'commit', 'detail', 'summary', 'copy_needed', 'media_needed', 'ledger_id', 'receipt'}}}
         response = await _http.get('http://agent-tisan:8000/jobs/' + job_id,
             params={'tenant_id': str(tenant)}, headers={'X-Tank-Key': key,
                 'X-Tervory-Tenant': str(tenant)}, timeout=10, follow_redirects=False)
@@ -345,7 +348,7 @@ async def build_result(tenant: UUID, result: dict) -> dict:
             return result
         measured = {k: v for k, v in job['result'].items() if k in {
             'slug', 'name', 'ok', 'checks', 'detail', 'archive', 'build', 'memory_id', 'refused',
-            'copy_needed', 'media_needed', 'token_set', 'files'}}
+            'copy_needed', 'media_needed', 'token_set', 'files', 'ledger_id', 'receipt'}}
         if 'build' in measured:
             measured['build_id'] = measured['build']
         return {**result, **measured, 'status': 'done'}
