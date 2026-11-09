@@ -61,6 +61,7 @@ _plan: dict = {}
 _record: dict = {}
 _compose: dict[str, str] = {}
 _promoted: set[str] = set()
+_unverified_health: set[str] = set()
 _registry = None
 
 
@@ -370,6 +371,7 @@ def pin_source(uuid: str, name: str, sha: str) -> bool:
 
 def healthy(uuid: str, name: str, wait_s: int = HEALTH_WAIT_S) -> bool:
     """After Coolify finished: the app must report running:healthy before it counts as deployed."""
+    _unverified_health.discard(uuid)
     deadline = time.time() + wait_s
     status = ""
     while True:
@@ -378,6 +380,7 @@ def healthy(uuid: str, name: str, wait_s: int = HEALTH_WAIT_S) -> bool:
         if status.startswith("running:healthy"):
             return True
         if status == "running:unknown":
+            _unverified_health.add(uuid)
             print(f"::warning title=no health check::{name} has no health check Coolify can read; "
                   "not verified as a healthy image release")
             return False
@@ -414,6 +417,7 @@ def undo(uuid: str, name: str) -> None:
 
 def ship(uuid: str, name: str, timeout_s: int) -> bool:
     """Promote this run's images (image mode), deploy, wait, check health; undo on a failure."""
+    _unverified_health.discard(uuid)
     if not release(uuid, name):
         return False
     ok = deploy(uuid, name) and wait_for(uuid, name, timeout_s)
@@ -421,7 +425,17 @@ def ship(uuid: str, name: str, timeout_s: int) -> bool:
         ok = healthy(uuid, name)
         if ok:
             mark_healthy(uuid)
-    if not ok and uuid not in _timed_out:
+    if not ok and uuid in _unverified_health:
+        # Aggregate unknown may reflect ancillary containers without probes. It
+        # proves neither a failed app nor a healthy release: retain it for review.
+        _promoted.discard(uuid)
+        compose = _compose.get(uuid, "")
+        entry = (_record.get("apps") or {}).get(deploy_images.compose_key(compose)) if compose else None
+        if entry:
+            entry["state"], entry["at"] = "health_unverified", deploy_images._now_iso()
+        print(f"::warning title=health unverified::{name}: aggregate health unknown; "
+              "no outage inferred, no automatic rollback, release remains unverified")
+    elif not ok and uuid not in _timed_out:
         undo(uuid, name)
     elif not ok:
         # Still building or starting in Coolify: it may finish, so :live stays on the new images.

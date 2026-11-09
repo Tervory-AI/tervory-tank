@@ -777,3 +777,23 @@ def test_partial_recovery_failure_never_deploys(monkeypatch, tmp_path, operation
         monkeypatch.setattr(mod, 'api', lambda *args: (200, {'uuid': mod.MAIN_APP, 'name': 'main'}))
         assert mod.rollback_main() == 1
     assert pins == [A] and reg.tags == before and deployed == []
+
+
+@pytest.mark.parametrize("bootstrap", [False, True])
+def test_unknown_aggregate_health_is_unverified_not_an_automatic_rollback(monkeypatch, tmp_path, bootstrap):
+    mod = _deploy_script(monkeypatch)
+    reg, _ = _image_mode(monkeypatch, tmp_path, mod, ['docker-compose.yml'], status='running:unknown',
+                         record={} if bootstrap else None)
+    mod.load_plan()
+    last_good = json.loads(json.dumps(mod._record.get('apps', {}).get('main', {}).get('last_good', {})))
+    mod._compose[mod.MAIN_APP] = 'docker-compose.yml'
+    deployed = []
+    monkeypatch.setattr(mod, 'deploy', lambda *args: deployed.append(args) or True)
+    monkeypatch.setattr(mod, 'wait_for', lambda *args: True)
+    monkeypatch.setattr(mod, 'undo', lambda *args: pytest.fail('unknown health must not roll back'))
+    assert not mod.ship(mod.MAIN_APP, 'main', 10)
+    entry = mod._record['apps']['main']
+    assert len(deployed) == 1 and entry['state'] == 'health_unverified'
+    assert entry['live']['sha'] == B and entry['last_good'] == last_good
+    assert reg.tags[f'{_repo("tank")}:live'] == 'sha256:tank-new'
+    assert mod.MAIN_APP not in mod._promoted
