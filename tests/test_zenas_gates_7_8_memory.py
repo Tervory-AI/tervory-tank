@@ -489,6 +489,10 @@ async def room_app(gate78_memory, monkeypatch):
     monkeypatch.setenv('ZENAS_MEMORY_ENABLED', 'true')
     from agents.zenas import app as room
     from agents.zenas.core.store import PgStore
+    # Return the shared app to its original state before this pool is closed.
+    # Otherwise a later in-memory room test inherits a disposed DB client.
+    from starlette.datastructures import State
+    monkeypatch.setattr(room.app, 'state', State(dict(room.app.state._state)))
     await PgStore(stack.records.pool).apply_schema()
     room.app.state.configuration = {'ok': True}
     room.app.state.pool = stack.records.pool
