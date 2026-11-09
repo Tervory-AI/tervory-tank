@@ -1336,6 +1336,10 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
         original = await __import__('engine_ladder').select(engine_rt, req, original, caller)
         if original.get('_engine'):
             original['_engine']['memory'] = recalled
+        # BEGIN ENGINE ROUTER: per-request router, off unless ENGINE_ROUTER_ENABLED=true.
+        if __import__('request_router').enabled():
+            original = await __import__('request_router').route(engine_rt, req, original, caller)
+        # END ENGINE ROUTER
         # ENGINE LEARNING: shadow coverage for client requests; unset returns the policy unchanged.
         original = await __import__('engine_coverage').overlay(engine_rt, req, original)
     policy = original
@@ -1354,6 +1358,8 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
         if "error" not in value:
             answer = (priority_queue.QueuedResponse if value["queued"] else RouteResponse).model_validate(value["answer"])
             answer = await __import__('engine_ladder').receipt(engine_rt, req, policy, answer)
+            if policy.get('_router'):  # ENGINE ROUTER: decision and its time on the receipt
+                answer = await __import__('request_router').receipt(engine_rt, req, policy, answer)
             answer = await __import__('exact_cache').record(engine_rt, req, policy, answer)
             return await prompt_cache.receipt(engine_rt, req, answer)
         attempted.add(policy["model"])

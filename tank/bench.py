@@ -235,6 +235,7 @@ async def _bench_model(pool, policy: dict, model: str, cases: list[dict], book: 
         VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id''', PLATFORM_TENANT, region, policy['task_type'], model, comparison, suite_hash, len(cases))
     status, error = 'complete', None
     scores, costs = [], []
+    case_scores: list[tuple[list[dict], float]] = []  # engine router scoreboard only
     for case in cases:
         try:
             await controls.refuse_paid(paid=paid,
@@ -277,6 +278,7 @@ async def _bench_model(pool, policy: dict, model: str, cases: list[dict], book: 
             break
         scores.append(score)
         costs.append(result['cost'])
+        case_scores.append((messages, score))
     score = sum(scores)/len(scores) if scores and status == 'complete' else None
     cost = sum(costs)/len(costs) if costs and status == 'complete' else None
     await pool.execute('''UPDATE tank.bench_runs SET score=$2,cost_per_call=$3,status=$4,error=$5,finished_at=now()
@@ -286,6 +288,10 @@ async def _bench_model(pool, policy: dict, model: str, cases: list[dict], book: 
             VALUES($1,$2,1,$3,$4,$5,$6,now()) ON CONFLICT(task_type,model,rung) DO UPDATE SET
             bench_run_id=$3,bench_score=$4,bench_cost_per_call=$5,bench_n=$6,bench_at=now()''',
             policy['task_type'], model, run_id, score, cost, len(scores))
+        import router_scoreboard
+        if router_scoreboard.enabled():  # ENGINE ROUTER: off unless ENGINE_ROUTER_ENABLED=true
+            await router_scoreboard.record_bench_run(pool, platform_tenant=PLATFORM_TENANT, region=region,
+                task_type=policy['task_type'], model=model, score=score, cost_per_call=cost, case_scores=case_scores)
     return {'model': model, 'score': score, 'cost_per_call': cost, 'status': status}
 
 
