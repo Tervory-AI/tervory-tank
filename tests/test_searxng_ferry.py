@@ -30,7 +30,7 @@ def test_ferry_is_an_internal_service_and_searxng_waits_for_it() -> None:
     services = compose["services"]
     assert "tor" not in services
     ferry = services["Ferry"]
-    assert ferry["image"] == "ferry"
+    assert ferry["image"] == "ghcr.io/tervory-ai/tervory-tank/main-ferry:live"
     assert ferry["build"] == "./tor"
     assert ferry["networks"] == ["default"]
     assert "ports" not in ferry

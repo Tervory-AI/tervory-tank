@@ -65,6 +65,7 @@ services:
       - default
 
   hermes:
+    image: ghcr.io/tervory-ai/tervory-tank/za-hermes:live
     build:
       context: .
       dockerfile: hermes/Dockerfile
@@ -97,6 +98,7 @@ services:
   # Provider-token cost is zero; CPU, RAM and electricity are not free.
   local-model:
     profiles: [engine]
+    image: ghcr.io/tervory-ai/tervory-tank/za-local-model:live
     build: ./litellm/local-model
     platform: linux/amd64
     environment:
@@ -119,6 +121,7 @@ services:
   # DECISION reuse the pinned runtime, with a larger Apache-2.0 model for answers.
   local-model-large:
     profiles: [engine]
+    image: ghcr.io/tervory-ai/tervory-tank/za-local-model-large:live
     build: ./litellm/local-model
     platform: linux/amd64
     environment:
@@ -139,6 +142,7 @@ services:
       start_period: 60s
 
   litellm:
+    image: ghcr.io/tervory-ai/tervory-tank/za-litellm:live
     build: ./litellm
     restart: unless-stopped
     command: ["--config", "/app/config.za.yaml", "--port", "4000"]
@@ -187,6 +191,7 @@ services:
       - tervory-own-zenas-za
 
   tank:
+    image: ghcr.io/tervory-ai/tervory-tank/za-tank:live
     build:
       context: ./tank
       args:
@@ -301,6 +306,7 @@ services:
       traefik.http.services.product-za-tank.loadbalancer.server.port: "8000"
 
   r2-backup-za:
+    image: ghcr.io/tervory-ai/tervory-tank/za-r2-backup-za:live
     build:
       context: .
       dockerfile: jobs/train/Dockerfile.backup
@@ -342,6 +348,7 @@ services:
       - default
 
   agent-roles:
+    image: ghcr.io/tervory-ai/tervory-tank/za-agent-roles:live
     build:
       context: ./agents
       dockerfile: Dockerfile.roles

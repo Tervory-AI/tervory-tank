@@ -1,6 +1,12 @@
 # Deploy straight after a merge to main (founder, 27 Oct): the pull request already
 # passed CI, so the deploy no longer waits for the same checks to run again on main.
 # Deploy only the apps whose code changed.
+# Images (9 Nov, deploy_images.py): settle waits for a quiet main (a burst of merges becomes one
+# deploy of the latest commit; a run whose commit is no longer the tip cancels itself and the
+# newer run deploys both), plan lists the changed apps since each app's last good deploy, build
+# makes their images on GitHub runners and pushes them to GHCR tagged with the commit, and
+# deploy moves :live to them just before Coolify pulls and restarts. The deploy record (an
+# artifact) keeps every app's previous images: coolify-ops op=rollback goes back in one step.
 # The main app goes first; rooms deploy only if main finished. After main, the ZA chain (ZA stack,
 # then ZA rooms) runs beside Boston's rooms, because they build on different hosts. No manual clicks after a merge.
 # The Coolify token lives only in the repo secret COOLIFY_TOKEN and is never printed.
@@ -27,8 +33,114 @@ concurrency:
   queue: max
 
 jobs:
-  deploy:
+  settle:
     runs-on: ubuntu-latest
+    # Waits at most MAX_HOLD_S (60 min) for a quiet main, then deploys anyway.
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      # Cancel its own run when a newer merge is the tip of main (that run deploys both).
+      actions: write
+    outputs:
+      before: ${{ steps.before.outputs.before }}
+    env:
+      AFTER: ${{ github.sha }}
+      GITHUB_TOKEN: ${{ github.token }}
+      SETTLE_S: ${{ vars.DEPLOY_SETTLE_S || '1200' }}
+      MAX_HOLD_S: ${{ vars.DEPLOY_MAX_HOLD_S || '3600' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Find the previous deployed commit
+        id: before
+        run: |
+          # Compare with the previous push run that actually ran (success or failure), not only the
+          # last success: one app failing must not make every later merge redeploy every app (28 Oct).
+          # Cancelled runs (a superseded settle among them) are skipped, so their changes are still
+          # included. Apps whose last Coolify deployment failed are retried by deploy_changed.py.
+          prev=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&event=push&status=completed&per_page=20" \
+            | jq -r '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // empty')
+          if [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then
+            echo "before=$prev" >> "$GITHUB_OUTPUT"
+            echo "BEFORE=$prev" >> "$GITHUB_ENV"
+          fi
+      - name: Wait for a quiet main, or hand this run to the newer merge
+        run: python3 .github/scripts/deploy_images.py settle
+
+  plan:
+    needs: settle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Read the deploy record artifact of the last deploy.
+      actions: read
+    outputs:
+      images: ${{ steps.plan.outputs.images }}
+    env:
+      AFTER: ${{ github.sha }}
+      BEFORE: ${{ needs.settle.outputs.before }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - run: pip install PyYAML==6.0.3
+      - name: List the changed apps and their images
+        id: plan
+        run: python3 .github/scripts/deploy_images.py plan --out "$RUNNER_TEMP/deploy/plan.json"
+
+  build:
+    needs: plan
+    if: ${{ needs.plan.outputs.images != '' && needs.plan.outputs.images != '[]' }}
+    name: build ${{ matrix.compose }} ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # Push the images to ghcr.io/tervory-ai/tervory-tank (GITHUB_TOKEN, no other credential).
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.images) }}
+    env:
+      AFTER: ${{ github.sha }}
+      COMPOSE: ${{ matrix.compose }}
+      SERVICE: ${{ matrix.service }}
+      GITHUB_TOKEN: ${{ github.token }}
+      ACTOR: ${{ github.actor }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: pip install PyYAML==6.0.3
+      - name: Build and push the image, tagged with the commit
+        run: |
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker buildx create --use --driver docker-container --name tervory-ci
+          python3 .github/scripts/deploy_images.py build --compose "$COMPOSE" --service "$SERVICE" --sha "$AFTER"
+
+  deploy:
+    needs: [settle, plan, build]
+    # A failed image build stops only its own app (its images are checked before :live moves).
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      # Move :live and :previous on the images this run built.
+      packages: write
     # Worst case, a shared room change (tests/test_deploy_changed.py recomputes this from
     # the room folders in the repo): waits of main 30 min + ZA 45 min + 7 rooms x 15 min
     # + Radix 30 min + Tisan 30 min + 1 ZA room x 30 min = 270 min (16200 s); Coolify calls 52 x 30 s
@@ -43,6 +155,8 @@ jobs:
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
       ZA_OFFLINE: ${{ vars.ZA_OFFLINE || '' }}
       AFTER: ${{ github.sha }}
+      GITHUB_TOKEN: ${{ github.token }}
+      ACTOR: ${{ github.actor }}
       DEPLOY_BUDGET_S: "18600"
       # Existing Tank service credential, read-only call; missing/unreachable gate is reported and fails open.
       RADIX_DEPLOY_TANK_KEY: ${{ secrets.TANK_API_KEY }}
@@ -51,27 +165,37 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 50
-      - name: Find the previous deployed commit
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - run: pip install PyYAML==6.0.3
+      - name: Find the tip of main and this run's plan
+        env:
+          BEFORE: ${{ needs.settle.outputs.before }}
         run: |
-          # Compare with the previous run that actually ran (success or failure), not only the last
-          # success: one app failing must not make every later merge redeploy every app (28 Oct).
-          # Cancelled runs are skipped, so their changes are still included. Apps whose last
-          # Coolify deployment failed are retried by deploy_changed.py on their own.
-          prev=$(curl -sS -H "Authorization: Bearer ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&status=completed&per_page=20" \
-            | jq -r '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // empty')
-          if [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then echo "BEFORE=$prev" >> "$GITHUB_ENV"; fi
           # Tip of main now: an app whose last Coolify deploy finished on it is not restarted
           # again by a queued run (deploy_changed.py MAIN_HEAD). Unknown: deploy as before.
-          head=$(curl -sS -H "Authorization: Bearer ${{ github.token }}" \
+          head=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
             "https://api.github.com/repos/${{ github.repository }}/commits/main" | jq -r '.sha // empty')
           case "$head" in [0-9a-f][0-9a-f]*) [ ${#head} -eq 40 ] && echo "MAIN_HEAD=$head" >> "$GITHUB_ENV" ;; esac
+          # The same plan the build job used (same commits, same record: this run holds the deploy group).
+          python3 .github/scripts/deploy_images.py plan --out "$RUNNER_TEMP/deploy/plan.json"
+          echo "DEPLOY_PLAN=$RUNNER_TEMP/deploy/plan.json" >> "$GITHUB_ENV"
+          echo "DEPLOY_RECORD=$RUNNER_TEMP/deploy/deploy-record.json" >> "$GITHUB_ENV"
       - name: Deploy changed apps
         run: |
           case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be https"; exit 1 ;; esac
           test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
           python3 .github/scripts/deploy_changed.py
+      - name: Keep the deploy record (previous images of every app, for rollback)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: deploy-record
+          path: ${{ runner.temp }}/deploy/deploy-record.json
+          retention-days: 90
+          if-no-files-found: ignore
 
   live-check:
     needs: deploy

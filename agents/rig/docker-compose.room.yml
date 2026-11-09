@@ -4,6 +4,7 @@
 # receipt's founder_fills in this application, then deploy through Coolify.
 services:
   room:
+    image: ghcr.io/tervory-ai/tervory-tank/rig-room-room:live
     build:
       context: ..
       dockerfile: rig/Dockerfile
