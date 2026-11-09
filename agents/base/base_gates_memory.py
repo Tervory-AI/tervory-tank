@@ -366,6 +366,18 @@ async def run_with_memory(
         if skip_storage:
             raise RuntimeError('hermes unreachable')
         recalled = await memory.recall(tenant, task_key, kind=None, limit=32, user_id=user)
+        # Exact receipts and corrections are authoritative SQL records. Vector
+        # indexing may lag a successful write, and semantic top-k is not an
+        # exhaustive exact-key lookup. Retain recall for contextual memories.
+        stored = select_tenant_user_memories(
+            await memory.records(tenant, user_id=user), tenant_id=tenant, user_id=user
+        )
+        by_id = {row['id']: row for row in recalled}
+        for row in stored:
+            if (row.get('kind') in {'base.receipt', 'base.correction'}
+                    and str((row.get('meta') or {}).get('task_key', '')) == str(task_key)):
+                by_id[row['id']] = {**row, 'text': row.get('text', row.get('claim', ''))}
+        recalled = list(by_id.values())
     except (RuntimeError, TimeoutError, ConnectionError) as exc:
         if not storage_unavailable(exc):
             raise

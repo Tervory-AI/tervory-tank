@@ -199,9 +199,16 @@ async def test_sql_scope_before_vector_limit_and_restricted_role(base_entry,monk
 
 
 @pytest.mark.asyncio
-async def test_real_drive_batch_fresh_ids_repeat_and_changed_business_receipts(base_entry,monkeypatch):
+@pytest.mark.parametrize('index_ready', [True, False])
+async def test_real_drive_batch_fresh_ids_repeat_and_changed_business_receipts(base_entry,monkeypatch,index_ready):
     e=base_entry
     monkeypatch.setenv('BASE_BRAIN_URL','http://base-brain:8000')
+    if not index_ready:
+        # The authoritative SQL write succeeds while vector indexing awaits its
+        # retry. An exact business repeat must still avoid another paid call.
+        async def defer_index(*args, **kwargs):
+            return False
+        monkeypatch.setattr(e.stack.records, 'process_one', defer_index)
     measurements=[]
     ids=[]
     for label,count in [('first',1),('repeat',1),('changed',2)]:
