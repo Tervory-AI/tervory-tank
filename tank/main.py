@@ -1749,6 +1749,11 @@ async def _run_route(
         upstream: Any = "provider error" if holds_identifier else (data or r.text[:500])
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": upstream})
 
+    # ENGINE LEARNING: shadow coverage adds a candidate after the cache key and the answer
+    # exist, for client requests only (never evals, replays, judges or seats). Unset: unchanged.
+    if (model_override is None and "#" not in req.task_type and not c1_hit and priority != "urgent"
+            and cost_status == "set" and not holds_identifier):
+        policy = await __import__('engine_coverage').overlay(__import__("sys").modules[__name__], req, policy)
     # Graduation: shadow the candidate on a share of calls; it never affects this answer.
     # An identifier prompt is not copied to a second provider or into the transcript.
     if not c1_hit and priority != "urgent" and cost_status == "set" and not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
@@ -2105,7 +2110,8 @@ async def _shadow_work(req: RouteRequest, policy: dict[str, Any], messages: list
         log.warning("shadow %s skipped %s: a paid tool is not started from here", req.task_type, cand)
         return
     code = graduate.is_skill(cand)
-    budget_open = code or await _shadow_budget_open(req.task_type)
+    # ENGINE LEARNING: zero-price local shadows are unbudgeted only when coverage is on.
+    budget_open = code or await __import__('engine_coverage').unmetered(__import__('sys').modules[__name__], cand) or await _shadow_budget_open(req.task_type)
     if not cache and not budget_open:
         log.warning("shadow %s skipped %s: daily budget spent", req.task_type, cand)
         return

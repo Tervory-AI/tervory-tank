@@ -3233,6 +3233,9 @@ CREATE TABLE IF NOT EXISTS tank.engine_receipts (
     created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tenant_id,ledger_id)
 );
 ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
+-- ENGINE LEARNING (engine_rollback.py): a graduation whose live answers slipped.
+ALTER TABLE tank.engine_graduations ADD COLUMN IF NOT EXISTS rolled_back_at timestamptz;
+ALTER TABLE tank.engine_graduations ADD COLUMN IF NOT EXISTS rollback_reason text;
 
 -- Home is assigned at onboarding; changing it requires a separate data migration.
 CREATE TABLE IF NOT EXISTS tank.tenants (
