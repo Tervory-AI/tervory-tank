@@ -36,14 +36,14 @@ WORKSPACE_KEY = "placeholder-gate78-workspace"
 
 @pytest.fixture
 def radix_runtime(monkeypatch):
-    required = ["agents/radix/memory_api.py", "agents/radix/gates_memory.py",
-                "agents/radix/radix_brain.py", "agents/radix/readiness.py",
+    required = ["agents/radix/radix_memory_api.py", "agents/radix/radix_memory.py",
+                "agents/radix/radix_brain.py", "agents/radix/radix_readiness.py",
                 "agents/radix/task_runtime.py", "agents/radix/radix_brain_service.py"]
     missing = [name for name in required if not (ROOT / name).is_file()]
     assert not missing, "BLOCKED: integrate the authoritative Radix PR and fixed-core corridor: " + ", ".join(missing)
     monkeypatch.syspath_prepend(str(ROOT / "agents/radix"))
     # Load the shipped application, not a replacement route around its helpers.
-    for name in ("gold_sources", "gates_memory", "memory_api", "radix_brain", "task_runtime"):
+    for name in ("gold_sources", "radix_memory", "radix_memory_api", "radix_brain", "task_runtime"):
         spec = importlib.util.spec_from_file_location(name, ROOT / "agents/radix" / (name + ".py"))
         module = importlib.util.module_from_spec(spec)
         monkeypatch.setitem(sys.modules, name, module)

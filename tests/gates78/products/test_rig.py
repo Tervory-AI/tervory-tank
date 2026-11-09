@@ -249,7 +249,7 @@ async def test_no_foreign_content_or_secret_in_responses_receipts_or_logs(rig_wi
 def test_runtime_packaging_and_default_off_profiles(monkeypatch):
     require_runtime()
     monkeypatch.syspath_prepend(str(ROOT / 'agents/rig'))
-    from gates_memory import memory_enabled
+    from rig_memory import memory_enabled
     from rig_brain_client import brain_enabled
     monkeypatch.delenv('RIG_MEMORY_ENABLED', raising=False)
     monkeypatch.delenv('RIG_BRAIN_ENABLED', raising=False)
@@ -314,7 +314,7 @@ async def test_changed_owner_tenant_and_ineligible_action_never_reuses(rig_wire)
         assert answer['answered_from_memory'] is False
         assert answer['user_id'] == user and answer['tenant_id'] == tenant
         assert answer['task_id'] != first['task_id']
-    from gates_memory import is_cache_eligible
+    from rig_memory import is_cache_eligible
     assert not is_cache_eligible('rig.forge.submit')
     assert not is_cache_eligible('rig.payment')
     assert len(wire.provider_calls) == 6
@@ -503,7 +503,7 @@ async def test_typed_delegate_runs_real_sdk_once_and_retains_signed_scope(rig_wi
 
 @pytest.mark.asyncio
 async def test_application_gap_uses_tank_typed_delegate_and_real_sdk(rig_wire):
-    from actor_context import set_verified_actor, reset_verified_actor
+    from rig_actor_context import set_verified_actor, reset_verified_actor
     from chassis.tank import TankClient
     from rig_brain_client import brain_then_route
     wire = rig_wire
@@ -642,7 +642,7 @@ async def test_tank_private_dispatch_is_one_bounded_attempt(rig_wire, monkeypatc
 
 @pytest.mark.asyncio
 async def test_application_failed_worker_retry_never_falls_through(rig_wire):
-    from actor_context import set_verified_actor, reset_verified_actor
+    from rig_actor_context import set_verified_actor, reset_verified_actor
     from chassis.tank import TankClient
     from rig_brain_client import brain_then_route
     wire = rig_wire

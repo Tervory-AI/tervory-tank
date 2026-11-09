@@ -22,8 +22,8 @@ USER_B = 'placeholder-rig-peer'
 USER_C = 'placeholder-rig-other-tenant'
 PLACEHOLDER_WORKSPACE_KEY = 'placeholder-gate78-workspace-key'
 RUNTIME_FILES = (
-    'agents/rig/gates_memory.py', 'agents/rig/memory_api.py',
-    'agents/rig/actor_context.py', 'agents/rig/rig_brain_client.py',
+    'agents/rig/rig_memory.py', 'agents/rig/rig_memory_api.py',
+    'agents/rig/rig_actor_context.py', 'agents/rig/rig_brain_client.py',
     'agents/rig/rigbox/savings.py', 'tank/rig_savings.py',
     'tank/rig_brain_routing.py',
 )
