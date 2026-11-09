@@ -491,6 +491,9 @@ async def test_personal_planner_keeps_signed_owner_and_durable_receipt(base_entr
     replay = await httpx.ASGITransport(app=e.brain.app).handle_async_request(sent)
     assert replay.status_code == 401
     body = json.loads(sent.content)
+    assert body['evidence']
+    gateway_messages = json.loads(e.provider_calls[-1].content)['messages']
+    assert json.dumps(body['evidence']) in gateway_messages[-1]['content']
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=e.brain.app), base_url='http://base-brain') as client:
         for user, expected in ((USER_A, 200), (USER_B, 403)):
             raw = json.dumps({**body, 'user_id': user}, separators=(',', ':')).encode()

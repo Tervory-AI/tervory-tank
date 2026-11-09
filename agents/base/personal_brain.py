@@ -84,7 +84,8 @@ async def personal_task(body: Plan, request: Request):
     path = '/v1/agents/base/tasks'
     payload = dict(tenant_id=str(body.tenant_id), user_id=actor.user_id, run_id=str(body.task_id),
         messages=[{'role': 'user', 'content': 'Plan the unresolved Base business batch using its recorded evidence: '
-                   + json.dumps({'batch': body.batch, 'count': body.count, 'engine': body.engine})}])
+                   + json.dumps({'batch': body.batch, 'count': body.count, 'engine': body.engine,
+                                 'evidence': body.evidence})}])
     raw = json.dumps(payload, separators=(',', ':')).encode()
     headers = {'X-Tank-Key': key, 'X-Home-Region': body.home_region, 'Content-Type': 'application/json',
         'X-Tervory-User-Assertion': sign_assertion('base', SignedUser(str(body.tenant_id), actor.user_id, actor.role),
