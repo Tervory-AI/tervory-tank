@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -25,6 +26,16 @@ ROOT = Path(__file__).resolve().parents[3]
 USER_A = 'placeholder-workspace-user-a'
 USER_B = 'placeholder-workspace-user-b'
 SERVICE_KEY = 'placeholder-workspace-service-key'
+
+
+def fresh_workspace_module(monkeypatch):
+    """Reload the real adapter privately without changing registered classes."""
+    name = 'command_tools._gate78_workspace_' + uuid4().hex
+    spec = importlib.util.spec_from_file_location(name, workspace.__file__)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest_asyncio.fixture
@@ -178,11 +189,11 @@ async def workspace_entry(gate78_memory, monkeypatch):
         await client.aclose()
         # Recreate the serving application and adapter; SQL checkpoints and the
         # existing Hermes service survive, as they do across a Tank restart.
-        importlib.reload(workspace)
+        restarted = fresh_workspace_module(monkeypatch)
         app = FastAPI()
         app.add_middleware(TriggerSigninMiddleware)
         app.include_router(command.router)
-        app.include_router(workspace.build_router())
+        app.include_router(restarted.build_router())
         app.add_middleware(paid_steps.ApprovalMiddleware)
         monkeypatch.setattr(main, 'app', app)
         client = actual_client(transport=httpx.ASGITransport(app=app), base_url='http://placeholder-workspace')
