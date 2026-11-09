@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Set working paths
         run: |
-          echo "LIVE_CHECK_PLAYWRIGHT_PATH=$RUNNER_TEMP/signed-in-browser/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "LIVE_CHECK_PLAYWRIGHT_PATH=$GITHUB_WORKSPACE/tests/trigger_browser_tools/node_modules/playwright" >> "$GITHUB_ENV"
           echo "SIGNED_IN_OUTPUT=$RUNNER_TEMP/signed-in-results" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -52,14 +52,14 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: signed-in-playwright-${{ runner.os }}-1.64.1-chromium
-      - name: Install browser test packages
+      - name: Install browser test packages (committed lock, Playwright 1.64.1)
         run: |
-          npm install --prefix "$RUNNER_TEMP/signed-in-browser" --no-audit --no-fund playwright@1.64.1
+          npm ci --prefix tests/trigger_browser_tools --ignore-scripts --no-audit --no-fund
           browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
           if [ -n "$browser" ]; then
             echo "LIVE_CHECK_CHROMIUM=$browser" >> "$GITHUB_ENV"
           else
-            "$RUNNER_TEMP/signed-in-browser/node_modules/.bin/playwright" install --with-deps chromium
+            tests/trigger_browser_tools/node_modules/.bin/playwright install --with-deps chromium
           fi
       - name: Checker runs against saved fixtures (offline)
         run: python3 tests/test_signed_in_runner.py

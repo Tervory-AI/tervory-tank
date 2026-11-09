@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -95,4 +96,6 @@ def test_every_page_the_founder_named_is_checked() -> None:
                    "tiger", "skala", "autumbra", "radix", "tisan", "zenas", "opli", "market-lab", "savings"):
         assert needed in ids
     for page in config["pages"]:
-        assert page["url"].startswith("https://") and page["url"].split("/")[2].endswith("tervory.com")
+        url = urlsplit(page["url"])
+        assert url.scheme == "https"
+        assert url.hostname == "tervory.com" or (url.hostname or "").endswith(".tervory.com")
