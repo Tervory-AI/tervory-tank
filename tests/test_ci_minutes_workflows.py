@@ -69,6 +69,11 @@ def test_ci_keeps_job_names_and_no_main_push_trigger() -> None:
     assert set(jobs["ci-ok"]["needs"]) == set(jobs) - {"runner", "ci-ok"}
     assert "push" not in _triggers(_load(CI)) and "branches: [main]" not in text
     assert _load(CI)["permissions"] == {"contents": "read"}
+    canonical = jobs["gates78"]
+    proof = next(step for step in canonical["steps"] if step.get("name") == "Gate 7/8 foundation and every submitted product")
+    assert proof["env"]["POOL_SCHEMA_DATABASE_URL"] == proof["env"]["MEMORY_TEST_DATABASE_URL"]
+    assert proof["env"]["DATABASE_URL"] == proof["env"]["MEMORY_TEST_DATABASE_URL"]
+    assert "gates78" in jobs["ci-ok"]["needs"]
 
 
 def test_preflight_is_cheap_hosted_and_guarded() -> None:
