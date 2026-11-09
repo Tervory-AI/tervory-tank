@@ -222,6 +222,8 @@ def test_t51_product_fails_closed_without_shared_contract_and_writes_nothing(her
     import importlib.util
     from pathlib import Path
     legacy_path = Path(__file__).resolve().parents[1] / 'vendor/tervory-tank/agents/_chassis/chassis/memory.py'
+    if not legacy_path.exists():
+        legacy_path = Path(__file__).resolve().parents[1] / 'tests/fixtures/tisan_unintegrated_core/legacy_memory.py'
     spec = importlib.util.spec_from_file_location('tisan_legacy_memory', legacy_path)
     legacy = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(legacy)

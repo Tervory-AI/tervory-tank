@@ -417,10 +417,11 @@ async def test_signed_assertion_is_bound_to_request_tenant_user_and_time(monkeyp
 
 
 def test_tank_patch_signs_the_verified_actor_and_applies_to_tank_source(tmp_path, monkeypatch):
-    """Current-core proposal uses the shipped signer; obsolete patches stay unapplied."""
+    """The original proposal applies to its pinned pre-integration source."""
     import subprocess
     import os
-    core = Path(os.environ['TISAN_CHECK_CORE'])
+    historical = ROOT / 'tests/fixtures/tisan_unintegrated_core'
+    core = Path(os.environ.get('TISAN_CHECK_CORE') or historical)
     for name in ('tank/tisan_requests.py', 'tank/agent_tasks.py', 'tank/task_contract.py',
                  'agents/_chassis/chassis/tank.py', 'agents/_chassis/chassis/task_contract.py',
                  'tests/registry_frozen.golden'):
@@ -428,6 +429,11 @@ def test_tank_patch_signs_the_verified_actor_and_applies_to_tank_source(tmp_path
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes((core / name).read_bytes())
     patch = ROOT / 'tank-patches/gates78-current-core-ingress.patch'
+    if not patch.exists():
+        patch = historical / 'ingress.patch'
+    # TMPDIR lives inside the checkout. Give the copied historical tree its own
+    # repository so git apply cannot silently skip paths relative to the parent.
+    subprocess.run(['git', 'init', '--quiet', str(tmp_path)], check=True)
     subprocess.run(['git', 'apply', '--check', str(patch)], cwd=tmp_path, check=True)
     subprocess.run(['git', 'apply', str(patch)], cwd=tmp_path, check=True)
     text = (tmp_path / 'tank/tisan_requests.py').read_text()
@@ -500,10 +506,10 @@ def test_own_signed_control_fails_closed_until_shared_contract_exists(monkeypatc
 
 @pytest.mark.asyncio
 async def test_unintegrated_typed_client_refuses_tisan_without_tiger_authorization(monkeypatch):
-    """Current main is intentionally Tiger-only until Head reviews our adapter patch."""
+    """The pinned pre-integration client refuses Tisan before HTTP dispatch."""
     import os
     spec = importlib.util.spec_from_file_location('chassis.tisan_unreviewed_client',
-        Path(os.environ['TISAN_CHECK_CORE']) / 'agents/_chassis/chassis/tank.py')
+        Path(os.environ.get('TISAN_CHECK_CORE') or ROOT / 'tests/fixtures/tisan_unintegrated_core') / 'agents/_chassis/chassis/tank.py')
     baseline = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(baseline)
     from chassis.user_assertion import SignedUser
