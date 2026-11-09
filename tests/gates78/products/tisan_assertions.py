@@ -93,4 +93,3 @@ async def assert_fixture_spend(tisan, record_property):
     three = await tisan.counts()
     assert three == {'provider_calls': 2, 'cost': 2 * FIXTURE_COST, 'tokens': 2 * (FIXTURE_INPUT + FIXTURE_OUTPUT)}
     record_property('tisan_fixture_spend', json.dumps({'first': one, 'exact_repeat_increment': {'provider_calls': 0, 'cost': 0, 'tokens': 0}, 'changed_cumulative': three}))
-
