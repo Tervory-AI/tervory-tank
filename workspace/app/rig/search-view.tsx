@@ -4,6 +4,7 @@ import { fetchWithDeadline as fetch } from "../../lib/request";
 import { useEffect, useRef, useState } from "react";
 import { request } from "./request";
 import { type Part, type Pistol } from "./copy";
+import { ADMIN, askTopics } from "./overview-model";
 
 type SourceRef = { title: string; detail: string };
 type Item = { name: string; price: string };
@@ -36,7 +37,9 @@ async function call<T>(body: unknown): Promise<T> {
   }, (body as { op?: string }).op === "ask" ? 190000 : 35000);
 }
 
-export function SearchView({ query, onQuery, hasCatalogue }: { query: string; onQuery: (value: string) => void; hasCatalogue: boolean }) {
+const UNANSWERED = "Rig did not answer for this account. Reload the page to try again.";
+
+export function SearchView({ query, onQuery, hasCatalogue, unanswered = false }: { query: string; onQuery: (value: string) => void; hasCatalogue: boolean; unanswered?: boolean }) {
   const [text, setText] = useState("");
   const [pistols, setPistols] = useState<Pistol[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
@@ -151,7 +154,7 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
         setChosen("");
         setAdded([]);
         setFinal(false);
-        setLine("");
+        setLine(`Search looks through Rig's own catalogue records. Nothing in this catalogue matches "${trimmed}". Try a brand, a model or a part name.`);
         return;
       }
       applyHits(trimmed, hits, body.exact_match !== false, body.message);
@@ -245,7 +248,7 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
             Search
           </button>
         </form>
-        <p className="results-line" role="status" aria-live="polite">{hasCatalogue ? line : <>— <a href="/rig/admin">Import your catalogue file or connect an official feed.</a></>}</p>
+        <p className="results-line" role="status" aria-live="polite">{hasCatalogue ? line : unanswered ? UNANSWERED : <>— <a href="/rig/admin">Import your catalogue file or connect an official feed.</a></>}</p>
       </div>
 
       <div className="search-split">
@@ -317,9 +320,25 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
 
         <aside className="ask" aria-label="Ask Rig">
           <h2>Ask Rig</h2>
-          <p className="intro">Ask in plain words. Answers come only from Rig's catalogue.</p>
-          <div className="thread">
-            {(hasCatalogue ? thread : []).map((turn, index) =>
+          {hasCatalogue ? (
+            <p className="intro">Ask in plain words. Answers come only from this catalogue&apos;s products and approved fits. When the catalogue doesn&apos;t say, Rig answers &ldquo;I don&apos;t know&rdquo;.</p>
+          ) : unanswered ? (
+            <p className="intro">Ask Rig answers from this account&apos;s catalogue. {UNANSWERED}</p>
+          ) : (
+            <p className="intro">Ask Rig answers questions from this account&apos;s catalogue, so it needs one first. <a href={ADMIN}>Import your catalogue in Rig admin.</a></p>
+          )}
+          {hasCatalogue && !thread.length ? (
+            <div className="answer-topics">
+              <h3>Rig can answer</h3>
+              <ul>
+                {askTopics(centre?.name ?? null).map((topic) => (
+                  <li key={topic}>{topic}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {hasCatalogue && thread.length ? <div className="thread">
+            {thread.map((turn, index) =>
               turn.role === "you" ? (
                 <article key={index} className="you">
                   <b>You</b>
@@ -361,19 +380,21 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
                 </article>
               ),
             )}
-          </div>
-          <form className="composer" onSubmit={send}>
-            <input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder='Ask a follow-up'
-              aria-label="Ask Rig"
-              disabled={busy}
-            />
-            <button type="submit" className="line" disabled={busy}>
-              {busy ? "Sending…" : "Send"}
-            </button>
-          </form>
+          </div> : null}
+          {hasCatalogue ? (
+            <form className="composer" onSubmit={send}>
+              <input
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={thread.length ? "Ask a follow-up" : centre ? `Ask about ${centre.name}` : "Ask about a product or part"}
+                aria-label="Ask Rig"
+                disabled={busy}
+              />
+              <button type="submit" className="line" disabled={busy}>
+                {busy ? "Sending…" : "Send"}
+              </button>
+            </form>
+          ) : null}
         </aside>
       </div>
 

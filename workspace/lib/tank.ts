@@ -1238,7 +1238,18 @@ export function approveTisanGold(tenantId: string, userId: string, pageId: strin
   });
 }
 
-export type RigCatalogueCounts = { products: number; fits: number };
+/**
+ * One store's Rig room, as counts. `fits` is approved fits (what shoppers see). The other
+ * fields are null when an older room does not report them; the overview then hides them.
+ */
+export type RigCatalogueCounts = {
+  products: number;
+  fits: number;
+  active: number | null;
+  waiting: number | null;
+  feeds: number | null;
+  delivery: boolean | null;
+};
 
 function wholeCount(value: unknown): number | null {
   const count = typeof value === "number" ? value : Number(value);
@@ -1246,18 +1257,33 @@ function wholeCount(value: unknown): number | null {
   return count;
 }
 
+function optionalCount(value: unknown): number | null {
+  return value === undefined || value === null ? null : wholeCount(value);
+}
+
 /** Product and fit totals for this tenant, from the Rig room through Tank. Null when Rig does not answer. */
 export async function rigCatalogueCounts(tenantId: string): Promise<RigCatalogueCounts | null> {
   if (!tenantId) return null;
   try {
-    const row = await tank<{ products?: unknown; fits?: unknown }>(
+    const row = await tank<{
+      products?: unknown; fits?: unknown; approved_fits?: unknown; active?: unknown;
+      waiting_fits?: unknown; feeds?: unknown; delivery?: unknown;
+    }>(
       `/v1/rig/catalogues?tenant_id=${encodeURIComponent(tenantId)}`,
       { method: "GET" },
     );
     const products = wholeCount(row.products);
-    const fits = wholeCount(row.fits);
+    const fits = row.approved_fits === undefined ? wholeCount(row.fits) : wholeCount(row.approved_fits);
     if (products === null || fits === null) return null;
-    return { products, fits };
+    const active = optionalCount(row.active);
+    return {
+      products,
+      fits,
+      active: active !== null && active <= products ? active : null,
+      waiting: optionalCount(row.waiting_fits),
+      feeds: optionalCount(row.feeds),
+      delivery: typeof row.delivery === "boolean" ? row.delivery : null,
+    };
   } catch {
     return null;
   }

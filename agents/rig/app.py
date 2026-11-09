@@ -297,7 +297,11 @@ async def _catalogue_counts(request: Request) -> JSONResponse:
     activate_tenant(tenant_id)
     products = await service.store.products(tenant_id)
     fits = await service.store.fits(tenant_id)
-    return JSONResponse({"products": len(products), "fits": len(fits)})
+    feeds = await service.store.feeds_for(tenant_id)
+    retailer = await service.store.retailer(tenant_id)
+    from rigbox.catalogue_status import catalogue_status
+    # Counts and yes/no facts only: no feed address, email or webhook leaves the room.
+    return JSONResponse(catalogue_status(products, fits, feeds, retailer))
 
 
 async def _room_read(request: Request, kind: str) -> JSONResponse:

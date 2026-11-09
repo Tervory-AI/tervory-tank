@@ -139,7 +139,9 @@ def test_coolify_api_success_can_close_the_coolify_issue(monkeypatch) -> None:
     results = {item.thing: item for item in watchdog.coolify_results()}
     assert results["Coolify"].state == "ok"
     assert results["Coolify"].detail == "HTTP 200"
-    assert results["Coolify tervory-tank-za"].state == "down"
+    # running:unknown is a health-check gap (every container running, one has no check), not an outage.
+    assert results["Coolify tervory-tank-za"].state == "gap"
+    assert results["Coolify tervory-tank-za"].detail == watchdog.GAP_DETAIL
     assert results["Coolify tervory-tank"].state == "ok"
 
 

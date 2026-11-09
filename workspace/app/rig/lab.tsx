@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import {
   ACCOUNT_BOTTOM,
   ACCOUNT_NAV,
-  BUILT,
   CHANGES,
   PLAN,
   SKIN_STEPS,
@@ -17,6 +16,7 @@ import { Plugins } from "./plugins";
 import { SearchView } from "./search-view";
 import { SquadLinks } from "../squad-links";
 import type { PluginPanel } from "./vault-model";
+import { builtEmptyLine, builtRows, nextEmptyLine, nextStep, searchableLine, statusFrom, type RigStatus } from "./overview-model";
 type Decided = { id: string; name: string; fits: string; why: string; state: string; on: boolean };
 
 function Pill({ children, on = true }: { children: string; on?: boolean }) {
@@ -48,13 +48,13 @@ function CompactSearch({ onSearch }: { onSearch: (query: string) => void }) {
   );
 }
 
-export function CatalogueNumbers({ products, fits }: { products: number | null; fits: number | null }) {
+export function CatalogueNumbers({ products, fits, searchable = null }: { products: number | null; fits: number | null; searchable?: string | null }) {
   return (
     <section className="counts" aria-label="Counts">
       <article className="count">
         <b>{products ?? "—"}</b>
         <strong>Products</strong>
-        <p className="fine">In this account&apos;s catalogue.</p><p className="first-action"><a href="/rig/admin">Import your catalogue file or connect an official feed.</a></p>
+        <p className="fine">In this account&apos;s catalogue.{searchable ? ` ${searchable}` : ""}</p><p className="first-action"><a href="/rig/admin">Import your catalogue file or connect an official feed.</a></p>
       </article>
       <article className="count">
         <b>{fits ?? "—"}</b>
@@ -70,12 +70,17 @@ export function Lab({
   products,
   fits,
   plugins,
+  status: given,
 }: {
   accountName: string;
   products: number | null;
   fits: number | null;
   plugins: PluginPanel;
+  status?: RigStatus;
 }) {
+  const status = given ?? statusFrom(products, fits);
+  const built = builtRows(status);
+  const next = nextStep(status);
   const [tab, setTab] = useState<TabId>("search");
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -169,7 +174,7 @@ export function Lab({
       </aside>
 
       <div className={tab === "search" ? "body home" : "body"}>
-        {tab === "search" ? <SearchView query={query} onQuery={setQuery} hasCatalogue={products !== null && products > 0} /> : null}
+        {tab === "search" ? <SearchView query={query} onQuery={setQuery} hasCatalogue={products !== null && products > 0} unanswered={given !== undefined && products === null} /> : null}
 
         {tab === "overview" ? (
           <>
@@ -183,27 +188,43 @@ export function Lab({
                 Open live search
               </a>
             </header>
-            <CatalogueNumbers products={products} fits={fits} />
-            <section className="block">
-              <h2>What's built</h2>
-              <div className="sheet">
-                {!BUILT.length && <p>— <a href="https://tervory.com">Support</a></p>}
-                {BUILT.map((row) => (
-                  <div className="wide-row" key={row.title}>
-                    <div>
-                      <h3>{row.title}</h3>
-                      <p>{row.text}</p>
+            <CatalogueNumbers products={products} fits={fits} searchable={searchableLine(status)} />
+            <section className="block" aria-labelledby="rig-built">
+              <h2 id="rig-built">What&apos;s built</h2>
+              {built.length ? (
+                <div className="sheet">
+                  {built.map((row) => (
+                    <div className="wide-row" key={row.title}>
+                      <div>
+                        <h3>{row.title}</h3>
+                        <p>{row.text}</p>
+                      </div>
+                      <Pill>Done</Pill>
                     </div>
-                    <Pill>Done</Pill>
+                  ))}
+                </div>
+              ) : (
+                <p className="intro">{builtEmptyLine(status)}</p>
+              )}
+            </section>
+            <section className="block" aria-labelledby="rig-next">
+              <h2 id="rig-next">Next step</h2>
+              {next ? (
+                <div className="sheet">
+                  <div className="wide-row">
+                    <div>
+                      <h3>{next.title}</h3>
+                      <p>{next.text}</p>
+                    </div>
+                    <a className="line" href={next.href}>
+                      {next.link}
+                    </a>
                   </div>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <p className="intro">{nextEmptyLine(status)}</p>
+              )}
             </section>
-            <section className="block">
-              <h2>Next step</h2>
-            </section>
-            <footer className="foot">
-            </footer>
           </>
         ) : null}
 
@@ -216,7 +237,7 @@ export function Lab({
               </div>
               <CompactSearch onSearch={searchFrom} />
             </header>
-            <CatalogueNumbers products={products} fits={fits} />
+            <CatalogueNumbers products={products} fits={fits} searchable={searchableLine(status)} />
             {products !== null && products > 0 && fits !== null ? (
               <section className="block">
                 <h2>This account</h2>

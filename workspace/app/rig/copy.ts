@@ -44,7 +44,6 @@ export type WaitingFit = {
   why: string;
 };
 
-export const BUILT: { title: string; text: string }[] = [];
 export const PLAN: { code: string; title: string; text: string; state: string; on: boolean }[] = [];
 export const CHANGES: { id: string; title: string; when: string }[] = [];
 export const SKIN_STEPS = [
