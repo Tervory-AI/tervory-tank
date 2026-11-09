@@ -5,12 +5,6 @@
     "path": "tank/tisan_requests.py",
     "sha256": "e3b49ab847ad8a4abc7e9931f267bf739fd45b0e38cfb63103c8df794c41eec6"
   },
-  "tank/agent_tasks.py": {
-    "repository": "Tervory-AI/tervory-tank",
-    "commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
-    "path": "tank/agent_tasks.py",
-    "sha256": "3b3ed59f33d2e061e5f0d16604d2a99a96f5fa4520b9646824ab195e77211a96"
-  },
   "tank/task_contract.py": {
     "repository": "Tervory-AI/tervory-tank",
     "commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
@@ -46,5 +40,11 @@
     "commit": "6c3207008a5085be9648f3485e8bd6492dc9ef2f",
     "path": "vendor/tervory-tank/agents/_chassis/chassis/memory.py",
     "sha256": "021960c298cb1570d05b8d44842c7dcb2a8e73cf855c6821ca0aa0601c24e5a3"
+  },
+  "tank/agent_tasks.py.txt": {
+    "repository": "Tervory-AI/tervory-tank",
+    "commit": "ea9f0d0418951ae7215a165e9df1e590902002fd",
+    "path": "tank/agent_tasks.py",
+    "sha256": "3b3ed59f33d2e061e5f0d16604d2a99a96f5fa4520b9646824ab195e77211a96"
   }
 }

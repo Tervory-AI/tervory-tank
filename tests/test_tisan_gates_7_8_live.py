@@ -427,7 +427,11 @@ def test_tank_patch_signs_the_verified_actor_and_applies_to_tank_source(tmp_path
                  'tests/registry_frozen.golden'):
         dest = tmp_path / name
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes((core / name).read_bytes())
+        source = core / name
+        if name == 'tank/agent_tasks.py' and not source.exists():
+            # This historical input is only patched as text, never imported.
+            source = core / (name + '.txt')
+        dest.write_bytes(source.read_bytes())
     patch = ROOT / 'tank-patches/gates78-current-core-ingress.patch'
     if not patch.exists():
         patch = historical / 'ingress.patch'
