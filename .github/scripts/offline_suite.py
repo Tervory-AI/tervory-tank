@@ -10,8 +10,9 @@ Three pytest runs, because two test folders import sibling modules by bare
 name (test_alerts, test_review) and so cannot share one process with other
 folders that have files of the same name:
   1. everything else, 2. tests/tiger_g5, 3. tests/zenas_regulation_alerts.
-tests/ci_security runs in the security job (it needs the pinned gitleaks) and
-tests/test_live_check.py in live-check.yml (it needs Playwright for Node).
+tests/ci_security runs in the security job (it needs the pinned gitleaks),
+tests/test_live_check.py in live-check.yml and tests/test_signed_in_runner.py in
+signed-in-check.yml (both need Playwright for Node).
 The files in SIDE_WORKFLOW run in rig-forge.yml or tenant-rls.yml, not here.
 
 Known failures on main are listed with reasons in tests/quarantine.txt.
@@ -40,7 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ALONE = ["tests/tiger_g5", "tests/zenas_regulation_alerts"]
 # Run by their own workflows: security job (pinned gitleaks), live-check.yml (Node Playwright).
-ELSEWHERE = ["tests/ci_security", "tests/test_live_check.py",
+ELSEWHERE = ["tests/ci_security", "tests/test_live_check.py", "tests/test_signed_in_runner.py",
              "tests/gates78/products/test_market_lab.py"]  # required gates78 job, isolated researcher pins
 # Test files a side workflow already runs, by name, mapped to "workflow file: job". The main
 # suite leaves them out so they no longer run twice (3 Nov, founder). A file is listed only

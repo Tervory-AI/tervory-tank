@@ -28,6 +28,16 @@ def _room(path: Path) -> None:
         sys.path.insert(0, text)
 
 
+def _own_market_packages(monkeypatch) -> None:
+    """Skill runs in the same worker can leave another top-level feeds/engines/core in sys.modules
+    (market.series_fetch ships its own). Market Lab's app must import its own; restored after the test."""
+    room = str(ROOT / "agents" / "market_lab")
+    monkeypatch.syspath_prepend(room)
+    for name, module in list(sys.modules.items()):
+        if name.split(".", 1)[0] in {"feeds", "engines", "core"} and not str(getattr(module, "__file__", "") or "").startswith(room):
+            monkeypatch.delitem(sys.modules, name)
+
+
 def _load(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
@@ -339,6 +349,7 @@ class _GoldConn:
 async def test_market_lab_rejects_a_wrong_room_key(monkeypatch):
     _room(ROOT / "agents" / "_chassis")
     _room(ROOT / "agents" / "market_lab")
+    _own_market_packages(monkeypatch)
     lab = _load("market_lab_label_route", ROOT / "agents" / "market_lab" / "gold_sources.py")
     monkeypatch.setenv("TANK_REGION", "us-east")
     key = secrets.token_hex(24)

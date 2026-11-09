@@ -10,12 +10,15 @@ from pathlib import Path
 import re
 import sys
 
-ROOT = Path(__file__).resolve().parents[2]
-for path in (ROOT, ROOT / 'tank'):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-from tank import tervor_code as baseline
-from tank.tervor_registry import digest, identity, manifest
+TANK_ROOT = Path(__file__).resolve().parents[1]
+if str(TANK_ROOT) not in sys.path:
+    sys.path.insert(0, str(TANK_ROOT))
+if __package__ == 'tank.training_jobs':
+    from .. import tervor_code as baseline
+    from ..tervor_registry import digest, identity, manifest
+else:
+    import tervor_code as baseline
+    from tervor_registry import digest, identity, manifest
 import tervor_dataset
 from . import train
 

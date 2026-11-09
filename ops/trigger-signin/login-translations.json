@@ -1,0 +1,287 @@
+{
+  "ar": {
+    "common": {
+      "title": "تسجيل الدخول باستخدام Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "بالنقر فوق سماح، فإنك تسمح لـ {appName} و Tervory استخدام معلوماتك وفقاً لشروط الخدمة وسياسات الخصوصية الخاصة بكل منهما. يمكنك إلغاء هذا الوصول في أي وقت."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "تسجيل الدخول باستخدام Tervory"
+    },
+    "register": {
+      "description": "أنشئ حساب Tervory الخاص بك."
+    },
+    "signedin": {
+      "title": "مرحباً {user}!"
+    }
+  },
+  "de": {
+    "common": {
+      "title": "Anmelden mit Tervory"
+    },
+    "device": {
+      "request": {
+        "description": "Durch Klicken auf Zulassen erlauben Sie {appName} und Tervory, Ihre Informationen gemäß ihren jeweiligen Nutzungsbedingungen und Datenschutzrichtlinien zu verwenden. Sie können diesen Zugriff jederzeit widerrufen."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Mit Tervory anmelden"
+    },
+    "register": {
+      "description": "Erstellen Sie Ihr Tervory-Konto."
+    },
+    "signedin": {
+      "title": "Willkommen {user}!"
+    }
+  },
+  "en": {
+    "common": {
+      "title": "Login with Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "By clicking Allow, you allow {appName} and Tervory to use your information in accordance with their respective terms of service and privacy policies. You can revoke this access at any time."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Sign in with Tervory"
+    },
+    "register": {
+      "description": "Create your Tervory account."
+    },
+    "signedin": {
+      "title": "Welcome {user}!"
+    }
+  },
+  "es": {
+    "common": {
+      "title": "Iniciar sesión con Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "Al hacer clic en Permitir, autorizas a {appName} y a Tervory a usar tu información de acuerdo con sus respectivos términos de servicio y políticas de privacidad. Puedes revocar este acceso en cualquier momento."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Iniciar sesión con Tervory"
+    },
+    "register": {
+      "description": "Crea tu cuenta Tervory."
+    },
+    "signedin": {
+      "title": "¡Bienvenido {user}!"
+    }
+  },
+  "fr": {
+    "common": {
+      "title": "Connexion avec Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "En cliquant sur Autoriser, vous permettez à {appName} et à Tervory d'utiliser vos informations conformément à leurs conditions d'utilisation et politiques de confidentialité respectives. Vous pouvez révoquer cet accès à tout moment."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Se connecter avec Tervory"
+    },
+    "register": {
+      "description": "Créez votre compte Tervory."
+    },
+    "signedin": {
+      "title": "Bienvenue {user} !"
+    }
+  },
+  "hu": {
+    "common": {
+      "title": "Bejelentkezés a Tervory-lel"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "Az Engedélyezés gombra kattintva engedélyezed, hogy a(z) {appName} és a Tervory a saját felhasználási feltételeik és adatvédelmi irányelveik szerint használja az adataidat. Ezt a hozzáférést bármikor visszavonhatod."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Bejelentkezés Tervory-lel"
+    },
+    "register": {
+      "description": "Hozd létre a Tervory fiókodat."
+    },
+    "signedin": {
+      "title": "Üdvözlünk, {user}!"
+    }
+  },
+  "it": {
+    "common": {
+      "title": "Accedi con Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "Cliccando su Consenti, autorizzi {appName} e Tervory a utilizzare le tue informazioni in conformità con i rispettivi termini di servizio e politiche sulla privacy. Puoi revocare questo accesso in qualsiasi momento."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Accedi con Tervory"
+    },
+    "register": {
+      "description": "Crea il tuo account Tervory."
+    },
+    "signedin": {
+      "title": "Benvenuto {user}!"
+    }
+  },
+  "ja": {
+    "common": {
+      "title": "Tervoryでログイン"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "「許可」をクリックすることで、{appName}とTervoryがそれぞれの利用規約およびプライバシーポリシーに従ってあなたの情報を使用することを許可します。このアクセスはいつでも取り消すことができます。"
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Tervoryでサインイン"
+    },
+    "register": {
+      "description": "Tervoryアカウントを作成します。"
+    },
+    "signedin": {
+      "title": "ようこそ {user}さん！"
+    }
+  },
+  "nl": {
+    "common": {
+      "title": "Inloggen met Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "Door op Toestaan te klikken geeft u {appName} en Tervory toestemming om jouw informatie te gebruiken overeenkomstig hun respectieve servicevoorwaarden en privacybeleid. U kunt deze toegang op elk moment intrekken."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Aanmelden met Tervory"
+    },
+    "register": {
+      "description": "Maak jouw Tervory-account aan."
+    },
+    "signedin": {
+      "title": "Welkom {user}!"
+    }
+  },
+  "pl": {
+    "common": {
+      "title": "Zaloguj się za pomocą Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "Klikając Zezwól, pozwalasz tej aplikacji i Tervory na korzystanie z Twoich informacji zgodnie z ich odpowiednimi warunkami użytkowania i politykami prywatności. Możesz cofnąć ten dostęp w dowolnym momencie."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Zaloguj się przez Tervory"
+    },
+    "register": {
+      "description": "Utwórz konto Tervory."
+    },
+    "signedin": {
+      "title": "Witaj {user}!"
+    }
+  },
+  "pt": {
+    "common": {
+      "title": "Entrar com Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "Ao clicar em Permitir, você autoriza {appName} e Tervory a usar suas informações de acordo com seus respectivos termos de serviço e políticas de privacidade. Você pode revogar este acesso a qualquer momento."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Entrar com Tervory"
+    },
+    "register": {
+      "description": "Crie sua conta Tervory."
+    },
+    "signedin": {
+      "title": "Bem-vindo, {user}!"
+    }
+  },
+  "ru": {
+    "common": {
+      "title": "Войти с Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "Нажимая «Разрешить», вы разрешаете этому приложению и Tervory использовать вашу информацию в соответствии с их условиями использования и политиками конфиденциальности. Вы можете отозвать этот доступ в любое время."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Войти через Tervory"
+    },
+    "register": {
+      "description": "Создайте свой аккаунт Tervory."
+    },
+    "signedin": {
+      "title": "Добро пожаловать, {user}!"
+    }
+  },
+  "tr": {
+    "common": {
+      "title": "Tervory ile Giriş"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "İzin Ver'e tıklayarak, {appName} ve Tervory'in bilgilerinizi kendi hizmet şartları ve gizlilik politikalarına uygun olarak kullanmasına izin vermiş olursunuz. Bu erişimi istediğiniz zaman iptal edebilirsiniz."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Tervory ile Giriş"
+    },
+    "register": {
+      "description": "Tervory hesabınızı oluşturun."
+    },
+    "signedin": {
+      "title": "Hoş geldin {user}!"
+    }
+  },
+  "uk": {
+    "common": {
+      "title": "Вхід через Tervory"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "Натискаючи Дозволити, ви дозволяєте {appName} та Tervory використовувати вашу інформацію відповідно до їхніх умов надання послуг та політик конфіденційності. Ви можете скасувати цей доступ у будь-який час."
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "Увійти через Tervory"
+    },
+    "register": {
+      "description": "Створіть свій обліковий запис Tervory."
+    },
+    "signedin": {
+      "title": "Ласкаво просимо, {user}!"
+    }
+  },
+  "zh": {
+    "common": {
+      "title": "使用 Tervory 登录"
+    },
+    "device": {
+      "request": {
+        "disclaimer": "点击“允许”即表示您允许此应用程序和 Tervory 根据其各自的服务条款和隐私政策使用您的信息。您可以随时撤销此访问权限。"
+      }
+    },
+    "idp": {
+      "signInWithZitadel": "用 Tervory 登录"
+    },
+    "register": {
+      "description": "创建您的 Tervory 账户。"
+    },
+    "signedin": {
+      "title": "欢迎 {user}！"
+    }
+  }
+}

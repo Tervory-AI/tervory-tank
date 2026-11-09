@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from anyio import CapacityLimiter, to_thread
 
 SETTING = 'ENGINE_CODE_TOOL_LIMITS_ENABLED'
+CAPS_SETTING = 'ENGINE_CODE_OUTPUT_CAPS_ENABLED'
 LIMITER = CapacityLimiter(1)
 WORKERS: set[asyncio.Task] = set()
 LOCAL_SECONDS = 10
@@ -24,6 +25,10 @@ class PreparationError(HTTPException):
 
 def enabled():
     return os.environ.get(SETTING, '').strip() == 'true'
+
+
+def caps_enabled():
+    return os.environ.get(CAPS_SETTING, '').strip() == 'true'
 
 
 def serialize(rows):
@@ -66,7 +71,102 @@ def excerpt(encoding, tokens, keep):
     return first + '\n[local excerpt: middle omitted; request a narrower tool result]\n' + last
 
 
-def render(results, limit, encoding):
+def envelope_result(output):
+    try:
+        envelope = json.loads(output)
+    except (ValueError,RecursionError):
+        return None
+    if isinstance(envelope,dict) and isinstance(envelope.get('result'),dict):
+        return envelope['result']
+    return None
+
+
+def summary_text(result):
+    """Deterministic local summary per tool; no model. Unknown shapes keep diagnostics."""
+    body = envelope_result(result.output)
+    if body is None:
+        return diagnostic_text(result)
+    if result.name == 'run_command' and body.get('code') == 0 and isinstance(body.get('output'),str):
+        lines = body['output'].splitlines()
+        return (f'[local summary: command succeeded; {len(lines)} output lines; last lines follow]\n'
+                + '\n'.join(lines[-SUMMARY_LINES:]))
+    if result.name == 'list_files' and isinstance(body.get('files'),list):
+        names = [name for name in body['files'] if isinstance(name,str)]
+        folders = {}
+        for name in names:
+            folder = name.rsplit('/',1)[0] + '/' if '/' in name else './'
+            folders[folder] = folders.get(folder,0) + 1
+        return (f'[local summary: {len(names)} files in {len(folders)} folders]\n'
+                + '\n'.join(f'{folder} {count}' for folder,count in sorted(folders.items())))
+    if result.name == 'search' and isinstance(body.get('matches'),list):
+        grouped = {}
+        for match in body['matches']:
+            if isinstance(match,dict) and isinstance(match.get('file'),str):
+                grouped.setdefault(match['file'],[]).append(match)
+        rows = []
+        for name in sorted(grouped):
+            hits = grouped[name]
+            rows.append(f'{name}: {len(hits)} matches, lines ' + ','.join(str(hit.get('line')) for hit in hits[:SUMMARY_LINES]))
+            rows.extend(f'  {hit.get("line")}: {str(hit.get("text",""))[:200]}' for hit in hits[:3])
+        return f'[local summary: {sum(map(len,grouped.values()))} matches in {len(grouped)} files]\n' + '\n'.join(rows)
+    if result.name == 'git' and isinstance(body.get('output'),str) and not body['output'].startswith('diff '):
+        states = {}
+        for line in body['output'].splitlines():
+            states[line[:2].strip() or '?'] = states.get(line[:2].strip() or '?',0) + 1
+        return '[local summary: changed files by status] ' + ', '.join(f'{state} {count}' for state,count in sorted(states.items()))
+    return diagnostic_text(result)
+
+
+SUMMARY_LINES = 20
+TASK_TYPES = ('command.code.plan', 'command.code.fix', 'command.code.edit', 'command.code.explore', 'command.code.start')
+
+
+def task_type(body):
+    """Classify one code turn locally. The route task type stays command.code."""
+    from code_gate import command_error
+    if body.mode == 'plan':
+        return 'command.code.plan'
+    if any(result.name == 'run_command' and command_error(result.output) not in (None,'invalid-command-result')
+           for result in body.tool_results):
+        return 'command.code.fix'
+    if any(result.name == 'propose_edit' for result in body.tool_results):
+        return 'command.code.edit'
+    return 'command.code.explore' if body.tool_results else 'command.code.start'
+
+
+async def task_cap(tenant_id, kind):
+    """The task type's tenant/platform max_tokens_out, else command.code's. Never a model choice."""
+    from main import load_policy
+    try:
+        policy = await load_policy(kind,tenant_id)
+    except HTTPException as error:
+        if error.status_code != 404:
+            raise
+        policy = await load_policy('command.code',tenant_id)
+    limit = policy.get('max_tokens_out')
+    if type(limit) is not int or limit < 1:
+        raise HTTPException(422, 'This task needs a positive tool-output token limit.')
+    return limit
+
+
+async def offload(work):
+    """Run local CPU work on the shared single preparation slot, as context() does."""
+    owner = object()
+    await LIMITER.acquire_on_behalf_of(owner)
+    worker = asyncio.create_task(run_work(work,owner,LIMITER))
+    WORKERS.add(worker)
+    worker.add_done_callback(finished)
+    return await asyncio.shield(worker)
+
+
+async def run_work(work, owner, limiter):
+    try:
+        return await to_thread.run_sync(work)
+    finally:
+        limiter.release_on_behalf_of(owner)
+
+
+def render(results, limit, encoding, summarize=False):
     if type(limit) is not int or limit < 1:
         raise HTTPException(422, 'This task needs a positive tool-output token limit.')
     if any(BINARY_CONTROL.search(result.output) for result in results):
@@ -76,7 +176,7 @@ def render(results, limit, encoding):
     before = len(encoding.encode(original))
     if before <= limit:
         return original, {'tokens_before':before, 'tokens_after':before, 'limit':limit, 'summarized':False}
-    vectors = [encoding.encode(diagnostic_text(result)) for result in results]
+    vectors = [encoding.encode(summary_text(result) if summarize else diagnostic_text(result)) for result in results]
     keep = max(1, limit // max(1,len(rows)))
     while keep:
         shortened = serialize([{'name':row['name'], 'output':excerpt(encoding,tokens,keep)}
