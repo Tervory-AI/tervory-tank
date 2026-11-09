@@ -509,7 +509,13 @@ async def test_private_task_boundary_denials(radix_stack, enabled, monkeypatch, 
     actor = SignedUser(s.memory.tenant, USER_A, "member")
     if fault == "user": body["user_id"] = USER_B
     if fault == "tenant": body["tenant_id"] = s.memory.other_tenant
-    if fault == "other-room": path = path.replace("/radix/", "/base/")
+    if fault == "other-room":
+        # Exercise a registered, enabled foreign room, not a missing Base route.
+        # Base's own integrated task endpoint correctly rejects at authentication
+        # (401); its absence previously yielded the generic unavailable-room 403.
+        path = path.replace("/radix/", "/tiger/")
+        monkeypatch.setenv("TANK_KEY_TIGER", "placeholder-foreign-room-key")
+        monkeypatch.setenv("TIGER_BRAIN_ENABLED", "true")
     if fault == "off": monkeypatch.delenv("RADIX_BRAIN_ENABLED", raising=False)
     if fault == "squad":
         await s.pool.execute("DELETE FROM tank.tenant_squad WHERE tenant_id=$1", uuid.UUID(s.memory.tenant))
@@ -527,9 +533,20 @@ async def test_private_task_boundary_denials(radix_stack, enabled, monkeypatch, 
         raw = json.dumps(body).encode()
     before = await s.snapshot()
     response = await s.tank.post(path, headers=headers, content=raw)
-    expected = 409 if fault == "off" else 403 if fault in {"user", "region", "other-room", "squad"} else 401
+    expected = 409 if fault == "off" else 403 if fault in {"user", "region", "squad"} else 401
     assert response.status_code == expected, response.text
     assert await s.snapshot() == before and not s.provider_calls and not s.brain_requests
+    if fault == "other-room":
+        assert response.json() == {"detail": "Owning room key required."}
+        # Even the foreign service key cannot authorize a Radix user assertion
+        # for Tiger; audience verification must fail before any task or spend.
+        headers["X-Tank-Key"] = "placeholder-foreign-room-key"
+        headers[HEADER] = sign_assertion("radix", actor, "POST", path, raw,
+                                       key="placeholder-foreign-room-key")
+        response = await s.tank.post(path, headers=headers, content=raw)
+        assert response.status_code == 401, response.text
+        assert response.json() == {"detail": "Signed user required for memory"}
+        assert await s.snapshot() == before and not s.provider_calls and not s.brain_requests
 
 
 @pytest.mark.parametrize("fault", ["missing", "service-key", "wrong-key", "user", "tenant", "target", "expired", "run", "region", "off"])
