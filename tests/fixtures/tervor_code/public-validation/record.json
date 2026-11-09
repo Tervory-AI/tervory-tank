@@ -1,0 +1,10 @@
+{
+  "reference": "https://github.com/pypa/flit",
+  "revision": "eeaf9e783c87c331f1d73bb2f5553fc79016aae1",
+  "path": "flit_core/flit_core/common.py",
+  "licence": "BSD-3-Clause",
+  "function": "normalize_file_permissions",
+  "function_source": "def normalize_file_permissions(st_mode):\n    \"\"\"Normalize the permission bits in the st_mode field from stat to 644/755\n\n    Popular VCSs only track whether a file is executable or not. The exact\n    permissions can vary on systems with different umasks. Normalising\n    to 644 (non executable) or 755 (executable) makes builds more reproducible.\n    \"\"\"\n    # Set 644 permissions, leaving higher bits of st_mode unchanged\n    new_mode = (st_mode | 0o644) & ~0o133\n    if st_mode & 0o100:\n        new_mode |= 0o111  # Executable: 644 -> 755\n    return new_mode\n",
+  "raw_sha256": "0f7ddcd378b41e047f24889129d12f79b54784222ac7fa22ff29ec51a7fbabb2",
+  "licence_sha256": "35b4f1dec512e617077fd6980dbb43ef8c2887adc5d0185edb4c04da175dd816"
+}

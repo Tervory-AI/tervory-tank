@@ -48,8 +48,8 @@ Integration uses current-main `tervor_registry.digest`, `encoded` and `identity`
 with the existing platform tenant, `opli` product, row tags, held-out flags and
 bundle hashes. It passes validation and gold inputs into M7's exclusion guard.
 It does not persist fixtures as reviewed gold or forge model-card/DeepEval scores.
-M8's paid current-rung evaluation remains a separate gate. M9's coding agent
-support and a larger reviewed gold set are still required; this PR does not edit
+M8's paid current-rung evaluation remains a separate gate. The coding trainer/data path is now described in TERVOR-CODE-TRAINER.md; a larger
+reviewed corpus and gold set remain required. This baseline does not edit
 shared training, billing, serving or promotion gates. PRs #751/#752/#753/#756/
 #759/#760/#761 remain owned by their existing branches.
 
