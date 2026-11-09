@@ -4,6 +4,7 @@
 # No production DB login, model key, control-plane key or Docker socket.
 services:
   agent-ghost:
+    image: ghcr.io/tervory-ai/tervory-tank/ghost-agent-ghost:live
     build:
       context: ..
       dockerfile: ghost/Dockerfile
@@ -52,6 +53,7 @@ services:
       retries: 10
     expose: ["8000"]
   enforce-lifecycle:
+    image: ghcr.io/tervory-ai/tervory-tank/ghost-enforce-lifecycle:live
     build:
       context: ..
       dockerfile: ghost/Dockerfile
@@ -81,6 +83,7 @@ services:
       AUTUMBRA_COOLIFY_GITHUB_APP_UUID: ${AUTUMBRA_COOLIFY_GITHUB_APP_UUID:-}
     networks: [gw]
   ghost-browser:
+    image: ghcr.io/tervory-ai/tervory-tank/ghost-ghost-browser:live
     build:
       context: ..
       dockerfile: ghost/Dockerfile.browser
@@ -107,6 +110,7 @@ services:
   # Keeps the former ghost-brain boundary: gw for Tank, internal sandbox net.
   ghost-brain:
     profiles: [brain]
+    image: ghcr.io/tervory-ai/tervory-tank/ghost-ghost-brain:live
     build:
       context: ..
       dockerfile: ghost/Dockerfile
@@ -148,6 +152,7 @@ services:
     expose: ["8001"]
   ghost-sandbox:
     profiles: [brain]
+    image: ghcr.io/tervory-ai/tervory-tank/ghost-ghost-sandbox:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.sandbox

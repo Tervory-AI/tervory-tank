@@ -94,6 +94,9 @@ async def test_the_room_stores_a_founder_sign_off_and_refuses_a_reviewer_without
     card_id = await _card(ladder)
     monkeypatch.setattr(room, "_store", lambda: store)
     monkeypatch.setattr(room, "_ready", _ready(ladder))
+    # In-memory room: an earlier test in the same worker may leave its closed
+    # PostgreSQL pool on the shared app state, which the receipt layer would use.
+    monkeypatch.delattr(room.app.state, "pool", raising=False)
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=room.app),

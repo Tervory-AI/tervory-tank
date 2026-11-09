@@ -6,6 +6,12 @@ Coolify API, and queues a deploy. The main app goes first and must finish with
 success. The South Africa stack (tervory-tank-za) is next and must finish
 before any room is deployed, so a broken main or SA deploy never fans out.
 The token comes from COOLIFY_TOKEN and is never printed.
+
+Images (9 Nov): with DEPLOY_PLAN set (deploy-on-merge, after its build job), an app whose
+images this run built gets them promoted to :live just before its Coolify deploy, so Coolify
+only pulls and restarts; a failed deploy or health check puts :live back and redeploys the
+old images; DEPLOY_RECORD keeps the previous digests of every app for a one-step rollback
+(`deploy_changed.py rollback`, coolify-ops op=rollback). See deploy_images.py.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ import urllib.request
 import urllib.parse
 
 from backup_runtime_scope import verify_main_scope
+import deploy_images
 
 URL = os.environ["COOLIFY_URL"].rstrip("/")
 TOKEN = os.environ["COOLIFY_TOKEN"]
@@ -41,16 +48,21 @@ ZA_OFFLINE = os.environ.get("ZA_OFFLINE", "").strip().lower() == "true"
 # Empty: unknown, every wanted app deploys as before.
 MAIN_HEAD = os.environ.get("MAIN_HEAD", "").strip().lower()
 
-# Paths that rebuild the main stack (Tank, Workspace, LiteLLM, Hermes, SearXNG, site, shared compose).
-MAIN_PREFIXES = (
-    "tank/", "workspace/", "litellm/", "hermes/", "db/", "searxng/", "tiger/", "site/", "tor/",
-    "docker-compose.yml",
-    # Backup workers live in the main and ZA stacks (r2-backup, r2-backup-za).
-    "docker-compose.za.yml", "jobs/train/backup.py", "jobs/train/r2_archive.py",
-    "jobs/train/Dockerfile.backup",
-)
-# Shared room code: a change here redeploys every room.
-ALL_ROOMS_PREFIXES = ("agents/_chassis/", "agents/_template/")
+# MAIN_PREFIXES (paths that rebuild the main stack) and ALL_ROOMS_PREFIXES (shared room
+# code) live in deploy_images.py, which plans the image builds from the same rules.
+MAIN_PREFIXES = deploy_images.MAIN_PREFIXES
+ALL_ROOMS_PREFIXES = deploy_images.ALL_ROOMS_PREFIXES
+# The image step (DEPLOY_PLAN from deploy-on-merge). Unset: Coolify deploys as before.
+PLAN_PATH = os.environ.get("DEPLOY_PLAN", "")
+RECORD_PATH = os.environ.get("DEPLOY_RECORD", "")
+# After Coolify reports a deployment finished, how long the app may take to report healthy.
+HEALTH_WAIT_S = 300
+_plan: dict = {}
+_record: dict = {}
+_compose: dict[str, str] = {}
+_promoted: set[str] = set()
+_unverified_health: set[str] = set()
+_registry = None
 
 
 def radix_blocks(name: str) -> bool:
@@ -100,11 +112,13 @@ def radix_blocks(name: str) -> bool:
         return False
 
 
-def api(method: str, path: str) -> tuple[int, object]:
+def api(method: str, path: str, payload: dict | None = None) -> tuple[int, object]:
     if URL != "https://coolify.tervory.com":
         raise ValueError("COOLIFY_URL must match the fixed https Coolify base")
     req = urllib.request.Request(f"https://coolify.tervory.com/api/v1{path}", method=method,
-                                 headers={"Authorization": f"Bearer {TOKEN}", "Accept": "application/json"})
+                                 data=json.dumps(payload).encode() if payload is not None else None,
+                                 headers={"Authorization": f"Bearer {TOKEN}", "Accept": "application/json",
+                                          **({"Content-Type": "application/json"} if payload is not None else {})})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             body = r.read().decode() or "null"
@@ -125,6 +139,10 @@ def api(method: str, path: str) -> tuple[int, object]:
 
 
 def changed_paths() -> list[str]:
+    if _plan:
+        # Everything since the previous deploy run, plus each app's own changes since its
+        # last good deploy (deploy_images.plan), so a skipped or failed run loses nothing.
+        return list(_plan.get("paths", []))
     if not BEFORE or set(BEFORE) == {"0"}:
         rng = [f"{AFTER}~1", AFTER]
     else:
@@ -134,6 +152,8 @@ def changed_paths() -> list[str]:
 
 
 def wanted(paths: list[str]) -> tuple[bool, set[str], bool]:
+    # Same rule as deploy_images.wanted (tests/test_deploy_images.py keeps the two equal);
+    # kept self-contained here because other tests load this function on its own.
     main = any(p.startswith(MAIN_PREFIXES) for p in paths)
     rooms: set[str] = set()
     every_room = any(p.startswith(ALL_ROOMS_PREFIXES) for p in paths)
@@ -245,6 +265,20 @@ def last_failed(uuid: str) -> bool:
 
 def already_live(uuid: str, name: str) -> bool:
     """True when the app's latest Coolify deployment finished on MAIN_HEAD, so a deploy would only restart it."""
+    if PLAN_PATH:
+        # Coolify's Git SHA describes the Compose checkout, not the images it
+        # pulled. A newer main must never conceal an older :live image release.
+        compose = _compose.get(uuid, "")
+        entry = (_record.get("apps") or {}).get(deploy_images.compose_key(compose)) if compose else None
+        good = (entry or {}).get("last_good") or {}
+        images = good.get("images") or {}
+        if (not entry or entry.get("state") not in {"deployed", "restored", "rolled-back"}
+                or good != entry.get("live") or good.get("sha") != AFTER or not images):
+            return False
+        if any(registry().digest(f"{deploy_images.image_repo(compose, service)}:live") != digest
+               for service, digest in images.items()):
+            return False
+        return healthy(uuid, name, wait_s=0)
     if len(MAIN_HEAD) != 40:
         return False
     code, body = api("GET", f"/deployments/applications/{uuid}?take=1")
@@ -280,7 +314,189 @@ def deploy(uuid: str, name: str) -> bool:
     return True
 
 
+def _plan_specs(compose: str) -> list[deploy_images.BuildSpec]:
+    return [deploy_images.BuildSpec(compose=i["compose"], service=i["service"], context="", dockerfile="")
+            for i in _plan.get("images", []) if i["compose"] == compose]
+
+
+def registry():
+    global _registry
+    if _registry is None:
+        _registry = deploy_images.Registry()
+    return _registry
+
+
+def release(uuid: str, name: str) -> bool:
+    """Make this run's images the app's :live images, just before Coolify pulls them.
+
+    No plan, or no image built for this app in this run (a retry, an unchanged app):
+    nothing to promote, Coolify redeploys what it has. A missing or untaggable image stops
+    this app only: its current containers keep serving.
+    """
+    compose = _compose.get(uuid, "")
+    if not _plan or compose not in _plan.get("build", []):
+        return True
+    if not pin_source(uuid, name, AFTER):
+        return False
+    try:
+        entry = deploy_images.promote(compose, AFTER, registry(), _record, specs=_plan_specs)
+    except (deploy_images.MissingImage, RuntimeError) as exc:
+        print(f"::error title=image {name}::{exc}; not deployed, its current images keep serving")
+        return False
+    _promoted.add(uuid)
+    previous = (entry.get("previous") or {}).get("sha", "")[:8] or "none recorded"
+    print(f"::notice title=live image::{name} :live is {AFTER[:8]} (previous {previous})")
+    return True
+
+
+def pin_source(uuid: str, name: str, sha: str) -> bool:
+    """Coolify's deploy endpoint has no commit argument; pin only its source SHA.
+
+    PATCH /applications/{uuid} supports git_commit_sha. Read it back before
+    queueing anything; an older server or denied setting cannot silently deploy HEAD.
+    """
+    if not deploy_images.SHA.fullmatch(sha or ""):
+        print(f"::error title=source pin::{name} has no verified full release commit")
+        return False
+    code, _ = api("PATCH", f"/applications/{uuid}", {"git_commit_sha": sha})
+    if not 200 <= code < 300:
+        print(f"::error title=source pin::{name} release pin refused (HTTP {code})")
+        return False
+    code, body = api("GET", f"/applications/{uuid}")
+    if code != 200 or not isinstance(body, dict) or body.get("git_commit_sha") != sha:
+        print(f"::error title=source pin::{name} release pin could not be verified")
+        return False
+    return True
+
+
+def healthy(uuid: str, name: str, wait_s: int = HEALTH_WAIT_S) -> bool:
+    """After Coolify finished: the app must report running:healthy before it counts as deployed."""
+    _unverified_health.discard(uuid)
+    deadline = time.time() + wait_s
+    status = ""
+    while True:
+        code, body = api("GET", f"/applications/{uuid}")
+        status = (body.get("status") or "").lower() if code == 200 and isinstance(body, dict) else status
+        if status.startswith("running:healthy"):
+            return True
+        if status == "running:unknown":
+            _unverified_health.add(uuid)
+            print(f"::warning title=no health check::{name} has no health check Coolify can read; "
+                  "not verified as a healthy image release")
+            return False
+        if time.time() >= deadline:
+            print(f"::error title=health check failed::{name} is {status or 'unknown'} "
+                  f"{wait_s}s after its deployment finished")
+            return False
+        time.sleep(POLL_S)
+
+
+def undo(uuid: str, name: str) -> None:
+    """A failed deploy or health check: put :live back to the previous images and redeploy them."""
+    compose = _compose.get(uuid, "")
+    if uuid not in _promoted:
+        return
+    _promoted.discard(uuid)
+    previous = (_record.get("apps", {}).get(deploy_images.compose_key(compose)) or {}).get("previous") or {}
+    if not pin_source(uuid, name, previous.get("sha", "")):
+        return
+    try:
+        if not deploy_images.restore(compose, registry(), _record):
+            print(f"::error title=no previous image::{name} has no recorded previous image to go back to")
+            return
+    except RuntimeError as exc:
+        print(f"::error title=restore {name}::{exc}")
+        return
+    print(f"::error title=rolled back::{name} failed on {AFTER[:8]}; :live is back on the previous images "
+          "and an exact-source recovery is attempted")
+    if (deploy(uuid, name) and wait_for(uuid, name, MAIN_TIMEOUT_S if uuid == MAIN_APP else room_timeout(name))
+            and healthy(uuid, name)):
+        mark_healthy(uuid, "restored")
+        print(f"::notice title=previous images back::{name} runs its previous images again")
+
+
+def ship(uuid: str, name: str, timeout_s: int) -> bool:
+    """Promote this run's images (image mode), deploy, wait, check health; undo on a failure."""
+    _unverified_health.discard(uuid)
+    if not release(uuid, name):
+        return False
+    ok = deploy(uuid, name) and wait_for(uuid, name, timeout_s)
+    if ok and uuid in _promoted:
+        ok = healthy(uuid, name)
+        if ok:
+            mark_healthy(uuid)
+    if not ok and uuid in _unverified_health:
+        # Aggregate unknown may reflect ancillary containers without probes. It
+        # proves neither a failed app nor a healthy release: retain it for review.
+        _promoted.discard(uuid)
+        compose = _compose.get(uuid, "")
+        entry = (_record.get("apps") or {}).get(deploy_images.compose_key(compose)) if compose else None
+        if entry:
+            entry["state"], entry["at"] = "health_unverified", deploy_images._now_iso()
+        print(f"::warning title=health unverified::{name}: aggregate health unknown; "
+              "no outage inferred, no automatic rollback, release remains unverified")
+    elif not ok and uuid not in _timed_out:
+        undo(uuid, name)
+    elif not ok:
+        # Still building or starting in Coolify: it may finish, so :live stays on the new images.
+        _promoted.discard(uuid)
+    return ok
+
+
+def mark_healthy(uuid: str, state: str = "deployed") -> None:
+    compose = _compose.get(uuid, "")
+    entry = (_record.get("apps") or {}).get(deploy_images.compose_key(compose)) if compose else None
+    if entry and (entry.get("live") or {}).get("images"):
+        entry["last_good"] = entry["live"]
+        entry["state"], entry["at"] = state, deploy_images._now_iso()
+
+
+def load_plan() -> None:
+    global _plan, _record
+    _plan = json.loads(open(PLAN_PATH, encoding="utf-8").read()) if PLAN_PATH else {}
+    if RECORD_PATH and os.path.exists(RECORD_PATH):
+        _record = json.loads(open(RECORD_PATH, encoding="utf-8").read())
+    else:
+        _record = {}
+
+
+def save_record() -> None:
+    if not RECORD_PATH or not _record:
+        return
+    _record["updated"] = deploy_images._now_iso()
+    with open(RECORD_PATH, "w", encoding="utf-8") as stream:
+        json.dump(_record, stream, indent=2, sort_keys=True)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as stream:
+            stream.write("\n### Deploy record (rollback: coolify-ops op=rollback app=<uuid>)\n\n"
+                         "| app | live | previous | state |\n|---|---|---|---|\n")
+            for key, entry in sorted((_record.get("apps") or {}).items()):
+                live = (entry.get("live") or {}).get("sha", "")[:8]
+                prev = (entry.get("previous") or {}).get("sha", "")[:8]
+                stream.write(f"| {key} | {live} | {prev} | {entry.get('state', '')} |\n")
+
+
+def map_composes(apps: list[dict]) -> None:
+    _compose.clear()
+    for app in apps:
+        try:
+            if app.get("uuid"):
+                _compose[app["uuid"]] = deploy_images.compose_for_app(app)
+        except ValueError:
+            continue
+    _compose.setdefault(MAIN_APP, "docker-compose.yml")
+
+
 def main() -> int:
+    load_plan()
+    try:
+        return _main()
+    finally:
+        save_record()
+
+
+def _main() -> int:
     # GitHub stamps each log line when it arrives; unbuffered lines keep real times.
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
@@ -291,6 +507,7 @@ def main() -> int:
         print(f"::error title=coolify::could not list applications (HTTP {code})")
         return 1
     by_name = {a.get("name", ""): a.get("uuid") for a in apps}
+    map_composes(apps)
     room_apps = {n: u for n, u in by_name.items() if n.startswith("agent-") and n != "agent-template"}
     # A display-name edit must not silently stop deploying a room. Only the exact
     # standard room compose qualifies; Enforce and other auxiliary apps stay out.
@@ -335,7 +552,7 @@ def main() -> int:
             return 1
         if already_live(MAIN_APP, "main"):
             pass
-        elif not deploy(MAIN_APP, "main") or not wait_for(MAIN_APP, "main", MAIN_TIMEOUT_S):
+        elif not ship(MAIN_APP, "main", MAIN_TIMEOUT_S):
             print("::error title=stopped::main did not deploy; rooms were not touched")
             return 1
     boston = {n: u for n, u in targets.items() if not n.endswith("-za")}
@@ -353,7 +570,7 @@ def main() -> int:
                 pass
             elif za_uuid and already_live(za_uuid, SA_APP):
                 pass
-            elif not za_uuid or not deploy(za_uuid, SA_APP) or not wait_for(za_uuid, SA_APP, ZA_TIMEOUT_S):
+            elif not za_uuid or not ship(za_uuid, SA_APP, ZA_TIMEOUT_S):
                 # The ZA box failing (for example a power outage there) must not hold back
                 # Boston's rooms. ZA rooms wait until tervory-tank-za deploys again.
                 print("::error title=za not deployed::tervory-tank-za did not finish deploying in this run; "
@@ -384,7 +601,7 @@ def deploy_rooms(targets: dict[str, str]) -> bool:
                   f"{DEPLOY_BUDGET_S}s job budget; deploy it by hand (coolify-ops) or with the next change to its code")
             ok = False
             continue
-        ok = (deploy(uuid, name) and wait_for(uuid, name, wait)) and ok
+        ok = ship(uuid, name, wait) and ok
         if uuid in _timed_out:
             print(f"::error title=remaining rooms deferred::{name} may still be building; "
                   "no further rooms were queued on this host, to avoid overlapping builds")
@@ -392,5 +609,38 @@ def deploy_rooms(targets: dict[str, str]) -> bool:
     return ok
 
 
+def rollback_main() -> int:
+    """coolify-ops op=rollback: APP (uuid), optional ROLLBACK_TO (a commit), DEPLOY_RECORD."""
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+    uuid, to = os.environ.get("APP", ""), os.environ.get("ROLLBACK_TO", "")
+    load_plan()
+    try:
+        code, app = api("GET", f"/applications/{uuid}")
+        if code != 200 or not isinstance(app, dict):
+            print(f"::error title=rollback::could not read application {uuid} (HTTP {code})")
+            return 1
+        name = app.get("name") or uuid
+        compose = deploy_images.compose_for_app(app) if uuid != MAIN_APP else "docker-compose.yml"
+        target_sha = to or (((_record.get("apps") or {}).get(deploy_images.compose_key(compose)) or {})
+                            .get("previous") or {}).get("sha", "")
+        if not pin_source(uuid, name, target_sha):
+            return 1
+        entry = deploy_images.rollback(compose, registry(), _record, to)
+        _compose[uuid] = compose
+        print(f"::notice title=rollback::{name} :live is now {entry['live'].get('sha', '')[:8] or 'the previous images'}")
+        wait = MAIN_TIMEOUT_S if uuid == MAIN_APP else ZA_TIMEOUT_S if name == SA_APP else room_timeout(name)
+        if not (deploy(uuid, name) and wait_for(uuid, name, wait) and healthy(uuid, name)):
+            print(f"::error title=rollback deploy::{name} did not come back healthy on the rolled-back images")
+            return 1
+        mark_healthy(uuid, "rolled-back")
+        return 0
+    except (deploy_images.MissingImage, RuntimeError, ValueError) as exc:
+        print(f"::error title=rollback::{exc}")
+        return 1
+    finally:
+        save_record()
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(rollback_main() if sys.argv[1:] == ["rollback"] else main())

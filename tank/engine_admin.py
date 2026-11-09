@@ -42,7 +42,63 @@ def build_router(rt):
                 body.tenant_id, rt.box_region(), body.task_type, body.model, body.checkpoint)
         return {'state': 'candidate', 'model': body.model, 'checkpoint': body.checkpoint}
 
+    # BEGIN ENGINE LEARNING: each route answers exactly like main (404) until its setting is true.
+    # The setting is checked before identity and validation, so an unset setting
+    # answers every caller exactly as an unknown path does.
+    @router.get('/shadow-coverage', dependencies=[Depends(coverage_gate)])
+    async def shadow_coverage(tenant_id: uuid.UUID, actor: Actor = Depends(identity)):
+        require_founder(actor)
+        return await __import__('engine_coverage').listing(rt, tenant_id)
+
+    @router.post('/learn', dependencies=[Depends(replay_gate)])
+    async def learn(body: Replay, actor: Actor = Depends(identity)):
+        require_founder(actor)
+        return await replay(rt, body)
+    # END ENGINE LEARNING
+
     return router
+
+
+REPLAY_SETTING = 'ENGINE_LEARNING_REPLAY_ENABLED'
+
+
+def replay_enabled():
+    return __import__('os').environ.get(REPLAY_SETTING) == 'true'
+
+
+def coverage_gate():
+    if not __import__('engine_coverage').enabled():
+        raise HTTPException(404, 'Not Found')
+
+
+def replay_gate():
+    if not replay_enabled():
+        raise HTTPException(404, 'Not Found')
+
+
+class Replay(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    tenant_id: uuid.UUID
+    task_type: str = Field(min_length=1, max_length=200)
+    limit: int = Field(default=200, ge=1, le=200)
+
+
+async def replay(rt, body):
+    """Replay one tenant's accepted recorded traffic now, through the same proof as every request."""
+    import engine_ladder
+    import graduate
+    import paid_steps
+    req = rt.RouteRequest(tenant_id=body.tenant_id, task_type=body.task_type,
+                          messages=[rt.Message(role='user', content='engine learning replay')])
+    policy = await rt.load_policy(body.task_type, body.tenant_id)
+    if rt.is_build_only_model(policy['model']):
+        raise HTTPException(409, 'Build-only policies never enter the serving ladder')
+    run = paid_steps.Run(body.tenant_id, uuid.uuid4(), paid_steps.fingerprint(['engine-replay', body.model_dump(mode='json')]))
+    with paid_steps.run_scope(run):
+        selected = await engine_ladder.select(rt, req, policy)
+        result = await graduate.engine_tick(rt, req, selected, limit=body.limit)
+        after = await engine_ladder.select(rt, req, policy)
+    return {**result, 'serving_model': after['model'], 'serving_rung': engine_ladder.rung(after['model'])}
 
 
 async def engine_status(rt, tenant_id):
@@ -93,4 +149,8 @@ async def engine_status(rt, tenant_id):
         row['traces_url'] = engine_tracing.traces_url(tenant_id, name)
         row['cache_layers'] = cache_usage.get(name, __import__('cache_metrics').empty())
         result.append(row)
+    import engine_numbers
+    if engine_numbers.enabled():
+        numbers = await engine_numbers.collect(rt, tenant_id)
+        result = [engine_numbers.attach(row, numbers) for row in result]
     return {'tenant_id': str(tenant_id), 'region': rt.box_region(), 'local_status': engine_runtime.local_status(), 'tasks': result}
