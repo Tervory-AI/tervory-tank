@@ -41,13 +41,19 @@ export async function rigCall(tenantId: string, op: string, payload: Record<stri
   if (op === "ask") {
     const question = String(payload.question ?? "").trim().slice(0, 500);
     if (!question) return { answer: "I don't know", items: [], sources: [] };
-    const found = await rigProxy(SEARCH, tenantId, { method: "GET", query: { q: question, limit: "5" } });
-    const results = Array.isArray(found.results) ? (found.results as SearchHit[]) : [];
-    if (!results.length || found.exact_match === false) {
-      return { answer: "I don't know", items: [], sources: [] };
+    // The product the shopper chose on the page; otherwise the question's own best match.
+    let productId = String(payload.product_id ?? "");
+    if (!ID.test(productId)) {
+      const found = await rigProxy(SEARCH, tenantId, { method: "GET", query: { q: question, limit: "5" } });
+      const results = Array.isArray(found.results) ? (found.results as SearchHit[]) : [];
+      if (!results.length || found.exact_match === false) {
+        return { answer: "I don't know", items: [], sources: [] };
+      }
+      productId = String(results[0]?.id ?? "");
     }
-    const productId = String(results[0]?.id ?? "");
     if (!ID.test(productId)) return { answer: "I don't know", items: [], sources: [] };
+    // Tank's /v1/rig/ask forwards to the room, whose model call goes through Tank's
+    // router (task type rig.ask). No model is named here.
     const asked = await rigProxy(ASK, tenantId, { method: "POST", body: { product_id: productId, question } });
     const answer = String(asked.answer ?? "I don't know");
     const cites = Array.isArray(asked.cites) ? asked.cites.map(String).filter((id) => ID.test(id)) : [];
