@@ -1227,6 +1227,9 @@ def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[di
                     max_tokens: int, route_seat: str | None) -> tuple[str, str, str]:
     # Whole policy revision, pinned skill, system messages, matter and generation
     # limits participate. Even legacy platform/region scopes stay tenant-local.
+    if policy.get('_coverage'):
+        # ENGINE LEARNING: the coverage overlay never changes a cache key.
+        policy = {k: v for k, v in {**policy, **policy['_coverage']['stored']}.items() if k != '_coverage'}
     c1 = __import__('exact_cache')
     identity_policy = policy if c1.enabled() else {k: v for k, v in policy.items() if k != 'cache_ttl_s'}
     context = [identity_policy, req.skill, req.case_ref, route_seat, max_tokens, box_region()]
@@ -1333,6 +1336,8 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
         original = await __import__('engine_ladder').select(engine_rt, req, original, caller)
         if original.get('_engine'):
             original['_engine']['memory'] = recalled
+        # ENGINE LEARNING: shadow coverage for client requests; unset returns the policy unchanged.
+        original = await __import__('engine_coverage').overlay(engine_rt, req, original)
     policy = original
     attempted = set()
     while True:
@@ -1749,11 +1754,6 @@ async def _run_route(
         upstream: Any = "provider error" if holds_identifier else (data or r.text[:500])
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": upstream})
 
-    # ENGINE LEARNING: shadow coverage adds a candidate after the cache key and the answer
-    # exist, for client requests only (never evals, replays, judges or seats). Unset: unchanged.
-    if (model_override is None and "#" not in req.task_type and not c1_hit and priority != "urgent"
-            and cost_status == "set" and not holds_identifier):
-        policy = await __import__('engine_coverage').overlay(__import__("sys").modules[__name__], req, policy)
     # Graduation: shadow the candidate on a share of calls; it never affects this answer.
     # An identifier prompt is not copied to a second provider or into the transcript.
     if not c1_hit and priority != "urgent" and cost_status == "set" and not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():

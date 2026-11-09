@@ -117,7 +117,8 @@ async def overlay(rt, req, policy: dict[str, Any]) -> dict[str, Any]:
         rate = float(policy.get('shadow_rate') or 0) or PAID_RATE
     else:
         rate = 1.0  # Local and code shadows cost no provider spend and are not budgeted.
-    return {**policy, 'candidate_model': name, 'shadow_rate': rate, '_coverage': choice}
+    stored = {'candidate_model': policy.get('candidate_model'), 'shadow_rate': policy.get('shadow_rate')}
+    return {**policy, 'candidate_model': name, 'shadow_rate': rate, '_coverage': {**choice, 'stored': stored}}
 
 
 async def unmetered(rt, candidate: str | None) -> bool:

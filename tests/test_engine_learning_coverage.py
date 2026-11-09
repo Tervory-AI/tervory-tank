@@ -87,6 +87,9 @@ async def test_paid_shadow_stays_in_budget_and_local_shadow_is_unlimited(boundar
         await settle(b)
     assert await shadows(b, tenant) == []
     monkeypatch.setenv('ENGINE_SHADOW_COVERAGE_ENABLED', 'true')
+    # Switching coverage on never changes a cache key: an answer cached while off still hits.
+    again = await world.route(b, tenant, f'Classify: unset {NOT_TRUE[-1]!r} was charged twice.')
+    assert again['rung'] == 4 and again['cost_usd'] == 0
     paid = await world.route(b, tenant, 'Classify: budget closed, charged twice.')
     await settle(b)
     assert paid['model'] == world.PAID and await shadows(b, tenant) == []
