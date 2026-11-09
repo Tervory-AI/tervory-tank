@@ -3901,6 +3901,35 @@ END
 $$;
 -- END engine_ledger
 
+-- GATE BEFORE (finish), code_caps.py: a tenant's own cap per code task. No row keeps the
+-- platform caps (ENGINE_CODE_BUDGET_TOKENS / ENGINE_CODE_BUDGET_USD), which stay the ceiling.
+-- Tenant-keyed like every tank table, so the tenant RLS rollout covers it.
+CREATE TABLE IF NOT EXISTS tank.code_task_caps (
+    tenant_id uuid PRIMARY KEY,
+    max_tokens bigint CHECK (max_tokens IS NULL OR max_tokens > 0),
+    max_usd numeric(18,6) CHECK (max_usd IS NULL OR max_usd > 0),
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CHECK (max_tokens IS NOT NULL OR max_usd IS NOT NULL)
+);
+-- GATE BEFORE (finish), code_fix_memory.py: an error a later change fixed, per tenant.
+CREATE TABLE IF NOT EXISTS tank.code_fix_memory (
+    tenant_id uuid NOT NULL,
+    signature text NOT NULL CHECK (signature ~ '^[a-f0-9]{64}$'),
+    command text NOT NULL CHECK (length(command) BETWEEN 1 AND 8000),
+    diffs text[] NOT NULL CHECK (cardinality(diffs) BETWEEN 1 AND 3),
+    files text[] NOT NULL CHECK (cardinality(files) BETWEEN 1 AND 2),
+    status text NOT NULL DEFAULT 'good' CHECK (status IN ('good','bad')),
+    bad_reason text CHECK (bad_reason IS NULL OR bad_reason IN ('did_not_fix','did_not_apply')),
+    hits integer NOT NULL DEFAULT 0,
+    misses integer NOT NULL DEFAULT 0,
+    created_by text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, signature)
+);
+CREATE INDEX IF NOT EXISTS code_fix_memory_recent ON tank.code_fix_memory(tenant_id, updated_at DESC);
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (

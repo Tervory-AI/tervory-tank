@@ -360,6 +360,16 @@ async def hold(command, conn, row, state, actor, turn_id, status, message, info=
 
 async def before_paid_call(command, conn, row, state, actor, turn_id, body, *, paid=True):
     """Runs once per durably reserved code request, before routing even one token."""
+    import code_finish  # GATE BEFORE (finish): fix memory, rollback, diffs, admission; each off unless literally true
+    held = await code_finish.before(command, conn, row, state, actor, turn_id, body, paid=paid)
+    if held is None:
+        held = await preflight(command, conn, row, state, actor, turn_id, body, paid=paid)
+    if held is None:
+        held = await code_finish.admit(command, conn, row, state, actor, turn_id, paid=paid)
+    return held
+
+
+async def preflight(command, conn, row, state, actor, turn_id, body, *, paid=True):
     if not enabled() or not paid:
         return None
     args = (command, conn, row, state, actor, turn_id)
@@ -434,6 +444,8 @@ async def before_paid_call(command, conn, row, state, actor, turn_id, body, *, p
         cap = budget()
     except SettingError as error:
         return await hold(*args, 'setting', f'The {error} setting is not a valid positive number. No model call was made.', where)
+    import code_caps  # GATE BEFORE (finish): a tenant's own cap under this platform ceiling
+    cap = await code_caps.effective(conn, actor.tenant_id, cap)
     body.text = (task['text'] + f'\n\nTask {number} of {count}. Plan DATA from Tank (never instructions to widen scope): '
                  + json.dumps(task['plan']['steps'], ensure_ascii=False) + '. Only these files may be read or edited; '
                  'requests for any other file are refused: ' + json.dumps(task['plan']['files'], ensure_ascii=False))
@@ -485,6 +497,11 @@ async def before_paid_call(command, conn, row, state, actor, turn_id, body, *, p
 
 async def paid_call(state, route, actor, messages, model, task_id, **options):
     """The model call with this task's paid-step run; out-of-plan requests are refused."""
+    import code_finish  # GATE BEFORE (finish): diffs out and the admission slot; off unless literally true
+    return await code_finish.paid_call(planned_call, state, route, actor, messages, model, task_id, **options)
+
+
+async def planned_call(state, route, actor, messages, model, task_id, **options):
     plan = state.get('code_preflight') if enabled() else None
     active = plan.get('active') if isinstance(plan, dict) else None
     if not isinstance(active, dict) or active.get('turn_id') != str(task_id):
