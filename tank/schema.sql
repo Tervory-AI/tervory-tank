@@ -3749,6 +3749,57 @@ CREATE SCHEMA IF NOT EXISTS agent_ghost;
 -- Counterfactual tokens reuse the shared comparison columns, never billed usage.
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS autumbra_reference_hash text;
 -- END autumbra
+-- BEGIN engine_router
+-- Per-request router scoreboard (tank/router_scoreboard.py). difficulty -1 is the whole
+-- task type; 0..4 are fifths of RouteLLM's strong-win-rate. Written only while
+-- ENGINE_ROUTER_ENABLED=true; read only by the router, always by tenant_id.
+CREATE TABLE IF NOT EXISTS tank.router_scoreboard (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    model text NOT NULL,
+    difficulty smallint NOT NULL DEFAULT -1 CHECK (difficulty BETWEEN -1 AND 4),
+    gold_agreement numeric, gold_n integer NOT NULL DEFAULT 0,
+    bench_score numeric, bench_n integer NOT NULL DEFAULT 0, bench_cost_usd numeric, bench_at timestamptz,
+    shadow_agreement numeric, shadow_n integer NOT NULL DEFAULT 0,
+    deepeval_score numeric, deepeval_n integer NOT NULL DEFAULT 0,
+    quality numeric, quality_n integer NOT NULL DEFAULT 0,
+    p50_ms integer, p95_ms integer, error_rate numeric, calls integer NOT NULL DEFAULT 0,
+    price_usd numeric,
+    available boolean NOT NULL DEFAULT false,
+    cooldown_until timestamptz,
+    refreshed_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, region, task_type, model, difficulty)
+);
+CREATE TABLE IF NOT EXISTS tank.router_decisions (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    ledger_id uuid NOT NULL,
+    mode text NOT NULL CHECK (mode IN ('shadow','served','fallback')),
+    ladder_model text NOT NULL,
+    chosen_model text,
+    served_model text NOT NULL,
+    difficulty double precision,
+    bucket smallint,
+    decision_ms double precision NOT NULL CHECK (decision_ms >= 0),
+    reason text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, ledger_id)
+);
+CREATE INDEX IF NOT EXISTS router_decisions_task ON tank.router_decisions (tenant_id, region, task_type, created_at DESC);
+CREATE TABLE IF NOT EXISTS tank.router_promotions (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    proven boolean NOT NULL DEFAULT false,
+    decisions integer NOT NULL DEFAULT 0,
+    compared integer NOT NULL DEFAULT 0,
+    agreement numeric,
+    checked_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, region, task_type)
+);
+-- END engine_router
 
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
