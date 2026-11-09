@@ -31,7 +31,7 @@ import urllib.parse
 
 from backup_runtime_scope import verify_main_scope
 import deploy_images
-from deploy_images import ALL_ROOMS_PREFIXES, MAIN_PREFIXES, wanted as _wanted
+from deploy_images import wanted as _wanted
 
 URL = os.environ["COOLIFY_URL"].rstrip("/")
 TOKEN = os.environ["COOLIFY_TOKEN"]
@@ -51,6 +51,8 @@ MAIN_HEAD = os.environ.get("MAIN_HEAD", "").strip().lower()
 
 # MAIN_PREFIXES (paths that rebuild the main stack) and ALL_ROOMS_PREFIXES (shared room
 # code) live in deploy_images.py, which plans the image builds from the same rules.
+MAIN_PREFIXES = deploy_images.MAIN_PREFIXES
+ALL_ROOMS_PREFIXES = deploy_images.ALL_ROOMS_PREFIXES
 # The image step (DEPLOY_PLAN from deploy-on-merge). Unset: Coolify deploys as before.
 PLAN_PATH = os.environ.get("DEPLOY_PLAN", "")
 RECORD_PATH = os.environ.get("DEPLOY_RECORD", "")
