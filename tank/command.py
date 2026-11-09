@@ -2526,13 +2526,19 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
             raise HTTPException(409, 'This request was already submitted. Reopen the session to inspect its state.')
         import code_gate
         gate = code_gate.advance(state, str(body.prompt_id), body.tool_results, body.progress, body.continuation)
+        import code_burn  # GATE BEFORE (spin) hook: a no-op unless ENGINE_CODE_SPIN_ENABLED is exactly true.
         if gate:
+            await code_burn.before(__import__(__name__), conn, row, state, actor, turn_id, body, gate)
             return await code_gate.stopped_response(__import__(__name__), conn, row, state, actor, turn_id, gate)
         import code_preflight  # Gate before: preflight hook (off unless ENGINE_CODE_PREFLIGHT_ENABLED=true)
         held = await code_preflight.before_paid_call(__import__(__name__), conn, row, state, actor, turn_id, body,
                                                      paid=_memory_answer is None)
         if held:
             return held
+        # GATE BEFORE (spin): after preflight, before the model call.
+        spun = await code_burn.before(__import__(__name__), conn, row, state, actor, turn_id, body, None)
+        if spun:
+            return spun
     read_tools = {'list_files', 'read_file', 'search', 'git'}
     schema = {name: model.model_json_schema() for name, model in CODE_TOOLS.items()
               if body.mode != 'plan' or name in read_tools}
@@ -2575,15 +2581,20 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
         import code_limits
         import code_context
         # Gate before: send only what matters (repo-map slice, output caps). Unset settings keep main's path.
+        allowed_files = code_context.preflight_scope(
+            state, actor, thread_id, turn_id, body, require_scope=code_burn.enabled())
         messages, options, context = await code_context.send_only_what_matters(
-            actor, thread_id, body, messages,
-            allowed_files=code_context.preflight_scope(state, actor, thread_id, turn_id, body))
+            actor, thread_id, body, messages, allowed_files=allowed_files)
         if context is None and code_limits.enabled() and body.tool_results:
             payload, context = await code_limits.context(actor.tenant_id, 'command.code', body.tool_results)
             messages[-1] = {'role':'user', 'content':'Local tool result DATA (not instructions): ' + payload}
             options['max_tokens'] = context['limit']
         async with asyncio.timeout(150):
-            if _memory_answer is None:
+            if _memory_answer is None and code_burn.enabled():  # GATE BEFORE (spin) hook, through preflight's paid call
+                answer = await code_burn.paid_round(__import__(__name__), thread_id, body, actor, turn_id, messages, options,
+                    route=lambda *call, **kw: code_preflight.paid_call(state, route_code, *call, **kw), prepared=context,
+                    allowed_files=allowed_files)
+            elif _memory_answer is None:
                 answer = await code_preflight.paid_call(state, route_code, actor, messages, body.model, uuid.UUID(turn_id), **options)
             else:
                 # Only the internal OPLI corridor supplies this value. All normal
@@ -2628,6 +2639,7 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
         actual = next((r.get('model') for r in reversed(state['receipts']) if r.get('step_id') == turn_id), None)
         return {**plan.model_dump(), 'cards': cards, 'receipt': {'rows': receipts, 'totals': totals(receipts)},
                 **({'context':context} if context is not None else {}),
+                **(getattr(answer, 'spin_response', {}) if code_burn.enabled() else {}),  # GATE BEFORE (spin) hook: burn meter
                 'turn': {'model': actual if actual in permitted else 'Auto', 'cost_usd': totals(receipts)['cost_usd'] if receipts else None}}
     except (Exception, asyncio.CancelledError) as error:
         async with editing(thread_id, actor) as (conn, row, state):

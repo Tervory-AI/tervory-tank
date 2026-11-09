@@ -181,6 +181,10 @@ async def zenas(gate78_memory, monkeypatch, request):
     # Runtime absence is an explicit dependency failure, not a skip or a private
     # runtime/core overlay. Head integrates runtime separately before acceptance.
     room = require_runtime()
+    # Every app-state resource below belongs to this disposable fixture. Restore
+    # the original bindings so later room tests cannot use a closed pool/client.
+    from starlette.datastructures import State
+    monkeypatch.setattr(room.app, 'state', State(dict(room.app.state._state)))
     region = getattr(request, "param", "us-east")
     stack = await gate78_memory("zenas")
     pool = stack.records.pool

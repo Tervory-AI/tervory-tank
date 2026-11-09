@@ -23,6 +23,7 @@ from command import Actor
 import test_access1 as access_fixtures
 from test_access1 import make_connection, MemoryDB
 from test_agent1_isolation import browser, runner
+from brain import browser_gateway
 from test_access1_feeds import MemoryStore, DomainLimiter, run_check
 
 app = access_fixtures.app
@@ -382,7 +383,6 @@ async def test_dismiss_closes_the_owning_browser_handle_and_status_detects_resta
 @pytest.mark.asyncio
 @pytest.mark.parametrize("room", ["base", "tiger"])
 async def test_sealed_browser_resolves_only_its_own_gateway_and_render_never_forwards_key(monkeypatch, room):
-    from brain import browser_gateway
     room_key = uuid.uuid4().hex
     tenant, task = str(uuid.uuid4()), str(uuid.uuid4())
     monkeypatch.setenv("TANK_KEY", room_key)

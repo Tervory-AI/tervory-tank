@@ -20,6 +20,7 @@
 
 services:
   agent-radix:
+    image: ghcr.io/tervory-ai/tervory-tank/radix-agent-radix:live
     build:
       context: ..
       dockerfile: radix/Dockerfile
@@ -62,6 +63,7 @@ services:
       - "8000"
 
   egress-proxy:
+    image: ghcr.io/tervory-ai/tervory-tank/radix-egress-proxy:live
     build:
       context: ..
       dockerfile: radix/Dockerfile
@@ -95,6 +97,7 @@ services:
   # DNS verification/control and ephemeral single-host scan tunnels. The scan
   # CLIs remain in agent-radix, which has no internet route. No published port.
   passive-egress:
+    image: ghcr.io/tervory-ai/tervory-tank/radix-passive-egress:live
     build:
       context: ..
       dockerfile: radix/Dockerfile
@@ -130,6 +133,7 @@ services:
   radix-brain:
     profiles:
     - brain
+    image: ghcr.io/tervory-ai/tervory-tank/radix-radix-brain:live
     build:
       context: ..
       dockerfile: radix/Dockerfile
@@ -186,6 +190,7 @@ services:
   radix-sandbox:
     profiles:
     - brain
+    image: ghcr.io/tervory-ai/tervory-tank/radix-radix-sandbox:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.sandbox
@@ -216,6 +221,7 @@ services:
     cap_drop:
     - ALL
   radix-browser:
+    image: ghcr.io/tervory-ai/tervory-tank/radix-radix-browser:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.browser
@@ -252,6 +258,7 @@ services:
     - /tmp:rw,nosuid,nodev,size=128m
     init: true
   radix-browser-gateway:
+    image: ghcr.io/tervory-ai/tervory-tank/radix-radix-browser-gateway:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.gateway

@@ -6,6 +6,7 @@
 
 services:
   agent-tiger:
+    image: ghcr.io/tervory-ai/tervory-tank/tiger-agent-tiger:live
     build:
       context: ..
       dockerfile: tiger/Dockerfile
@@ -51,6 +52,7 @@ services:
 
   tiger-brain:
     profiles: [brain]
+    image: ghcr.io/tervory-ai/tervory-tank/tiger-tiger-brain:live
     build:
       context: ..
       dockerfile: tiger/Dockerfile
@@ -86,6 +88,7 @@ services:
 
   tiger-sandbox:
     profiles: [brain]
+    image: ghcr.io/tervory-ai/tervory-tank/tiger-tiger-sandbox:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.sandbox
@@ -110,6 +113,7 @@ services:
     cap_drop: [ALL]
 
   tiger-browser:
+    image: ghcr.io/tervory-ai/tervory-tank/tiger-tiger-browser:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.browser
@@ -133,6 +137,7 @@ services:
       retries: 10
 
   tiger-browser-gateway:
+    image: ghcr.io/tervory-ai/tervory-tank/tiger-tiger-browser-gateway:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.gateway

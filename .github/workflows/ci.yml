@@ -229,6 +229,8 @@ jobs:
           pip install --require-hashes -r tank/moot/requirements.sdk.lock
       - name: Prepare video processing tools for offline acceptance
         run: bash .github/scripts/install-video-test-tools.sh
+      - name: Prepare pinned real Rig SDK for offline worker acceptance
+        run: bash .github/scripts/install-rig-sdk.sh
       - name: Prepare real Radix advisory database for offline proofs
         run: |
           mkdir -p "$RUNNER_TEMP/radix-osv"
@@ -404,6 +406,10 @@ jobs:
         # remain INCOMPLETE. Head uses the default (all twelve required) for signoff.
         env:
           MEMORY_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          # Radix enters the real command corridor using the shared SQL fixture.
+          POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          # Tank reads required runtime settings when the app is imported.
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/market_test
         run: |
           test "$RUNNER_ENVIRONMENT" = github-hosted || { echo "Gate 7/8 runs only on disposable GitHub-hosted infrastructure"; exit 1; }
           python scripts/gates_7_8.py --submitted

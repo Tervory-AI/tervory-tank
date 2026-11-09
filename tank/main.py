@@ -1227,6 +1227,9 @@ def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[di
                     max_tokens: int, route_seat: str | None) -> tuple[str, str, str]:
     # Whole policy revision, pinned skill, system messages, matter and generation
     # limits participate. Even legacy platform/region scopes stay tenant-local.
+    if policy.get('_coverage'):
+        # ENGINE LEARNING: the coverage overlay never changes a cache key.
+        policy = {k: v for k, v in {**policy, **policy['_coverage']['stored']}.items() if k != '_coverage'}
     c1 = __import__('exact_cache')
     identity_policy = policy if c1.enabled() else {k: v for k, v in policy.items() if k != 'cache_ttl_s'}
     context = [identity_policy, req.skill, req.case_ref, route_seat, max_tokens, box_region()]
@@ -1337,6 +1340,8 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
         if __import__('request_router').enabled():
             original = await __import__('request_router').route(engine_rt, req, original, caller)
         # END ENGINE ROUTER
+        # ENGINE LEARNING: shadow coverage for client requests; unset returns the policy unchanged.
+        original = await __import__('engine_coverage').overlay(engine_rt, req, original)
     policy = original
     attempted = set()
     while True:
@@ -1357,6 +1362,8 @@ async def _paid_route(req: RouteRequest,task_id=None,caller=None,**kwargs):
                 answer = await __import__('request_router').receipt(engine_rt, req, policy, answer)
             answer = await __import__('exact_cache').record(engine_rt, req, policy, answer)
             answer = await prompt_cache.receipt(engine_rt, req, answer)
+            # C5 on every provider: receipt line; off unless ENGINE_C5_ALL_PROVIDERS_ENABLED=true.
+            answer = await __import__('prompt_cache_providers').receipt(engine_rt, req, answer)
             # Savings ledger: returns the same answer; off unless ENGINE_LEDGER_ENABLED=true.
             return await __import__('savings_ledger').record(engine_rt, req, answer)
         attempted.add(policy["model"])
@@ -1623,6 +1630,9 @@ async def _run_route(
     cache_options = await __import__('exact_cache').gateway_options(
         __import__('sys').modules[__name__], req, policy, identity, model, safe=not holds_identifier,
         streaming=_on_token is not None)
+    # C5 on every provider: per-tenant cache key where documented; off: {}.
+    cache_options = {**cache_options, **await __import__('prompt_cache_providers').request_options(
+        __import__('sys').modules[__name__], req, model, messages)}
     try:
         if _on_token is not None and req.task_type in {"command.turn", "command.code"}:
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
@@ -2113,7 +2123,8 @@ async def _shadow_work(req: RouteRequest, policy: dict[str, Any], messages: list
         log.warning("shadow %s skipped %s: a paid tool is not started from here", req.task_type, cand)
         return
     code = graduate.is_skill(cand)
-    budget_open = code or await _shadow_budget_open(req.task_type)
+    # ENGINE LEARNING: zero-price local shadows are unbudgeted only when coverage is on.
+    budget_open = code or await __import__('engine_coverage').unmetered(__import__('sys').modules[__name__], cand) or await _shadow_budget_open(req.task_type)
     if not cache and not budget_open:
         log.warning("shadow %s skipped %s: daily budget spent", req.task_type, cand)
         return
@@ -3957,7 +3968,8 @@ async def _run_one_skill(
 # ---------- Base: the room owns the worker; Tank only proxies ----------
 
 BASE_AGENT_URL = os.environ.get("BASE_AGENT_URL", "http://agent-base:8000")
-_BASE_ROUTES = {"run", "retry", "rerun", "batches", "engines", "records"}
+_BASE_ROUTES = {"run", "retry", "rerun", "batches", "engines", "records",
+                "memory", "memory/edit", "memory/forget", "memory/control"}
 
 
 @app.post("/v1/base/context-dev/trial", dependencies=[Depends(__import__("admin").require_admin)])

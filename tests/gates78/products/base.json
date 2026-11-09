@@ -1,0 +1,157 @@
+{
+  "product": "base",
+  "source_sha": "07b5822ecfed4e46067c1d3c4d78e52ab34cb8ee",
+  "entrypoints": [
+    "POST /v1/base/run",
+    "GET /v1/base/memory",
+    "POST /v1/base/memory/forget",
+    "agents/base/room.py::base_loop",
+    "agents/base/base_brain.py::run_code_first",
+    "agents/base/base_brain.py::drive_batch"
+  ],
+  "legacy_tests": [
+    "tests/test_base_gates_7_8.py::test_product_request_brain_route_receipt_then_memory",
+    "tests/test_base_gates_7_8.py::test_correction_applies_next_time_with_no_paid_call",
+    "tests/test_base_gates_7_8.py::test_second_user_and_second_tenant_see_nothing",
+    "tests/test_base_gates_7_8.py::test_same_task_twice_reports_cost_and_tokens_each_run",
+    "tests/test_base_gates_7_8.py::test_apply_corrections_and_secret_refusal",
+    "tests/test_base_gates_7_8.py::test_pilot_fixture_first_and_repeat_usage_are_fake_offline_not_billing",
+    "tests/test_base_gates_7_8.py::test_product_brain_tank_memory_uses_brain_route_and_tank_receipts",
+    "tests/test_base_gates_7_8.py::test_skills_client_receives_chassis_memory_attribute",
+    "tests/test_base_gates_7_8.py::test_usage_from_model_receipts_sums_tank_rows",
+    "tests/test_base_gates_7_8_controls.py::test_missing_user_id_fails_closed_for_memory_scope",
+    "tests/test_base_gates_7_8_controls.py::test_run_with_memory_refuses_missing_user_id_without_paid_or_remember",
+    "tests/test_base_gates_7_8_controls.py::test_memory_control_off_skips_recall_and_remember_but_still_pays",
+    "tests/test_base_gates_7_8_controls.py::test_memory_control_view_recalls_but_refuses_remember_and_forget",
+    "tests/test_base_gates_7_8_controls.py::test_memory_control_edit_remembers_but_refuses_forget",
+    "tests/test_base_gates_7_8_controls.py::test_memory_control_forget_deletes_row",
+    "tests/test_base_gates_7_8_controls.py::test_identical_unmodified_task_second_run_zero_paid_calls",
+    "tests/test_base_gates_7_8_controls.py::test_correction_repeat_is_separate_from_identical_reuse",
+    "tests/test_base_gates_7_8_controls.py::test_pilot_fixture_first_identical_and_corrected_are_distinct_fake_offline",
+    "tests/test_base_gates_7_8_controls.py::test_product_path_usage_comes_from_tank_receipts_not_fixture_constants",
+    "tests/test_base_gates_7_8_controls.py::test_reuse_key_requires_same_tenant_user_task_key_and_input_hash",
+    "tests/test_base_gates_7_8_controls.py::test_changed_user_and_tenant_miss_reuse_isolation",
+    "tests/test_base_gates_7_8_controls.py::test_correction_overrides_and_invalidates_stale_identical_result",
+    "tests/test_base_gates_7_8_controls.py::test_off_and_forget_honored_without_task_side_effect_forget",
+    "tests/test_base_gates_7_8_controls.py::test_product_memory_short_circuits_before_brain_tank_invocation",
+    "tests/test_base_gates_7_8_controls.py::test_drive_batch_shaped_payload_ignores_fresh_task_uuid",
+    "tests/test_base_gates_7_8_controls.py::test_chassis_calls_receive_verified_user_before_storage_filtering",
+    "tests/test_base_gates_7_8_controls.py::test_post_payment_storage_failure_never_dispatches_twice",
+    "tests/test_base_gates_7_8_drive_batch.py::test_drive_batch_fresh_task_uuids_identical_business_zero_second_paid",
+    "tests/test_base_gates_7_8_drive_batch.py::test_drive_batch_off_skips_memory_and_pays_each_run",
+    "tests/test_base_gates_7_8_drive_batch.py::test_session_user_channel_rejects_forged_header_identity",
+    "tests/test_base_gates_7_8_entry.py::test_memory_routes_require_room_key_and_session_user",
+    "tests/test_base_gates_7_8_entry.py::test_entry_identical_repeat_fixed_price_and_zero_incremental",
+    "tests/test_base_gates_7_8_entry.py::test_entry_user_and_tenant_isolation",
+    "tests/test_base_gates_7_8_entry.py::test_entry_edit_correction_override_and_explicit_forget_and_off",
+    "tests/test_base_gates_7_8_entry.py::test_created_by_resolves_as_session_user_on_batch_cfg",
+    "tests/test_base_gates_7_8_entry.py::test_business_hash_ignores_fresh_run_uuids",
+    "tests/test_base_gates_7_8_entry.py::test_product_entry_same_business_different_run_uuids_zero_second_paid",
+    "tests/test_base_gates_7_8_entry.py::test_production_memory_routes_cannot_issue_synthetic_receipts",
+    "tests/test_base_gates_7_8.py::test_unknown_receipt_price_is_not_zero_or_a_partial_sum",
+    "tests/test_base_gates_7_8.py::test_missing_receipts_preserve_unknown_usage",
+    "tests/test_base_gates_7_8.py::test_recorded_zero_and_partial_tokens_are_distinct_from_missing_accounting",
+    "tests/test_base_gates_7_8.py::test_unknown_paid_accounting_is_retained_without_reusable_memory",
+    "tests/test_base_gates_7_8_drive_batch.py::test_drive_batch_changed_actual_inputs_never_reuse",
+    "tests/test_base_gates_7_8_drive_batch.py::test_drive_batch_missing_records_refuses_reuse_before_paid"
+  ],
+  "cases": {
+    "G7.owner_crud": [
+      "tests/gates78/products/test_base.py::test_owner_worker_write_and_real_memory_controls",
+      "tests/gates78/products/test_base.py::test_real_drive_batch_fresh_ids_repeat_and_changed_business_receipts"
+    ],
+    "G7.same_tenant": [
+      "tests/gates78/products/test_base.py::test_personal_read_mutation_and_publish_isolation"
+    ],
+    "G7.other_tenant": [
+      "tests/gates78/products/test_base.py::test_personal_read_mutation_and_publish_isolation"
+    ],
+    "G7.tenant_wide": [
+      "tests/gates78/products/test_base.py::test_no_declared_tenant_wide_kind_refuses_unowned_personal_rows"
+    ],
+    "G7.required_owner": [
+      "tests/gates78/products/test_base.py::test_no_declared_tenant_wide_kind_refuses_unowned_personal_rows",
+      "tests/gates78/products/test_base.py::test_body_is_not_identity_and_queued_owner_is_verified"
+    ],
+    "G7.signed_actor": [
+      "tests/gates78/products/test_base.py::test_body_is_not_identity_and_queued_owner_is_verified",
+      "tests/gates78/products/test_base.py::test_unsigned_headers_cannot_read_personal_memory"
+    ],
+    "G7.assertion_rejection": [
+      "tests/gates78/products/test_base.py::test_room_assertion_verification_and_nonce_binding"
+    ],
+    "G7.replay": [
+      "tests/gates78/products/test_base.py::test_restart_and_concurrent_nonce_replay_cannot_restore_forget"
+    ],
+    "G7.sql_before_vector": [
+      "tests/gates78/products/test_base.py::test_sql_scope_before_vector_limit_and_restricted_role"
+    ],
+    "G7.database_role": [
+      "tests/gates78/products/test_base.py::test_sql_scope_before_vector_limit_and_restricted_role"
+    ],
+    "G7.controls": [
+      "tests/gates78/products/test_base.py::test_owner_worker_write_and_real_memory_controls",
+      "tests/gates78/products/test_base.py::test_durable_correction_forget_and_off_controls",
+      "tests/gates78/products/test_base.py::test_unsigned_headers_cannot_read_personal_memory"
+    ],
+    "G7.no_content_leak": [
+      "tests/gates78/products/test_base.py::test_personal_read_mutation_and_publish_isolation",
+      "tests/gates78/products/test_base.py::test_changed_inputs_and_foreign_owners_never_reuse"
+    ],
+    "G7.runtime_contract": [
+      "tests/gates78/products/test_base.py::test_actual_proxy_allowlist_and_signed_header_contract",
+      "tests/gates78/products/test_base.py::test_real_drive_batch_fresh_ids_repeat_and_changed_business_receipts"
+    ],
+    "G8.default_off": [
+      "tests/gates78/products/test_base.py::test_default_off_and_historical_no_memory_path"
+    ],
+    "G8.task_path": [
+      "tests/gates78/products/test_base.py::test_real_drive_batch_fresh_ids_repeat_and_changed_business_receipts",
+      "tests/gates78/products/test_base.py::test_body_is_not_identity_and_queued_owner_is_verified"
+    ],
+    "G8.free_first": [
+      "tests/gates78/products/test_base.py::test_free_passes_precede_real_drive_batch"
+    ],
+    "G8.exact_repeat": [
+      "tests/gates78/products/test_base.py::test_real_drive_batch_fresh_ids_repeat_and_changed_business_receipts",
+      "tests/gates78/products/test_base.py::test_drive_batch_persisted_inputs_and_unknown_accounting"
+    ],
+    "G8.misses": [
+      "tests/gates78/products/test_base.py::test_changed_inputs_and_foreign_owners_never_reuse",
+      "tests/gates78/products/test_base.py::test_drive_batch_persisted_inputs_and_unknown_accounting"
+    ],
+    "G8.correction": [
+      "tests/gates78/products/test_base.py::test_durable_correction_forget_and_off_controls"
+    ],
+    "G8.forget": [
+      "tests/gates78/products/test_base.py::test_durable_correction_forget_and_off_controls",
+      "tests/gates78/products/test_base.py::test_restart_and_concurrent_nonce_replay_cannot_restore_forget"
+    ],
+    "G8.memory_off": [
+      "tests/gates78/products/test_base.py::test_default_off_and_historical_no_memory_path",
+      "tests/gates78/products/test_base.py::test_durable_correction_forget_and_off_controls"
+    ],
+    "G8.outage": [
+      "tests/gates78/products/test_base.py::test_real_storage_outage_is_truthful_without_double_payment",
+      "tests/gates78/products/test_base.py::test_drive_batch_persisted_inputs_and_unknown_accounting"
+    ],
+    "G8.auth_not_outage": [
+      "tests/gates78/products/test_base.py::test_memory_auth_failure_never_degrades_to_paid"
+    ],
+    "G8.receipts": [
+      "tests/gates78/products/test_base.py::test_real_drive_batch_fresh_ids_repeat_and_changed_business_receipts",
+      "tests/gates78/products/test_base.py::test_retries_concurrency_and_meaningful_receipts",
+      "tests/gates78/products/test_base.py::test_drive_batch_persisted_inputs_and_unknown_accounting"
+    ],
+    "G8.retry_concurrency": [
+      "tests/gates78/products/test_base.py::test_retries_concurrency_and_meaningful_receipts",
+      "tests/gates78/products/test_base.py::test_restart_and_concurrent_nonce_replay_cannot_restore_forget"
+    ],
+    "G8.product_regressions": [
+      "tests/gates78/products/test_base.py::test_all_original_requirements_and_real_worker_are_retained",
+      "tests/gates78/products/test_base.py::test_real_drive_batch_fresh_ids_repeat_and_changed_business_receipts",
+      "tests/gates78/products/test_base.py::test_default_off_and_historical_no_memory_path",
+      "tests/gates78/products/test_base.py::test_drive_batch_persisted_inputs_and_unknown_accounting"
+    ]
+  }
+}

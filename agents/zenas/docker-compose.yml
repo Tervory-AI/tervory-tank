@@ -6,6 +6,7 @@
 
 services:
   agent-zenas:
+    image: ghcr.io/tervory-ai/tervory-tank/zenas-agent-zenas:live
     build:
       context: ..
       dockerfile: zenas/Dockerfile
@@ -52,6 +53,7 @@ services:
 
   zenas-brain:
     profiles: [brain]
+    image: ghcr.io/tervory-ai/tervory-tank/zenas-zenas-brain:live
     build:
       context: ..
       dockerfile: zenas/Dockerfile
@@ -89,6 +91,7 @@ services:
 
   zenas-sandbox:
     profiles: [brain]
+    image: ghcr.io/tervory-ai/tervory-tank/zenas-zenas-sandbox:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.sandbox
@@ -116,6 +119,7 @@ services:
   # docker compose --profile load run --rm pool-loader
   # nice and a 2g cap keep Tank and the agents ahead of a bulk load.
   pool-loader:
+    image: ghcr.io/tervory-ai/tervory-tank/zenas-pool-loader:live
     build:
       context: ..
       dockerfile: zenas/pool/Dockerfile

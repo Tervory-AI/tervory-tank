@@ -7,6 +7,7 @@
 
 services:
   agent-rig:
+    image: ghcr.io/tervory-ai/tervory-tank/rig-agent-rig:live
     build:
       context: ..
       dockerfile: rig/Dockerfile
@@ -82,6 +83,7 @@ services:
   rig-brain:
     # FRAME brain — opt-in compose profile; nothing switches on by default.
     profiles: [brain]
+    image: ghcr.io/tervory-ai/tervory-tank/rig-rig-brain:live
     build:
       context: ../..
       dockerfile: agents/rig/Dockerfile.brain
@@ -117,6 +119,7 @@ services:
     # FRAME brain — sandbox only starts with the opt-in brain profile.
     profiles: [brain]
     # The exact Base WASI runtime; a separate container and internal network.
+    image: ghcr.io/tervory-ai/tervory-tank/rig-rig-sandbox:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.sandbox
@@ -141,6 +144,7 @@ services:
     cap_drop: [ALL]
 
   rig-browser:
+    image: ghcr.io/tervory-ai/tervory-tank/rig-rig-browser:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.browser
@@ -164,6 +168,7 @@ services:
     cap_drop: [ALL]
 
   rig-browser-gateway:
+    image: ghcr.io/tervory-ai/tervory-tank/rig-rig-browser-gateway:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.gateway
@@ -186,6 +191,7 @@ services:
 
   # RIG-5F: only the brain shares this control network with the forge.
   rig-forge:
+    image: ghcr.io/tervory-ai/tervory-tank/rig-rig-forge:live
     build:
       context: ./forge
       dockerfile: Dockerfile
@@ -220,6 +226,7 @@ services:
     cap_drop: [ALL]
 
   rig-forge-egress:
+    image: ghcr.io/tervory-ai/tervory-tank/rig-rig-forge-egress:live
     build:
       context: ./forge
       dockerfile: Dockerfile

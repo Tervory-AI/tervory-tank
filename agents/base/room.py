@@ -321,6 +321,7 @@ async def insert_batch(
     concurrency: int,
     registry: list[dict[str, Any]] | None,
     *, task_id: uuid.UUID | None = None,
+    memory_control: str | None = None,
 ) -> Any:
     cfg = {
         "batch": label,
@@ -332,6 +333,9 @@ async def insert_batch(
         "tenant_id": str(tenant_id),
         "model_spend": 0,
     }
+    if memory_control is not None:
+        from base_gates_memory import normalize_memory_control
+        cfg["memory_control"] = normalize_memory_control(memory_control)
     cfg = Job(tenant_id=tenant_id, region=os.environ.get("TANK_REGION", "us-east"),
               agent="base", skill="base.enrich", input=cfg, engine=engine).to_room(skill_column="task_type")["input"]
     title = (
@@ -361,7 +365,7 @@ async def insert_batch(
     return row
 
 
-async def _run_batch(pool: Any, task_id: uuid.UUID, cfg: dict[str, Any], call: SkillCall) -> None:
+async def _run_batch(pool: Any, task_id: uuid.UUID, cfg: dict[str, Any], call: SkillCall, *, planning: bool = False) -> None:
     wire = Job.from_room({"tenant_id": cfg["tenant_id"], "task_type": "base.enrich", "input": cfg},
                          agent="base", region=os.environ.get("TANK_REGION", "us-east"), skill_column="task_type")
     tenant_id, engine = wire.tenant_id, wire.engine
@@ -471,12 +475,14 @@ async def _run_batch(pool: Any, task_id: uuid.UUID, cfg: dict[str, Any], call: S
             tenant_id,
         )
         await conn.execute(
-            "UPDATE agent_base.tasks SET status='done', error=NULL, result=$3, input=$4::jsonb, finished_at=now() "
+            "UPDATE agent_base.tasks SET status=$5, error=NULL, result=$3, input=$4::jsonb, "
+            "finished_at=CASE WHEN $5='done' THEN now() ELSE NULL END "
             "WHERE id=$1 AND tenant_id=$2",
             task_id,
             tenant_id,
             result_line(int(counts[0]), int(counts[2]), int(counts[1]), spent),
             json.dumps(cfg),
+            "running" if planning else "done",
         )
 
 
@@ -512,13 +518,15 @@ async def _owned_loop(pool: Any, skills: SkillClient) -> None:
             if models_paused():
                 await asyncio.sleep(min(60.0, max(1.0, _model_pause["until"] - time.time())))
                 continue
+            # Clear before inspecting the queue. A commit+wake during SELECT
+            # must remain visible when the empty query proceeds to wait.
+            _wake.clear()
             async with discovery_pool.acquire() as conn:
                 row = await conn.fetchrow(
                     "SELECT id, tenant_id, input FROM agent_base.tasks "
                     "WHERE task_type='base.enrich' AND status='queued' ORDER BY created_at LIMIT 1"
                 )
             if row is None:
-                _wake.clear()
                 try:
                     await asyncio.wait_for(_wake.wait(), timeout=30)
                 except asyncio.TimeoutError:

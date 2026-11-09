@@ -76,6 +76,8 @@ ROUTES = (
     ('early', 'engine_admin', 'build_router', ('tank',), True),
     # Empty router unless ENGINE_LEDGER_ENABLED=true at start-up.
     ('early', 'savings_ledger', 'build_router', ('tank',), True),
+    # Empty router unless ENGINE_SHARED_WORK_ENABLED=true at start-up.
+    ('early', 'shared_work', 'build_router', ('tank',), True),
 )
 
 def register_routes(tank: Any, phase: str) -> None:

@@ -2,23 +2,18 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
 import socket
-import ipaddress
-import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
-import httpx
-try:
-    from network import BoundedHTTP
-except ModuleNotFoundError:  # package imports in offline and shared callers
-    from agents.base.network import BoundedHTTP
 from fastapi import Header, HTTPException
 from pydantic import BaseModel
 
@@ -39,6 +34,21 @@ class ActiveBatch:
 active: dict[tuple[uuid.UUID, uuid.UUID], ActiveBatch] = {}
 
 
+def receipt_spend(rows):
+    """Unknown charges block further work instead of becoming zero savings."""
+    from decimal import Decimal, InvalidOperation
+    total = Decimal(0)
+    for row in rows:
+        try:
+            value = Decimal(str(row.get("cost_usd")))
+            if not value.is_finite() or value < 0:
+                raise ValueError()
+        except (InvalidOperation, ValueError, TypeError):
+            raise RuntimeError("Base model cost is not recorded. Check the run receipt before retrying.") from None
+        total += value
+    return float(total)
+
+
 async def run_code_first(pool: Any, skills: Any, task_id: uuid.UUID, cfg: dict, call: Any) -> None:
     """Run the existing free passes before asking the brain to recover gaps."""
     from room import _run_batch
@@ -50,15 +60,51 @@ async def run_code_first(pool: Any, skills: Any, task_id: uuid.UUID, cfg: dict, 
     async def free_skill(skill_id: str, payload: dict) -> dict:
         return await call(skill_id, {**payload, "_base_brain_task": str(task_id), "_base_brain_free": True})
 
-    await _run_batch(pool, task_id, cfg, free_skill)
+    await _run_batch(pool, task_id, cfg, free_skill, planning=True)
     from sources.continuation import finish_context
     await finish_context(pool, getattr(skills, "_http", None), task_id, cfg)
     outcome = await results(ActiveBatch(pool, cfg, call), Task(tenant_id=tenant, task_id=task_id))
+    if outcome["pipeline_status"] == "running":
+        outcome["pipeline_status"] = "done"
+        if not outcome["unresolved"]:
+            await pool.execute("UPDATE agent_base.tasks SET status='done',finished_at=now() WHERE tenant_id=$1 AND id=$2 AND status='running'", tenant, task_id)
     # A pause/failure is not permission to spend. Completed, sourced code
     # answers need no model conversation or paid continuation.
     if outcome["pipeline_status"] != "done" or not outcome["unresolved"]:
         return
     await drive_batch(pool, skills, task_id, cfg, call, free_result=outcome)
+
+
+async def batch_memory_payload(pool, tenant, task_id, cfg):
+    """Bind reuse to the persisted record multiset and the worker's pinned inputs."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT raw FROM agent_base.records WHERE task_id=$1 AND tenant_id=$2",
+            task_id, tenant,
+        )
+    if not rows or len(rows) != int(cfg["count"]):
+        raise RuntimeError("Base batch inputs are incomplete; memory reuse is unavailable")
+    # Record order is immaterial to independent enrichment. Retain duplicates and
+    # every raw field, including nested source IDs/digests; database row/run IDs stay out.
+    records = []
+    for row in rows:
+        raw = json.loads(row["raw"]) if isinstance(row["raw"], str) else row["raw"]
+        if not isinstance(raw, dict):
+            raise TypeError("Base batch input is not a record")
+        records.append(json.dumps(raw, sort_keys=True, separators=(",", ":"), allow_nan=False))
+    digest = hashlib.sha256(json.dumps(sorted(records), separators=(",", ":")).encode()).hexdigest()
+    return {
+        "input_version": 2,
+        "records_sha256": digest,
+        "batch": cfg.get("batch"),
+        "count": len(records),
+        "engine": cfg.get("engine"),
+        "preview": cfg.get("preview"),
+        "registry": cfg.get("registry"),
+        "refs": cfg.get("refs"),
+        "engine_data_version": cfg.get("engine_data_version"),
+        "region": cfg.get("region") or os.environ.get("TANK_REGION", "us-east"),
+    }
 
 
 async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | None = None):
@@ -74,111 +120,155 @@ async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | N
         # The brain's pipeline_run tool receives the completed free pass. It
         # must not repeat reads or charge for work the queue already did.
         batch.ran, batch.operation, batch.result = True, "pipeline", free_result
-    active[identity] = batch
     receipt = None
+    memory = getattr(skills, "memory", None)
+    from base_gates_memory import normalize_memory_control, resolve_authenticated_user_id
+    # Fail closed for memory: no synthetic tenant-as-user identity.
+    user_id = resolve_authenticated_user_id(cfg if isinstance(cfg, dict) else {}, tenant)
+    # Only the verified ingress may persist this marker in the queued row.
+    # Historical created_by/user_id values alone must never grant personal memory.
+    if not user_id or cfg.get("verified_user_id") != user_id:
+        user_id = None
+    task_key = str(cfg.get("batch") or task_id)
+    memory_control = normalize_memory_control(
+        (cfg.get("memory_control") if isinstance(cfg, dict) else None)
+        or os.environ.get("BASE_MEMORY_CONTROL")
+        or "off"
+    )
+    skip_storage = False
+    if memory is not None and user_id is not None and memory_control != "off":
+        # Persisted personal OFF wins over request overrides and survives restarts.
+        try:
+            rows = await memory.records(str(tenant), user_id=user_id)
+        except (RuntimeError, TimeoutError, ConnectionError) as exc:
+            from base_gates_memory import storage_unavailable
+            if not storage_unavailable(exc):
+                raise
+            rows, skip_storage = [], True
+        for row in rows:
+            meta = row.get("meta") or {}
+            if (row.get("tenant_id") == str(tenant) and meta.get("user_id") == user_id
+                    and meta.get("base_control") in {"off", "view", "edit", "forget"}):
+                memory_control = meta["base_control"]
+    use_memory = memory is not None and user_id is not None and memory_control != "off"
+    active[identity] = batch
     try:
         async with pool.acquire() as conn:
             await conn.execute(
                 "UPDATE agent_base.tasks SET status='running',started_at=coalesce(started_at,now()),finished_at=NULL "
                 "WHERE tenant_id=$1 AND id=$2", tenant, task_id)
-        try:
-            async with httpx.AsyncClient(timeout=30) as raw_client:
-                client = BoundedHTTP(raw_client)
-                response = await client.post(os.environ["BASE_BRAIN_URL"] + "/tasks",
-                    headers=skills._headers(), json={"tenant_id": str(tenant), "task_id": str(task_id),
-                        "home_region": os.environ.get("TANK_REGION", "us-east"), "batch": cfg["batch"],
-                        "count": cfg["count"], "engine": cfg.get("engine")})
-                deadline = time.monotonic() + 300
-                while response.status_code == 202:
-                    if time.monotonic() > deadline:
-                        raise RuntimeError("Base brain polling deadline reached")
-                    await asyncio.sleep(2)
-                    response = await client.get(os.environ["BASE_BRAIN_URL"] + "/tasks/" + str(task_id),
-                        headers=skills._headers(), params={"tenant_id": str(tenant),
-                            "home_region": os.environ.get("TANK_REGION", "us-east")})
-            if response.status_code != 200:
-                raise RuntimeError("Base brain unavailable")
-            receipt = response.json()
-            if receipt.get("tenant_id") != str(tenant) or receipt.get("task_id") != str(task_id):
-                receipt = None
-                raise RuntimeError("Brain receipt scope mismatch")
-            if receipt.get("status") != "done":
-                raise RuntimeError("Brain did not finish")
-        except Exception as exc:
-            logging.getLogger("base.brain").warning("Brain flow failed (%s)", type(exc).__name__)
-            # The unchanged pipeline remains available if memory, policy, the
-            # agent or its service failed before it started any pipeline work.
-            if not batch.ran:
-                from room import _run_batch
-                # A lost start response must not allow a late brain callback to
-                # race the fallback. Cancel its job and close the pipeline gate.
-                batch.ran, batch.operation = True, "fallback"
-                try:
-                    async with httpx.AsyncClient(timeout=5) as raw_client:
-                        cancel_client = BoundedHTTP(raw_client)
-                        await cancel_client.delete(os.environ["BASE_BRAIN_URL"] + "/tasks/" + str(task_id),
-                            headers=skills._headers(), params={"tenant_id": str(tenant),
-                                "home_region": os.environ.get("TANK_REGION", "us-east")})
-                except Exception:
-                    pass
-                receipt = receipt if isinstance(receipt, dict) else {
-                    "tenant_id": str(tenant), "task_id": str(task_id), "room": "base", "model_receipts": [], "steps": []}
-                receipt.update(status="fallback", error="Brain unavailable before pipeline; default pipeline used.")
-                receipt["steps"].append({"action": "pipeline_fallback", "reason": "brain failed before pipeline_run"})
-                try:
-                    response = await skills._http.get(skills._base + "/v1/agents/base/receipts",
-                        headers=skills._headers(), params={"tenant_id": str(tenant), "task_id": str(task_id)}, timeout=15)
-                    if response.status_code == 200:
-                        receipt["model_receipts"] = response.json()["receipts"]
-                except Exception:
-                    pass
-                previous = float(cfg.get("brain_spend") or 0)
-                cost = max(previous, sum(float(row["cost_usd"]) for row in receipt.get("model_receipts", [])))
-                cfg["brain_spend"] = cost
-                cfg["model_spend"] = float(cfg.get("model_spend") or 0) - previous + cost
+
+        async def _brain_tank_paid(task_payload: dict) -> dict:
+            from base_brain_route import invoke_brain_task
+            return await invoke_brain_task(
+                skills,
+                tenant_id=str(tenant),
+                task_id=str(task_id),
+                batch=str(cfg["batch"]),
+                count=int(cfg["count"]),
+                engine=cfg.get("engine"), user_id=user_id,
+                evidence=(batch.result or {}).get("unresolved", []),
+            )
+
+        if memory is not None and user_id is None:
+            logging.getLogger("base.brain").info(
+                "Memory bracket skipped: no authenticated user_id (fail closed for memory scope)")
+        if memory is not None and memory_control == "off":
+            logging.getLogger("base.brain").info(
+                "Memory bracket skipped: memory_control=off (historical path, no memory ops)")
+
+        if use_memory:
+            from base_gates_memory import product_to_brain_tank_memory
+            # Memory enabled: bracket failures fail closed (no silent paid direct path).
+            bracket = await product_to_brain_tank_memory(
+                memory,
+                tenant_id=str(tenant),
+                user_id=user_id,
+                task_key=task_key,
+                task=await batch_memory_payload(pool, tenant, task_id, cfg),
+                brain_tank_call=_brain_tank_paid,
+                memory_control=memory_control, skip_storage=skip_storage,
+            )
+            if bracket.get("answered_from_memory"):
+                reuse = ((bracket.get("result") or {}) if isinstance(bracket.get("result"), dict) else {}).get("reuse")
+                summary = (
+                    "Identical task reused from memory; paid brain/Tank route skipped."
+                    if reuse == "identical_receipt"
+                    else "Applied memory correction; paid brain/Tank route skipped."
+                )
+                receipt = {
+                    "tenant_id": str(tenant),
+                    "task_id": str(task_id),
+                    "room": "base",
+                    "status": "done",
+                    "steps": bracket["steps"],
+                    "model_receipts": [],
+                    "summary": summary + " " + json.dumps(bracket.get("result") or {}, sort_keys=True),
+                    "answered_from_memory": True,
+                    "cost_usd": 0.0,
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                    "tokens_total": 0,
+                }
+                from base_gates_memory import usage_from_model_receipts
+                original = bracket.get("result") or {}
+                comparison = usage_from_model_receipts(original.get("model_receipts", []))
+                receipt.update(paid_calls=0, would_have_cost=comparison["cost_usd"],
+                    comparison_status="prior_recorded_run" if comparison["cost_usd"] is not None else "unknown")
                 cfg["brain_receipt"] = receipt
-                await _run_batch(pool, task_id, cfg, scoped_call)
+                cfg["brain_spend"] = 0.0
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        "UPDATE agent_base.tasks SET input=$3::jsonb,status='done',error=NULL,finished_at=now() "
+                        "WHERE tenant_id=$1 AND id=$2", tenant, task_id, json.dumps(cfg))
                 return
-            if not batch.finished:
-                # Close callbacks before stopping the agent, then let any free
-                # pass settle before using the existing paid continuation.
-                async with batch.lock:
-                    batch.finished = True
-                    batch.operation = "finish_fallback"
-                try:
-                    async with httpx.AsyncClient(timeout=5) as raw_client:
-                        cancel_client = BoundedHTTP(raw_client)
-                        await cancel_client.delete(os.environ["BASE_BRAIN_URL"] + "/tasks/" + str(task_id),
-                            headers=skills._headers(), params={"tenant_id": str(tenant),
-                                "home_region": os.environ.get("TANK_REGION", "us-east")})
-                except Exception:
-                    pass
-                if batch.job:
-                    await asyncio.shield(batch.job)
-                receipt = receipt or {"tenant_id": str(tenant), "task_id": str(task_id), "room": "base",
-                    "steps": [], "model_receipts": []}
-                batch.job = asyncio.create_task(run_phase(batch, Task(tenant_id=tenant, task_id=task_id, finish=True)))
-                await asyncio.shield(batch.job)
-                result = batch.result or {"pipeline_status": "failed"}
-                receipt["steps"].append({"action": "pipeline_continue_fallback", "status": result["pipeline_status"],
-                    "summary": result.get("summary"), "reason": "brain failed after pipeline_run"})
-                receipt["status"] = "done" if result["pipeline_status"] == "done" else "failed"
-                receipt["error"] = None if receipt["status"] == "done" else "Default pipeline continuation did not finish."
-            else:
-                if batch.job and not batch.job.done():
-                    await asyncio.shield(batch.job)
-                if not receipt:
-                    receipt = {"tenant_id": str(tenant), "task_id": str(task_id), "room": "base", "status": "failed",
-                        "error": "Brain unavailable after pipeline started; completed work retained.", "steps": [], "model_receipts": []}
-            try:
-                response = await skills._http.get(skills._base + "/v1/agents/base/receipts",
-                    headers=skills._headers(), params={"tenant_id": str(tenant), "task_id": str(task_id)}, timeout=15)
-                if response.status_code == 200:
-                    receipt["model_receipts"] = response.json()["receipts"]
-            except Exception:
-                pass
+            paid_result = bracket.get("result") or {}
+            receipt = paid_result if isinstance(paid_result, dict) and paid_result.get("task_id") else None
+            if receipt is None:
+                raise RuntimeError("Brain memory bracket returned no receipt")
+            receipt = {
+                **receipt,
+                **{field: bracket[field] for field in ("cost_usd", "tokens_in", "tokens_out", "tokens_total", "paid_calls")},
+                "answered_from_memory": False,
+                "memory_bracket": {
+                    "steps": bracket["steps"],
+                    "cost_usd": bracket["cost_usd"],
+                    "tokens_in": bracket["tokens_in"],
+                    "tokens_out": bracket["tokens_out"],
+                    "tokens_total": bracket["tokens_total"],
+                    "answered_from_memory": False,
+                    "memory_control": memory_control,
+                    "memory_unavailable": bool(bracket.get("memory_unavailable")),
+                },
+            }
+
+        if not use_memory:
+            if user_id is None:
+                # Historical ownerless rows stay on the unchanged code/skill path.
+                # They never enter personal memory or a fabricated shared actor.
+                from room import _run_batch
+                if batch.ran:
+                    await run_phase(batch, Task(tenant_id=tenant, task_id=task_id, finish=True))
+                else:
+                    await _run_batch(pool, task_id, cfg, scoped_call)
+                return
+            paid = await _brain_tank_paid({})
+            receipt = dict(paid['result'])
+            receipt.update({field: paid[field] for field in ('cost_usd', 'tokens_in', 'tokens_out', 'tokens_total')})
+            receipt.update(paid_calls=len(receipt.get('model_receipts', [])), answered_from_memory=False)
         cfg["brain_receipt"] = receipt
-        cost = sum(float(r["cost_usd"]) for r in receipt.get("model_receipts", []))
+        if (bracket["cost_usd"] if use_memory else receipt.get("cost_usd")) is None:
+            # The work already ran. Retain its receipt and unknown spend; never
+            # retry a paid edge or publish a zero total after a ledger outage.
+            cfg["brain_spend"] = cfg["model_spend"] = None
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    "UPDATE agent_base.tasks SET input=$3::jsonb,status='failed',error=$4,finished_at=now() "
+                    "WHERE tenant_id=$1 AND id=$2", tenant, task_id, json.dumps(cfg),
+                    "Base model cost is not recorded. Check the run receipt before retrying.",
+                )
+            raise RuntimeError("Base model cost is not recorded. Check the run receipt before retrying.")
+        cost = receipt_spend(receipt.get("model_receipts", []))
         previous_brain_cost = float(cfg.get("brain_spend") or 0)
         cost = max(previous_brain_cost, cost)
         cfg["brain_spend"] = cost
@@ -231,6 +321,7 @@ async def results(batch: ActiveBatch, body: Task) -> dict:
             item = profile.get(key) or raw.get(key) or ""
             return str(item.get("value") or "") if isinstance(item, dict) else str(item)
         unresolved.append({"id": str(row["id"]), "name": value("name")[:120],
+            "raw_name": str(raw.get("name") or "")[:120],
             "website": value("website")[:160], "status": row["status"]})
     return {"pipeline_status": task["status"], "summary": task["result"], "unresolved": unresolved,
             "skills": batch.cfg.get("refs", {}), "cost_usd": batch.cfg.get("model_spend", 0)}

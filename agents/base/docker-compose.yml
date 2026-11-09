@@ -13,6 +13,7 @@
 # No service publishes ports.
 services:
   agent-base:
+    image: ghcr.io/tervory-ai/tervory-tank/base-agent-base:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile
@@ -58,6 +59,7 @@ services:
       - "8000"
 
   base-brain:
+    image: ghcr.io/tervory-ai/tervory-tank/base-base-brain:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.brain
@@ -91,6 +93,7 @@ services:
   # An unprivileged sibling exec service, with only per-run tmpfs workspaces.
   # No Docker daemon/socket, brain volume, provider key or host path is mounted.
   base-sandbox:
+    image: ghcr.io/tervory-ai/tervory-tank/base-base-sandbox:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.sandbox
@@ -114,6 +117,7 @@ services:
       retries: 10
 
   base-browser:
+    image: ghcr.io/tervory-ai/tervory-tank/base-base-browser:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.browser
@@ -137,6 +141,7 @@ services:
     cap_drop: [ALL]
 
   base-browser-gateway:
+    image: ghcr.io/tervory-ai/tervory-tank/base-base-browser-gateway:live
     build:
       context: ../..
       dockerfile: agents/base/Dockerfile.gateway

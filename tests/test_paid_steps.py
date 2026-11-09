@@ -455,6 +455,9 @@ async def exercise_model_router(router_database, monkeypatch, owner, *, fail_pri
     monkeypatch.delenv('TANK_PROVIDER_ALLOW',raising=False)
     monkeypatch.setattr(tank,'pool',lambda:pool)
     monkeypatch.setattr(tank,'_redis',None)
+    # A worker that ran Tank's startup and shutdown earlier leaves main._http as a
+    # closed client; this fixture's gateway is the class patch below, never that client.
+    monkeypatch.setattr(tank,'_http',None)
     policy = dict(model='placeholder-model',rung=1,priority='standard',system_prompt=None,
                   max_tokens_out=32,cache_scope='none',candidate_model=None,shadow_rate=0,
                   semantic_cache=False,fallbacks=[])

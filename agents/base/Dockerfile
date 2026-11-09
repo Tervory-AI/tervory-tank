@@ -13,6 +13,7 @@ COPY agents/base/pipeline.py /app/pipeline.py
 COPY tank/base_source_scores.py /app/base_source_scores.py
 COPY agents/base/room.py /app/room.py
 COPY agents/base/base_brain.py /app/base_brain.py
+COPY agents/base/base_gates_memory.py agents/base/base_brain_route.py agents/base/base_memory_api.py /app/
 COPY agents/base/browser_evidence.py /app/browser_evidence.py
 COPY agents/base/access_sources.py /app/access_sources.py
 COPY agents/base/sources /app/sources

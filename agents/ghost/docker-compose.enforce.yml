@@ -8,6 +8,7 @@
 # Substitute TENANT_ID before deploy. Never paste a secret value into this file.
 services:
   enforce:
+    image: ghcr.io/tervory-ai/tervory-tank/ghost-enforce-enforce:live
     build:
       context: ..
       dockerfile: ghost/Dockerfile
@@ -49,6 +50,7 @@ services:
       retries: 10
     # No ports: / no expose to public. Reachable only on the internal network + queue.
   egress-proxy:
+    image: ghcr.io/tervory-ai/tervory-tank/ghost-enforce-egress-proxy:live
     build:
       context: ..
       dockerfile: radix/Dockerfile
@@ -75,6 +77,7 @@ services:
         interface_name: radix-link
       egress: {}
   health-observer:
+    image: ghcr.io/tervory-ai/tervory-tank/ghost-enforce-health-observer:live
     build:
       context: ..
       dockerfile: ghost/Dockerfile
@@ -95,6 +98,7 @@ services:
       - health_results:/data
     networks: [health_internal]
   health-egress-proxy:
+    image: ghcr.io/tervory-ai/tervory-tank/ghost-enforce-health-egress-proxy:live
     build:
       context: ..
       dockerfile: radix/Dockerfile

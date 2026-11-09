@@ -5,7 +5,9 @@ import hashlib
 import json
 import os
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+import code_checks
 
 SETTING = 'ENGINE_CODE_PROGRESS_ENABLED'
 
@@ -19,6 +21,19 @@ class Progress(BaseModel):
     tree: str = Field(pattern=r'^[a-f0-9]{64}$')
     tests_passed: int = Field(ge=0, le=1_000_000_000)
     build_stage: int = Field(ge=0, le=10000)
+    # Gate before (spin): the client's own $0 check results. Refused unless
+    # ENGINE_CODE_SPIN_ENABLED is exactly true, so other hosts keep main's contract.
+    # Never part of the dump: code_progress keeps only the digest and counts.
+    checks: list[code_checks.Check] | None = Field(default=None, max_length=5, exclude=True)
+
+    @model_validator(mode='after')
+    def spin_checks(self):
+        if 'checks' in self.model_fields_set:
+            import code_burn
+            if not code_burn.enabled():
+                raise ValueError('Local check results are not enabled on this host')
+            code_checks.validate_checks(self.checks or [])
+        return self
 
 
 def stopped(reason, message):
