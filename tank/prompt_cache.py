@@ -131,6 +131,8 @@ async def receipt(rt, req, answer):
     import priority_queue
     try:
         prices = await rt._batch_price(answer.model)
+        # C5 on every provider: documented rates where the roster has none (off: unchanged).
+        prices = __import__('prompt_cache_providers').fill(prices)
     except (HTTPException, KeyError):
         # Accounting metadata can be partial; it must not invalidate a paid
         # answer or bypass its approval. Missing rates stay unpriced.
