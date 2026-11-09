@@ -592,3 +592,35 @@ def test_scope_handoff_binds_current_verified_preflight_actor_and_turn(monkeypat
     with pytest.raises(HTTPException) as denied:
         code_context.preflight_scope(state, actor, thread, turn, request)
     assert denied.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_landed_preflight_scope_reaches_context_over_signed_http(api, runtime, monkeypatch):
+    import test_code_preflight as preflight
+    import code_preflight
+    client, pool = api
+    monkeypatch.setenv(code_preflight.SETTING, 'true')
+    monkeypatch.setenv(code_context.SETTING, 'true')
+    runtime._roster_models = AsyncMock(return_value=[{'model_name': preflight.MODEL, 'model_info': {}}])
+    await preflight.routed(pool)
+    seen = []
+    monkeypatch.setattr(command, 'route_code', preflight.fake(pool, [], seen))
+    thread = await preflight.new_thread(client)
+    marker = 'prior_task_excluded_content_9185'
+    code_context.CACHE.update((str(existing.TENANT), 'founder', thread), 'old-task',
+                             {'tank/private.py': 'def old_private():\n    return "' + marker + '"'},
+                             set(), None, ['tank/private.py'])
+    response = await client.post(f'/v1/command/threads/{thread}/code-turn', json={
+        'text': 'Fix the off-by-one in tank/a.py', 'prompt_id': str(uuid.uuid4()),
+        'history': [{'kind': 'tool', 'content': marker}, {'kind': 'project', 'content': marker}],
+        'tool_results': [preflight.read('tank/a.py', 'def allowed():\n    return 1'),
+            {'name': 'search', 'output': json.dumps({'result': {'matches': [
+                {'file': 'tank/a.py', 'line': 1, 'text': 'allowed_match'},
+                {'file': 'tank/private.py', 'line': 1, 'text': marker}]}})}]})
+    assert response.status_code == 200, response.text
+    assert len(seen) == 1 and seen[0]['run'] is not None
+    sent = json.dumps(seen[0]['messages'])
+    assert marker not in sent and 'tank/private.py' not in sent
+    assert 'allowed_match' in sent and 'def allowed' in sent
+    state = await preflight.thread_state(pool, thread)
+    assert state['code_preflight']['tasks'][0]['plan']['files'] == ['tank/a.py']
